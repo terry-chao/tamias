@@ -2,11 +2,13 @@
 
 #include <QBitmap>
 #include <QEvent>
+#include <QFontMetricsF>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QResizeEvent>
 #include <QShowEvent>
+#include <QTransform>
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -85,6 +87,42 @@ bool point_in_triangle(const QPointF& p, const QPointF t[3]) {
   const bool has_neg = (z0 < 0.f) || (z1 < 0.f) || (z2 < 0.f);
   const bool has_pos = (z0 > 0.f) || (z1 > 0.f) || (z2 > 0.f);
   return !(has_neg && has_pos);
+}
+
+// Shrink a face quad toward its center (inset in 0..0.5). Corner order: BL,BR,TR,TL.
+QPolygonF inset_quad(const QPointF pts[4], qreal inset) {
+  const QPointF c = (pts[0] + pts[1] + pts[2] + pts[3]) * 0.25;
+  QPolygonF out;
+  out.reserve(4);
+  for (int i = 0; i < 4; ++i) {
+    out << (pts[i] + (c - pts[i]) * inset);
+  }
+  return out;
+}
+
+void draw_face_label(QPainter& painter, const QFont& font, const QString& label,
+                     const QPointF pts[4], const QPainterPath& face_clip) {
+  const QFontMetricsF fm(font);
+  const qreal tw = std::max<qreal>(fm.horizontalAdvance(label), fm.height());
+  const qreal th = fm.height();
+  // Source matches face corner order (BL, BR, TR, TL).
+  const QRectF src(0.0, 0.0, tw, th);
+  QPolygonF src_poly;
+  src_poly << src.bottomLeft() << src.bottomRight() << src.topRight() << src.topLeft();
+  const QPolygonF dst_poly = inset_quad(pts, 0.54);
+
+  QTransform xform;
+  if (!QTransform::quadToQuad(src_poly, dst_poly, xform)) {
+    return;
+  }
+
+  painter.save();
+  painter.setClipPath(face_clip, Qt::IntersectClip);
+  painter.setWorldTransform(xform, true);
+  painter.setFont(font);
+  painter.setPen(QColor(255, 255, 255, 235));
+  painter.drawText(src, Qt::AlignCenter, label);
+  painter.restore();
 }
 
 }  // namespace
@@ -389,7 +427,6 @@ void ViewCubeWidget::paintEvent(QPaintEvent*) {
     int index = 0;
     float depth = 0.f;
     QPointF pts[4];
-    QPointF center;
   };
   struct DrawCorner {
     int index = 0;
@@ -417,16 +454,13 @@ void ViewCubeWidget::paintEvent(QPaintEvent*) {
     DrawFace df;
     df.index = i;
     float depth = 0.f;
-    QPointF sum;
     for (int c = 0; c < 4; ++c) {
       const Vec3f v = to_view(face.corners[c]);
       const Vec2f pr = project(v);
       df.pts[c] = QPointF(pr.x, pr.y);
-      sum += df.pts[c];
       depth += v.z;
     }
     df.depth = depth * 0.25f;
-    df.center = sum * 0.25;
     visible_faces.push_back(df);
   }
 
@@ -458,8 +492,7 @@ void ViewCubeWidget::paintEvent(QPaintEvent*) {
 
   QFont font = painter.font();
   font.setBold(true);
-  font.setPixelSize(13);
-  painter.setFont(font);
+  font.setPixelSize(10);
 
   for (const auto& df : visible_faces) {
     const auto& face = faces_[df.index];
@@ -475,9 +508,12 @@ void ViewCubeWidget::paintEvent(QPaintEvent*) {
     painter.setPen(QPen(QColor(255, 255, 255, hovered ? 220 : 140), hovered ? 1.6 : 1.0));
     painter.drawPath(path);
 
-    painter.setPen(QColor(255, 255, 255, 230));
-    painter.drawText(QRectF(df.center.x() - 12, df.center.y() - 10, 24, 20), Qt::AlignCenter,
-                     face.label);
+    // Skip near edge-on faces — transformed glyphs become unreadable.
+    const float facing =
+        face.normal.x * eye_dir.x + face.normal.y * eye_dir.y + face.normal.z * eye_dir.z;
+    if (facing >= 0.22f) {
+      draw_face_label(painter, font, face.label, df.pts, path);
+    }
   }
 
   // Corner chamfers on top so they remain visible/clickable targets.
