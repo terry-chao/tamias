@@ -54,12 +54,19 @@ void main() {
   }
 
   vec3 n = normalize(vNormal);
+  vec3 v = normalize(pc.eye_pos_mode.xyz - vWorldPos);
+  // Opaque solids: drop fragments whose geometric normal faces away from the camera.
+  // Combined with depth testing this hides the interior without depending on GPU
+  // winding / frontFace (which is fragile with Vulkan Y clip correction).
+  if (dot(n, v) < 0.0) {
+    discard;
+  }
+
   vec3 l = normalize(pc.light_dir_selected.xyz);
   vec3 base = pc.color.rgb;
 
   vec3 lit;
   if (vMode > 1.5) {
-    vec3 v = normalize(pc.eye_pos_mode.xyz - vWorldPos);
     lit = shaded_realistic(n, l, v, base);
   } else {
     lit = shaded_simple(n, l, base);

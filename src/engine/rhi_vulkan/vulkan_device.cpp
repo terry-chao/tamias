@@ -968,10 +968,11 @@ Result<std::unique_ptr<PipelineState>> VulkanDevice::create_pipeline(const Pipel
   VkPipelineRasterizationStateCreateInfo rs{
       VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
   rs.polygonMode = desc.wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
-  // Wireframe keeps both sides so the full edge structure stays visible.
-  // Solid modes cull backs; frontFace is CW because clip_space_correction flips Y.
-  rs.cullMode = desc.wireframe ? VK_CULL_MODE_NONE : VK_CULL_MODE_BACK_BIT;
-  rs.frontFace = VK_FRONT_FACE_CLOCKWISE;
+  // Do not rely on GPU face winding here: clip Y-flip + mixed asset windings make
+  // frontFace easy to get wrong (hollow "see-through" solids). Solid opacity comes
+  // from depth testing; mesh.frag also discards inward faces in shaded modes.
+  rs.cullMode = VK_CULL_MODE_NONE;
+  rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
   rs.lineWidth = 1.f;
 
   VkPipelineMultisampleStateCreateInfo ms{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
@@ -981,7 +982,9 @@ Result<std::unique_ptr<PipelineState>> VulkanDevice::create_pipeline(const Pipel
       VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
   ds.depthTestEnable = desc.depth_test ? VK_TRUE : VK_FALSE;
   ds.depthWriteEnable = desc.depth_test ? VK_TRUE : VK_FALSE;
-  ds.depthCompareOp = VK_COMPARE_OP_LESS;
+  ds.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+  ds.depthBoundsTestEnable = VK_FALSE;
+  ds.stencilTestEnable = VK_FALSE;
 
   VkPipelineColorBlendAttachmentState blend_att{};
   blend_att.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
