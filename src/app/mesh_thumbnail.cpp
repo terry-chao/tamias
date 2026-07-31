@@ -158,9 +158,11 @@ QImage render_mesh_thumbnail(const MeshCpu& mesh, int width, int height) {
     n = normalize(n);
     const float ndotl = (std::max)(0.f, dot(n, light));
     const float shade = 0.22f + 0.78f * ndotl;
-    const int r = static_cast<int>(std::lround(210.f * shade));
-    const int g = static_cast<int>(std::lround(198.f * shade));
-    const int b = static_cast<int>(std::lround(178.f * shade));
+    const Vec3 base = (mesh.vertices[i0].color + mesh.vertices[i1].color + mesh.vertices[i2].color) *
+                      (1.f / 3.f);
+    const int r = static_cast<int>(std::lround(std::clamp(base.x * shade, 0.f, 1.f) * 255.f));
+    const int g = static_cast<int>(std::lround(std::clamp(base.y * shade, 0.f, 1.f) * 255.f));
+    const int b = static_cast<int>(std::lround(std::clamp(base.z * shade, 0.f, 1.f) * 255.f));
     fill_triangle(zbuf, image, width, height, p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, p2.x, p2.y, p2.z,
                   qRgba(r, g, b, 255));
   }

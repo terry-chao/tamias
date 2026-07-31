@@ -1,6 +1,7 @@
 #include "vulkan_backend.h"
 
 #include "core/log.h"
+#include "graphics/mesh.h"
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -17,6 +18,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstring>
 #include <fstream>
 #include <limits>
@@ -947,12 +949,13 @@ Result<std::unique_ptr<PipelineState>> VulkanDevice::create_pipeline(const Pipel
 
   VkVertexInputBindingDescription binding{};
   binding.binding = 0;
-  binding.stride = sizeof(float) * 8;  // pos3 + nrm3 + uv2
+  binding.stride = sizeof(Vertex);  // pos3 + nrm3 + uv2 + color3
   binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-  std::array<VkVertexInputAttributeDescription, 3> attrs{};
-  attrs[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0};
-  attrs[1] = {1, 0, VK_FORMAT_R32G32B32_SFLOAT, sizeof(float) * 3};
-  attrs[2] = {2, 0, VK_FORMAT_R32G32_SFLOAT, sizeof(float) * 6};
+  std::array<VkVertexInputAttributeDescription, 4> attrs{};
+  attrs[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT, static_cast<std::uint32_t>(offsetof(Vertex, position))};
+  attrs[1] = {1, 0, VK_FORMAT_R32G32B32_SFLOAT, static_cast<std::uint32_t>(offsetof(Vertex, normal))};
+  attrs[2] = {2, 0, VK_FORMAT_R32G32_SFLOAT, static_cast<std::uint32_t>(offsetof(Vertex, uv))};
+  attrs[3] = {3, 0, VK_FORMAT_R32G32B32_SFLOAT, static_cast<std::uint32_t>(offsetof(Vertex, color))};
   VkPipelineVertexInputStateCreateInfo vi{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
   vi.vertexBindingDescriptionCount = 1;
   vi.pVertexBindingDescriptions = &binding;

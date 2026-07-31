@@ -32,6 +32,7 @@ class HomePage final : public QWidget {
   void settingsRequested();
   void fileActivated(const QString& path);
   void missingFileActivated(const QString& path);
+  void recentRemoveRequested(const QString& path);
   void openDocumentActivated(int index);
 
  private:

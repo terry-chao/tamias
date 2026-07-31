@@ -3,6 +3,10 @@
 #include "app_settings.h"
 #include "core/log.h"
 
+#if defined(TAMIAS_HAS_RHI_OPENGL)
+#include "engine/rhi_opengl/opengl_backend.h"
+#endif
+
 #include <QCoreApplication>
 #include <QMouseEvent>
 #include <QShowEvent>
@@ -10,6 +14,8 @@
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWheelEvent>
+
+#include <algorithm>
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -56,8 +62,11 @@ class DocumentViewport::NativeSurface final : public QWidget {
   }
 };
 
-DocumentViewport::DocumentViewport(std::shared_ptr<Document> document, QWidget* parent)
-    : QWidget(parent), document_(std::move(document)) {
+DocumentViewport::DocumentViewport(std::shared_ptr<Document> document,
+                                   std::shared_ptr<RenderThread> render_thread, QWidget* parent)
+    : QWidget(parent),
+      document_(std::move(document)),
+      render_thread_(std::move(render_thread)) {
   setMouseTracking(true);
   setFocusPolicy(Qt::StrongFocus);
   // Match Vulkan clear so any uncovered edge never flashes pure black.
@@ -112,6 +121,7 @@ DocumentViewport::~DocumentViewport() {
   alive_ = false;
   channel_.reset();
   render_thread_.reset();
+  destroy_gl_surface();
 }
 
 void DocumentViewport::set_render_mode(RenderMode mode) {
@@ -231,7 +241,11 @@ void DocumentViewport::on_view_cube_face(ViewCubeFace face) {
 NativeWindowHandle DocumentViewport::native_handle() const {
   NativeWindowHandle handle{};
 #if defined(_WIN32)
-  handle.hwnd = reinterpret_cast<void*>(surface_ ? surface_->winId() : winId());
+  if (gl_hwnd_) {
+    handle.hwnd = gl_hwnd_;
+  } else {
+    handle.hwnd = reinterpret_cast<void*>(surface_ ? surface_->winId() : winId());
+  }
 #else
   if (auto* ni = QGuiApplication::platformNativeInterface()) {
     handle.display = ni->nativeResourceForIntegration("display");
@@ -241,12 +255,46 @@ NativeWindowHandle DocumentViewport::native_handle() const {
   return handle;
 }
 
+void DocumentViewport::destroy_gl_surface() {
+#if defined(_WIN32) && defined(TAMIAS_HAS_RHI_OPENGL)
+  if (gl_hwnd_) {
+    destroy_opengl_surface_hwnd(gl_hwnd_);
+    gl_hwnd_ = nullptr;
+  }
+#endif
+}
+
+void DocumentViewport::ensure_gl_surface() {
+#if defined(_WIN32) && defined(TAMIAS_HAS_RHI_OPENGL)
+  if (gl_hwnd_ || !surface_) {
+    return;
+  }
+  if (AppSettings::instance().graphics_backend() != GraphicsBackend::OpenGL) {
+    return;
+  }
+  // Force the Qt native child to exist, then create our GL HWND on the UI thread.
+  const WId parent_id = surface_->winId();
+  if (!parent_id) {
+    return;
+  }
+  const auto dpr = devicePixelRatioF();
+  const int w = std::max(1, static_cast<int>(surface_->width() * dpr));
+  const int h = std::max(1, static_cast<int>(surface_->height() * dpr));
+  gl_hwnd_ = create_opengl_surface_hwnd(reinterpret_cast<void*>(parent_id), w, h);
+  if (!gl_hwnd_) {
+    log_error("Failed to create OpenGL surface HWND on UI thread");
+  }
+#endif
+}
+
 void DocumentViewport::ensure_channel() {
   if (!alive_ || channel_) {
     return;
   }
-  const RenderDeviceConfig config = AppSettings::instance().render_device_config();
-  render_thread_ = RenderThreadPool::instance().acquire(config);
+  if (!render_thread_) {
+    const RenderDeviceConfig config = AppSettings::instance().render_device_config();
+    render_thread_ = RenderThreadPool::instance().acquire(config);
+  }
   if (!render_thread_) {
     log_error("failed to acquire RenderThread");
     return;
@@ -269,9 +317,15 @@ void DocumentViewport::submit_current_frame() {
   if (surface_->width() < 2 || surface_->height() < 2) {
     return;
   }
+  ensure_gl_surface();
   const auto dpr = devicePixelRatioF();
   const auto w = static_cast<std::uint32_t>(surface_->width() * dpr);
   const auto h = static_cast<std::uint32_t>(surface_->height() * dpr);
+#if defined(_WIN32) && defined(TAMIAS_HAS_RHI_OPENGL)
+  if (gl_hwnd_) {
+    resize_opengl_surface_hwnd(gl_hwnd_, static_cast<int>(w), static_cast<int>(h));
+  }
+#endif
   channel_->resize(native_handle(), w, h);
 
   FrameSubmission frame{};

@@ -5,6 +5,7 @@ layout(location = 1) in vec2 vUV;
 layout(location = 2) in float vSelected;
 layout(location = 3) in vec3 vWorldPos;
 layout(location = 4) in float vMode;
+layout(location = 5) in vec3 vColor;
 
 layout(push_constant) uniform PushConstants {
   mat4 mvp;
@@ -63,7 +64,7 @@ void main() {
   }
 
   vec3 l = normalize(pc.light_dir_selected.xyz);
-  vec3 base = pc.color.rgb;
+  vec3 base = pc.color.rgb * vColor;
 
   vec3 lit;
   if (vMode > 1.5) {

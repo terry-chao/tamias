@@ -10,6 +10,7 @@
 #include <cstring>
 #include <fstream>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 namespace tamias {
@@ -17,12 +18,88 @@ namespace {
 
 void append_triangle(MeshCpu& mesh, Vec3 a, Vec3 b, Vec3 c, Vec3 n) {
   const auto base = static_cast<std::uint32_t>(mesh.vertices.size());
-  mesh.vertices.push_back(Vertex{a, n, {}});
-  mesh.vertices.push_back(Vertex{b, n, {}});
-  mesh.vertices.push_back(Vertex{c, n, {}});
+  Vertex va{};
+  va.position = a;
+  va.normal = n;
+  Vertex vb = va;
+  vb.position = b;
+  Vertex vc = va;
+  vc.position = c;
+  mesh.vertices.push_back(va);
+  mesh.vertices.push_back(vb);
+  mesh.vertices.push_back(vc);
   mesh.indices.push_back(base);
   mesh.indices.push_back(base + 1);
   mesh.indices.push_back(base + 2);
+}
+
+constexpr Vec3 kDefaultMeshColor{0.75f, 0.78f, 0.82f};
+
+// Find the start index of the Nth `{...}` object inside a JSON array after `array_key`.
+std::optional<std::string> nth_json_object(const std::string& json, std::string_view array_key,
+                                           int object_index) {
+  if (object_index < 0) {
+    return std::nullopt;
+  }
+  const auto key_pos = json.find(array_key);
+  if (key_pos == std::string::npos) {
+    return std::nullopt;
+  }
+  const auto arr = json.find('[', key_pos + array_key.size());
+  if (arr == std::string::npos) {
+    return std::nullopt;
+  }
+  int depth = 0;
+  int index = -1;
+  std::size_t obj_start = std::string::npos;
+  for (std::size_t i = arr; i < json.size(); ++i) {
+    if (json[i] == '{') {
+      if (depth == 0) {
+        ++index;
+        if (index == object_index) {
+          obj_start = i;
+        }
+      }
+      ++depth;
+    } else if (json[i] == '}') {
+      --depth;
+      if (depth == 0 && obj_start != std::string::npos && index == object_index) {
+        return json.substr(obj_start, i - obj_start + 1);
+      }
+    } else if (json[i] == ']' && depth == 0) {
+      break;
+    }
+  }
+  return std::nullopt;
+}
+
+Vec3 parse_base_color_factor(const std::string& material_json) {
+  const auto pbr = material_json.find("\"pbrMetallicRoughness\"");
+  if (pbr == std::string::npos) {
+    return {1.f, 1.f, 1.f};
+  }
+  const auto factor = material_json.find("\"baseColorFactor\"", pbr);
+  if (factor == std::string::npos) {
+    return {1.f, 1.f, 1.f};
+  }
+  const auto bracket = material_json.find('[', factor);
+  if (bracket == std::string::npos) {
+    return {1.f, 1.f, 1.f};
+  }
+  char* end = nullptr;
+  const float r = static_cast<float>(std::strtod(material_json.c_str() + bracket + 1, &end));
+  if (!end) {
+    return {1.f, 1.f, 1.f};
+  }
+  while (*end == ' ' || *end == ',') {
+    ++end;
+  }
+  const float g = static_cast<float>(std::strtod(end, &end));
+  while (end && (*end == ' ' || *end == ',')) {
+    ++end;
+  }
+  const float b = static_cast<float>(std::strtod(end, &end));
+  return {r, g, b};
 }
 
 template <typename T>
@@ -112,6 +189,18 @@ Result<MeshCpu> load_glb(const std::filesystem::path& path) {
   const auto indices_accessor = find_number_after("\"indices\"", indices_key);
   if (!indices_accessor) {
     return Err("failed to parse indices accessor");
+  }
+
+  Vec3 base_color{1.f, 1.f, 1.f};
+  // Look for "material" on the first primitive (near POSITION / indices).
+  const auto prim_window_end = std::min(json.size(), indices_key + 120);
+  const auto material_key = json.find("\"material\"", meshes_pos);
+  if (material_key != std::string::npos && material_key < prim_window_end) {
+    if (const auto mat_idx = find_number_after("\"material\"", material_key)) {
+      if (auto mat_obj = nth_json_object(json, "\"materials\"", static_cast<int>(*mat_idx))) {
+        base_color = parse_base_color_factor(*mat_obj);
+      }
+    }
   }
 
   auto accessor_info = [&](int accessor_index, std::uint32_t& count, std::uint32_t& component_type,
@@ -227,6 +316,7 @@ Result<MeshCpu> load_glb(const std::filesystem::path& path) {
     const float* p = reinterpret_cast<const float*>(pos_ptr + i * sizeof(float) * 3);
     mesh.vertices[i].position = {p[0], p[1], p[2]};
     mesh.vertices[i].normal = {0, 0, 1};
+    mesh.vertices[i].color = base_color;
   }
 
   if (nrm_accessor) {
@@ -293,7 +383,8 @@ MeshCpu make_demo_cube() {
 }
 
 Result<MeshCpu> load_obj(const std::filesystem::path& path) {
-  auto result = rapidobj::ParseFile(path);
+  // Optional MTL so samples without companion .mtl still load.
+  auto result = rapidobj::ParseFile(path, rapidobj::MaterialLibrary::Default(rapidobj::Load::Optional));
   if (result.error) {
     return Err("OBJ load failed: " + result.error.code.message());
   }
@@ -312,6 +403,14 @@ Result<MeshCpu> load_obj(const std::filesystem::path& path) {
         index_offset += fv;
         continue;
       }
+      Vec3 face_color = kDefaultMeshColor;
+      if (fi < shape.mesh.material_ids.size()) {
+        const int mid = shape.mesh.material_ids[fi];
+        if (mid >= 0 && static_cast<std::size_t>(mid) < result.materials.size()) {
+          const auto& kd = result.materials[static_cast<std::size_t>(mid)].diffuse;
+          face_color = {kd[0], kd[1], kd[2]};
+        }
+      }
       Vertex tri[3]{};
       for (std::size_t v = 0; v < 3; ++v) {
         const auto idx = shape.mesh.indices[index_offset + v];
@@ -323,6 +422,7 @@ Result<MeshCpu> load_obj(const std::filesystem::path& path) {
                            normals[static_cast<std::size_t>(idx.normal_index) * 3 + 1],
                            normals[static_cast<std::size_t>(idx.normal_index) * 3 + 2]};
         }
+        tri[v].color = face_color;
       }
       if (length(tri[0].normal) < 1e-6f) {
         const Vec3 n = normalize(cross(tri[1].position - tri[0].position,

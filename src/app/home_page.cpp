@@ -1,7 +1,9 @@
 #include "home_page.h"
 
 #include <QCoreApplication>
+#include <QEnterEvent>
 #include <QFileInfo>
+#include <QFocusEvent>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -9,8 +11,11 @@
 #include <QLabel>
 #include <QLocale>
 #include <QMouseEvent>
+#include <QPainter>
+#include <QPainterPath>
 #include <QPixmap>
 #include <QPushButton>
+#include <QResizeEvent>
 #include <QScrollArea>
 #include <QSizePolicy>
 #include <QStyle>
@@ -20,6 +25,8 @@
 
 namespace tamias {
 namespace {
+
+constexpr int kCardRadius = 12;
 
 QString format_opened_time(const QDateTime& dt) {
   if (!dt.isValid()) {
@@ -42,25 +49,76 @@ QString format_created_time(const QDateTime& dt) {
                       : QCoreApplication::translate("tamias::HomePage", "Unknown");
 }
 
+void apply_rounded_mask(QWidget* widget, int radius) {
+  QPainterPath path;
+  path.addRoundedRect(QRectF(widget->rect()), radius, radius);
+  widget->setMask(QRegion(path.toFillPolygon().toPolygon()));
+}
+
+void paint_rounded_card(QWidget* widget, bool missing) {
+  QPainter p(widget);
+  p.setRenderHint(QPainter::Antialiasing, true);
+  const bool hot = widget->underMouse() || widget->hasFocus();
+  const QColor bg = missing ? QColor(0x13, 0x13, 0x14)
+                            : (hot ? QColor(0x1b, 0x1b, 0x1d) : QColor(0x16, 0x16, 0x17));
+  const QColor border = hot ? QColor(0xe8, 0x8f, 0x4d) : QColor(0x29, 0x29, 0x2b);
+  QPainterPath path;
+  path.addRoundedRect(QRectF(widget->rect()).adjusted(1.0, 1.0, -1.0, -1.0),
+                      kCardRadius - 1, kCardRadius - 1);
+  p.fillPath(path, bg);
+  p.setPen(QPen(border, 1.0));
+  p.drawPath(path);
+}
+
+class CardBorderOverlay final : public QWidget {
+ public:
+  explicit CardBorderOverlay(QWidget* card) : QWidget(card), card_(card) {
+    setAttribute(Qt::WA_TransparentForMouseEvents);
+    setAttribute(Qt::WA_NoSystemBackground);
+  }
+
+ protected:
+  void paintEvent(QPaintEvent*) override {
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    const QColor border =
+        (card_->underMouse() || card_->hasFocus()) ? QColor(0xe8, 0x8f, 0x4d)
+                                                   : QColor(0x29, 0x29, 0x2b);
+    QPainterPath path;
+    path.addRoundedRect(QRectF(rect()).adjusted(1.0, 1.0, -1.0, -1.0),
+                        kCardRadius - 1, kCardRadius - 1);
+    p.setPen(QPen(border, 1.0));
+    p.drawPath(path);
+  }
+
+ private:
+  QWidget* card_ = nullptr;
+};
+
 class RecentCard final : public QFrame {
  public:
   using ActivationHandler = std::function<void(const QString&, bool)>;
+  using RemoveHandler = std::function<void(const QString&)>;
 
   RecentCard(const RecentFileItem& item, bool exists, ActivationHandler on_activated,
-             QWidget* parent = nullptr)
+             RemoveHandler on_removed, QWidget* parent = nullptr)
       : QFrame(parent),
         path_(item.path),
         exists_(exists),
-        on_activated_(std::move(on_activated)) {
+        missing_(!exists),
+        on_activated_(std::move(on_activated)),
+        on_removed_(std::move(on_removed)) {
     setObjectName(QStringLiteral("recentCard"));
     setCursor(Qt::PointingHandCursor);
     setFocusPolicy(Qt::StrongFocus);
     setAttribute(Qt::WA_Hover, true);
+    setAttribute(Qt::WA_StyledBackground, false);
+    setFrameShape(QFrame::NoFrame);
     setToolTip(item.path);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(0, 0, 0, 16);
+    root->setContentsMargins(1, 1, 1, 16);
     root->setSpacing(0);
 
     auto* thumb = new QFrame(this);
@@ -93,17 +151,32 @@ class RecentCard final : public QFrame {
     }
     thumb_grid->addWidget(preview, 0, 0);
 
-    auto* type_wrap = new QWidget(thumb);
-    type_wrap->setAttribute(Qt::WA_TransparentForMouseEvents);
-    auto* type_layout = new QHBoxLayout(type_wrap);
-    type_layout->setContentsMargins(10, 10, 10, 10);
-    type_layout->addStretch(1);
-    auto* type = new QLabel(QFileInfo(item.path).suffix().toUpper(), type_wrap);
+    auto* chrome = new QWidget(thumb);
+    auto* chrome_layout = new QHBoxLayout(chrome);
+    chrome_layout->setContentsMargins(8, 8, 8, 8);
+
+    auto* remove_btn = new QPushButton(QString(QChar(0x00d7)), chrome);
+    remove_btn->setObjectName(QStringLiteral("recentRemove"));
+    remove_btn->setFixedSize(24, 24);
+    remove_btn->setCursor(Qt::PointingHandCursor);
+    remove_btn->setFocusPolicy(Qt::NoFocus);
+    remove_btn->setToolTip(
+        QCoreApplication::translate("tamias::HomePage", "Remove from recent"));
+    connect(remove_btn, &QPushButton::clicked, this, [this] {
+      if (on_removed_) {
+        on_removed_(path_);
+      }
+    });
+    chrome_layout->addWidget(remove_btn, 0, Qt::AlignTop);
+
+    chrome_layout->addStretch(1);
+    auto* type = new QLabel(QFileInfo(item.path).suffix().toUpper(), chrome);
     type->setObjectName(QStringLiteral("fileType"));
     type->setAlignment(Qt::AlignCenter);
     type->setFixedWidth(44);
-    type_layout->addWidget(type, 0, Qt::AlignTop);
-    thumb_grid->addWidget(type_wrap, 0, 0);
+    type->setAttribute(Qt::WA_TransparentForMouseEvents);
+    chrome_layout->addWidget(type, 0, Qt::AlignTop);
+    thumb_grid->addWidget(chrome, 0, 0);
     root->addWidget(thumb);
 
     auto* name = new QLabel(item.name, this);
@@ -150,13 +223,47 @@ class RecentCard final : public QFrame {
       missing->setObjectName(QStringLiteral("recentMissing"));
       missing->setContentsMargins(16, 7, 16, 0);
       root->addWidget(missing);
-      setProperty("missing", true);
-      style()->unpolish(this);
-      style()->polish(this);
     }
+
+    border_overlay_ = new CardBorderOverlay(this);
+    border_overlay_->setGeometry(rect());
+    border_overlay_->raise();
   }
 
  protected:
+  void paintEvent(QPaintEvent*) override { paint_rounded_card(this, missing_); }
+
+  void resizeEvent(QResizeEvent* event) override {
+    QFrame::resizeEvent(event);
+    apply_rounded_mask(this, kCardRadius);
+    border_overlay_->setGeometry(rect());
+    border_overlay_->raise();
+  }
+
+  void enterEvent(QEnterEvent* event) override {
+    QFrame::enterEvent(event);
+    update();
+    border_overlay_->update();
+  }
+
+  void leaveEvent(QEvent* event) override {
+    QFrame::leaveEvent(event);
+    update();
+    border_overlay_->update();
+  }
+
+  void focusInEvent(QFocusEvent* event) override {
+    QFrame::focusInEvent(event);
+    update();
+    border_overlay_->update();
+  }
+
+  void focusOutEvent(QFocusEvent* event) override {
+    QFrame::focusOutEvent(event);
+    update();
+    border_overlay_->update();
+  }
+
   void mouseReleaseEvent(QMouseEvent* event) override {
     if (event->button() == Qt::LeftButton && rect().contains(event->pos())) {
       on_activated_(path_, exists_);
@@ -176,7 +283,10 @@ class RecentCard final : public QFrame {
  private:
   QString path_;
   bool exists_ = true;
+  bool missing_ = false;
+  CardBorderOverlay* border_overlay_ = nullptr;
   ActivationHandler on_activated_;
+  RemoveHandler on_removed_;
 };
 
 class OpenDocCard final : public QFrame {
@@ -189,6 +299,8 @@ class OpenDocCard final : public QFrame {
     setCursor(Qt::PointingHandCursor);
     setFocusPolicy(Qt::StrongFocus);
     setAttribute(Qt::WA_Hover, true);
+    setAttribute(Qt::WA_StyledBackground, false);
+    setFrameShape(QFrame::NoFrame);
     setToolTip(item.path.isEmpty() ? item.name : item.path);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
@@ -225,6 +337,33 @@ class OpenDocCard final : public QFrame {
   }
 
  protected:
+  void paintEvent(QPaintEvent*) override { paint_rounded_card(this, false); }
+
+  void resizeEvent(QResizeEvent* event) override {
+    QFrame::resizeEvent(event);
+    apply_rounded_mask(this, kCardRadius);
+  }
+
+  void enterEvent(QEnterEvent* event) override {
+    QFrame::enterEvent(event);
+    update();
+  }
+
+  void leaveEvent(QEvent* event) override {
+    QFrame::leaveEvent(event);
+    update();
+  }
+
+  void focusInEvent(QFocusEvent* event) override {
+    QFrame::focusInEvent(event);
+    update();
+  }
+
+  void focusOutEvent(QFocusEvent* event) override {
+    QFrame::focusOutEvent(event);
+    update();
+  }
+
   void mouseReleaseEvent(QMouseEvent* event) override {
     if (event->button() == Qt::LeftButton && rect().contains(event->pos())) {
       on_activated_(index_);
@@ -273,28 +412,25 @@ HomePage::HomePage(QWidget* parent) : QWidget(parent) {
       "  border: 1px solid #38383b; padding: 11px 21px; border-radius: 8px;"
       "}"
       "QPushButton#homeActionSecondary:hover { background: #2d2d30; border-color: #505054; }"
-      "#recentCard {"
-      "  background: #161617;"
-      "  border: 1px solid #29292b;"
-      "  border-radius: 12px;"
+      "#recentCard, #openDocCard {"
+      "  background: transparent;"
+      "  border: none;"
       "  min-width: 210px; min-height: 250px;"
       "}"
-      "#recentCard:hover, #recentCard:focus { background: #1b1b1d;"
-      "  border: 1px solid #e88f4d; }"
-      "#recentCard[missing=\"true\"] { background: #131314; }"
-      "#openDocCard {"
-      "  background: #161617;"
-      "  border: 1px solid #29292b;"
-      "  border-radius: 12px;"
+      "#openDocCard { min-height: 0; }"
+      "QPushButton#recentRemove {"
+      "  background: rgba(20, 20, 22, 180); color: #eee9e2;"
+      "  border: 1px solid #444448; border-radius: 12px;"
+      "  font-size: 14px; font-weight: 700; padding: 0;"
       "}"
-      "#openDocCard:hover, #openDocCard:focus { background: #1b1b1d;"
-      "  border: 1px solid #e88f4d; }"
+      "QPushButton#recentRemove:hover {"
+      "  background: #e88f4d; color: #17110d; border-color: #e88f4d;"
+      "}"
       "#openBadge { background: #2a2118; color: #e88f4d; border: 1px solid #5a3f28;"
       "  border-radius: 4px; padding: 4px 8px; font-size: 10px; font-weight: 700; }"
       "#openHint { color: #e88f4d; font-size: 12px; font-weight: 600; }"
-      "#recentThumb { background: #202022; border-top-left-radius: 11px;"
-      "  border-top-right-radius: 11px; }"
-      "#recentPreview { border-top-left-radius: 11px; border-top-right-radius: 11px; }"
+      "#recentThumb { background: #202022; border: none; }"
+      "#recentPreview { background: transparent; }"
       "#fileType { background: #2b2b2e; color: #c9c4bd; border: 1px solid #414145;"
       "  border-radius: 4px; padding: 3px 5px; font-size: 10px; font-weight: 700; }"
       "#recentName { color: #f1ede7; font-size: 14px; font-weight: 600; }"
@@ -361,7 +497,7 @@ HomePage::HomePage(QWidget* parent) : QWidget(parent) {
   open_btn->setIcon(style()->standardIcon(QStyle::SP_DialogOpenButton));
   connect(open_btn, &QPushButton::clicked, this, &HomePage::openRequested);
   actions->addWidget(open_btn);
-  auto* demo_btn = new QPushButton(tr("Try the demo cube"), hero);
+  auto* demo_btn = new QPushButton(tr("Try Alvin demo"), hero);
   demo_btn->setObjectName(QStringLiteral("homeActionSecondary"));
   connect(demo_btn, &QPushButton::clicked, this, &HomePage::newDemoRequested);
   actions->addWidget(demo_btn);
@@ -490,6 +626,7 @@ void HomePage::refresh(const QVector<RecentFileItem>& items) {
             emit missingFileActivated(path);
           }
         },
+        [this](const QString& path) { emit recentRemoveRequested(path); },
         cards_host_);
     cards_layout_->addWidget(card, i / kColumns, i % kColumns);
   }

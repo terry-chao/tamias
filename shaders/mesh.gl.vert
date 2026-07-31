@@ -3,6 +3,7 @@
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec2 inUV;
+layout(location = 3) in vec3 inColor;
 
 layout(std140, binding = 0) uniform PushConstants {
   mat4 mvp;
@@ -17,12 +18,14 @@ layout(location = 1) out vec2 vUV;
 layout(location = 2) out float vSelected;
 layout(location = 3) out vec3 vWorldPos;
 layout(location = 4) out float vMode;
+layout(location = 5) out vec3 vColor;
 
 void main() {
   vec4 world = pc.model * vec4(inPosition, 1.0);
   vWorldPos = world.xyz;
   vNormal = mat3(pc.model) * inNormal;
   vUV = inUV;
+  vColor = inColor;
   vSelected = pc.light_dir_selected.w;
   vMode = pc.eye_pos_mode.w;
   gl_Position = pc.mvp * vec4(inPosition, 1.0);

@@ -199,10 +199,19 @@ void RenderThread::resize_surface(std::uint64_t channel_id, NativeWindowHandle w
   if (it == channels_.end()) {
     return;
   }
-  it->second.window = window;
-  it->second.width = std::max(1u, w);
-  it->second.height = std::max(1u, h);
-  it->second.needs_recreate = true;
+  ChannelState& channel = it->second;
+  const std::uint32_t width = std::max(1u, w);
+  const std::uint32_t height = std::max(1u, h);
+  const bool same_window = channel.window.hwnd == window.hwnd &&
+                           channel.window.display == window.display &&
+                           channel.window.window == window.window;
+  if (same_window && channel.width == width && channel.height == height) {
+    return;
+  }
+  channel.window = window;
+  channel.width = width;
+  channel.height = height;
+  channel.needs_recreate = true;
   cv_.notify_one();
 }
 

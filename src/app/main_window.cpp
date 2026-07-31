@@ -8,7 +8,10 @@
 #include "modeling/shape_ops.h"
 #include "settings_dialog.h"
 
+#include <QAction>
+#include <QCoreApplication>
 #include <QDialog>
+#include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QIcon>
@@ -40,11 +43,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   setCentralWidget(stack_);
 
   connect(tabs_, &QTabWidget::tabCloseRequested, this, &MainWindow::close_tab);
-  connect(tabs_, &QTabWidget::currentChanged, this, &MainWindow::on_tab_changed);
   connect(home_, &HomePage::newDemoRequested, this, &MainWindow::new_demo_document);
   connect(home_, &HomePage::openRequested, this, &MainWindow::open_file);
   connect(home_, &HomePage::fileActivated, this, &MainWindow::open_recent_path);
   connect(home_, &HomePage::missingFileActivated, this, &MainWindow::on_missing_recent);
+  connect(home_, &HomePage::recentRemoveRequested, this, [this](const QString& path) {
+    recent_.remove(path);
+    refresh_home();
+  });
   connect(home_, &HomePage::openDocumentActivated, this, &MainWindow::activate_open_document);
   connect(home_, &HomePage::settingsRequested, this, &MainWindow::open_settings);
 
@@ -61,41 +67,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   connect(settings_action, &QAction::triggered, this, &MainWindow::open_settings);
   addAction(settings_action);
 
-  render_mode_group_ = new QActionGroup(this);
-  render_mode_group_->setExclusive(true);
-
-  wireframe_action_ = new QAction(tr("&Wireframe"), this);
-  wireframe_action_->setCheckable(true);
-  wireframe_action_->setShortcut(QKeySequence(tr("Ctrl+1")));
-  wireframe_action_->setStatusTip(tr("Line drawing — edges only"));
-  wireframe_action_->setData(static_cast<int>(RenderMode::Wireframe));
-
-  shaded_action_ = new QAction(tr("&Shaded"), this);
-  shaded_action_->setCheckable(true);
-  shaded_action_->setChecked(true);
-  shaded_action_->setShortcut(QKeySequence(tr("Ctrl+2")));
-  shaded_action_->setStatusTip(tr("Simple shaded solid display"));
-  shaded_action_->setData(static_cast<int>(RenderMode::Shaded));
-
-  realistic_action_ = new QAction(tr("&Realistic"), this);
-  realistic_action_->setCheckable(true);
-  realistic_action_->setShortcut(QKeySequence(tr("Ctrl+3")));
-  realistic_action_->setStatusTip(tr("Lit display with specular highlights"));
-  realistic_action_->setData(static_cast<int>(RenderMode::Realistic));
-
-  render_mode_group_->addAction(wireframe_action_);
-  render_mode_group_->addAction(shaded_action_);
-  render_mode_group_->addAction(realistic_action_);
-  connect(render_mode_group_, &QActionGroup::triggered, this, [this](QAction* action) {
-    set_render_mode(static_cast<RenderMode>(action->data().toInt()));
-  });
-
   auto* view_menu = menuBar()->addMenu(tr("&View"));
-  auto* display_menu = view_menu->addMenu(tr("&Display Mode"));
-  display_menu->addAction(wireframe_action_);
-  display_menu->addAction(shaded_action_);
-  display_menu->addAction(realistic_action_);
-  view_menu->addSeparator();
   view_menu->addAction(tr("&Frame All"), this, &MainWindow::frame_all, QKeySequence(tr("F")));
 
   // Settings live under Tools (VS / CAD), and also on the File welcome page.
@@ -107,23 +79,18 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   connect(exit_action, &QAction::triggered, this, &QWidget::close);
   tools_menu->addAction(exit_action);
 
-  auto* toolbar = addToolBar(tr("Display"));
-  toolbar->setObjectName(QStringLiteral("displayToolbar"));
+  auto* toolbar = addToolBar(tr("View"));
+  toolbar->setObjectName(QStringLiteral("viewToolbar"));
   toolbar->setMovable(false);
-  toolbar->addAction(wireframe_action_);
-  toolbar->addAction(shaded_action_);
-  toolbar->addAction(realistic_action_);
-  toolbar->addSeparator();
   toolbar->addAction(tr("Frame All"), this, &MainWindow::frame_all);
 
-  statusBar()->showMessage(tr("Ready — Open glTF/OBJ or create a demo cube"));
+  statusBar()->showMessage(tr("Ready — Open a model or try the demo"));
   show_home();
 }
 
 void MainWindow::show_home() {
   refresh_home();
   stack_->setCurrentWidget(home_);
-  sync_render_mode_actions();
 }
 
 void MainWindow::show_documents() {
@@ -132,7 +99,6 @@ void MainWindow::show_documents() {
     return;
   }
   stack_->setCurrentWidget(tabs_);
-  sync_render_mode_actions();
 }
 
 void MainWindow::activate_open_document(int index) {
@@ -227,25 +193,24 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document) {
     QMessageBox::critical(this, tr("Upload"), QString::fromStdString(r.error()));
     return;
   }
-  auto* viewport = new DocumentViewport(document, tabs_);
+  auto* viewport = new DocumentViewport(document, thread, tabs_);
   const int index = tabs_->addTab(viewport, QString::fromStdString(document->name()));
   tabs_->setCurrentIndex(index);
   show_documents();
-  sync_render_mode_actions();
 }
 
 void MainWindow::new_demo_document() {
-  auto document = std::make_shared<Document>("Demo Cube");
-  MeshAsset asset{};
-  asset.name = "cube";
-  asset.cpu = make_demo_cube();
-  auto& stored = document->add_mesh(std::move(asset));
-  SceneNode node{};
-  node.name = "cube";
-  node.mesh_asset_id = stored.id;
-  node.world_bounds = stored.cpu.bounds;
-  document->scene().add_node(std::move(node));
-  add_document_tab(document);
+  const QString relative = QStringLiteral("assets/samples/alvin.obj");
+  QString path = QDir(QCoreApplication::applicationDirPath()).filePath(relative);
+  if (!QFileInfo::exists(path)) {
+    path = QDir(QStringLiteral(TAMIAS_SOURCE_DIR)).filePath(relative);
+  }
+  if (!QFileInfo::exists(path)) {
+    QMessageBox::warning(this, tr("Demo"),
+                         tr("Demo model not found:\n%1").arg(relative));
+    return;
+  }
+  open_path(path);
 }
 
 bool MainWindow::open_path(const QString& path) {
@@ -300,6 +265,9 @@ bool MainWindow::open_path(const QString& path) {
   node.name = stored.name;
   node.mesh_asset_id = stored.id;
   node.world_bounds = stored.cpu.bounds;
+  if (mesh_has_vertex_colors(stored.cpu)) {
+    node.color = {1.f, 1.f, 1.f};
+  }
   document->scene().add_node(std::move(node));
   add_document_tab(document);
 
@@ -347,36 +315,6 @@ DocumentViewport* MainWindow::current_viewport() const {
   return qobject_cast<DocumentViewport*>(tabs_->currentWidget());
 }
 
-void MainWindow::set_render_mode(RenderMode mode) {
-  if (auto* vp = current_viewport()) {
-    vp->set_render_mode(mode);
-  }
-  sync_render_mode_actions();
-}
-
-void MainWindow::sync_render_mode_actions() {
-  const auto* vp = current_viewport();
-  const RenderMode mode = vp ? vp->render_mode() : RenderMode::Shaded;
-  const bool enabled = vp != nullptr;
-  wireframe_action_->setEnabled(enabled);
-  shaded_action_->setEnabled(enabled);
-  realistic_action_->setEnabled(enabled);
-  switch (mode) {
-    case RenderMode::Wireframe:
-      wireframe_action_->setChecked(true);
-      break;
-    case RenderMode::Realistic:
-      realistic_action_->setChecked(true);
-      break;
-    case RenderMode::Shaded:
-    default:
-      shaded_action_->setChecked(true);
-      break;
-  }
-}
-
-void MainWindow::on_tab_changed(int) { sync_render_mode_actions(); }
-
 void MainWindow::frame_all() {
   if (auto* vp = current_viewport()) {
     vp->frame_scene();
@@ -390,8 +328,6 @@ void MainWindow::close_tab(int index) {
   }
   if (tabs_->count() == 0) {
     show_home();
-  } else {
-    sync_render_mode_actions();
   }
 }
 

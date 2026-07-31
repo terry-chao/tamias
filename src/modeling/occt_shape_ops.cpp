@@ -10,14 +10,23 @@
 #include <BRep_Tool.hxx>
 #include <BRepTools.hxx>
 #include <IFSelect_ReturnStatus.hxx>
-#include <IGESControl_Reader.hxx>
+#include <IGESCAFControl_Reader.hxx>
 #include <Poly_Triangulation.hxx>
-#include <STEPControl_Reader.hxx>
+#include <Quantity_Color.hxx>
+#include <STEPCAFControl_Reader.hxx>
+#include <TDF_Label.hxx>
+#include <TDF_LabelSequence.hxx>
+#include <TDocStd_Document.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopLoc_Location.hxx>
 #include <TopoDS.hxx>
+#include <TopoDS_Compound.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
+#include <XCAFApp_Application.hxx>
+#include <XCAFDoc_ColorTool.hxx>
+#include <XCAFDoc_DocumentTool.hxx>
+#include <XCAFDoc_ShapeTool.hxx>
 #include <gp_Trsf.hxx>
 
 #include <algorithm>
@@ -26,6 +35,8 @@
 namespace tamias {
 namespace {
 
+constexpr Vec3 kDefaultCadColor{0.75f, 0.78f, 0.82f};
+
 std::string lower_ext(const std::filesystem::path& path) {
   std::string ext = path.extension().string();
   std::transform(ext.begin(), ext.end(), ext.begin(),
@@ -33,9 +44,67 @@ std::string lower_ext(const std::filesystem::path& path) {
   return ext;
 }
 
+bool lookup_color(const Handle(XCAFDoc_ColorTool)& colors, const TopoDS_Shape& shape,
+                  Quantity_Color& out) {
+  if (colors.IsNull() || shape.IsNull()) {
+    return false;
+  }
+  return colors->GetColor(shape, XCAFDoc_ColorSurf, out) ||
+         colors->GetColor(shape, XCAFDoc_ColorGen, out) ||
+         colors->GetColor(shape, XCAFDoc_ColorCurv, out);
+}
+
+bool lookup_color(const Handle(XCAFDoc_ColorTool)& colors, const TDF_Label& label,
+                  Quantity_Color& out) {
+  if (colors.IsNull() || label.IsNull()) {
+    return false;
+  }
+  return colors->GetColor(label, XCAFDoc_ColorSurf, out) ||
+         colors->GetColor(label, XCAFDoc_ColorGen, out) ||
+         colors->GetColor(label, XCAFDoc_ColorCurv, out);
+}
+
+Vec3 to_vec3(const Quantity_Color& c) {
+  return {static_cast<float>(c.Red()), static_cast<float>(c.Green()),
+          static_cast<float>(c.Blue())};
+}
+
+Vec3 resolve_face_color(const Handle(XCAFDoc_ShapeTool)& shapes,
+                        const Handle(XCAFDoc_ColorTool)& colors, const TopoDS_Face& face,
+                        bool has_root_color, const Quantity_Color& root_qty) {
+  Quantity_Color qty;
+  if (lookup_color(colors, face, qty)) {
+    return to_vec3(qty);
+  }
+  if (!shapes.IsNull()) {
+    TDF_Label label;
+    if (shapes->Search(face, label)) {
+      for (TDF_Label cur = label; !cur.IsNull(); cur = cur.Father()) {
+        if (lookup_color(colors, cur, qty)) {
+          return to_vec3(qty);
+        }
+        // Stop at document root children depth; Father of Main is null-ish.
+        if (cur.Depth() <= 1) {
+          break;
+        }
+      }
+    }
+  }
+  if (has_root_color) {
+    return to_vec3(root_qty);
+  }
+  return kDefaultCadColor;
+}
+
 class OcctShape final : public Shape {
  public:
-  explicit OcctShape(TopoDS_Shape shape) : shape_(std::move(shape)) {}
+  OcctShape(TopoDS_Shape shape, Handle(TDocStd_Document) doc)
+      : shape_(std::move(shape)), doc_(std::move(doc)) {
+    if (!doc_.IsNull()) {
+      shapes_ = XCAFDoc_DocumentTool::ShapeTool(doc_->Main());
+      colors_ = XCAFDoc_DocumentTool::ColorTool(doc_->Main());
+    }
+  }
 
   [[nodiscard]] std::string backend_name() const override { return "occt"; }
 
@@ -50,6 +119,9 @@ class OcctShape final : public Shape {
       return Err("BRepMesh_IncrementalMesh failed");
     }
 
+    Quantity_Color root_qty;
+    const bool has_root_color = lookup_color(colors_, shape_, root_qty);
+
     MeshCpu mesh;
     for (TopExp_Explorer exp(shape_, TopAbs_FACE); exp.More(); exp.Next()) {
       const TopoDS_Face face = TopoDS::Face(exp.Current());
@@ -58,6 +130,10 @@ class OcctShape final : public Shape {
       if (tri.IsNull()) {
         continue;
       }
+
+      Vec3 face_color =
+          resolve_face_color(shapes_, colors_, face, has_root_color, root_qty);
+
       const gp_Trsf trsf = loc.Transformation();
       const bool reversed = face.Orientation() == TopAbs_REVERSED;
       const int base = static_cast<int>(mesh.vertices.size());
@@ -70,6 +146,7 @@ class OcctShape final : public Shape {
         Vertex v{};
         v.position = {static_cast<float>(p.X()), static_cast<float>(p.Y()),
                       static_cast<float>(p.Z())};
+        v.color = face_color;
         if (tri->HasNormals()) {
           gp_Dir n = tri->Normal(i);
           if (reversed) {
@@ -134,7 +211,34 @@ class OcctShape final : public Shape {
 
  private:
   TopoDS_Shape shape_;
+  Handle(TDocStd_Document) doc_;
+  Handle(XCAFDoc_ShapeTool) shapes_;
+  Handle(XCAFDoc_ColorTool) colors_;
 };
+
+Handle(TDocStd_Document) new_xcaf_document() {
+  Handle(TDocStd_Document) doc;
+  XCAFApp_Application::GetApplication()->NewDocument("MDTV-XCAF", doc);
+  return doc;
+}
+
+TopoDS_Shape compound_free_shapes(const Handle(XCAFDoc_ShapeTool)& shapes) {
+  TDF_LabelSequence free_shapes;
+  shapes->GetFreeShapes(free_shapes);
+  if (free_shapes.Length() == 0) {
+    return {};
+  }
+  if (free_shapes.Length() == 1) {
+    return shapes->GetShape(free_shapes.Value(1));
+  }
+  TopoDS_Compound compound;
+  BRep_Builder builder;
+  builder.MakeCompound(compound);
+  for (int i = 1; i <= free_shapes.Length(); ++i) {
+    builder.Add(compound, shapes->GetShape(free_shapes.Value(i)));
+  }
+  return compound;
+}
 
 class OcctShapeOps final : public IShapeOps {
  public:
@@ -143,33 +247,61 @@ class OcctShapeOps final : public IShapeOps {
   [[nodiscard]] Result<std::unique_ptr<Shape>> read_file(
       const std::filesystem::path& path) const override {
     const std::string ext = lower_ext(path);
-    TopoDS_Shape shape;
     if (ext == ".step" || ext == ".stp") {
-      STEPControl_Reader reader;
-      if (reader.ReadFile(path.string().c_str()) != IFSelect_RetDone) {
-        return Err("STEPControl_Reader::ReadFile failed: " + path.string());
+      Handle(TDocStd_Document) doc = new_xcaf_document();
+      if (doc.IsNull()) {
+        return Err("failed to create XCAF document");
       }
-      reader.TransferRoots();
-      shape = reader.OneShape();
-    } else if (ext == ".iges" || ext == ".igs") {
-      IGESControl_Reader reader;
+      STEPCAFControl_Reader reader;
+      reader.SetColorMode(true);
+      reader.SetNameMode(true);
       if (reader.ReadFile(path.string().c_str()) != IFSelect_RetDone) {
-        return Err("IGESControl_Reader::ReadFile failed: " + path.string());
+        return Err("STEPCAFControl_Reader::ReadFile failed: " + path.string());
       }
-      reader.TransferRoots();
-      shape = reader.OneShape();
-    } else if (ext == ".brep") {
+      if (!reader.Transfer(doc)) {
+        return Err("STEPCAFControl_Reader::Transfer failed: " + path.string());
+      }
+      Handle(XCAFDoc_ShapeTool) shapes = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
+      TopoDS_Shape shape = compound_free_shapes(shapes);
+      if (shape.IsNull()) {
+        return Err("OCCT produced an empty shape: " + path.string());
+      }
+      return std::unique_ptr<Shape>(std::make_unique<OcctShape>(std::move(shape), doc));
+    }
+    if (ext == ".iges" || ext == ".igs") {
+      Handle(TDocStd_Document) doc = new_xcaf_document();
+      if (doc.IsNull()) {
+        return Err("failed to create XCAF document");
+      }
+      IGESCAFControl_Reader reader;
+      reader.SetColorMode(true);
+      reader.SetNameMode(true);
+      if (reader.ReadFile(path.string().c_str()) != IFSelect_RetDone) {
+        return Err("IGESCAFControl_Reader::ReadFile failed: " + path.string());
+      }
+      if (!reader.Transfer(doc)) {
+        return Err("IGESCAFControl_Reader::Transfer failed: " + path.string());
+      }
+      Handle(XCAFDoc_ShapeTool) shapes = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
+      TopoDS_Shape shape = compound_free_shapes(shapes);
+      if (shape.IsNull()) {
+        return Err("OCCT produced an empty shape: " + path.string());
+      }
+      return std::unique_ptr<Shape>(std::make_unique<OcctShape>(std::move(shape), doc));
+    }
+    if (ext == ".brep") {
+      TopoDS_Shape shape;
       BRep_Builder builder;
       if (!BRepTools::Read(shape, path.string().c_str(), builder)) {
         return Err("BRepTools::Read failed: " + path.string());
       }
-    } else {
-      return Err("OCCT unsupported extension: " + ext);
+      if (shape.IsNull()) {
+        return Err("OCCT produced an empty shape: " + path.string());
+      }
+      return std::unique_ptr<Shape>(
+          std::make_unique<OcctShape>(std::move(shape), Handle(TDocStd_Document){}));
     }
-    if (shape.IsNull()) {
-      return Err("OCCT produced an empty shape: " + path.string());
-    }
-    return std::unique_ptr<Shape>(std::make_unique<OcctShape>(std::move(shape)));
+    return Err("OCCT unsupported extension: " + ext);
   }
 };
 
@@ -187,7 +319,7 @@ void register_occt_shape_ops() {
 
 Result<MeshCpu> tessellate_occt_box_for_tests() {
   BRepPrimAPI_MakeBox box(10.0, 10.0, 10.0);
-  OcctShape shape(box.Shape());
+  OcctShape shape(box.Shape(), Handle(TDocStd_Document){});
   return shape.tessellate(0.5);
 }
 

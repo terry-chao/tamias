@@ -5,6 +5,7 @@
 #include "graphics/mesh.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <string>
 #include <string_view>
@@ -26,29 +27,17 @@ class OpenGLDevice;
 
 class OpenGLBuffer final : public Buffer {
  public:
-  OpenGLBuffer(GLuint buffer, BufferDesc desc, GLenum target)
-      : buffer_(buffer), desc_(desc), target_(target) {}
-  ~OpenGLBuffer() override {
-    if (buffer_) {
-      gl::DeleteBuffers(1, &buffer_);
-    }
-  }
+  OpenGLBuffer(OpenGLDevice* device, GLuint buffer, BufferDesc desc, GLenum target);
+  ~OpenGLBuffer() override;
 
   [[nodiscard]] const BufferDesc& desc() const override { return desc_; }
   [[nodiscard]] GLuint handle() const { return buffer_; }
   [[nodiscard]] GLenum target() const { return target_; }
 
-  Result<void> write(std::uint64_t offset, std::span<const std::byte> data) override {
-    if (!desc_.host_visible) {
-      return Err("buffer is not host visible");
-    }
-    gl::BindBuffer(target_, buffer_);
-    gl::BufferSubData(target_, static_cast<GLintptr>(offset),
-                      static_cast<GLsizeiptr>(data.size()), data.data());
-    return {};
-  }
+  Result<void> write(std::uint64_t offset, std::span<const std::byte> data) override;
 
  private:
+  OpenGLDevice* device_ = nullptr;
   GLuint buffer_ = 0;
   BufferDesc desc_{};
   GLenum target_ = GL_ARRAY_BUFFER;
@@ -158,7 +147,13 @@ class OpenGLDevice final : public RHIDevice {
   Result<void> initialize();
 
   [[nodiscard]] GraphicsBackend backend() const override { return GraphicsBackend::OpenGL; }
-  [[nodiscard]] Mat4 clip_space_correction_matrix() const override { return Mat4::identity(); }
+  [[nodiscard]] Mat4 clip_space_correction_matrix() const override {
+    // perspective() emits Z in [0,1] (Vulkan-style). Remap to OpenGL [-1,1].
+    Mat4 m = Mat4::identity();
+    m(2, 2) = 2.f;
+    m(2, 3) = -1.f;
+    return m;
+  }
 
   Result<std::unique_ptr<Buffer>> create_buffer(const BufferDesc& desc) override;
   Result<std::unique_ptr<Texture>> create_texture(const TextureDesc&) override {
@@ -183,6 +178,7 @@ class OpenGLDevice final : public RHIDevice {
   }
 
   Result<void> make_current_dummy();
+  Result<void> make_current_hdc(HDC hdc);
   Result<void> make_current_window(const NativeWindowHandle& window
 #if defined(_WIN32)
                                    ,
@@ -219,6 +215,37 @@ class OpenGLDevice final : public RHIDevice {
   bool owns_display_ = false;
 #endif
 };
+
+OpenGLBuffer::OpenGLBuffer(OpenGLDevice* device, GLuint buffer, BufferDesc desc, GLenum target)
+    : device_(device), buffer_(buffer), desc_(desc), target_(target) {}
+
+OpenGLBuffer::~OpenGLBuffer() {
+  if (!buffer_ || !device_) {
+    return;
+  }
+  if (device_->make_current_dummy()) {
+    gl::DeleteBuffers(1, &buffer_);
+    device_->release_current();
+  }
+  buffer_ = 0;
+}
+
+Result<void> OpenGLBuffer::write(std::uint64_t offset, std::span<const std::byte> data) {
+  if (!desc_.host_visible) {
+    return Err("buffer is not host visible");
+  }
+  if (!device_) {
+    return Err("OpenGL buffer has no device");
+  }
+  if (auto r = device_->make_current_dummy(); !r) {
+    return Err(r.error());
+  }
+  gl::BindBuffer(target_, buffer_);
+  gl::BufferSubData(target_, static_cast<GLintptr>(offset), static_cast<GLsizeiptr>(data.size()),
+                    data.data());
+  device_->release_current();
+  return {};
+}
 
 #if defined(_WIN32)
 
@@ -343,6 +370,16 @@ Result<void> OpenGLDevice::make_current_dummy() {
   return {};
 }
 
+Result<void> OpenGLDevice::make_current_hdc(HDC hdc) {
+  if (!hdc) {
+    return Err("OpenGL make_current missing HDC");
+  }
+  if (!wglMakeCurrent(hdc, context_)) {
+    return Err("wglMakeCurrent swapchain failed");
+  }
+  return {};
+}
+
 Result<void> OpenGLDevice::make_current_window(const NativeWindowHandle& window, HDC* out_hdc) {
   if (!window.hwnd) {
     return Err("OpenGL swapchain missing HWND");
@@ -354,9 +391,9 @@ Result<void> OpenGLDevice::make_current_window(const NativeWindowHandle& window,
   }
   // Pixel format can only be set once per window; ignore failure if already set.
   (void)set_pixel_format(hdc);
-  if (!wglMakeCurrent(hdc, context_)) {
+  if (auto r = make_current_hdc(hdc); !r) {
     ReleaseDC(hwnd, hdc);
-    return Err("wglMakeCurrent swapchain failed");
+    return Err(r.error());
   }
   if (out_hdc) {
     *out_hdc = hdc;
@@ -599,7 +636,7 @@ Result<std::unique_ptr<Buffer>> OpenGLDevice::create_buffer(const BufferDesc& de
   gl::BufferData(target, static_cast<GLsizeiptr>(desc.size), nullptr,
                  desc.host_visible ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW);
   release_current();
-  return std::make_unique<OpenGLBuffer>(buffer, desc, target);
+  return std::make_unique<OpenGLBuffer>(this, buffer, desc, target);
 }
 
 Result<std::unique_ptr<ShaderModule>> OpenGLDevice::create_shader_module(
@@ -668,11 +705,19 @@ Result<void> OpenGLSwapChain::resize(std::uint32_t width, std::uint32_t height) 
 
 Result<void> OpenGLSwapChain::make_current() {
 #if defined(_WIN32)
+  // HWND must already have a depth-capable pixel format (set on the UI thread).
   if (hdc_) {
     ReleaseDC(static_cast<HWND>(window_.hwnd), hdc_);
     hdc_ = nullptr;
   }
-  return device_->make_current_window(window_, &hdc_);
+  if (!window_.hwnd) {
+    return Err("OpenGL swapchain missing HWND");
+  }
+  hdc_ = GetDC(static_cast<HWND>(window_.hwnd));
+  if (!hdc_) {
+    return Err("GetDC failed for OpenGL swapchain");
+  }
+  return device_->make_current_hdc(hdc_);
 #else
   return device_->make_current_window(window_);
 #endif
@@ -774,11 +819,15 @@ void OpenGLCommandList::draw_indexed(const DrawIndexedDesc& desc) {
   gl::EnableVertexAttribArray(1);
   gl::VertexAttribPointer(
       1, 3, GL_FLOAT, GL_FALSE, stride,
-      reinterpret_cast<const void*>(static_cast<std::uintptr_t>(vertex_offset_ + sizeof(Vec3))));
+      reinterpret_cast<const void*>(static_cast<std::uintptr_t>(vertex_offset_ + offsetof(Vertex, normal))));
   gl::EnableVertexAttribArray(2);
-  gl::VertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, stride,
-                          reinterpret_cast<const void*>(static_cast<std::uintptr_t>(
-                              vertex_offset_ + sizeof(Vec3) + sizeof(Vec3))));
+  gl::VertexAttribPointer(
+      2, 2, GL_FLOAT, GL_FALSE, stride,
+      reinterpret_cast<const void*>(static_cast<std::uintptr_t>(vertex_offset_ + offsetof(Vertex, uv))));
+  gl::EnableVertexAttribArray(3);
+  gl::VertexAttribPointer(
+      3, 3, GL_FLOAT, GL_FALSE, stride,
+      reinterpret_cast<const void*>(static_cast<std::uintptr_t>(vertex_offset_ + offsetof(Vertex, color))));
 
   const auto index_ptr =
       reinterpret_cast<const void*>(static_cast<std::uintptr_t>(
@@ -796,6 +845,104 @@ Result<std::unique_ptr<RHIDevice>> create_opengl_device(const DeviceCreateInfo& 
 }
 
 }  // namespace
+
+#if defined(_WIN32)
+namespace {
+
+LRESULT CALLBACK tamias_gl_surface_wnd_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+  if (msg == WM_NCHITTEST) {
+    // The child HWND only presents pixels. Let the Qt viewport underneath
+    // receive orbit, pan, wheel, and selection input.
+    return HTTRANSPARENT;
+  }
+  if (msg == WM_ERASEBKGND) {
+    return 1;
+  }
+  if (msg == WM_PAINT) {
+    PAINTSTRUCT ps;
+    BeginPaint(hwnd, &ps);
+    EndPaint(hwnd, &ps);
+    return 0;
+  }
+  return DefWindowProcA(hwnd, msg, wp, lp);
+}
+
+const char* tamias_gl_surface_class() {
+  static const char* kName = [] {
+    WNDCLASSEXA wc{};
+    wc.cbSize = sizeof(wc);
+    wc.style = CS_OWNDC;
+    wc.lpfnWndProc = tamias_gl_surface_wnd_proc;
+    wc.hInstance = GetModuleHandleA(nullptr);
+    wc.lpszClassName = "tamias_gl_surface";
+    wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    RegisterClassExA(&wc);
+    return wc.lpszClassName;
+  }();
+  return kName;
+}
+
+}  // namespace
+
+void* create_opengl_surface_hwnd(void* parent_hwnd, int width, int height) {
+  HWND parent = static_cast<HWND>(parent_hwnd);
+  if (!parent) {
+    return nullptr;
+  }
+  width = std::max(1, width);
+  height = std::max(1, height);
+  // Must run on the UI thread. WS_EX_TRANSPARENT lets mouse events reach Qt.
+  HWND hwnd = CreateWindowExA(WS_EX_TRANSPARENT, tamias_gl_surface_class(), "",
+                              WS_CHILD | WS_VISIBLE, 0, 0, width, height, parent, nullptr,
+                              GetModuleHandleA(nullptr), nullptr);
+  if (!hwnd) {
+    return nullptr;
+  }
+  HDC hdc = GetDC(hwnd);
+  if (!hdc) {
+    DestroyWindow(hwnd);
+    return nullptr;
+  }
+  PIXELFORMATDESCRIPTOR pfd{};
+  pfd.nSize = sizeof(pfd);
+  pfd.nVersion = 1;
+  pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
+  pfd.iPixelType = PFD_TYPE_RGBA;
+  pfd.cColorBits = 32;
+  pfd.cDepthBits = 24;
+  pfd.iLayerType = PFD_MAIN_PLANE;
+  const int format = ChoosePixelFormat(hdc, &pfd);
+  if (format == 0 || !SetPixelFormat(hdc, format, &pfd)) {
+    ReleaseDC(hwnd, hdc);
+    DestroyWindow(hwnd);
+    return nullptr;
+  }
+  ReleaseDC(hwnd, hdc);
+  log_info("OpenGL surface HWND created on UI thread (depth-capable)");
+  return hwnd;
+}
+
+void destroy_opengl_surface_hwnd(void* hwnd) {
+  if (hwnd) {
+    DestroyWindow(static_cast<HWND>(hwnd));
+  }
+}
+
+void resize_opengl_surface_hwnd(void* hwnd, int width, int height) {
+  if (!hwnd) {
+    return;
+  }
+  HWND native = static_cast<HWND>(hwnd);
+  width = std::max(1, width);
+  height = std::max(1, height);
+  RECT client{};
+  if (GetClientRect(native, &client) && client.right == width && client.bottom == height) {
+    return;
+  }
+  SetWindowPos(native, nullptr, 0, 0, width, height,
+               SWP_NOZORDER | SWP_NOACTIVATE);
+}
+#endif
 
 void register_opengl_backend() {
   log_info("Registering OpenGL RHI backend");

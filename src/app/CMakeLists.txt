@@ -30,7 +30,11 @@ if(WIN32)
 endif()
 
 target_include_directories(tamias PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
-target_compile_definitions(tamias PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_compile_definitions(tamias PRIVATE
+  NOMINMAX
+  WIN32_LEAN_AND_MEAN
+  TAMIAS_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
 
 target_link_libraries(tamias
   PRIVATE
@@ -74,7 +78,11 @@ add_custom_command(TARGET tamias POST_BUILD
           ${TAMIAS_SHADER_SOURCE_DIR}/mesh.gl.vert
           ${TAMIAS_SHADER_SOURCE_DIR}/mesh.gl.frag
           $<TARGET_FILE_DIR:tamias>/shaders
-  COMMENT "Copying shaders next to tamias"
+  COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:tamias>/assets/samples
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          ${CMAKE_SOURCE_DIR}/assets/samples
+          $<TARGET_FILE_DIR:tamias>/assets/samples
+  COMMENT "Copying shaders and sample assets next to tamias"
 )
 
 if(TAMIAS_HAS_OCCT AND WIN32)

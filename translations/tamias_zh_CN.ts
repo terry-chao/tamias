@@ -44,6 +44,10 @@
         <translation>文件不可用 · 点击移除</translation>
     </message>
     <message>
+        <source>Remove from recent</source>
+        <translation>从最近打开中移除</translation>
+    </message>
+    <message>
         <location filename="../src/app/home_page.cpp" line="200"/>
         <source>OPEN</source>
         <translation>打开中</translation>
@@ -80,8 +84,8 @@
     </message>
     <message>
         <location filename="../src/app/home_page.cpp" line="364"/>
-        <source>Try the demo cube</source>
-        <translation>试用演示立方体</translation>
+        <source>Try Alvin demo</source>
+        <translation>试用 Alvin 演示模型</translation>
     </message>
     <message>
         <location filename="../src/app/home_page.cpp" line="368"/>
@@ -228,8 +232,8 @@
     </message>
     <message>
         <location filename="../src/app/main_window.cpp" line="119"/>
-        <source>Ready — Open glTF/OBJ or create a demo cube</source>
-        <translation>就绪 — 打开 glTF/OBJ 或创建演示立方体</translation>
+        <source>Ready — Open a model or try the demo</source>
+        <translation>就绪 — 打开模型或试用演示</translation>
     </message>
     <message>
         <location filename="../src/app/main_window.cpp" line="211"/>

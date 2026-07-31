@@ -16,7 +16,9 @@ namespace tamias {
 class DocumentViewport final : public QWidget {
   Q_OBJECT
  public:
-  explicit DocumentViewport(std::shared_ptr<Document> document, QWidget* parent = nullptr);
+  explicit DocumentViewport(std::shared_ptr<Document> document,
+                            std::shared_ptr<RenderThread> render_thread,
+                            QWidget* parent = nullptr);
   ~DocumentViewport() override;
 
   [[nodiscard]] Document& document() { return *document_; }
@@ -39,6 +41,8 @@ class DocumentViewport final : public QWidget {
  private:
   NativeWindowHandle native_handle() const;
   void ensure_channel();
+  void ensure_gl_surface();
+  void destroy_gl_surface();
   void submit_current_frame();
   void rebuild_bvh();
   void layout_overlays();
@@ -54,6 +58,7 @@ class DocumentViewport final : public QWidget {
   RenderMode mode_ = RenderMode::Shaded;
   class NativeSurface;
   NativeSurface* surface_ = nullptr;
+  void* gl_hwnd_ = nullptr;  // Win32 OpenGL child HWND (UI-thread owned)
   ViewCubeWidget* view_cube_ = nullptr;
   QLabel* coord_label_ = nullptr;
   QPoint last_mouse_;
