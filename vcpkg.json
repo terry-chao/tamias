@@ -1,0 +1,48 @@
+{
+  "name": "tamias",
+  "version": "0.1.0",
+  "builtin-baseline": "616affa24b974b710a4fc26257e90b7fda6d6826",
+  "features": {
+    "linux-desktop": {
+      "description": "Linux X11/XCB Qt and Vulkan platform dependencies",
+      "supports": "linux",
+      "dependencies": [
+        {
+          "name": "vulkan-loader",
+          "default-features": false,
+          "features": ["xcb"]
+        },
+        {
+          "name": "qtbase",
+          "default-features": false,
+          "features": ["fontconfig", "freetype", "xcb"]
+        }
+      ]
+    }
+  },
+  "dependencies": [
+    "vulkan",
+    "vulkan-memory-allocator",
+    {
+      "name": "xcb",
+      "platform": "linux"
+    },
+    "fastgltf",
+    "rapidobj",
+    {
+      "name": "spdlog",
+      "default-features": false
+    },
+    "gtest",
+    {
+      "name": "qtbase",
+      "default-features": false,
+      "features": ["gui", "widgets", "png"]
+    },
+    "qtsvg",
+    {
+      "name": "glslang",
+      "features": ["tools"]
+    }
+  ]
+}

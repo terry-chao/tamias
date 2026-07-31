@@ -1,0 +1,5 @@
+add_library(tamias_io STATIC mesh_io.cpp)
+add_library(tamias::io ALIAS tamias_io)
+target_include_directories(tamias_io PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_include_directories(tamias_io PRIVATE ${RAPIDOBJ_INCLUDE_DIRS})
+target_link_libraries(tamias_io PUBLIC tamias::core tamias::graphics)

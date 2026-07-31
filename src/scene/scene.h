@@ -1,0 +1,62 @@
+#pragma once
+
+#include "math/math.h"
+
+#include <cstdint>
+#include <string>
+#include <vector>
+
+namespace tamias {
+
+struct SceneNode {
+  std::uint64_t id = 0;
+  std::string name;
+  std::uint64_t mesh_asset_id = 0;
+  std::uint64_t gpu_mesh_id = 0;
+  Mat4 transform = Mat4::identity();
+  Vec3 color{0.75f, 0.78f, 0.82f};
+  Aabb world_bounds{};
+  bool selected = false;
+};
+
+class Scene {
+ public:
+  SceneNode& add_node(SceneNode node) {
+    node.id = next_id_++;
+    nodes_.push_back(std::move(node));
+    return nodes_.back();
+  }
+
+  [[nodiscard]] const std::vector<SceneNode>& nodes() const { return nodes_; }
+  [[nodiscard]] std::vector<SceneNode>& nodes() { return nodes_; }
+
+  void clear_selection() {
+    for (auto& n : nodes_) {
+      n.selected = false;
+    }
+  }
+
+  SceneNode* find(std::uint64_t id) {
+    for (auto& n : nodes_) {
+      if (n.id == id) {
+        return &n;
+      }
+    }
+    return nullptr;
+  }
+
+  const SceneNode* find(std::uint64_t id) const {
+    for (const auto& n : nodes_) {
+      if (n.id == id) {
+        return &n;
+      }
+    }
+    return nullptr;
+  }
+
+ private:
+  std::vector<SceneNode> nodes_;
+  std::uint64_t next_id_ = 1;
+};
+
+}  // namespace tamias
