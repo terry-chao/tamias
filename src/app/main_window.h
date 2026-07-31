@@ -2,10 +2,14 @@
 
 #include "document/document.h"
 #include "document_viewport.h"
+#include "home_page.h"
+#include "recent_files.h"
 
 #include <QAction>
 #include <QActionGroup>
 #include <QMainWindow>
+#include <QMenu>
+#include <QStackedWidget>
 #include <QTabWidget>
 #include <memory>
 
@@ -23,14 +27,26 @@ class MainWindow final : public QMainWindow {
   void frame_all();
   void close_tab(int index);
   void on_tab_changed(int index);
+  void open_recent_path(const QString& path);
+  void on_missing_recent(const QString& path);
+  void rebuild_recent_menu();
 
  private:
   void add_document_tab(std::shared_ptr<Document> document);
   Result<void> populate_document_meshes(Document& document, RenderThread& thread);
   void sync_render_mode_actions();
+  void show_home();
+  void show_documents();
+  void refresh_home();
+  bool open_path(const QString& path);
   DocumentViewport* current_viewport() const;
 
+  QStackedWidget* stack_ = nullptr;
+  HomePage* home_ = nullptr;
   QTabWidget* tabs_ = nullptr;
+  QMenu* recent_menu_ = nullptr;
+  RecentFilesStore recent_;
+
   QAction* wireframe_action_ = nullptr;
   QAction* shaded_action_ = nullptr;
   QAction* realistic_action_ = nullptr;

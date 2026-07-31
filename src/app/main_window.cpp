@@ -4,6 +4,7 @@
 #include "io/mesh_io.h"
 
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QIcon>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -17,16 +18,30 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   setWindowIcon(QIcon(QStringLiteral(":/branding/logo.png")));
   resize(1280, 800);
 
-  tabs_ = new QTabWidget(this);
+  recent_.load();
+
+  stack_ = new QStackedWidget(this);
+  home_ = new HomePage(stack_);
+  tabs_ = new QTabWidget(stack_);
   tabs_->setTabsClosable(true);
   tabs_->setDocumentMode(true);
-  setCentralWidget(tabs_);
+  stack_->addWidget(home_);
+  stack_->addWidget(tabs_);
+  setCentralWidget(stack_);
+
   connect(tabs_, &QTabWidget::tabCloseRequested, this, &MainWindow::close_tab);
   connect(tabs_, &QTabWidget::currentChanged, this, &MainWindow::on_tab_changed);
+  connect(home_, &HomePage::newDemoRequested, this, &MainWindow::new_demo_document);
+  connect(home_, &HomePage::openRequested, this, &MainWindow::open_file);
+  connect(home_, &HomePage::fileActivated, this, &MainWindow::open_recent_path);
+  connect(home_, &HomePage::missingFileActivated, this, &MainWindow::on_missing_recent);
 
   auto* file_menu = menuBar()->addMenu(tr("&File"));
   file_menu->addAction(tr("&New Demo Cube"), this, &MainWindow::new_demo_document);
   file_menu->addAction(tr("&Open..."), this, &MainWindow::open_file, QKeySequence::Open);
+  recent_menu_ = file_menu->addMenu(tr("Open &Recent"));
+  connect(recent_menu_, &QMenu::aboutToShow, this, &MainWindow::rebuild_recent_menu);
+  rebuild_recent_menu();
   file_menu->addSeparator();
   file_menu->addAction(tr("E&xit"), this, &QWidget::close, QKeySequence::Quit);
 
@@ -77,7 +92,52 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   toolbar->addAction(tr("Frame All"), this, &MainWindow::frame_all);
 
   statusBar()->showMessage(tr("Ready — Open glTF/OBJ or create a demo cube"));
-  new_demo_document();
+  show_home();
+}
+
+void MainWindow::show_home() {
+  refresh_home();
+  stack_->setCurrentWidget(home_);
+  sync_render_mode_actions();
+}
+
+void MainWindow::show_documents() {
+  stack_->setCurrentWidget(tabs_);
+  sync_render_mode_actions();
+}
+
+void MainWindow::refresh_home() {
+  home_->refresh(recent_.items());
+  rebuild_recent_menu();
+}
+
+void MainWindow::rebuild_recent_menu() {
+  if (!recent_menu_) {
+    return;
+  }
+  recent_menu_->clear();
+  const auto& items = recent_.items();
+  if (items.isEmpty()) {
+    auto* empty = recent_menu_->addAction(tr("(No recent files)"));
+    empty->setEnabled(false);
+    return;
+  }
+  for (const RecentFileItem& item : items) {
+    const bool exists = QFileInfo::exists(item.path);
+    auto* action = recent_menu_->addAction(item.name);
+    action->setData(item.path);
+    action->setEnabled(exists);
+    if (!exists) {
+      action->setText(tr("%1 (missing)").arg(item.name));
+    }
+    connect(action, &QAction::triggered, this, [this, path = item.path, exists]() {
+      if (exists) {
+        open_recent_path(path);
+      } else {
+        on_missing_recent(path);
+      }
+    });
+  }
 }
 
 Result<void> MainWindow::populate_document_meshes(Document& document, RenderThread& thread) {
@@ -112,6 +172,7 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document) {
   auto* viewport = new DocumentViewport(document, tabs_);
   const int index = tabs_->addTab(viewport, QString::fromStdString(document->name()));
   tabs_->setCurrentIndex(index);
+  show_documents();
   sync_render_mode_actions();
 }
 
@@ -129,18 +190,21 @@ void MainWindow::new_demo_document() {
   add_document_tab(document);
 }
 
-void MainWindow::open_file() {
-  const QString path = QFileDialog::getOpenFileName(
-      this, tr("Open Mesh"), QString(),
-      tr("Meshes (*.gltf *.glb *.obj);;glTF (*.gltf *.glb);;OBJ (*.obj)"));
+bool MainWindow::open_path(const QString& path) {
   if (path.isEmpty()) {
-    return;
+    return false;
   }
-  const auto file = std::filesystem::path(path.toStdString());
+  const QFileInfo info(path);
+  if (!info.exists()) {
+    QMessageBox::warning(this, tr("Open"), tr("File not found:\n%1").arg(path));
+    return false;
+  }
+
+  const auto file = std::filesystem::path(info.absoluteFilePath().toStdString());
   auto mesh = load_mesh_file(file);
   if (!mesh) {
     QMessageBox::critical(this, tr("Open"), QString::fromStdString(mesh.error()));
-    return;
+    return false;
   }
   auto document = std::make_shared<Document>(file.filename().string());
   document->set_path(file);
@@ -154,10 +218,40 @@ void MainWindow::open_file() {
   node.world_bounds = stored.cpu.bounds;
   document->scene().add_node(std::move(node));
   add_document_tab(document);
-  statusBar()->showMessage(tr("Loaded %1").arg(path), 5000);
+
+  recent_.add(info.absoluteFilePath());
+  refresh_home();
+  statusBar()->showMessage(tr("Loaded %1").arg(info.absoluteFilePath()), 5000);
+  return true;
+}
+
+void MainWindow::open_file() {
+  const QString path = QFileDialog::getOpenFileName(
+      this, tr("Open Mesh"), QString(),
+      tr("Meshes (*.gltf *.glb *.obj);;glTF (*.gltf *.glb);;OBJ (*.obj)"));
+  if (path.isEmpty()) {
+    return;
+  }
+  open_path(path);
+}
+
+void MainWindow::open_recent_path(const QString& path) { open_path(path); }
+
+void MainWindow::on_missing_recent(const QString& path) {
+  const auto answer = QMessageBox::question(
+      this, tr("Missing file"),
+      tr("This file no longer exists:\n%1\n\nRemove it from Recent?").arg(path),
+      QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+  if (answer == QMessageBox::Yes) {
+    recent_.remove(path);
+    refresh_home();
+  }
 }
 
 DocumentViewport* MainWindow::current_viewport() const {
+  if (stack_->currentWidget() != tabs_) {
+    return nullptr;
+  }
   return qobject_cast<DocumentViewport*>(tabs_->currentWidget());
 }
 
@@ -202,7 +296,11 @@ void MainWindow::close_tab(int index) {
     tabs_->removeTab(index);
     delete w;
   }
-  sync_render_mode_actions();
+  if (tabs_->count() == 0) {
+    show_home();
+  } else {
+    sync_render_mode_actions();
+  }
 }
 
 }  // namespace tamias

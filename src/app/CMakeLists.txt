@@ -5,6 +5,8 @@ set(CMAKE_AUTOUIC ON)
 add_executable(tamias
   main.cpp
   main_window.cpp
+  home_page.cpp
+  recent_files.cpp
   document_viewport.cpp
   view_cube_widget.cpp
   rhi_backends.cpp
