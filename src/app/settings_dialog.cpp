@@ -67,11 +67,11 @@ void SettingsDialog::on_backend_changed(int index) {
   if (backend == GraphicsBackend::OpenGL) {
     backend_hint_->setText(
         tr("OpenGL uses an isolated render thread per document (never shared). "
-           "Changes apply to newly opened documents."));
+           "Backend changes take effect after restarting Tamias."));
   } else {
     backend_hint_->setText(
         tr("Vulkan documents with the same settings share one render thread. "
-           "Changes apply to newly opened documents."));
+           "Backend changes take effect after restarting Tamias."));
   }
 }
 
@@ -81,6 +81,7 @@ void SettingsDialog::accept() {
   const QString language = language_combo_->currentData().toString();
   auto& settings = AppSettings::instance();
   language_changed_ = language != settings.ui_language();
+  backend_changed_ = backend != settings.graphics_backend();
   settings.set_graphics_backend(backend);
   settings.set_ui_language(language);
   settings.save();

@@ -36,6 +36,24 @@ class Scene {
     }
   }
 
+  [[nodiscard]] SceneNode* selected_node() {
+    for (auto& n : nodes_) {
+      if (n.selected) {
+        return &n;
+      }
+    }
+    return nullptr;
+  }
+
+  [[nodiscard]] const SceneNode* selected_node() const {
+    for (const auto& n : nodes_) {
+      if (n.selected) {
+        return &n;
+      }
+    }
+    return nullptr;
+  }
+
   SceneNode* find(std::uint64_t id) {
     for (auto& n : nodes_) {
       if (n.id == id) {

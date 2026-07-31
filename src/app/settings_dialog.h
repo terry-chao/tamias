@@ -13,6 +13,7 @@ class SettingsDialog final : public QDialog {
   explicit SettingsDialog(QWidget* parent = nullptr);
 
   [[nodiscard]] bool language_changed() const { return language_changed_; }
+  [[nodiscard]] bool backend_changed() const { return backend_changed_; }
 
  private slots:
   void accept() override;
@@ -23,6 +24,7 @@ class SettingsDialog final : public QDialog {
   QComboBox* language_combo_ = nullptr;
   QLabel* backend_hint_ = nullptr;
   bool language_changed_ = false;
+  bool backend_changed_ = false;
 };
 
 }  // namespace tamias

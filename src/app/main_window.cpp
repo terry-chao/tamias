@@ -90,6 +90,22 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   connect(open_action, &QAction::triggered, this, &MainWindow::open_file);
   addAction(open_action);
 
+  auto* save_action = new QAction(style()->standardIcon(QStyle::SP_DialogSaveButton),
+                                  tr("Save"), this);
+  save_action->setShortcut(QKeySequence::Save);
+  save_action->setToolTip(tr("Save the selected model"));
+  connect(save_action, &QAction::triggered, this, &MainWindow::save_file);
+  addAction(save_action);
+
+  auto* save_as_action = new QAction(
+      themed_mask_icon(QStringLiteral(":/icons/save_as.svg"),
+                       palette().color(QPalette::WindowText)),
+      tr("Save As…"), this);
+  save_as_action->setShortcut(QKeySequence::SaveAs);
+  save_as_action->setToolTip(tr("Save the selected model to a new file"));
+  connect(save_as_action, &QAction::triggered, this, &MainWindow::save_file_as);
+  addAction(save_as_action);
+
   auto* frame_all_action = new QAction(
       themed_mask_icon(QStringLiteral(":/icons/frame_all.svg"),
                        palette().color(QPalette::WindowText)),
@@ -123,6 +139,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   toolbar->setMovable(false);
   toolbar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
   toolbar->addAction(open_action);
+  toolbar->addAction(save_action);
+  toolbar->addAction(save_as_action);
   toolbar->addAction(frame_all_action);
   toolbar->addAction(settings_action);
 
@@ -214,10 +232,15 @@ void MainWindow::open_settings() {
   if (dialog.exec() != QDialog::Accepted) {
     return;
   }
+  QStringList notes;
   if (dialog.language_changed()) {
-    QMessageBox::information(
-        this, tr("Language"),
-        tr("Language changes take effect after restarting Tamias."));
+    notes << tr("Language changes take effect after restarting Tamias.");
+  }
+  if (dialog.backend_changed()) {
+    notes << tr("Render backend changes take effect after restarting Tamias.");
+  }
+  if (!notes.isEmpty()) {
+    QMessageBox::information(this, tr("Settings"), notes.join(QStringLiteral("\n\n")));
   }
 }
 
@@ -335,6 +358,111 @@ void MainWindow::open_file() {
     return;
   }
   open_path(path);
+}
+
+bool MainWindow::is_obj_path(const QString& path) {
+  return QFileInfo(path).suffix().compare(QStringLiteral("obj"), Qt::CaseInsensitive) == 0;
+}
+
+const MeshCpu* MainWindow::selected_mesh(Document& document) const {
+  const SceneNode* node = document.scene().selected_node();
+  if (!node) {
+    return nullptr;
+  }
+  const MeshAsset* asset = document.mesh(node->mesh_asset_id);
+  return asset ? &asset->cpu : nullptr;
+}
+
+bool MainWindow::write_selected_mesh(const QString& path) {
+  auto* vp = current_viewport();
+  if (!vp) {
+    QMessageBox::information(this, tr("Save"), tr("Open a document first."));
+    return false;
+  }
+  Document& document = vp->document();
+  const MeshCpu* mesh = selected_mesh(document);
+  if (!mesh) {
+    QMessageBox::information(this, tr("Save"),
+                             tr("Select a model in the viewport, then save again."));
+    return false;
+  }
+
+  QString out_path = path;
+  if (!is_obj_path(out_path)) {
+    out_path += QStringLiteral(".obj");
+  }
+  const auto file = std::filesystem::path(QFileInfo(out_path).absoluteFilePath().toStdString());
+  if (auto r = save_mesh_file(file, *mesh); !r) {
+    QMessageBox::critical(this, tr("Save"), QString::fromStdString(r.error()));
+    return false;
+  }
+
+  document.set_path(file);
+  document.set_name(file.filename().string());
+  if (const int index = tabs_->indexOf(vp); index >= 0) {
+    tabs_->setTabText(index, QString::fromStdString(document.name()));
+  }
+
+  const QFileInfo info(QString::fromStdString(file.string()));
+  const QImage thumb = render_mesh_thumbnail(*mesh);
+  const QString thumb_path = save_mesh_thumbnail(info.absoluteFilePath(), thumb);
+  recent_.add(info.absoluteFilePath(), thumb_path);
+  refresh_home();
+  statusBar()->showMessage(tr("Saved %1").arg(info.absoluteFilePath()), 5000);
+  return true;
+}
+
+void MainWindow::save_file() {
+  auto* vp = current_viewport();
+  if (!vp) {
+    QMessageBox::information(this, tr("Save"), tr("Open a document first."));
+    return;
+  }
+  if (!selected_mesh(vp->document())) {
+    QMessageBox::information(this, tr("Save"),
+                             tr("Select a model in the viewport, then save again."));
+    return;
+  }
+
+  const auto& doc_path = vp->document().path();
+  if (!doc_path.empty() && is_obj_path(QString::fromStdString(doc_path.string()))) {
+    write_selected_mesh(QString::fromStdString(doc_path.string()));
+    return;
+  }
+  save_file_as();
+}
+
+void MainWindow::save_file_as() {
+  auto* vp = current_viewport();
+  if (!vp) {
+    QMessageBox::information(this, tr("Save"), tr("Open a document first."));
+    return;
+  }
+  if (!selected_mesh(vp->document())) {
+    QMessageBox::information(this, tr("Save"),
+                             tr("Select a model in the viewport, then save again."));
+    return;
+  }
+
+  QString suggested;
+  const auto& doc_path = vp->document().path();
+  if (!doc_path.empty()) {
+    QFileInfo info(QString::fromStdString(doc_path.string()));
+    suggested = info.absolutePath() + QLatin1Char('/') + info.completeBaseName() +
+                QStringLiteral(".obj");
+  } else {
+    suggested = QString::fromStdString(vp->document().name());
+    if (!is_obj_path(suggested)) {
+      suggested += QStringLiteral(".obj");
+    }
+  }
+
+  const QString path = QFileDialog::getSaveFileName(
+      this, tr("Save As"), suggested, tr("OBJ (*.obj)"));
+  if (path.isEmpty()) {
+    return;
+  }
+  write_selected_mesh(path);
 }
 
 void MainWindow::open_recent_path(const QString& path) { open_path(path); }

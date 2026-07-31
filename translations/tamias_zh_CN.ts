@@ -139,6 +139,42 @@
         <translation>打开模型文件</translation>
     </message>
     <message>
+        <source>Save</source>
+        <translation>保存</translation>
+    </message>
+    <message>
+        <source>Save the selected model</source>
+        <translation>保存选中的模型</translation>
+    </message>
+    <message>
+        <source>Save As…</source>
+        <translation>另存为…</translation>
+    </message>
+    <message>
+        <source>Save the selected model to a new file</source>
+        <translation>将选中的模型保存到新文件</translation>
+    </message>
+    <message>
+        <source>Open a document first.</source>
+        <translation>请先打开文档。</translation>
+    </message>
+    <message>
+        <source>Select a model in the viewport, then save again.</source>
+        <translation>请先在视口中选中模型，然后再保存。</translation>
+    </message>
+    <message>
+        <source>Save As</source>
+        <translation>另存为</translation>
+    </message>
+    <message>
+        <source>OBJ (*.obj)</source>
+        <translation>OBJ (*.obj)</translation>
+    </message>
+    <message>
+        <source>Saved %1</source>
+        <translation>已保存 %1</translation>
+    </message>
+    <message>
         <source>Frame all geometry in the view</source>
         <translation>框显视图中的全部几何</translation>
     </message>
@@ -249,14 +285,12 @@
         <translation>就绪 — 打开模型或试用演示</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="211"/>
-        <source>Language</source>
-        <translation>语言</translation>
-    </message>
-    <message>
-        <location filename="../src/app/main_window.cpp" line="212"/>
         <source>Language changes take effect after restarting Tamias.</source>
         <translation>语言更改将在重启 Tamias 后生效。</translation>
+    </message>
+    <message>
+        <source>Render backend changes take effect after restarting Tamias.</source>
+        <translation>渲染后端更改将在重启 Tamias 后生效。</translation>
     </message>
     <message>
         <location filename="../src/app/main_window.cpp" line="221"/>
@@ -365,49 +399,49 @@ Remove it from Recent?</source>
     </message>
     <message>
         <location filename="../src/app/settings_dialog.cpp" line="69"/>
-        <source>OpenGL uses an isolated render thread per document (never shared). Changes apply to newly opened documents.</source>
-        <translation>OpenGL 为每个文档使用独立渲染线程（不共享）。更改仅对新打开的文档生效。</translation>
+        <source>OpenGL uses an isolated render thread per document (never shared). Backend changes take effect after restarting Tamias.</source>
+        <translation>OpenGL 为每个文档使用独立渲染线程（不共享）。后端更改将在重启 Tamias 后生效。</translation>
     </message>
     <message>
         <location filename="../src/app/settings_dialog.cpp" line="73"/>
-        <source>Vulkan documents with the same settings share one render thread. Changes apply to newly opened documents.</source>
-        <translation>相同设置的 Vulkan 文档共享一个渲染线程。更改仅对新打开的文档生效。</translation>
+        <source>Vulkan documents with the same settings share one render thread. Backend changes take effect after restarting Tamias.</source>
+        <translation>相同设置的 Vulkan 文档共享一个渲染线程。后端更改将在重启 Tamias 后生效。</translation>
     </message>
 </context>
 <context>
     <name>tamias::ViewCubeWidget</name>
     <message>
-        <location filename="../src/app/view_cube_widget.cpp" line="79"/>
-        <source>Drag to orbit · Click a face: Front/Back/Left/Right/Top/Bottom</source>
-        <translation>拖动旋转视角 · 点击面：前/后/左/右/上/下</translation>
+        <location filename="../src/app/view_cube_widget.cpp" line="93"/>
+        <source>Drag to orbit · Click a face or corner to snap the view</source>
+        <translation>拖动旋转视角 · 点击面或角对齐视角</translation>
     </message>
     <message>
-        <location filename="../src/app/view_cube_widget.cpp" line="100"/>
+        <location filename="../src/app/view_cube_widget.cpp" line="115"/>
         <source>Front</source>
         <translation>前</translation>
     </message>
     <message>
-        <location filename="../src/app/view_cube_widget.cpp" line="107"/>
+        <location filename="../src/app/view_cube_widget.cpp" line="122"/>
         <source>Back</source>
         <translation>后</translation>
     </message>
     <message>
-        <location filename="../src/app/view_cube_widget.cpp" line="114"/>
+        <location filename="../src/app/view_cube_widget.cpp" line="129"/>
         <source>Left</source>
         <translation>左</translation>
     </message>
     <message>
-        <location filename="../src/app/view_cube_widget.cpp" line="121"/>
+        <location filename="../src/app/view_cube_widget.cpp" line="136"/>
         <source>Right</source>
         <translation>右</translation>
     </message>
     <message>
-        <location filename="../src/app/view_cube_widget.cpp" line="128"/>
+        <location filename="../src/app/view_cube_widget.cpp" line="143"/>
         <source>Top</source>
         <translation>上</translation>
     </message>
     <message>
-        <location filename="../src/app/view_cube_widget.cpp" line="135"/>
+        <location filename="../src/app/view_cube_widget.cpp" line="150"/>
         <source>Bottom</source>
         <translation>下</translation>
     </message>

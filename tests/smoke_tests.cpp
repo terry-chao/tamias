@@ -23,6 +23,19 @@ TEST(MeshIo, DemoCubeHasTriangles) {
   EXPECT_TRUE(mesh.bounds.valid());
 }
 
+TEST(MeshIo, SaveAndLoadObjRoundTrip) {
+  const auto original = make_demo_cube();
+  const auto path = std::filesystem::temp_directory_path() / "tamias_roundtrip.obj";
+  ASSERT_TRUE(save_obj(path, original)) << "save failed";
+  auto loaded = load_obj(path);
+  ASSERT_TRUE(loaded) << loaded.error();
+  EXPECT_EQ(loaded->indices.size(), original.indices.size());
+  EXPECT_EQ(loaded->vertices.size(), original.vertices.size());
+  EXPECT_TRUE(loaded->bounds.valid());
+  std::error_code ec;
+  std::filesystem::remove(path, ec);
+}
+
 TEST(Picking, RayHitsCube) {
   Document doc("t");
   MeshAsset asset{};

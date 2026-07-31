@@ -7,7 +7,9 @@
 #include "view/picking.h"
 #include "view_cube_widget.h"
 
+#include <QElapsedTimer>
 #include <QLabel>
+#include <QTimer>
 #include <QWidget>
 #include <memory>
 
@@ -37,6 +39,8 @@ class DocumentViewport final : public QWidget {
 
  private slots:
   void on_view_cube_face(ViewCubeFace face);
+  void on_view_cube_corner(ViewCubeCorner corner);
+  void on_view_anim_tick();
 
  private:
   NativeWindowHandle native_handle() const;
@@ -48,6 +52,8 @@ class DocumentViewport final : public QWidget {
   void layout_overlays();
   void sync_view_cube();
   void sync_coord_readout();
+  void start_view_animation(float target_yaw, float target_pitch);
+  void stop_view_animation();
   [[nodiscard]] Vec3 cursor_world_position(const QPoint& pos) const;
 
   std::shared_ptr<Document> document_;
@@ -61,6 +67,13 @@ class DocumentViewport final : public QWidget {
   void* gl_hwnd_ = nullptr;  // Win32 OpenGL child HWND (UI-thread owned)
   ViewCubeWidget* view_cube_ = nullptr;
   QLabel* coord_label_ = nullptr;
+  QTimer* view_anim_timer_ = nullptr;
+  QElapsedTimer view_anim_clock_;
+  float anim_from_yaw_ = 0.f;
+  float anim_from_pitch_ = 0.f;
+  float anim_yaw_delta_ = 0.f;
+  float anim_to_yaw_ = 0.f;
+  float anim_to_pitch_ = 0.f;
   QPoint last_mouse_;
   QPoint press_mouse_;
   bool orbiting_ = false;

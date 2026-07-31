@@ -13,6 +13,7 @@ namespace tamias {
 namespace {
 
 constexpr float kHalf = 0.55f;
+constexpr float kCornerInset = 0.22f;  // world units along each edge from vertex
 
 QColor face_color(ViewCubeFace face, bool hovered) {
   QColor c;
@@ -62,6 +63,18 @@ bool point_in_quad(const QPointF& p, const QPointF q[4]) {
   return true;
 }
 
+bool point_in_triangle(const QPointF& p, const QPointF t[3]) {
+  auto cross = [](QPointF a, QPointF b, QPointF c) {
+    return (b.x() - a.x()) * (c.y() - a.y()) - (b.y() - a.y()) * (c.x() - a.x());
+  };
+  const float z0 = static_cast<float>(cross(t[0], t[1], p));
+  const float z1 = static_cast<float>(cross(t[1], t[2], p));
+  const float z2 = static_cast<float>(cross(t[2], t[0], p));
+  const bool has_neg = (z0 < 0.f) || (z1 < 0.f) || (z2 < 0.f);
+  const bool has_pos = (z0 > 0.f) || (z1 > 0.f) || (z2 > 0.f);
+  return !(has_neg && has_pos);
+}
+
 }  // namespace
 
 ViewCubeWidget::ViewCubeWidget(QWidget* parent) : QWidget(parent) {
@@ -76,8 +89,9 @@ ViewCubeWidget::ViewCubeWidget(QWidget* parent) : QWidget(parent) {
   QPalette pal = palette();
   pal.setColor(QPalette::Window, QColor(31, 33, 38));
   setPalette(pal);
-  setToolTip(tr("Drag to orbit · Click a face: Front/Back/Left/Right/Top/Bottom"));
+  setToolTip(tr("Drag to orbit · Click a face or corner to snap the view"));
   rebuild_faces();
+  rebuild_corners();
 }
 
 void ViewCubeWidget::set_orientation(float yaw, float pitch) {
@@ -134,6 +148,39 @@ void ViewCubeWidget::rebuild_faces() {
                 {-kHalf, -kHalf, kHalf}},
                {0.f, -1.f, 0.f},
                tr("Bottom")};
+}
+
+void ViewCubeWidget::rebuild_corners() {
+  // Sign triples: (sx, sy, sz) for Right/Left × Top/Bottom × Front/Back.
+  struct Spec {
+    ViewCubeCorner id;
+    float sx;
+    float sy;
+    float sz;
+  };
+  const Spec specs[8] = {
+      {ViewCubeCorner::RightTopFront, 1.f, 1.f, 1.f},
+      {ViewCubeCorner::LeftTopFront, -1.f, 1.f, 1.f},
+      {ViewCubeCorner::RightTopBack, 1.f, 1.f, -1.f},
+      {ViewCubeCorner::LeftTopBack, -1.f, 1.f, -1.f},
+      {ViewCubeCorner::RightBottomFront, 1.f, -1.f, 1.f},
+      {ViewCubeCorner::LeftBottomFront, -1.f, -1.f, 1.f},
+      {ViewCubeCorner::RightBottomBack, 1.f, -1.f, -1.f},
+      {ViewCubeCorner::LeftBottomBack, -1.f, -1.f, -1.f},
+  };
+
+  for (int i = 0; i < 8; ++i) {
+    const auto& s = specs[i];
+    CornerGeom& c = corners_[i];
+    c.id = s.id;
+    c.vertex = {s.sx * kHalf, s.sy * kHalf, s.sz * kHalf};
+    // Inset along each axis toward the cube center → chamfer triangle.
+    c.pts[0] = {s.sx * (kHalf - kCornerInset), s.sy * kHalf, s.sz * kHalf};
+    c.pts[1] = {s.sx * kHalf, s.sy * (kHalf - kCornerInset), s.sz * kHalf};
+    c.pts[2] = {s.sx * kHalf, s.sy * kHalf, s.sz * (kHalf - kCornerInset)};
+    const float inv = 1.f / std::sqrt(3.f);
+    c.normal = {s.sx * inv, s.sy * inv, s.sz * inv};
+  }
 }
 
 void ViewCubeWidget::camera_basis(Vec3f& right, Vec3f& up, Vec3f& forward) const {
@@ -214,6 +261,64 @@ int ViewCubeWidget::hit_face(const QPoint& pos) const {
   return best.index;
 }
 
+int ViewCubeWidget::hit_corner(const QPoint& pos) const {
+  struct Candidate {
+    int index = -1;
+    float depth = 0.f;
+  };
+  Candidate best{-1, 1e9f};
+  const QPointF p(pos);
+
+  Vec3f right, up, forward;
+  camera_basis(right, up, forward);
+  const Vec3f eye_dir{-forward.x, -forward.y, -forward.z};
+
+  for (int i = 0; i < 8; ++i) {
+    const auto& corner = corners_[i];
+    const float facing =
+        corner.normal.x * eye_dir.x + corner.normal.y * eye_dir.y + corner.normal.z * eye_dir.z;
+    if (facing < 0.08f) {
+      continue;
+    }
+
+    QPointF t[3];
+    float depth = 0.f;
+    for (int k = 0; k < 3; ++k) {
+      const Vec3f v = to_view(corner.pts[k]);
+      const auto pr = project(v);
+      t[k] = QPointF(pr.x, pr.y);
+      depth += v.z;
+    }
+    depth *= (1.f / 3.f);
+
+    // Prefer triangle hit; also accept a small radius around the vertex so thin
+    // foreshortened corners remain clickable.
+    const Vec3f vv = to_view(corner.vertex);
+    const Vec2f vp = project(vv);
+    const float dx = static_cast<float>(p.x() - vp.x);
+    const float dy = static_cast<float>(p.y() - vp.y);
+    const bool near_vertex = (dx * dx + dy * dy) <= (10.f * 10.f);
+
+    if ((point_in_triangle(p, t) || near_vertex) && depth < best.depth) {
+      best = {i, depth};
+    }
+  }
+  return best.index;
+}
+
+void ViewCubeWidget::update_hover(const QPoint& pos) {
+  const int corner = hit_corner(pos);
+  int face = -1;
+  if (corner < 0) {
+    face = hit_face(pos);
+  }
+  if (corner != hover_corner_ || face != hover_face_) {
+    hover_corner_ = corner;
+    hover_face_ = face;
+    update();
+  }
+}
+
 void ViewCubeWidget::paintEvent(QPaintEvent*) {
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing, true);
@@ -234,8 +339,16 @@ void ViewCubeWidget::paintEvent(QPaintEvent*) {
     QPointF pts[4];
     QPointF center;
   };
-  std::vector<DrawFace> visible;
-  visible.reserve(6);
+  struct DrawCorner {
+    int index = 0;
+    float depth = 0.f;
+    QPointF pts[3];
+  };
+
+  std::vector<DrawFace> visible_faces;
+  visible_faces.reserve(6);
+  std::vector<DrawCorner> visible_corners;
+  visible_corners.reserve(8);
 
   Vec3f right, up, forward;
   camera_basis(right, up, forward);
@@ -262,18 +375,41 @@ void ViewCubeWidget::paintEvent(QPaintEvent*) {
     }
     df.depth = depth * 0.25f;
     df.center = sum * 0.25;
-    visible.push_back(df);
+    visible_faces.push_back(df);
   }
 
-  std::sort(visible.begin(), visible.end(),
+  for (int i = 0; i < 8; ++i) {
+    const auto& corner = corners_[i];
+    const float facing =
+        corner.normal.x * eye_dir.x + corner.normal.y * eye_dir.y + corner.normal.z * eye_dir.z;
+    if (facing < 0.05f) {
+      continue;
+    }
+
+    DrawCorner dc;
+    dc.index = i;
+    float depth = 0.f;
+    for (int k = 0; k < 3; ++k) {
+      const Vec3f v = to_view(corner.pts[k]);
+      const Vec2f pr = project(v);
+      dc.pts[k] = QPointF(pr.x, pr.y);
+      depth += v.z;
+    }
+    dc.depth = depth * (1.f / 3.f);
+    visible_corners.push_back(dc);
+  }
+
+  std::sort(visible_faces.begin(), visible_faces.end(),
             [](const DrawFace& a, const DrawFace& b) { return a.depth > b.depth; });
+  std::sort(visible_corners.begin(), visible_corners.end(),
+            [](const DrawCorner& a, const DrawCorner& b) { return a.depth > b.depth; });
 
   QFont font = painter.font();
   font.setBold(true);
   font.setPixelSize(13);
   painter.setFont(font);
 
-  for (const auto& df : visible) {
+  for (const auto& df : visible_faces) {
     const auto& face = faces_[df.index];
     QPainterPath path;
     path.moveTo(df.pts[0]);
@@ -282,7 +418,7 @@ void ViewCubeWidget::paintEvent(QPaintEvent*) {
     }
     path.closeSubpath();
 
-    const bool hovered = df.index == hover_face_;
+    const bool hovered = hover_corner_ < 0 && df.index == hover_face_;
     painter.fillPath(path, face_color(face.id, hovered));
     painter.setPen(QPen(QColor(255, 255, 255, hovered ? 220 : 140), hovered ? 1.6 : 1.0));
     painter.drawPath(path);
@@ -290,6 +426,21 @@ void ViewCubeWidget::paintEvent(QPaintEvent*) {
     painter.setPen(QColor(255, 255, 255, 230));
     painter.drawText(QRectF(df.center.x() - 12, df.center.y() - 10, 24, 20), Qt::AlignCenter,
                      face.label);
+  }
+
+  // Corner chamfers on top so they remain visible/clickable targets.
+  for (const auto& dc : visible_corners) {
+    QPainterPath path;
+    path.moveTo(dc.pts[0]);
+    path.lineTo(dc.pts[1]);
+    path.lineTo(dc.pts[2]);
+    path.closeSubpath();
+
+    const bool hovered = dc.index == hover_corner_;
+    QColor fill = hovered ? QColor(230, 230, 235) : QColor(200, 200, 210, 210);
+    painter.fillPath(path, fill);
+    painter.setPen(QPen(QColor(40, 42, 48, hovered ? 220 : 160), hovered ? 1.4 : 1.0));
+    painter.drawPath(path);
   }
 }
 
@@ -299,7 +450,8 @@ void ViewCubeWidget::mousePressEvent(QMouseEvent* event) {
   }
   last_mouse_ = event->pos();
   press_mouse_ = event->pos();
-  press_face_ = hit_face(event->pos());
+  press_corner_ = hit_corner(event->pos());
+  press_face_ = press_corner_ >= 0 ? -1 : hit_face(event->pos());
   dragging_ = false;
   grabMouse();
 }
@@ -311,6 +463,7 @@ void ViewCubeWidget::mouseMoveEvent(QMouseEvent* event) {
     if (!dragging_ && (event->pos() - press_mouse_).manhattanLength() >= 4) {
       dragging_ = true;
       hover_face_ = -1;
+      hover_corner_ = -1;
     }
     if (dragging_ && (delta.x() != 0 || delta.y() != 0)) {
       // Match viewport orbit feel (left drag).
@@ -319,11 +472,7 @@ void ViewCubeWidget::mouseMoveEvent(QMouseEvent* event) {
     return;
   }
 
-  const int hit = hit_face(event->pos());
-  if (hit != hover_face_) {
-    hover_face_ = hit;
-    update();
-  }
+  update_hover(event->pos());
 }
 
 void ViewCubeWidget::mouseReleaseEvent(QMouseEvent* event) {
@@ -331,18 +480,23 @@ void ViewCubeWidget::mouseReleaseEvent(QMouseEvent* event) {
     return;
   }
   releaseMouse();
-  if (!dragging_ && press_face_ >= 0) {
-    emit face_clicked(faces_[press_face_].id);
+  if (!dragging_) {
+    if (press_corner_ >= 0) {
+      emit corner_clicked(corners_[press_corner_].id);
+    } else if (press_face_ >= 0) {
+      emit face_clicked(faces_[press_face_].id);
+    }
   }
   dragging_ = false;
   press_face_ = -1;
-  hover_face_ = hit_face(event->pos());
-  update();
+  press_corner_ = -1;
+  update_hover(event->pos());
 }
 
 void ViewCubeWidget::leaveEvent(QEvent*) {
-  if (!dragging_ && hover_face_ != -1) {
+  if (!dragging_ && (hover_face_ != -1 || hover_corner_ != -1)) {
     hover_face_ = -1;
+    hover_corner_ = -1;
     update();
   }
 }

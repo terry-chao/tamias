@@ -27,6 +27,14 @@ class TurntableCamera {
   void look_top() { set_yaw_pitch(yaw_, 1.5f); }
   void look_bottom() { set_yaw_pitch(yaw_, -1.5f); }
 
+  // Place the eye along `direction` (from target toward eye), e.g. cube corners.
+  void look_toward(Vec3 direction) {
+    const Vec3 d = normalize(direction);
+    const float pitch = std::asin(std::clamp(d.y, -1.f, 1.f));
+    const float yaw = std::atan2(d.x, d.z);
+    set_yaw_pitch(yaw, pitch);
+  }
+
   void pan(float dx, float dy) {
     const Vec3 eye = eye_position();
     const Vec3 forward = normalize(target_ - eye);

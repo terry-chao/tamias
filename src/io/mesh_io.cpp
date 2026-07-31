@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <iomanip>
 #include <optional>
 #include <string_view>
 #include <vector>
@@ -469,6 +470,61 @@ Result<MeshCpu> load_mesh_file(const std::filesystem::path& path) {
     return load_gltf(path);
   }
   return Err("unsupported mesh format: " + ext);
+}
+
+Result<void> save_obj(const std::filesystem::path& path, const MeshCpu& mesh) {
+  if (mesh.indices.empty() || mesh.vertices.empty()) {
+    return Err("mesh has no triangles to save");
+  }
+  if (mesh.indices.size() % 3 != 0) {
+    return Err("mesh index count is not a multiple of 3");
+  }
+
+  std::ofstream out(path);
+  if (!out) {
+    return Err("failed to open file for writing: " + path.string());
+  }
+
+  out << "# Tamias OBJ export\n";
+  out << "o mesh\n";
+  out << std::setprecision(9) << std::fixed;
+
+  const bool write_colors = mesh_has_vertex_colors(mesh);
+  for (const auto& v : mesh.vertices) {
+    out << "v " << v.position.x << ' ' << v.position.y << ' ' << v.position.z;
+    if (write_colors) {
+      out << ' ' << v.color.x << ' ' << v.color.y << ' ' << v.color.z;
+    }
+    out << '\n';
+  }
+  for (const auto& v : mesh.vertices) {
+    out << "vn " << v.normal.x << ' ' << v.normal.y << ' ' << v.normal.z << '\n';
+  }
+  for (const auto& v : mesh.vertices) {
+    out << "vt " << v.uv.x << ' ' << v.uv.y << '\n';
+  }
+  for (std::size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
+    const auto i0 = mesh.indices[i] + 1;
+    const auto i1 = mesh.indices[i + 1] + 1;
+    const auto i2 = mesh.indices[i + 2] + 1;
+    out << "f " << i0 << '/' << i0 << '/' << i0 << ' ' << i1 << '/' << i1 << '/' << i1 << ' '
+        << i2 << '/' << i2 << '/' << i2 << '\n';
+  }
+  if (!out) {
+    return Err("failed while writing OBJ: " + path.string());
+  }
+  return {};
+}
+
+Result<void> save_mesh_file(const std::filesystem::path& path, const MeshCpu& mesh) {
+  auto ext = path.extension().string();
+  for (char& c : ext) {
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  }
+  if (ext == ".obj") {
+    return save_obj(path, mesh);
+  }
+  return Err("unsupported mesh write format: " + ext + " (only .obj is supported)");
 }
 
 }  // namespace tamias

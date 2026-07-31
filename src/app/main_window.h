@@ -19,6 +19,8 @@ class MainWindow final : public QMainWindow {
 
  private slots:
   void open_file();
+  void save_file();
+  void save_file_as();
   void new_demo_document();
   void frame_all();
   void close_tab(int index);
@@ -34,8 +36,11 @@ class MainWindow final : public QMainWindow {
   Result<void> populate_document_meshes(Document& document, RenderThread& thread);
   void refresh_home();
   bool open_path(const QString& path);
+  bool write_selected_mesh(const QString& path);
+  const MeshCpu* selected_mesh(Document& document) const;
   int find_open_document(const QString& path) const;
   DocumentViewport* current_viewport() const;
+  static bool is_obj_path(const QString& path);
 
   QStackedWidget* stack_ = nullptr;
   HomePage* home_ = nullptr;

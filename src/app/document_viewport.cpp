@@ -16,6 +16,7 @@
 #include <QWheelEvent>
 
 #include <algorithm>
+#include <cmath>
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -88,10 +89,16 @@ DocumentViewport::DocumentViewport(std::shared_ptr<Document> document,
 
   view_cube_ = new ViewCubeWidget(this);
   connect(view_cube_, &ViewCubeWidget::face_clicked, this, &DocumentViewport::on_view_cube_face);
+  connect(view_cube_, &ViewCubeWidget::corner_clicked, this, &DocumentViewport::on_view_cube_corner);
   connect(view_cube_, &ViewCubeWidget::orbit_dragged, this, [this](float dyaw, float dpitch) {
+    stop_view_animation();
     camera_.orbit(dyaw, dpitch);
     request_redraw();
   });
+
+  view_anim_timer_ = new QTimer(this);
+  view_anim_timer_->setInterval(16);
+  connect(view_anim_timer_, &QTimer::timeout, this, &DocumentViewport::on_view_anim_tick);
 
   coord_label_ = new QLabel(this);
   coord_label_->setObjectName(QStringLiteral("coordReadout"));
@@ -130,6 +137,7 @@ void DocumentViewport::set_render_mode(RenderMode mode) {
 }
 
 void DocumentViewport::frame_scene() {
+  stop_view_animation();
   camera_.frame_aabb(document_->bounds());
   request_redraw();
 }
@@ -214,28 +222,123 @@ void DocumentViewport::sync_coord_readout() {
   layout_overlays();
 }
 
+void DocumentViewport::stop_view_animation() {
+  if (view_anim_timer_ && view_anim_timer_->isActive()) {
+    view_anim_timer_->stop();
+  }
+}
+
+void DocumentViewport::start_view_animation(float target_yaw, float target_pitch) {
+  constexpr float kPi = 3.141592654f;
+  anim_from_yaw_ = camera_.yaw();
+  anim_from_pitch_ = camera_.pitch();
+  anim_to_yaw_ = target_yaw;
+  anim_to_pitch_ = std::clamp(target_pitch, -1.5f, 1.5f);
+
+  // Shortest yaw arc so e.g. Front↔Back never spins the long way.
+  float delta = anim_to_yaw_ - anim_from_yaw_;
+  while (delta > kPi) {
+    delta -= 2.f * kPi;
+  }
+  while (delta < -kPi) {
+    delta += 2.f * kPi;
+  }
+  anim_yaw_delta_ = delta;
+
+  if (std::abs(anim_yaw_delta_) < 1e-4f && std::abs(anim_to_pitch_ - anim_from_pitch_) < 1e-4f) {
+    camera_.set_yaw_pitch(anim_to_yaw_, anim_to_pitch_);
+    stop_view_animation();
+    request_redraw();
+    return;
+  }
+
+  view_anim_clock_.restart();
+  view_anim_timer_->start();
+  on_view_anim_tick();
+}
+
+void DocumentViewport::on_view_anim_tick() {
+  constexpr int kDurationMs = 280;
+  const float t_raw =
+      std::clamp(static_cast<float>(view_anim_clock_.elapsed()) / static_cast<float>(kDurationMs),
+                 0.f, 1.f);
+  // Ease-out cubic.
+  const float t = 1.f - (1.f - t_raw) * (1.f - t_raw) * (1.f - t_raw);
+  const float yaw = anim_from_yaw_ + anim_yaw_delta_ * t;
+  const float pitch = anim_from_pitch_ + (anim_to_pitch_ - anim_from_pitch_) * t;
+  camera_.set_yaw_pitch(yaw, pitch);
+  request_redraw();
+
+  if (t_raw >= 1.f) {
+    camera_.set_yaw_pitch(anim_to_yaw_, anim_to_pitch_);
+    stop_view_animation();
+    request_redraw();
+  }
+}
+
 void DocumentViewport::on_view_cube_face(ViewCubeFace face) {
+  float yaw = camera_.yaw();
+  float pitch = 0.f;
   switch (face) {
     case ViewCubeFace::Front:
-      camera_.look_front();
+      yaw = 0.f;
+      pitch = 0.f;
       break;
     case ViewCubeFace::Back:
-      camera_.look_back();
+      yaw = 3.141592654f;
+      pitch = 0.f;
       break;
     case ViewCubeFace::Left:
-      camera_.look_left();
+      yaw = -1.570796327f;
+      pitch = 0.f;
       break;
     case ViewCubeFace::Right:
-      camera_.look_right();
+      yaw = 1.570796327f;
+      pitch = 0.f;
       break;
     case ViewCubeFace::Top:
-      camera_.look_top();
+      pitch = 1.5f;
       break;
     case ViewCubeFace::Bottom:
-      camera_.look_bottom();
+      pitch = -1.5f;
       break;
   }
-  request_redraw();
+  start_view_animation(yaw, pitch);
+}
+
+void DocumentViewport::on_view_cube_corner(ViewCubeCorner corner) {
+  // Eye along the chosen cube corner (Front=+Z, Right=+X, Top=+Y).
+  Vec3 dir{};
+  switch (corner) {
+    case ViewCubeCorner::RightTopFront:
+      dir = {1.f, 1.f, 1.f};
+      break;
+    case ViewCubeCorner::LeftTopFront:
+      dir = {-1.f, 1.f, 1.f};
+      break;
+    case ViewCubeCorner::RightTopBack:
+      dir = {1.f, 1.f, -1.f};
+      break;
+    case ViewCubeCorner::LeftTopBack:
+      dir = {-1.f, 1.f, -1.f};
+      break;
+    case ViewCubeCorner::RightBottomFront:
+      dir = {1.f, -1.f, 1.f};
+      break;
+    case ViewCubeCorner::LeftBottomFront:
+      dir = {-1.f, -1.f, 1.f};
+      break;
+    case ViewCubeCorner::RightBottomBack:
+      dir = {1.f, -1.f, -1.f};
+      break;
+    case ViewCubeCorner::LeftBottomBack:
+      dir = {-1.f, -1.f, -1.f};
+      break;
+  }
+  const Vec3 d = normalize(dir);
+  const float pitch = std::asin(std::clamp(d.y, -1.f, 1.f));
+  const float yaw = std::atan2(d.x, d.z);
+  start_view_animation(yaw, pitch);
 }
 
 NativeWindowHandle DocumentViewport::native_handle() const {
@@ -375,8 +478,10 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
   last_mouse_ = event->pos();
   press_mouse_ = event->pos();
   if (event->button() == Qt::LeftButton) {
+    stop_view_animation();
     orbiting_ = true;
   } else if (event->button() == Qt::MiddleButton || event->button() == Qt::RightButton) {
+    stop_view_animation();
     panning_ = true;
   }
 }
@@ -423,6 +528,7 @@ void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
 }
 
 void DocumentViewport::wheelEvent(QWheelEvent* event) {
+  stop_view_animation();
   const float steps = event->angleDelta().y() / 120.f;
   const float factor = std::pow(0.9f, steps);
   const QPoint pos = event->position().toPoint();
