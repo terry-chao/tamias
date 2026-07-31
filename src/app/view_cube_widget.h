@@ -41,6 +41,8 @@ class ViewCubeWidget final : public QWidget {
   void orbit_dragged(float dyaw, float dpitch);
 
  protected:
+  void showEvent(QShowEvent* event) override;
+  void resizeEvent(QResizeEvent* event) override;
   void paintEvent(QPaintEvent* event) override;
   void mousePressEvent(QMouseEvent* event) override;
   void mouseMoveEvent(QMouseEvent* event) override;
@@ -48,6 +50,7 @@ class ViewCubeWidget final : public QWidget {
   void leaveEvent(QEvent* event) override;
 
  private:
+  void apply_plate_mask();
   struct Vec3f {
     float x = 0.f;
     float y = 0.f;

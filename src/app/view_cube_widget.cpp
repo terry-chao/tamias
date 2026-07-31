@@ -1,9 +1,19 @@
 #include "view_cube_widget.h"
 
+#include <QBitmap>
 #include <QEvent>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QResizeEvent>
+#include <QShowEvent>
+
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -14,6 +24,8 @@ namespace {
 
 constexpr float kHalf = 0.55f;
 constexpr float kCornerInset = 0.22f;  // world units along each edge from vertex
+constexpr int kPlateRadius = 12;
+const QColor kPlateBg(42, 45, 52);
 
 QColor face_color(ViewCubeFace face, bool hovered) {
   QColor c;
@@ -82,16 +94,58 @@ ViewCubeWidget::ViewCubeWidget(QWidget* parent) : QWidget(parent) {
   setMouseTracking(true);
   setCursor(Qt::PointingHandCursor);
   // Native HWND so this overlay stacks above the Vulkan surface child on Win32.
-  // Match the viewport clear gray so rounded-plate corners never flash black.
+  // Rounded window region lets the viewport show through the four corners.
   setAttribute(Qt::WA_NativeWindow);
   setAttribute(Qt::WA_OpaquePaintEvent, true);
-  setAutoFillBackground(true);
-  QPalette pal = palette();
-  pal.setColor(QPalette::Window, QColor(31, 33, 38));
-  setPalette(pal);
+  setAutoFillBackground(false);
   setToolTip(tr("Drag to orbit · Click a face or corner to snap the view"));
   rebuild_faces();
   rebuild_corners();
+}
+
+void ViewCubeWidget::apply_plate_mask() {
+  // Prefer Win32 round-rect region — smoother than a polygonized QPainterPath.
+  // Coordinates must be device pixels (HWND client size), not logical QWidget size.
+#if defined(_WIN32)
+  const WId wid = winId();
+  if (!wid) {
+    return;
+  }
+  auto* hwnd = reinterpret_cast<HWND>(wid);
+  RECT rc{};
+  if (!GetClientRect(hwnd, &rc)) {
+    return;
+  }
+  const int pw = rc.right - rc.left;
+  const int ph = rc.bottom - rc.top;
+  if (pw <= 0 || ph <= 0) {
+    return;
+  }
+  const int dia = (std::max)(2, qRound(kPlateRadius * 2.0 * devicePixelRatioF()));
+  HRGN hrgn = CreateRoundRectRgn(0, 0, pw + 1, ph + 1, dia, dia);
+  // SetWindowRgn takes ownership of hrgn.
+  SetWindowRgn(hwnd, hrgn, TRUE);
+#else
+  const qreal dpr = devicePixelRatioF();
+  QBitmap bitmap((size() * dpr).toSize());
+  bitmap.setDevicePixelRatio(dpr);
+  bitmap.fill(Qt::color0);
+  QPainter mp(&bitmap);
+  mp.setBrush(Qt::color1);
+  mp.setPen(Qt::NoPen);
+  mp.drawRoundedRect(QRectF(rect()), kPlateRadius, kPlateRadius);
+  setMask(bitmap);
+#endif
+}
+
+void ViewCubeWidget::showEvent(QShowEvent* event) {
+  QWidget::showEvent(event);
+  apply_plate_mask();
+}
+
+void ViewCubeWidget::resizeEvent(QResizeEvent* event) {
+  QWidget::resizeEvent(event);
+  apply_plate_mask();
 }
 
 void ViewCubeWidget::set_orientation(float yaw, float pitch) {
@@ -323,15 +377,13 @@ void ViewCubeWidget::paintEvent(QPaintEvent*) {
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing, true);
 
-  // Fill the full HWND rect first — outside a rounded plate would otherwise stay black.
-  const QColor bg(31, 33, 38);
-  painter.fillRect(rect(), bg);
-
-  QPainterPath plate;
-  plate.addRoundedRect(QRectF(rect()).adjusted(3, 3, -3, -3), 10, 10);
-  painter.fillPath(plate, QColor(42, 45, 52));
-  painter.setPen(QPen(QColor(255, 255, 255, 36), 1.0));
-  painter.drawPath(plate);
+  // Window region already clips to a round rect — fill solid, no square corners.
+  painter.fillRect(rect(), kPlateBg);
+  QPainterPath rim;
+  rim.addRoundedRect(QRectF(rect()).adjusted(1.0, 1.0, -1.0, -1.0), kPlateRadius - 1.0,
+                     kPlateRadius - 1.0);
+  painter.setPen(QPen(QColor(255, 255, 255, 28), 1.0));
+  painter.drawPath(rim);
 
   struct DrawFace {
     int index = 0;
