@@ -7,6 +7,8 @@ add_executable(tamias
   main_window.cpp
   home_page.cpp
   recent_files.cpp
+  app_settings.cpp
+  settings_dialog.cpp
   document_viewport.cpp
   view_cube_widget.cpp
   rhi_backends.cpp

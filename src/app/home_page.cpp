@@ -122,9 +122,6 @@ class RecentCard final : public QFrame {
     }
   }
 
-  [[nodiscard]] const QString& path() const { return path_; }
-  [[nodiscard]] bool exists() const { return exists_; }
-
  protected:
   void mouseReleaseEvent(QMouseEvent* event) override {
     if (event->button() == Qt::LeftButton && rect().contains(event->pos())) {
@@ -145,6 +142,67 @@ class RecentCard final : public QFrame {
  private:
   QString path_;
   bool exists_ = true;
+  ActivationHandler on_activated_;
+};
+
+class OpenDocCard final : public QFrame {
+ public:
+  using ActivationHandler = std::function<void(int)>;
+
+  OpenDocCard(const OpenDocumentItem& item, ActivationHandler on_activated, QWidget* parent = nullptr)
+      : QFrame(parent), index_(item.index), on_activated_(std::move(on_activated)) {
+    setObjectName(QStringLiteral("openDocCard"));
+    setCursor(Qt::PointingHandCursor);
+    setFocusPolicy(Qt::StrongFocus);
+    setAttribute(Qt::WA_Hover, true);
+    setToolTip(item.path.isEmpty() ? item.name : item.path);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+    auto* root = new QHBoxLayout(this);
+    root->setContentsMargins(16, 14, 16, 14);
+    root->setSpacing(14);
+
+    auto* badge = new QLabel(tr("OPEN"), this);
+    badge->setObjectName(QStringLiteral("openBadge"));
+    badge->setAlignment(Qt::AlignCenter);
+    root->addWidget(badge, 0, Qt::AlignVCenter);
+
+    auto* text = new QVBoxLayout();
+    text->setSpacing(2);
+    auto* name = new QLabel(item.name, this);
+    name->setObjectName(QStringLiteral("recentName"));
+    name->setWordWrap(true);
+    text->addWidget(name);
+    auto* subtitle = new QLabel(item.path.isEmpty() ? tr("Untitled document") : item.path, this);
+    subtitle->setObjectName(QStringLiteral("recentPath"));
+    subtitle->setWordWrap(true);
+    text->addWidget(subtitle);
+    root->addLayout(text, 1);
+
+    auto* hint = new QLabel(tr("Continue →"), this);
+    hint->setObjectName(QStringLiteral("openHint"));
+    root->addWidget(hint, 0, Qt::AlignVCenter);
+  }
+
+ protected:
+  void mouseReleaseEvent(QMouseEvent* event) override {
+    if (event->button() == Qt::LeftButton && rect().contains(event->pos())) {
+      on_activated_(index_);
+    }
+    QFrame::mouseReleaseEvent(event);
+  }
+
+  void keyPressEvent(QKeyEvent* event) override {
+    if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter ||
+        event->key() == Qt::Key_Space) {
+      on_activated_(index_);
+      return;
+    }
+    QFrame::keyPressEvent(event);
+  }
+
+ private:
+  int index_ = -1;
   ActivationHandler on_activated_;
 };
 
@@ -184,6 +242,16 @@ HomePage::HomePage(QWidget* parent) : QWidget(parent) {
       "#recentCard:hover, #recentCard:focus { background: #1b1b1d;"
       "  border: 1px solid #e88f4d; }"
       "#recentCard[missing=\"true\"] { background: #131314; }"
+      "#openDocCard {"
+      "  background: #161617;"
+      "  border: 1px solid #29292b;"
+      "  border-radius: 12px;"
+      "}"
+      "#openDocCard:hover, #openDocCard:focus { background: #1b1b1d;"
+      "  border: 1px solid #e88f4d; }"
+      "#openBadge { background: #2a2118; color: #e88f4d; border: 1px solid #5a3f28;"
+      "  border-radius: 4px; padding: 4px 8px; font-size: 10px; font-weight: 700; }"
+      "#openHint { color: #e88f4d; font-size: 12px; font-weight: 600; }"
       "#recentThumb { background: #202022; border-top-left-radius: 11px;"
       "  border-top-right-radius: 11px; }"
       "#fileType { background: #2b2b2e; color: #c9c4bd; border: 1px solid #414145;"
@@ -270,6 +338,28 @@ HomePage::HomePage(QWidget* parent) : QWidget(parent) {
   hero_layout->addWidget(logo, 0, Qt::AlignCenter);
   content_layout->addWidget(hero);
 
+  open_section_ = new QWidget(content);
+  auto* open_section_layout = new QVBoxLayout(open_section_);
+  open_section_layout->setContentsMargins(0, 0, 0, 0);
+  open_section_layout->setSpacing(14);
+  auto* open_row = new QHBoxLayout();
+  auto* open_title = new QLabel(tr("Open now"), open_section_);
+  open_title->setObjectName(QStringLiteral("homeSection"));
+  open_row->addWidget(open_title);
+  open_row->addStretch(1);
+  auto* open_hint = new QLabel(tr("Click to return to a viewport"), open_section_);
+  open_hint->setObjectName(QStringLiteral("homeSectionHint"));
+  open_row->addWidget(open_hint, 0, Qt::AlignBottom);
+  open_section_layout->addLayout(open_row);
+  open_host_ = new QWidget(open_section_);
+  open_layout_ = new QGridLayout(open_host_);
+  open_layout_->setContentsMargins(0, 0, 0, 0);
+  open_layout_->setHorizontalSpacing(14);
+  open_layout_->setVerticalSpacing(12);
+  open_section_layout->addWidget(open_host_);
+  open_section_->setVisible(false);
+  content_layout->addWidget(open_section_);
+
   auto* section_row = new QHBoxLayout();
   auto* section = new QLabel(tr("Jump back in"), content);
   section->setObjectName(QStringLiteral("homeSection"));
@@ -303,12 +393,33 @@ HomePage::HomePage(QWidget* parent) : QWidget(parent) {
   content_layout->addStretch(1);
 }
 
-void HomePage::clear_cards() {
-  while (QLayoutItem* item = cards_layout_->takeAt(0)) {
+void HomePage::clear_layout(QGridLayout* layout) {
+  if (!layout) {
+    return;
+  }
+  while (QLayoutItem* item = layout->takeAt(0)) {
     if (QWidget* w = item->widget()) {
       w->deleteLater();
     }
     delete item;
+  }
+}
+
+void HomePage::clear_cards() { clear_layout(cards_layout_); }
+
+void HomePage::set_open_documents(const QVector<OpenDocumentItem>& items) {
+  clear_layout(open_layout_);
+  open_section_->setVisible(!items.isEmpty());
+  constexpr int kColumns = 2;
+  for (int column = 0; column < kColumns; ++column) {
+    open_layout_->setColumnStretch(column, 1);
+  }
+  for (int i = 0; i < items.size(); ++i) {
+    auto* card = new OpenDocCard(
+        items[i],
+        [this](int index) { emit openDocumentActivated(index); },
+        open_host_);
+    open_layout_->addWidget(card, i / kColumns, i % kColumns);
   }
 }
 

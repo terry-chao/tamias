@@ -1,15 +1,19 @@
 #include "main_window.h"
 
+#include "app_settings.h"
 #include "core/log.h"
 #include "io/mesh_io.h"
+#include "settings_dialog.h"
 
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QIcon>
+#include <QKeySequence>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QStatusBar>
 #include <QToolBar>
+#include <QVector>
 
 namespace tamias {
 
@@ -19,6 +23,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   resize(1280, 800);
 
   recent_.load();
+  AppSettings::instance().load();
 
   stack_ = new QStackedWidget(this);
   home_ = new HomePage(stack_);
@@ -35,15 +40,21 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   connect(home_, &HomePage::openRequested, this, &MainWindow::open_file);
   connect(home_, &HomePage::fileActivated, this, &MainWindow::open_recent_path);
   connect(home_, &HomePage::missingFileActivated, this, &MainWindow::on_missing_recent);
+  connect(home_, &HomePage::openDocumentActivated, this, &MainWindow::activate_open_document);
 
-  auto* file_menu = menuBar()->addMenu(tr("&File"));
-  file_menu->addAction(tr("&New Demo Cube"), this, &MainWindow::new_demo_document);
-  file_menu->addAction(tr("&Open..."), this, &MainWindow::open_file, QKeySequence::Open);
-  recent_menu_ = file_menu->addMenu(tr("Open &Recent"));
-  connect(recent_menu_, &QMenu::aboutToShow, this, &MainWindow::rebuild_recent_menu);
-  rebuild_recent_menu();
-  file_menu->addSeparator();
-  file_menu->addAction(tr("E&xit"), this, &QWidget::close, QKeySequence::Quit);
+  // File is a navigation control to the welcome page — no dropdown actions.
+  menuBar()->addAction(tr("&File"), this, &MainWindow::show_home);
+
+  auto* open_action = new QAction(tr("Open..."), this);
+  open_action->setShortcut(QKeySequence::Open);
+  connect(open_action, &QAction::triggered, this, &MainWindow::open_file);
+  addAction(open_action);
+
+  auto* edit_menu = menuBar()->addMenu(tr("&Edit"));
+  edit_menu->addAction(tr("&Settings..."), this, &MainWindow::open_settings,
+                       QKeySequence(tr("Ctrl+,")));
+  edit_menu->addSeparator();
+  edit_menu->addAction(tr("E&xit"), this, &QWidget::close, QKeySequence::Quit);
 
   render_mode_group_ = new QActionGroup(this);
   render_mode_group_->setExclusive(true);
@@ -102,42 +113,60 @@ void MainWindow::show_home() {
 }
 
 void MainWindow::show_documents() {
+  if (tabs_->count() == 0) {
+    show_home();
+    return;
+  }
   stack_->setCurrentWidget(tabs_);
   sync_render_mode_actions();
 }
 
-void MainWindow::refresh_home() {
-  home_->refresh(recent_.items());
-  rebuild_recent_menu();
+void MainWindow::activate_open_document(int index) {
+  if (index < 0 || index >= tabs_->count()) {
+    return;
+  }
+  tabs_->setCurrentIndex(index);
+  show_documents();
 }
 
-void MainWindow::rebuild_recent_menu() {
-  if (!recent_menu_) {
-    return;
-  }
-  recent_menu_->clear();
-  const auto& items = recent_.items();
-  if (items.isEmpty()) {
-    auto* empty = recent_menu_->addAction(tr("(No recent files)"));
-    empty->setEnabled(false);
-    return;
-  }
-  for (const RecentFileItem& item : items) {
-    const bool exists = QFileInfo::exists(item.path);
-    auto* action = recent_menu_->addAction(item.name);
-    action->setData(item.path);
-    action->setEnabled(exists);
-    if (!exists) {
-      action->setText(tr("%1 (missing)").arg(item.name));
-    }
-    connect(action, &QAction::triggered, this, [this, path = item.path, exists]() {
-      if (exists) {
-        open_recent_path(path);
-      } else {
-        on_missing_recent(path);
+void MainWindow::refresh_home() {
+  home_->refresh(recent_.items());
+  QVector<OpenDocumentItem> open_items;
+  open_items.reserve(tabs_->count());
+  for (int i = 0; i < tabs_->count(); ++i) {
+    OpenDocumentItem item;
+    item.index = i;
+    item.name = tabs_->tabText(i);
+    if (auto* vp = qobject_cast<DocumentViewport*>(tabs_->widget(i))) {
+      const auto& path = vp->document().path();
+      if (!path.empty()) {
+        item.path = QString::fromStdString(path.string());
       }
-    });
+    }
+    open_items.push_back(item);
   }
+  home_->set_open_documents(open_items);
+}
+
+int MainWindow::find_open_document(const QString& path) const {
+  if (path.isEmpty()) {
+    return -1;
+  }
+  const QString abs = QFileInfo(path).absoluteFilePath();
+  for (int i = 0; i < tabs_->count(); ++i) {
+    auto* vp = qobject_cast<DocumentViewport*>(tabs_->widget(i));
+    if (!vp) {
+      continue;
+    }
+    const auto& doc_path = vp->document().path();
+    if (doc_path.empty()) {
+      continue;
+    }
+    if (QFileInfo(QString::fromStdString(doc_path.string())).absoluteFilePath() == abs) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 Result<void> MainWindow::populate_document_meshes(Document& document, RenderThread& thread) {
@@ -158,11 +187,19 @@ Result<void> MainWindow::populate_document_meshes(Document& document, RenderThre
   return {};
 }
 
+void MainWindow::open_settings() {
+  SettingsDialog dialog(this);
+  dialog.exec();
+}
+
 void MainWindow::add_document_tab(std::shared_ptr<Document> document) {
-  RenderDeviceConfig config{};
+  const RenderDeviceConfig config = AppSettings::instance().render_device_config();
   auto thread = RenderThreadPool::instance().acquire(config);
   if (!thread) {
-    QMessageBox::critical(this, tr("Render"), tr("Failed to create Vulkan render thread."));
+    QMessageBox::critical(
+        this, tr("Render"),
+        tr("Failed to create %1 render thread.")
+            .arg(QString::fromUtf8(to_string(config.backend))));
     return;
   }
   if (auto r = populate_document_meshes(*document, *thread); !r) {
@@ -193,6 +230,10 @@ void MainWindow::new_demo_document() {
 bool MainWindow::open_path(const QString& path) {
   if (path.isEmpty()) {
     return false;
+  }
+  if (const int existing = find_open_document(path); existing >= 0) {
+    activate_open_document(existing);
+    return true;
   }
   const QFileInfo info(path);
   if (!info.exists()) {

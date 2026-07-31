@@ -7,6 +7,7 @@
 #include "view/picking.h"
 #include "view_cube_widget.h"
 
+#include <QLabel>
 #include <QWidget>
 #include <memory>
 
@@ -42,6 +43,8 @@ class DocumentViewport final : public QWidget {
   void rebuild_bvh();
   void layout_overlays();
   void sync_view_cube();
+  void sync_coord_readout();
+  [[nodiscard]] Vec3 cursor_world_position(const QPoint& pos) const;
 
   std::shared_ptr<Document> document_;
   std::shared_ptr<RenderThread> render_thread_;
@@ -52,11 +55,13 @@ class DocumentViewport final : public QWidget {
   class NativeSurface;
   NativeSurface* surface_ = nullptr;
   ViewCubeWidget* view_cube_ = nullptr;
+  QLabel* coord_label_ = nullptr;
   QPoint last_mouse_;
   QPoint press_mouse_;
   bool orbiting_ = false;
   bool panning_ = false;
   bool alive_ = true;
+  bool has_cursor_ = false;
 };
 
 }  // namespace tamias

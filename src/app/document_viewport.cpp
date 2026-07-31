@@ -1,5 +1,6 @@
 #include "document_viewport.h"
 
+#include "app_settings.h"
 #include "core/log.h"
 
 #include <QCoreApplication>
@@ -83,10 +84,26 @@ DocumentViewport::DocumentViewport(std::shared_ptr<Document> document, QWidget* 
     request_redraw();
   });
 
+  coord_label_ = new QLabel(this);
+  coord_label_->setObjectName(QStringLiteral("coordReadout"));
+  coord_label_->setAttribute(Qt::WA_NativeWindow);
+  coord_label_->setAttribute(Qt::WA_TransparentForMouseEvents);
+  coord_label_->setStyleSheet(QStringLiteral(
+      "QLabel#coordReadout {"
+      "  background: rgba(20, 22, 26, 180);"
+      "  color: #d8d4ce;"
+      "  border: 1px solid #3a3c42;"
+      "  border-radius: 6px;"
+      "  padding: 6px 10px;"
+      "  font-family: Consolas, 'Cascadia Mono', monospace;"
+      "  font-size: 12px;"
+      "}"));
+
   camera_.frame_aabb(document_->bounds().valid() ? document_->bounds()
                                                  : Aabb{{-1, -1, -1}, {1, 1, 1}});
   rebuild_bvh();
   sync_view_cube();
+  sync_coord_readout();
 }
 
 DocumentViewport::~DocumentViewport() {
@@ -112,6 +129,7 @@ void DocumentViewport::request_redraw() {
     return;
   }
   sync_view_cube();
+  sync_coord_readout();
   submit_current_frame();
 }
 
@@ -124,10 +142,15 @@ void DocumentViewport::layout_overlays() {
       (void)surface_->winId();
     }
   }
+  constexpr int kMargin = 12;
   if (view_cube_) {
-    constexpr int kMargin = 12;
     view_cube_->move(width() - view_cube_->width() - kMargin, kMargin);
     view_cube_->raise();
+  }
+  if (coord_label_) {
+    coord_label_->adjustSize();
+    coord_label_->move(kMargin, height() - coord_label_->height() - kMargin);
+    coord_label_->raise();
   }
 }
 
@@ -135,6 +158,50 @@ void DocumentViewport::sync_view_cube() {
   if (view_cube_) {
     view_cube_->set_orientation(camera_.yaw(), camera_.pitch());
   }
+}
+
+Vec3 DocumentViewport::cursor_world_position(const QPoint& pos) const {
+  const auto dpr = devicePixelRatioF();
+  const float aspect = static_cast<float>((std::max)(1, width())) /
+                       static_cast<float>((std::max)(1, height()));
+  const Ray ray =
+      camera_ray(camera_, aspect, static_cast<float>(pos.x() * dpr),
+                 static_cast<float>(pos.y() * dpr), static_cast<float>(width() * dpr),
+                 static_cast<float>(height() * dpr));
+
+  if (auto hit = bvh_.closest_hit(ray, *document_)) {
+    return ray.origin + ray.direction * hit->t;
+  }
+
+  // Fall back to the horizontal plane through the camera target.
+  const float plane_z = camera_.target().z;
+  if (std::fabs(ray.direction.z) > 1e-6f) {
+    const float t = (plane_z - ray.origin.z) / ray.direction.z;
+    if (t > 0.f) {
+      return ray.origin + ray.direction * t;
+    }
+  }
+  return ray.origin + ray.direction * camera_.distance();
+}
+
+void DocumentViewport::sync_coord_readout() {
+  if (!coord_label_) {
+    return;
+  }
+  if (!has_cursor_) {
+    const Vec3 target = camera_.target();
+    coord_label_->setText(tr("X %1  Y %2  Z %3")
+                              .arg(target.x, 0, 'f', 3)
+                              .arg(target.y, 0, 'f', 3)
+                              .arg(target.z, 0, 'f', 3));
+  } else {
+    const Vec3 p = cursor_world_position(last_mouse_);
+    coord_label_->setText(tr("X %1  Y %2  Z %3")
+                              .arg(p.x, 0, 'f', 3)
+                              .arg(p.y, 0, 'f', 3)
+                              .arg(p.z, 0, 'f', 3));
+  }
+  layout_overlays();
 }
 
 void DocumentViewport::on_view_cube_face(ViewCubeFace face) {
@@ -178,9 +245,7 @@ void DocumentViewport::ensure_channel() {
   if (!alive_ || channel_) {
     return;
   }
-  RenderDeviceConfig config{};
-  config.backend = GraphicsBackend::Vulkan;
-  config.enable_validation = true;
+  const RenderDeviceConfig config = AppSettings::instance().render_device_config();
   render_thread_ = RenderThreadPool::instance().acquire(config);
   if (!render_thread_) {
     log_error("failed to acquire RenderThread");
@@ -265,6 +330,7 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
 void DocumentViewport::mouseMoveEvent(QMouseEvent* event) {
   const QPoint delta = event->pos() - last_mouse_;
   last_mouse_ = event->pos();
+  has_cursor_ = true;
   if (orbiting_) {
     camera_.orbit(-delta.x() * 0.01f, delta.y() * 0.01f);
     request_redraw();
@@ -272,6 +338,8 @@ void DocumentViewport::mouseMoveEvent(QMouseEvent* event) {
     const float scale = camera_.distance() * 0.002f;
     camera_.pan(-delta.x() * scale, delta.y() * scale);
     request_redraw();
+  } else {
+    sync_coord_readout();
   }
 }
 
@@ -302,7 +370,17 @@ void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
 
 void DocumentViewport::wheelEvent(QWheelEvent* event) {
   const float steps = event->angleDelta().y() / 120.f;
-  camera_.dolly(std::pow(0.9f, steps));
+  const float factor = std::pow(0.9f, steps);
+  const QPoint pos = event->position().toPoint();
+  last_mouse_ = pos;
+  has_cursor_ = true;
+
+  // Zoom toward the cursor: dolly, then shift the orbit target so the world
+  // point under the mouse stays fixed in screen space.
+  const Vec3 focus = cursor_world_position(pos);
+  const Vec3 old_target = camera_.target();
+  camera_.dolly(factor);
+  camera_.set_target(focus + (old_target - focus) * factor);
   request_redraw();
 }
 
