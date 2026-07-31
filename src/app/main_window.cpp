@@ -3,11 +3,13 @@
 #include "app_settings.h"
 #include "core/log.h"
 #include "io/mesh_io.h"
+#include "mesh_thumbnail.h"
 #include "settings_dialog.h"
 
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QIcon>
+#include <QImage>
 #include <QKeySequence>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -41,6 +43,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   connect(home_, &HomePage::fileActivated, this, &MainWindow::open_recent_path);
   connect(home_, &HomePage::missingFileActivated, this, &MainWindow::on_missing_recent);
   connect(home_, &HomePage::openDocumentActivated, this, &MainWindow::activate_open_document);
+  connect(home_, &HomePage::settingsRequested, this, &MainWindow::open_settings);
 
   // File is a navigation control to the welcome page — no dropdown actions.
   menuBar()->addAction(tr("&File"), this, &MainWindow::show_home);
@@ -50,11 +53,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   connect(open_action, &QAction::triggered, this, &MainWindow::open_file);
   addAction(open_action);
 
-  auto* edit_menu = menuBar()->addMenu(tr("&Edit"));
-  edit_menu->addAction(tr("&Settings..."), this, &MainWindow::open_settings,
-                       QKeySequence(tr("Ctrl+,")));
-  edit_menu->addSeparator();
-  edit_menu->addAction(tr("E&xit"), this, &QWidget::close, QKeySequence::Quit);
+  auto* settings_action = new QAction(tr("&Settings..."), this);
+  settings_action->setShortcut(QKeySequence(tr("Ctrl+,")));
+  connect(settings_action, &QAction::triggered, this, &MainWindow::open_settings);
+  addAction(settings_action);
 
   render_mode_group_ = new QActionGroup(this);
   render_mode_group_->setExclusive(true);
@@ -92,6 +94,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   display_menu->addAction(realistic_action_);
   view_menu->addSeparator();
   view_menu->addAction(tr("&Frame All"), this, &MainWindow::frame_all, QKeySequence(tr("F")));
+
+  // Settings live under Tools (VS / CAD), and also on the File welcome page.
+  auto* tools_menu = menuBar()->addMenu(tr("&Tools"));
+  tools_menu->addAction(settings_action);
+  tools_menu->addSeparator();
+  auto* exit_action = new QAction(tr("E&xit"), this);
+  exit_action->setShortcut(QKeySequence::Quit);
+  connect(exit_action, &QAction::triggered, this, &QWidget::close);
+  tools_menu->addAction(exit_action);
 
   auto* toolbar = addToolBar(tr("Display"));
   toolbar->setObjectName(QStringLiteral("displayToolbar"));
@@ -260,7 +271,9 @@ bool MainWindow::open_path(const QString& path) {
   document->scene().add_node(std::move(node));
   add_document_tab(document);
 
-  recent_.add(info.absoluteFilePath());
+  const QImage thumb = render_mesh_thumbnail(stored.cpu);
+  const QString thumb_path = save_mesh_thumbnail(info.absoluteFilePath(), thumb);
+  recent_.add(info.absoluteFilePath(), thumb_path);
   refresh_home();
   statusBar()->showMessage(tr("Loaded %1").arg(info.absoluteFilePath()), 5000);
   return true;

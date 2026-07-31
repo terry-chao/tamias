@@ -1,7 +1,10 @@
 #include "recent_files.h"
 
+#include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -22,6 +25,23 @@ QDateTime file_created_at(const QFileInfo& info) {
 
 QString normalize_path(const QString& path) {
   return QFileInfo(path).absoluteFilePath();
+}
+
+bool is_cached_thumbnail(const QString& path) {
+  if (path.isEmpty()) {
+    return false;
+  }
+  const QString root =
+      QFileInfo(QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
+                    .filePath(QStringLiteral("thumbnails")))
+          .absoluteFilePath();
+  return QFileInfo(path).absoluteFilePath().startsWith(root);
+}
+
+void remove_thumbnail_file(const QString& path) {
+  if (is_cached_thumbnail(path)) {
+    QFile::remove(path);
+  }
 }
 
 }  // namespace
@@ -68,14 +88,16 @@ void RecentFilesStore::save() const {
   settings.setValue(QStringLiteral("recent/items"), list);
 }
 
-void RecentFilesStore::add(const QString& path) {
+void RecentFilesStore::add(const QString& path, const QString& thumbnail_path) {
   const QString absolute = normalize_path(path);
   if (absolute.isEmpty()) {
     return;
   }
 
+  QString previous_thumb;
   for (int i = 0; i < items_.size(); ++i) {
     if (QFileInfo(items_[i].path).absoluteFilePath() == absolute) {
+      previous_thumb = items_[i].thumbnail_path;
       items_.removeAt(i);
       break;
     }
@@ -87,9 +109,16 @@ void RecentFilesStore::add(const QString& path) {
   item.name = info.fileName();
   item.opened_at = QDateTime::currentDateTime();
   item.created_at = file_created_at(info);
+  item.thumbnail_path = thumbnail_path;
+  if (item.thumbnail_path.isEmpty()) {
+    item.thumbnail_path = previous_thumb;
+  } else if (!previous_thumb.isEmpty() && previous_thumb != item.thumbnail_path) {
+    remove_thumbnail_file(previous_thumb);
+  }
   items_.prepend(std::move(item));
 
   while (items_.size() > kMaxRecentFiles) {
+    remove_thumbnail_file(items_.last().thumbnail_path);
     items_.removeLast();
   }
   save();
@@ -99,6 +128,7 @@ void RecentFilesStore::remove(const QString& path) {
   const QString absolute = normalize_path(path);
   for (int i = 0; i < items_.size(); ++i) {
     if (QFileInfo(items_[i].path).absoluteFilePath() == absolute) {
+      remove_thumbnail_file(items_[i].thumbnail_path);
       items_.removeAt(i);
       save();
       return;

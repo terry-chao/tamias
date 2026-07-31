@@ -23,7 +23,7 @@ class RecentFilesStore {
 
   [[nodiscard]] const QVector<RecentFileItem>& items() const { return items_; }
 
-  void add(const QString& path);
+  void add(const QString& path, const QString& thumbnail_path = QString());
   void remove(const QString& path);
 
  private:

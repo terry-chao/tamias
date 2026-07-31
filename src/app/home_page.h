@@ -29,6 +29,7 @@ class HomePage final : public QWidget {
  signals:
   void newDemoRequested();
   void openRequested();
+  void settingsRequested();
   void fileActivated(const QString& path);
   void missingFileActivated(const QString& path);
   void openDocumentActivated(int index);

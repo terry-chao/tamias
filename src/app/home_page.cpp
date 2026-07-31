@@ -61,24 +61,44 @@ class RecentCard final : public QFrame {
     auto* thumb = new QFrame(this);
     thumb->setObjectName(QStringLiteral("recentThumb"));
     thumb->setFixedHeight(112);
-    auto* thumb_layout = new QVBoxLayout(thumb);
-    thumb_layout->setContentsMargins(14, 12, 14, 12);
+    auto* thumb_grid = new QGridLayout(thumb);
+    thumb_grid->setContentsMargins(0, 0, 0, 0);
+    thumb_grid->setSpacing(0);
 
-    auto* type = new QLabel(QFileInfo(item.path).suffix().toUpper(), thumb);
+    auto* preview = new QLabel(thumb);
+    preview->setObjectName(QStringLiteral("recentPreview"));
+    preview->setAlignment(Qt::AlignCenter);
+    preview->setMinimumHeight(112);
+    preview->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+    QPixmap thumb_pix;
+    if (!item.thumbnail_path.isEmpty()) {
+      thumb_pix.load(item.thumbnail_path);
+    }
+    if (!thumb_pix.isNull()) {
+      preview->setPixmap(thumb_pix.scaled(320, 112, Qt::KeepAspectRatioByExpanding,
+                                          Qt::SmoothTransformation));
+    } else {
+      const QPixmap logo(QStringLiteral(":/branding/logo.png"));
+      if (!logo.isNull()) {
+        preview->setPixmap(logo.scaled(58, 58, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+      } else {
+        preview->setText(QStringLiteral("3D"));
+      }
+    }
+    thumb_grid->addWidget(preview, 0, 0);
+
+    auto* type_wrap = new QWidget(thumb);
+    type_wrap->setAttribute(Qt::WA_TransparentForMouseEvents);
+    auto* type_layout = new QHBoxLayout(type_wrap);
+    type_layout->setContentsMargins(10, 10, 10, 10);
+    type_layout->addStretch(1);
+    auto* type = new QLabel(QFileInfo(item.path).suffix().toUpper(), type_wrap);
     type->setObjectName(QStringLiteral("fileType"));
     type->setAlignment(Qt::AlignCenter);
     type->setFixedWidth(44);
-    thumb_layout->addWidget(type, 0, Qt::AlignRight);
-
-    auto* preview = new QLabel(thumb);
-    preview->setAlignment(Qt::AlignCenter);
-    const QPixmap logo(QStringLiteral(":/branding/logo.png"));
-    if (!logo.isNull()) {
-      preview->setPixmap(logo.scaled(58, 58, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    } else {
-      preview->setText(QStringLiteral("3D"));
-    }
-    thumb_layout->addWidget(preview, 1, Qt::AlignCenter);
+    type_layout->addWidget(type, 0, Qt::AlignTop);
+    thumb_grid->addWidget(type_wrap, 0, 0);
     root->addWidget(thumb);
 
     auto* name = new QLabel(item.name, this);
@@ -254,6 +274,7 @@ HomePage::HomePage(QWidget* parent) : QWidget(parent) {
       "#openHint { color: #e88f4d; font-size: 12px; font-weight: 600; }"
       "#recentThumb { background: #202022; border-top-left-radius: 11px;"
       "  border-top-right-radius: 11px; }"
+      "#recentPreview { border-top-left-radius: 11px; border-top-right-radius: 11px; }"
       "#fileType { background: #2b2b2e; color: #c9c4bd; border: 1px solid #414145;"
       "  border-radius: 4px; padding: 3px 5px; font-size: 10px; font-weight: 700; }"
       "#recentName { color: #f1ede7; font-size: 14px; font-weight: 600; }"
@@ -324,6 +345,11 @@ HomePage::HomePage(QWidget* parent) : QWidget(parent) {
   demo_btn->setObjectName(QStringLiteral("homeActionSecondary"));
   connect(demo_btn, &QPushButton::clicked, this, &HomePage::newDemoRequested);
   actions->addWidget(demo_btn);
+  auto* settings_btn = new QPushButton(tr("Settings"), hero);
+  settings_btn->setObjectName(QStringLiteral("homeActionSecondary"));
+  settings_btn->setIcon(style()->standardIcon(QStyle::SP_FileDialogDetailedView));
+  connect(settings_btn, &QPushButton::clicked, this, &HomePage::settingsRequested);
+  actions->addWidget(settings_btn);
   actions->addStretch(1);
   hero_copy->addLayout(actions);
   hero_layout->addLayout(hero_copy, 1);
