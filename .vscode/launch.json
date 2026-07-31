@@ -9,7 +9,7 @@
       "args": [],
       "cwd": "${workspaceFolder}/build/msvc/bin/Debug",
       "env": {
-        "PATH": "C:/Qt/6.8.3/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
+        "PATH": "C:/Qt/6.11.1/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
       },
       "preLaunchTask": "predebug: debug"
     },
@@ -21,7 +21,7 @@
       "args": [],
       "cwd": "${workspaceFolder}/build/msvc/bin/RelWithDebInfo",
       "env": {
-        "PATH": "C:/Qt/6.8.3/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
+        "PATH": "C:/Qt/6.11.1/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
       },
       "preLaunchTask": "predebug: relwithdebinfo"
     },
@@ -33,7 +33,7 @@
       "args": [],
       "cwd": "${command:cmake.launchTargetDirectory}",
       "env": {
-        "PATH": "C:/Qt/6.8.3/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
+        "PATH": "C:/Qt/6.11.1/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
       },
       "preLaunchTask": "predebug: debug"
     }

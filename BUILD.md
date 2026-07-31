@@ -7,13 +7,13 @@ Supports **Windows x64** and **Linux x64** (X11/XCB). C++23, CMake Presets.
 Prerequisites:
 
 - Visual Studio 2022/2026 with C++ desktop workload
-- [Qt 6](https://www.qt.io/) (tested: 6.8.3 `msvc2022_64`)
+- [Qt 6](https://www.qt.io/) (tested: 6.11.1 `msvc2022_64`)
 - [Vulkan SDK](https://vulkan.lunarg.com/)
 - CMake 3.24+
 
 ```powershell
 $env:VULKAN_SDK = 'C:\VulkanSDK\<version>'
-$env:Path = "$env:VULKAN_SDK\Bin;C:\Qt\6.8.3\msvc2022_64\bin;$env:Path"
+$env:Path = "$env:VULKAN_SDK\Bin;C:\Qt\6.11.1\msvc2022_64\bin;$env:Path"
 
 # Edit CMakePresets.json CMAKE_PREFIX_PATH if your Qt path differs.
 cmake --preset msvc

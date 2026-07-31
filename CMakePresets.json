@@ -14,7 +14,7 @@
       "architecture": "x64",
       "binaryDir": "${sourceDir}/build/msvc",
       "cacheVariables": {
-        "CMAKE_PREFIX_PATH": "C:/Qt/6.8.3/msvc2022_64",
+        "CMAKE_PREFIX_PATH": "C:/Qt/6.11.1/msvc2022_64",
         "TAMIAS_ENABLE_OPENGL_BACKEND": "ON",
         "TAMIAS_USE_FETCHCONTENT": "ON"
       }
@@ -31,7 +31,7 @@
       "binaryDir": "${sourceDir}/build/msvc-ninja",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_PREFIX_PATH": "C:/Qt/6.8.3/msvc2022_64",
+        "CMAKE_PREFIX_PATH": "C:/Qt/6.11.1/msvc2022_64",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_MAKE_PROGRAM": "C:/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe",
         "TAMIAS_ENABLE_OPENGL_BACKEND": "ON",

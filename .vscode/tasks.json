@@ -8,7 +8,7 @@
       "options": {
         "cwd": "${workspaceFolder}",
         "env": {
-          "PATH": "C:/Qt/6.8.3/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
+          "PATH": "C:/Qt/6.11.1/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
         }
       },
       "problemMatcher": [],
@@ -21,7 +21,7 @@
       "options": {
         "cwd": "${workspaceFolder}",
         "env": {
-          "PATH": "C:/Qt/6.8.3/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
+          "PATH": "C:/Qt/6.11.1/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
         }
       },
       "problemMatcher": [],
@@ -68,7 +68,7 @@
       "options": {
         "cwd": "${workspaceFolder}",
         "env": {
-          "PATH": "C:/Qt/6.8.3/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
+          "PATH": "C:/Qt/6.11.1/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
         }
       },
       "problemMatcher": "$msCompile",
@@ -87,7 +87,7 @@
       "options": {
         "cwd": "${workspaceFolder}",
         "env": {
-          "PATH": "C:/Qt/6.8.3/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
+          "PATH": "C:/Qt/6.11.1/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
         }
       },
       "problemMatcher": "$msCompile",
