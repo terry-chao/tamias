@@ -5,6 +5,7 @@
 #include "engine/render/render_runtime.h"
 #include "math/camera.h"
 #include "view/picking.h"
+#include "view_cube_widget.h"
 
 #include <QWidget>
 #include <memory>
@@ -23,20 +24,23 @@ class DocumentViewport final : public QWidget {
   void request_redraw();
 
  protected:
-  QPaintEngine* paintEngine() const override { return nullptr; }
   void showEvent(QShowEvent* event) override;
   void resizeEvent(QResizeEvent* event) override;
-  void paintEvent(QPaintEvent* event) override;
   void mousePressEvent(QMouseEvent* event) override;
   void mouseMoveEvent(QMouseEvent* event) override;
   void mouseReleaseEvent(QMouseEvent* event) override;
   void wheelEvent(QWheelEvent* event) override;
+
+ private slots:
+  void on_view_cube_face(ViewCubeFace face);
 
  private:
   NativeWindowHandle native_handle() const;
   void ensure_channel();
   void submit_current_frame();
   void rebuild_bvh();
+  void layout_overlays();
+  void sync_view_cube();
 
   std::shared_ptr<Document> document_;
   std::shared_ptr<RenderThread> render_thread_;
@@ -44,6 +48,9 @@ class DocumentViewport final : public QWidget {
   TurntableCamera camera_;
   Bvh bvh_;
   RenderMode mode_ = RenderMode::Shaded;
+  class NativeSurface;
+  NativeSurface* surface_ = nullptr;
+  ViewCubeWidget* view_cube_ = nullptr;
   QPoint last_mouse_;
   QPoint press_mouse_;
   bool orbiting_ = false;

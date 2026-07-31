@@ -6,6 +6,7 @@ add_executable(tamias
   main.cpp
   main_window.cpp
   document_viewport.cpp
+  view_cube_widget.cpp
   rhi_backends.cpp
   resources.qrc
 )

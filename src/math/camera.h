@@ -17,6 +17,15 @@ class TurntableCamera {
     pitch_ = std::clamp(pitch, -1.5f, 1.5f);
   }
   void orbit(float dyaw, float dpitch) { set_yaw_pitch(yaw_ + dyaw, pitch_ + dpitch); }
+
+  // Snap to axis-aligned views (Z-up): Front=-Y, Back=+Y, Right=+X, Left=-X.
+  void look_front() { set_yaw_pitch(-1.570796327f, 0.f); }
+  void look_back() { set_yaw_pitch(1.570796327f, 0.f); }
+  void look_right() { set_yaw_pitch(0.f, 0.f); }
+  void look_left() { set_yaw_pitch(3.141592654f, 0.f); }
+  void look_top() { set_yaw_pitch(yaw_, 1.5f); }
+  void look_bottom() { set_yaw_pitch(yaw_, -1.5f); }
+
   void pan(float dx, float dy) {
     const Vec3 eye = eye_position();
     const Vec3 forward = normalize(target_ - eye);
