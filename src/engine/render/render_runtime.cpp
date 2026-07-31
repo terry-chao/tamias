@@ -284,6 +284,10 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
 
   const Mat4 clip = device_->clip_space_correction_matrix();
   const Mat4 view_proj = clip * frame.proj * frame.view;
+  // 0 = wireframe (unlit), 1 = shaded, 2 = realistic
+  const float mode_value = frame.mode == RenderMode::Wireframe  ? 0.f
+                           : frame.mode == RenderMode::Realistic ? 2.f
+                                                                 : 1.f;
 
   for (const auto& item : frame.items) {
     auto mesh_it = meshes_.find(item.mesh_id);
@@ -293,14 +297,19 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
     const GpuMesh& mesh = mesh_it->second;
     PushConstants pc{};
     pc.mvp = view_proj * item.transform;
+    pc.model = item.transform;
     pc.color[0] = item.color.x;
     pc.color[1] = item.color.y;
     pc.color[2] = item.color.z;
     pc.color[3] = 1.f;
-    pc.light_dir_selected[0] = 0.4f;
-    pc.light_dir_selected[1] = 0.6f;
-    pc.light_dir_selected[2] = 0.7f;
+    pc.light_dir_selected[0] = 0.45f;
+    pc.light_dir_selected[1] = 0.35f;
+    pc.light_dir_selected[2] = 0.82f;
     pc.light_dir_selected[3] = item.selected ? 1.f : 0.f;
+    pc.eye_pos_mode[0] = frame.eye_position.x;
+    pc.eye_pos_mode[1] = frame.eye_position.y;
+    pc.eye_pos_mode[2] = frame.eye_position.z;
+    pc.eye_pos_mode[3] = mode_value;
     channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
     channel.command_list->set_vertex_buffer(*mesh.vertex_buffer);
     channel.command_list->set_index_buffer(*mesh.index_buffer);

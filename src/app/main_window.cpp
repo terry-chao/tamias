@@ -8,6 +8,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QStatusBar>
+#include <QToolBar>
 
 namespace tamias {
 
@@ -21,6 +22,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   tabs_->setDocumentMode(true);
   setCentralWidget(tabs_);
   connect(tabs_, &QTabWidget::tabCloseRequested, this, &MainWindow::close_tab);
+  connect(tabs_, &QTabWidget::currentChanged, this, &MainWindow::on_tab_changed);
 
   auto* file_menu = menuBar()->addMenu(tr("&File"));
   file_menu->addAction(tr("&New Demo Cube"), this, &MainWindow::new_demo_document);
@@ -28,10 +30,51 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   file_menu->addSeparator();
   file_menu->addAction(tr("E&xit"), this, &QWidget::close, QKeySequence::Quit);
 
+  render_mode_group_ = new QActionGroup(this);
+  render_mode_group_->setExclusive(true);
+
+  wireframe_action_ = new QAction(tr("&Wireframe"), this);
+  wireframe_action_->setCheckable(true);
+  wireframe_action_->setShortcut(QKeySequence(tr("Ctrl+1")));
+  wireframe_action_->setStatusTip(tr("Line drawing — edges only"));
+  wireframe_action_->setData(static_cast<int>(RenderMode::Wireframe));
+
+  shaded_action_ = new QAction(tr("&Shaded"), this);
+  shaded_action_->setCheckable(true);
+  shaded_action_->setChecked(true);
+  shaded_action_->setShortcut(QKeySequence(tr("Ctrl+2")));
+  shaded_action_->setStatusTip(tr("Simple shaded solid display"));
+  shaded_action_->setData(static_cast<int>(RenderMode::Shaded));
+
+  realistic_action_ = new QAction(tr("&Realistic"), this);
+  realistic_action_->setCheckable(true);
+  realistic_action_->setShortcut(QKeySequence(tr("Ctrl+3")));
+  realistic_action_->setStatusTip(tr("Lit display with specular highlights"));
+  realistic_action_->setData(static_cast<int>(RenderMode::Realistic));
+
+  render_mode_group_->addAction(wireframe_action_);
+  render_mode_group_->addAction(shaded_action_);
+  render_mode_group_->addAction(realistic_action_);
+  connect(render_mode_group_, &QActionGroup::triggered, this, [this](QAction* action) {
+    set_render_mode(static_cast<RenderMode>(action->data().toInt()));
+  });
+
   auto* view_menu = menuBar()->addMenu(tr("&View"));
-  view_menu->addAction(tr("&Shaded"), this, &MainWindow::set_shaded);
-  view_menu->addAction(tr("&Wireframe"), this, &MainWindow::set_wireframe);
+  auto* display_menu = view_menu->addMenu(tr("&Display Mode"));
+  display_menu->addAction(wireframe_action_);
+  display_menu->addAction(shaded_action_);
+  display_menu->addAction(realistic_action_);
+  view_menu->addSeparator();
   view_menu->addAction(tr("&Frame All"), this, &MainWindow::frame_all, QKeySequence(tr("F")));
+
+  auto* toolbar = addToolBar(tr("Display"));
+  toolbar->setObjectName(QStringLiteral("displayToolbar"));
+  toolbar->setMovable(false);
+  toolbar->addAction(wireframe_action_);
+  toolbar->addAction(shaded_action_);
+  toolbar->addAction(realistic_action_);
+  toolbar->addSeparator();
+  toolbar->addAction(tr("Frame All"), this, &MainWindow::frame_all);
 
   statusBar()->showMessage(tr("Ready — Open glTF/OBJ or create a demo cube"));
   new_demo_document();
@@ -69,6 +112,7 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document) {
   auto* viewport = new DocumentViewport(document, tabs_);
   const int index = tabs_->addTab(viewport, QString::fromStdString(document->name()));
   tabs_->setCurrentIndex(index);
+  sync_render_mode_actions();
 }
 
 void MainWindow::new_demo_document() {
@@ -113,20 +157,42 @@ void MainWindow::open_file() {
   statusBar()->showMessage(tr("Loaded %1").arg(path), 5000);
 }
 
-void MainWindow::set_shaded() {
-  if (auto* vp = qobject_cast<DocumentViewport*>(tabs_->currentWidget())) {
-    vp->set_render_mode(RenderMode::Shaded);
+DocumentViewport* MainWindow::current_viewport() const {
+  return qobject_cast<DocumentViewport*>(tabs_->currentWidget());
+}
+
+void MainWindow::set_render_mode(RenderMode mode) {
+  if (auto* vp = current_viewport()) {
+    vp->set_render_mode(mode);
+  }
+  sync_render_mode_actions();
+}
+
+void MainWindow::sync_render_mode_actions() {
+  const auto* vp = current_viewport();
+  const RenderMode mode = vp ? vp->render_mode() : RenderMode::Shaded;
+  const bool enabled = vp != nullptr;
+  wireframe_action_->setEnabled(enabled);
+  shaded_action_->setEnabled(enabled);
+  realistic_action_->setEnabled(enabled);
+  switch (mode) {
+    case RenderMode::Wireframe:
+      wireframe_action_->setChecked(true);
+      break;
+    case RenderMode::Realistic:
+      realistic_action_->setChecked(true);
+      break;
+    case RenderMode::Shaded:
+    default:
+      shaded_action_->setChecked(true);
+      break;
   }
 }
 
-void MainWindow::set_wireframe() {
-  if (auto* vp = qobject_cast<DocumentViewport*>(tabs_->currentWidget())) {
-    vp->set_render_mode(RenderMode::Wireframe);
-  }
-}
+void MainWindow::on_tab_changed(int) { sync_render_mode_actions(); }
 
 void MainWindow::frame_all() {
-  if (auto* vp = qobject_cast<DocumentViewport*>(tabs_->currentWidget())) {
+  if (auto* vp = current_viewport()) {
     vp->frame_scene();
   }
 }
@@ -136,6 +202,7 @@ void MainWindow::close_tab(int index) {
     tabs_->removeTab(index);
     delete w;
   }
+  sync_render_mode_actions();
 }
 
 }  // namespace tamias

@@ -6,6 +6,8 @@
 #include <QMouseEvent>
 #include <QShowEvent>
 #include <QResizeEvent>
+#include <QTimer>
+#include <QVBoxLayout>
 #include <QWheelEvent>
 
 #if defined(_WIN32)
@@ -57,10 +59,22 @@ DocumentViewport::DocumentViewport(std::shared_ptr<Document> document, QWidget* 
     : QWidget(parent), document_(std::move(document)) {
   setMouseTracking(true);
   setFocusPolicy(Qt::StrongFocus);
+  // Match Vulkan clear so any uncovered edge never flashes pure black.
+  setAutoFillBackground(true);
+  QPalette pal = palette();
+  pal.setColor(QPalette::Window, QColor(31, 33, 38));
+  setPalette(pal);
 
   // Vulkan draws into a native child surface; this parent stays a normal Qt
   // widget so overlays (view cube) can paint and receive clicks on top.
+  // Keep the surface in a layout so it tracks the viewport size from the first
+  // show — manual setGeometry alone often leaves a tiny HWND at (0,0) until the
+  // user resizes/interacts.
   surface_ = new NativeSurface(this);
+  auto* root = new QVBoxLayout(this);
+  root->setContentsMargins(0, 0, 0, 0);
+  root->setSpacing(0);
+  root->addWidget(surface_);
 
   view_cube_ = new ViewCubeWidget(this);
   connect(view_cube_, &ViewCubeWidget::face_clicked, this, &DocumentViewport::on_view_cube_face);
@@ -103,7 +117,12 @@ void DocumentViewport::request_redraw() {
 
 void DocumentViewport::layout_overlays() {
   if (surface_) {
-    surface_->setGeometry(rect());
+    surface_->lower();
+    // Force HWND creation after layout so the first Vulkan present sees the
+    // real client extent, not a default 0x0 / stub size.
+    if (width() > 1 && height() > 1) {
+      (void)surface_->winId();
+    }
   }
   if (view_cube_) {
     constexpr int kMargin = 12;
@@ -180,9 +199,14 @@ void DocumentViewport::submit_current_frame() {
   if (!channel_ || !surface_) {
     return;
   }
+  // Skip until the surface has a real laid-out size; a 1x1 present on first
+  // show leaves a black window until the next resize.
+  if (surface_->width() < 2 || surface_->height() < 2) {
+    return;
+  }
   const auto dpr = devicePixelRatioF();
-  const auto w = static_cast<std::uint32_t>((std::max)(1.0, surface_->width() * dpr));
-  const auto h = static_cast<std::uint32_t>((std::max)(1.0, surface_->height() * dpr));
+  const auto w = static_cast<std::uint32_t>(surface_->width() * dpr);
+  const auto h = static_cast<std::uint32_t>(surface_->height() * dpr);
   channel_->resize(native_handle(), w, h);
 
   FrameSubmission frame{};
@@ -192,6 +216,7 @@ void DocumentViewport::submit_current_frame() {
   const float aspect = static_cast<float>(w) / static_cast<float>(h);
   frame.view = camera_.view_matrix();
   frame.proj = camera_.proj_matrix(aspect);
+  frame.eye_position = camera_.eye_position();
   frame.mode = mode_;
   for (const auto& node : document_->scene().nodes()) {
     SceneDrawItem item{};
@@ -210,6 +235,15 @@ void DocumentViewport::showEvent(QShowEvent* event) {
   layout_overlays();
   ensure_channel();
   request_redraw();
+  // Qt finishes applying the native child size after showEvent returns; present
+  // once more on the next event-loop tick so the first frame matches the HWND.
+  QTimer::singleShot(0, this, [this] {
+    if (!alive_) {
+      return;
+    }
+    layout_overlays();
+    request_redraw();
+  });
 }
 
 void DocumentViewport::resizeEvent(QResizeEvent* event) {
@@ -232,7 +266,7 @@ void DocumentViewport::mouseMoveEvent(QMouseEvent* event) {
   const QPoint delta = event->pos() - last_mouse_;
   last_mouse_ = event->pos();
   if (orbiting_) {
-    camera_.orbit(-delta.x() * 0.01f, -delta.y() * 0.01f);
+    camera_.orbit(-delta.x() * 0.01f, delta.y() * 0.01f);
     request_redraw();
   } else if (panning_) {
     const float scale = camera_.distance() * 0.002f;

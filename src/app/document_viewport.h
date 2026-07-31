@@ -20,6 +20,7 @@ class DocumentViewport final : public QWidget {
 
   [[nodiscard]] Document& document() { return *document_; }
   void set_render_mode(RenderMode mode);
+  [[nodiscard]] RenderMode render_mode() const { return mode_; }
   void frame_scene();
   void request_redraw();
 

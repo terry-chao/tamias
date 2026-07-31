@@ -968,8 +968,10 @@ Result<std::unique_ptr<PipelineState>> VulkanDevice::create_pipeline(const Pipel
   VkPipelineRasterizationStateCreateInfo rs{
       VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
   rs.polygonMode = desc.wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
-  rs.cullMode = VK_CULL_MODE_BACK_BIT;
-  rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+  // Wireframe keeps both sides so the full edge structure stays visible.
+  // Solid modes cull backs; frontFace is CW because clip_space_correction flips Y.
+  rs.cullMode = desc.wireframe ? VK_CULL_MODE_NONE : VK_CULL_MODE_BACK_BIT;
+  rs.frontFace = VK_FRONT_FACE_CLOCKWISE;
   rs.lineWidth = 1.f;
 
   VkPipelineMultisampleStateCreateInfo ms{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
@@ -996,7 +998,7 @@ Result<std::unique_ptr<PipelineState>> VulkanDevice::create_pipeline(const Pipel
   VkPushConstantRange push{};
   push.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
   push.offset = 0;
-  push.size = 128;
+  push.size = 256;
 
   VkPipelineLayoutCreateInfo layout_ci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
   layout_ci.pushConstantRangeCount = 1;

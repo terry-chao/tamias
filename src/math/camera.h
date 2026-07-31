@@ -71,7 +71,8 @@ class TurntableCamera {
  private:
   Vec3 target_{};
   float distance_ = 5.f;
-  float yaw_ = 0.8f;
+  // Default: elevated front-right three-quarter (Front=-Y, Right=+X).
+  float yaw_ = -0.8f;
   float pitch_ = 0.5f;
   float fovy_ = 0.8f;
   float znear_ = 0.05f;

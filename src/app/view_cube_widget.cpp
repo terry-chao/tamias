@@ -68,11 +68,14 @@ ViewCubeWidget::ViewCubeWidget(QWidget* parent) : QWidget(parent) {
   setFixedSize(96, 96);
   setMouseTracking(true);
   setCursor(Qt::PointingHandCursor);
-  setAttribute(Qt::WA_OpaquePaintEvent, false);
   // Native HWND so this overlay stacks above the Vulkan surface child on Win32.
+  // Match the viewport clear gray so rounded-plate corners never flash black.
   setAttribute(Qt::WA_NativeWindow);
-  setAttribute(Qt::WA_NoSystemBackground, false);
-  setAutoFillBackground(false);
+  setAttribute(Qt::WA_OpaquePaintEvent, true);
+  setAutoFillBackground(true);
+  QPalette pal = palette();
+  pal.setColor(QPalette::Window, QColor(31, 33, 38));
+  setPalette(pal);
   setToolTip(tr("拖动旋转视角 · 点击面：前/后/左/右/上/下"));
   rebuild_faces();
 }
@@ -214,10 +217,14 @@ void ViewCubeWidget::paintEvent(QPaintEvent*) {
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing, true);
 
+  // Fill the full HWND rect first — outside a rounded plate would otherwise stay black.
+  const QColor bg(31, 33, 38);
+  painter.fillRect(rect(), bg);
+
   QPainterPath plate;
-  plate.addRoundedRect(QRectF(rect()).adjusted(2, 2, -2, -2), 10, 10);
-  painter.fillPath(plate, QColor(20, 24, 30, 160));
-  painter.setPen(QPen(QColor(255, 255, 255, 40), 1.0));
+  plate.addRoundedRect(QRectF(rect()).adjusted(3, 3, -3, -3), 10, 10);
+  painter.fillPath(plate, QColor(42, 45, 52));
+  painter.setPen(QPen(QColor(255, 255, 255, 36), 1.0));
   painter.drawPath(plate);
 
   struct DrawFace {
@@ -306,7 +313,7 @@ void ViewCubeWidget::mouseMoveEvent(QMouseEvent* event) {
     }
     if (dragging_ && (delta.x() != 0 || delta.y() != 0)) {
       // Match viewport orbit feel (left drag).
-      emit orbit_dragged(-delta.x() * 0.02f, -delta.y() * 0.02f);
+      emit orbit_dragged(-delta.x() * 0.02f, delta.y() * 0.02f);
     }
     return;
   }

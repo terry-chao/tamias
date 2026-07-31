@@ -280,8 +280,9 @@ MeshCpu make_demo_cube() {
   MeshCpu mesh;
   const Vec3 p[8] = {{-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1},
                      {-1, -1, 1},  {1, -1, 1},  {1, 1, 1},  {-1, 1, 1}};
-  const int faces[6][4] = {{0, 1, 2, 3}, {4, 7, 6, 5}, {0, 4, 5, 1},
-                           {2, 6, 7, 3}, {0, 3, 7, 4}, {1, 5, 6, 2}};
+  // CCW when viewed from outside (outward normals).
+  const int faces[6][4] = {{0, 3, 2, 1}, {4, 5, 6, 7}, {0, 1, 5, 4},
+                           {3, 7, 6, 2}, {0, 4, 7, 3}, {1, 2, 6, 5}};
   const Vec3 normals[6] = {{0, 0, -1}, {0, 0, 1}, {0, -1, 0}, {0, 1, 0}, {-1, 0, 0}, {1, 0, 0}};
   for (int f = 0; f < 6; ++f) {
     append_triangle(mesh, p[faces[f][0]], p[faces[f][1]], p[faces[f][2]], normals[f]);
