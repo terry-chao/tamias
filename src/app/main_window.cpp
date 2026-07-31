@@ -8,6 +8,7 @@
 #include "modeling/shape_ops.h"
 #include "settings_dialog.h"
 
+#include <QDialog>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QIcon>
@@ -202,7 +203,14 @@ Result<void> MainWindow::populate_document_meshes(Document& document, RenderThre
 
 void MainWindow::open_settings() {
   SettingsDialog dialog(this);
-  dialog.exec();
+  if (dialog.exec() != QDialog::Accepted) {
+    return;
+  }
+  if (dialog.language_changed()) {
+    QMessageBox::information(
+        this, tr("Language"),
+        tr("Language changes take effect after restarting Tamias."));
+  }
 }
 
 void MainWindow::add_document_tab(std::shared_ptr<Document> document) {

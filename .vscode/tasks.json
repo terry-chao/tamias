@@ -60,6 +60,44 @@
       },
       "problemMatcher": "$msCompile",
       "group": "build"
+    },
+    {
+      "label": "predebug: debug",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/.vscode/predebug.ps1\" -Preset debug",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PATH": "C:/Qt/6.8.3/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
+        }
+      },
+      "problemMatcher": "$msCompile",
+      "group": "build",
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "showReuseMessage": false,
+        "clear": false
+      }
+    },
+    {
+      "label": "predebug: relwithdebinfo",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/.vscode/predebug.ps1\" -Preset relwithdebinfo",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PATH": "C:/Qt/6.8.3/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
+        }
+      },
+      "problemMatcher": "$msCompile",
+      "group": "build",
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "showReuseMessage": false,
+        "clear": false
+      }
     }
   ]
 }

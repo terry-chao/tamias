@@ -174,9 +174,9 @@ Vec3 DocumentViewport::cursor_world_position(const QPoint& pos) const {
   }
 
   // Fall back to the horizontal plane through the camera target.
-  const float plane_z = camera_.target().z;
-  if (std::fabs(ray.direction.z) > 1e-6f) {
-    const float t = (plane_z - ray.origin.z) / ray.direction.z;
+  const float plane_y = camera_.target().y;
+  if (std::fabs(ray.direction.y) > 1e-6f) {
+    const float t = (plane_y - ray.origin.y) / ray.direction.y;
     if (t > 0.f) {
       return ray.origin + ray.direction * t;
     }

@@ -56,8 +56,8 @@ class ViewCubeWidget final : public QWidget {
   [[nodiscard]] int hit_face(const QPoint& pos) const;
   void rebuild_faces();
 
-  float yaw_ = -0.8f;
-  float pitch_ = 0.5f;
+  float yaw_ = 0.785398163f;
+  float pitch_ = 0.35f;
   int hover_face_ = -1;
   int press_face_ = -1;
   QPoint last_mouse_{};

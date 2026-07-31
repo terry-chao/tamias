@@ -118,6 +118,14 @@ class OcctShape final : public Shape {
     if (mesh.indices.empty()) {
       return Err("OCCT tessellation produced no triangles");
     }
+    // OCCT is Z-up; Tamias viewport is Y-up (glTF). Rotate -90° about X:
+    // (x, y, z) -> (x, z, -y).
+    for (auto& v : mesh.vertices) {
+      const Vec3 p = v.position;
+      v.position = {p.x, p.z, -p.y};
+      const Vec3 n = v.normal;
+      v.normal = {n.x, n.z, -n.y};
+    }
     recompute_bounds(mesh);
     return mesh;
   }

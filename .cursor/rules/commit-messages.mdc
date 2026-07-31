@@ -1,0 +1,41 @@
+---
+description: Git commit message convention for Tamias
+alwaysApply: true
+---
+
+# Commit message style
+
+Use Conventional Commits with a Chinese summary, matching recent history:
+
+```
+type(scope): 简短中文说明
+```
+
+## Types
+
+- `feat` — new feature
+- `fix` — bug fix
+- `refactor` — restructuring without behavior change
+- `chore` — build, tooling, non-product tweaks
+- `docs` — documentation only
+- `test` — tests only
+
+## Scopes (common)
+
+`app` · `viewport` · `rhi` · `render` · `io` · `modeling` · `view`
+
+## Rules
+
+- One line preferred; keep it under ~50 Chinese characters when possible
+- Subject focuses on **why / user-visible outcome**, not a file list
+- Use Chinese for the description after the colon (same as recent `main` history)
+- Optional body: short bullets if multiple distinct changes must share one commit
+- Do not use `--no-verify` or amend pushed commits unless explicitly asked
+
+## Examples
+
+```
+feat(app): 增加欢迎首页与最近打开文件
+fix(viewport): 修复着色/真实模式仍可见模型内部
+feat(rhi): 实现 OpenGL 后端并对接 OCCT STEP/IGES/BREP
+```

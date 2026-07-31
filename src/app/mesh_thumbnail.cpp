@@ -25,18 +25,18 @@ CamBasis make_camera(const Aabb& bounds) {
   const Vec3 center = bounds.valid() ? bounds.center() : Vec3{};
   const float radius =
       bounds.valid() ? (std::max)(0.25f, length(bounds.extent()) * 0.5f) : 1.f;
-  // Match the default turntable three-quarter view.
-  constexpr float kYaw = -0.8f;
-  constexpr float kPitch = 0.5f;
+  // Match the default turntable three-quarter view (Y-up).
+  constexpr float kYaw = 0.785398163f;
+  constexpr float kPitch = 0.35f;
   const float cp = std::cos(kPitch);
   const float sp = std::sin(kPitch);
   const float cy = std::cos(kYaw);
   const float sy = std::sin(kYaw);
-  const Vec3 offset{cp * cy, cp * sy, sp};
+  const Vec3 offset{cp * sy, sp, cp * cy};
   CamBasis cam;
   cam.eye = center + offset * (radius * 2.6f);
   cam.forward = normalize(center - cam.eye);
-  cam.right = normalize(cross(cam.forward, {0.f, 0.f, 1.f}));
+  cam.right = normalize(cross(cam.forward, {0.f, 1.f, 0.f}));
   if (length(cam.right) < 1e-4f) {
     cam.right = {1.f, 0.f, 0.f};
   }

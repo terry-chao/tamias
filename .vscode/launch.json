@@ -11,9 +11,7 @@
       "env": {
         "PATH": "C:/Qt/6.8.3/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
       },
-      "preRunCommands": [
-        "platform shell powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/.vscode/predebug.ps1\" -Preset debug"
-      ]
+      "preLaunchTask": "predebug: debug"
     },
     {
       "name": "RelWithDebInfo tamias",
@@ -25,9 +23,7 @@
       "env": {
         "PATH": "C:/Qt/6.8.3/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
       },
-      "preRunCommands": [
-        "platform shell powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/.vscode/predebug.ps1\" -Preset relwithdebinfo"
-      ]
+      "preLaunchTask": "predebug: relwithdebinfo"
     },
     {
       "name": "CMake Launch Target",
@@ -38,7 +34,8 @@
       "cwd": "${command:cmake.launchTargetDirectory}",
       "env": {
         "PATH": "C:/Qt/6.8.3/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
-      }
+      },
+      "preLaunchTask": "predebug: debug"
     }
   ]
 }

@@ -9,11 +9,20 @@ add_executable(tamias
   recent_files.cpp
   mesh_thumbnail.cpp
   app_settings.cpp
+  i18n.cpp
   settings_dialog.cpp
   document_viewport.cpp
   view_cube_widget.cpp
   rhi_backends.cpp
   resources.qrc
+)
+
+set(TAMIAS_TS_FILES
+  ${CMAKE_SOURCE_DIR}/translations/tamias_zh_CN.ts
+)
+qt_add_translations(tamias
+  TS_FILES ${TAMIAS_TS_FILES}
+  RESOURCE_PREFIX "/i18n"
 )
 
 if(WIN32)

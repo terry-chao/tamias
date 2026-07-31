@@ -4,6 +4,7 @@
 #include "core/log.h"
 #include "engine/render/render_runtime.h"
 #include "graphics/graphics_backend.h"
+#include "i18n.h"
 #include "modeling/occt_shape_ops.h"
 
 #include <QApplication>
@@ -30,6 +31,9 @@ int main(int argc, char* argv[]) {
 #endif
 
   tamias::AppSettings::instance().load();
+  if (!tamias::apply_ui_language(tamias::AppSettings::instance().ui_language())) {
+    tamias::log_error("Failed to load UI translation catalog; falling back to source language");
+  }
 
   // Smoke: ensure the preferred graphics backend can create a device.
   {

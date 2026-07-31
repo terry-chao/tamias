@@ -124,7 +124,7 @@ Ray camera_ray(const TurntableCamera& camera, float aspect, float mouse_x, float
   const float ndc_y = 1.f - (2.f * mouse_y / height);
   const Vec3 eye = camera.eye_position();
   const Vec3 forward = normalize(camera.target() - eye);
-  const Vec3 right = normalize(cross(forward, {0.f, 0.f, 1.f}));
+  const Vec3 right = normalize(cross(forward, {0.f, 1.f, 0.f}));
   const Vec3 up = cross(right, forward);
   const Mat4 proj = camera.proj_matrix(aspect);
   const float tanx = ndc_x / proj(0, 0);

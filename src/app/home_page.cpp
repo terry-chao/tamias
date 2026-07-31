@@ -1,11 +1,13 @@
 #include "home_page.h"
 
+#include <QCoreApplication>
 #include <QFileInfo>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLocale>
 #include <QMouseEvent>
 #include <QPixmap>
 #include <QPushButton>
@@ -21,20 +23,23 @@ namespace {
 
 QString format_opened_time(const QDateTime& dt) {
   if (!dt.isValid()) {
-    return QObject::tr("Unknown");
+    return QCoreApplication::translate("tamias::HomePage", "Unknown");
   }
   const QDate today = QDate::currentDate();
   if (dt.date() == today) {
-    return QObject::tr("Today, %1").arg(dt.time().toString(QStringLiteral("HH:mm")));
+    return QCoreApplication::translate("tamias::HomePage", "Today, %1")
+        .arg(dt.time().toString(QStringLiteral("HH:mm")));
   }
   if (dt.date() == today.addDays(-1)) {
-    return QObject::tr("Yesterday, %1").arg(dt.time().toString(QStringLiteral("HH:mm")));
+    return QCoreApplication::translate("tamias::HomePage", "Yesterday, %1")
+        .arg(dt.time().toString(QStringLiteral("HH:mm")));
   }
-  return dt.toString(QStringLiteral("MMM d, yyyy"));
+  return QLocale().toString(dt.date(), QLocale::ShortFormat);
 }
 
 QString format_created_time(const QDateTime& dt) {
-  return dt.isValid() ? dt.toString(QStringLiteral("MMM d, yyyy")) : QObject::tr("Unknown");
+  return dt.isValid() ? QLocale().toString(dt.date(), QLocale::ShortFormat)
+                      : QCoreApplication::translate("tamias::HomePage", "Unknown");
 }
 
 class RecentCard final : public QFrame {
@@ -121,18 +126,27 @@ class RecentCard final : public QFrame {
     divider->setFixedHeight(1);
     root->addWidget(divider);
 
-    auto* opened = new QLabel(tr("Opened  %1").arg(format_opened_time(item.opened_at)), this);
+    auto* opened = new QLabel(
+        QCoreApplication::translate("tamias::HomePage", "Opened  %1")
+            .arg(format_opened_time(item.opened_at)),
+        this);
     opened->setObjectName(QStringLiteral("recentMeta"));
     opened->setContentsMargins(16, 10, 16, 0);
     root->addWidget(opened);
 
-    auto* created = new QLabel(tr("Created  %1").arg(format_created_time(item.created_at)), this);
+    auto* created = new QLabel(
+        QCoreApplication::translate("tamias::HomePage", "Created  %1")
+            .arg(format_created_time(item.created_at)),
+        this);
     created->setObjectName(QStringLiteral("recentMeta"));
     created->setContentsMargins(16, 3, 16, 0);
     root->addWidget(created);
 
     if (!exists) {
-      auto* missing = new QLabel(tr("File unavailable · click to remove"), this);
+      auto* missing = new QLabel(
+          QCoreApplication::translate("tamias::HomePage",
+                                      "File unavailable · click to remove"),
+          this);
       missing->setObjectName(QStringLiteral("recentMissing"));
       missing->setContentsMargins(16, 7, 16, 0);
       root->addWidget(missing);
@@ -182,7 +196,8 @@ class OpenDocCard final : public QFrame {
     root->setContentsMargins(16, 14, 16, 14);
     root->setSpacing(14);
 
-    auto* badge = new QLabel(tr("OPEN"), this);
+    auto* badge =
+        new QLabel(QCoreApplication::translate("tamias::HomePage", "OPEN"), this);
     badge->setObjectName(QStringLiteral("openBadge"));
     badge->setAlignment(Qt::AlignCenter);
     root->addWidget(badge, 0, Qt::AlignVCenter);
@@ -193,13 +208,18 @@ class OpenDocCard final : public QFrame {
     name->setObjectName(QStringLiteral("recentName"));
     name->setWordWrap(true);
     text->addWidget(name);
-    auto* subtitle = new QLabel(item.path.isEmpty() ? tr("Untitled document") : item.path, this);
+    auto* subtitle = new QLabel(
+        item.path.isEmpty()
+            ? QCoreApplication::translate("tamias::HomePage", "Untitled document")
+            : item.path,
+        this);
     subtitle->setObjectName(QStringLiteral("recentPath"));
     subtitle->setWordWrap(true);
     text->addWidget(subtitle);
     root->addLayout(text, 1);
 
-    auto* hint = new QLabel(tr("Continue →"), this);
+    auto* hint =
+        new QLabel(QCoreApplication::translate("tamias::HomePage", "Continue →"), this);
     hint->setObjectName(QStringLiteral("openHint"));
     root->addWidget(hint, 0, Qt::AlignVCenter);
   }
@@ -391,7 +411,7 @@ HomePage::HomePage(QWidget* parent) : QWidget(parent) {
   section->setObjectName(QStringLiteral("homeSection"));
   section_row->addWidget(section);
   section_row->addStretch(1);
-  auto* section_hint = new QLabel(tr("Your 8 most recent models"), content);
+  auto* section_hint = new QLabel(tr("Recently opened"), content);
   section_hint->setObjectName(QStringLiteral("homeSectionHint"));
   section_row->addWidget(section_hint, 0, Qt::AlignBottom);
   content_layout->addLayout(section_row);

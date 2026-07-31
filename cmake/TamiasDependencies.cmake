@@ -1,7 +1,7 @@
 # Resolve Qt, Vulkan, and local/third-party headers.
 
 find_package(Vulkan REQUIRED)
-find_package(Qt6 REQUIRED COMPONENTS Widgets Gui Svg)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Gui Svg LinguistTools)
 
 set(TAMIAS_THIRDPARTY_DIR "${CMAKE_SOURCE_DIR}/3rdparty")
 

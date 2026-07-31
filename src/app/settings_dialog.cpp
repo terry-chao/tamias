@@ -1,6 +1,7 @@
 #include "settings_dialog.h"
 
 #include "app_settings.h"
+#include "i18n.h"
 
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -13,7 +14,7 @@ namespace tamias {
 SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
   setWindowTitle(tr("Settings"));
   setModal(true);
-  resize(420, 180);
+  resize(420, 220);
 
   auto* root = new QVBoxLayout(this);
   root->setContentsMargins(18, 16, 18, 14);
@@ -23,6 +24,15 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
   form->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
   form->setHorizontalSpacing(16);
   form->setVerticalSpacing(10);
+
+  language_combo_ = new QComboBox(this);
+  for (const QString& code : available_ui_languages()) {
+    language_combo_->addItem(ui_language_display_name(code), code);
+  }
+  const int lang_index =
+      language_combo_->findData(AppSettings::instance().ui_language());
+  language_combo_->setCurrentIndex(lang_index >= 0 ? lang_index : 0);
+  form->addRow(tr("Language:"), language_combo_);
 
   backend_combo_ = new QComboBox(this);
   backend_combo_->addItem(tr("Vulkan"), static_cast<int>(GraphicsBackend::Vulkan));
@@ -68,8 +78,11 @@ void SettingsDialog::on_backend_changed(int index) {
 void SettingsDialog::accept() {
   const auto backend =
       static_cast<GraphicsBackend>(backend_combo_->currentData().toInt());
+  const QString language = language_combo_->currentData().toString();
   auto& settings = AppSettings::instance();
+  language_changed_ = language != settings.ui_language();
   settings.set_graphics_backend(backend);
+  settings.set_ui_language(language);
   settings.save();
   QDialog::accept();
 }

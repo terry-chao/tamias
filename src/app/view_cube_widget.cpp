@@ -76,7 +76,7 @@ ViewCubeWidget::ViewCubeWidget(QWidget* parent) : QWidget(parent) {
   QPalette pal = palette();
   pal.setColor(QPalette::Window, QColor(31, 33, 38));
   setPalette(pal);
-  setToolTip(tr("拖动旋转视角 · 点击面：前/后/左/右/上/下"));
+  setToolTip(tr("Drag to orbit · Click a face: Front/Back/Left/Right/Top/Bottom"));
   rebuild_faces();
 }
 
@@ -90,61 +90,62 @@ void ViewCubeWidget::set_orientation(float yaw, float pitch) {
 }
 
 void ViewCubeWidget::rebuild_faces() {
-  // Face corners in world space (Z-up). Order is CCW when viewed from outside.
+  // Face corners in world space (Y-up). Order is CCW when viewed from outside.
+  // Front=+Z, Back=-Z, Right=+X, Left=-X, Top=+Y, Bottom=-Y.
   faces_[0] = {ViewCubeFace::Front,
-               {{-kHalf, -kHalf, -kHalf},
-                {kHalf, -kHalf, -kHalf},
-                {kHalf, -kHalf, kHalf},
-                {-kHalf, -kHalf, kHalf}},
-               {0.f, -1.f, 0.f},
-               tr("前")};
-  faces_[1] = {ViewCubeFace::Back,
-               {{kHalf, kHalf, -kHalf},
-                {-kHalf, kHalf, -kHalf},
-                {-kHalf, kHalf, kHalf},
-                {kHalf, kHalf, kHalf}},
-               {0.f, 1.f, 0.f},
-               tr("后")};
-  faces_[2] = {ViewCubeFace::Left,
-               {{-kHalf, kHalf, -kHalf},
-                {-kHalf, -kHalf, -kHalf},
-                {-kHalf, -kHalf, kHalf},
-                {-kHalf, kHalf, kHalf}},
-               {-1.f, 0.f, 0.f},
-               tr("左")};
-  faces_[3] = {ViewCubeFace::Right,
-               {{kHalf, -kHalf, -kHalf},
-                {kHalf, kHalf, -kHalf},
-                {kHalf, kHalf, kHalf},
-                {kHalf, -kHalf, kHalf}},
-               {1.f, 0.f, 0.f},
-               tr("右")};
-  faces_[4] = {ViewCubeFace::Top,
                {{-kHalf, -kHalf, kHalf},
                 {kHalf, -kHalf, kHalf},
                 {kHalf, kHalf, kHalf},
                 {-kHalf, kHalf, kHalf}},
                {0.f, 0.f, 1.f},
-               tr("上")};
-  faces_[5] = {ViewCubeFace::Bottom,
-               {{-kHalf, kHalf, -kHalf},
-                {kHalf, kHalf, -kHalf},
-                {kHalf, -kHalf, -kHalf},
-                {-kHalf, -kHalf, -kHalf}},
+               tr("Front")};
+  faces_[1] = {ViewCubeFace::Back,
+               {{kHalf, -kHalf, -kHalf},
+                {-kHalf, -kHalf, -kHalf},
+                {-kHalf, kHalf, -kHalf},
+                {kHalf, kHalf, -kHalf}},
                {0.f, 0.f, -1.f},
-               tr("下")};
+               tr("Back")};
+  faces_[2] = {ViewCubeFace::Left,
+               {{-kHalf, -kHalf, -kHalf},
+                {-kHalf, -kHalf, kHalf},
+                {-kHalf, kHalf, kHalf},
+                {-kHalf, kHalf, -kHalf}},
+               {-1.f, 0.f, 0.f},
+               tr("Left")};
+  faces_[3] = {ViewCubeFace::Right,
+               {{kHalf, -kHalf, kHalf},
+                {kHalf, -kHalf, -kHalf},
+                {kHalf, kHalf, -kHalf},
+                {kHalf, kHalf, kHalf}},
+               {1.f, 0.f, 0.f},
+               tr("Right")};
+  faces_[4] = {ViewCubeFace::Top,
+               {{-kHalf, kHalf, kHalf},
+                {kHalf, kHalf, kHalf},
+                {kHalf, kHalf, -kHalf},
+                {-kHalf, kHalf, -kHalf}},
+               {0.f, 1.f, 0.f},
+               tr("Top")};
+  faces_[5] = {ViewCubeFace::Bottom,
+               {{-kHalf, -kHalf, -kHalf},
+                {kHalf, -kHalf, -kHalf},
+                {kHalf, -kHalf, kHalf},
+                {-kHalf, -kHalf, kHalf}},
+               {0.f, -1.f, 0.f},
+               tr("Bottom")};
 }
 
 void ViewCubeWidget::camera_basis(Vec3f& right, Vec3f& up, Vec3f& forward) const {
-  // Same eye offset convention as TurntableCamera (Z-up).
+  // Same eye offset convention as TurntableCamera (Y-up).
   const float cp = std::cos(pitch_);
   const float sp = std::sin(pitch_);
   const float cy = std::cos(yaw_);
   const float sy = std::sin(yaw_);
   // Direction from target toward eye.
-  const Vec3f eye_dir{cp * cy, cp * sy, sp};
+  const Vec3f eye_dir{cp * sy, sp, cp * cy};
   forward = {-eye_dir.x, -eye_dir.y, -eye_dir.z};  // look direction
-  const Vec3f world_up{0.f, 0.f, 1.f};
+  const Vec3f world_up{0.f, 1.f, 0.f};
   // right = normalize(cross(forward, world_up))
   right = {forward.y * world_up.z - forward.z * world_up.y,
            forward.z * world_up.x - forward.x * world_up.z,
