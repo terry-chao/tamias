@@ -915,6 +915,9 @@ Result<std::unique_ptr<Buffer>> VulkanDevice::create_buffer(const BufferDesc& de
 
 Result<std::unique_ptr<ShaderModule>> VulkanDevice::create_shader_module(
     const ShaderModuleDesc& desc) {
+  if (desc.language != ShaderLanguage::Spirv || desc.spirv.empty()) {
+    return Err("Vulkan shaders require SPIR-V");
+  }
   VkShaderModuleCreateInfo ci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
   ci.codeSize = desc.spirv.size_bytes();
   ci.pCode = desc.spirv.data();

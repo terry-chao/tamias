@@ -1,6 +1,7 @@
 #include "io/mesh_io.h"
 #include "math/math.h"
 #include "view/picking.h"
+#include "modeling/occt_shape_ops.h"
 #include "modeling/shape_ops.h"
 #include "engine/render/render_runtime.h"
 
@@ -54,3 +55,12 @@ TEST(RenderConfig, OpenGlDoesNotShare) {
   RenderDeviceConfig v1{GraphicsBackend::Vulkan, true};
   EXPECT_TRUE(v0.shares_execution_thread_with(v1));
 }
+
+#if defined(TAMIAS_HAS_OCCT)
+TEST(Occt, TessellateBox) {
+  auto mesh = tessellate_occt_box_for_tests();
+  ASSERT_TRUE(mesh.has_value()) << mesh.error();
+  EXPECT_FALSE(mesh->indices.empty());
+  EXPECT_TRUE(mesh->bounds.valid());
+}
+#endif

@@ -73,8 +73,12 @@ struct SwapChainDesc {
   std::uint32_t height = 1;
 };
 
+enum class ShaderLanguage { Spirv, Glsl };
+
 struct ShaderModuleDesc {
+  ShaderLanguage language = ShaderLanguage::Spirv;
   std::span<const std::uint32_t> spirv;
+  std::span<const char> glsl;
   std::string entry = "main";
 };
 

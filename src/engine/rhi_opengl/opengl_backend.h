@@ -4,8 +4,7 @@
 
 namespace tamias {
 
-// M4: OpenGL backend registration stub. Real WGL/GLX isolation comes later.
-// OpenGL must never share RenderThread/Device with other views.
+// OpenGL RHI: WGL (Win32) / GLX (X11). Never shares RenderThread/Device with other views.
 void register_opengl_backend();
 
 }  // namespace tamias

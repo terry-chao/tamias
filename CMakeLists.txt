@@ -23,7 +23,8 @@ set(TAMIAS_SHADER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/shaders")
 set(TAMIAS_SHADER_OUTPUT_DIR "${CMAKE_BINARY_DIR}/shaders")
 
 option(TAMIAS_ENABLE_VULKAN_BACKEND "Build the Vulkan RHI backend." ON)
-option(TAMIAS_ENABLE_OPENGL_BACKEND "Build the OpenGL RHI backend stub." ON)
+option(TAMIAS_ENABLE_OPENGL_BACKEND "Build the OpenGL RHI backend." ON)
+option(TAMIAS_ENABLE_OCCT "Build OCCT ShapeOps (STEP/IGES/BREP). Requires OCCT_ROOT." ON)
 option(TAMIAS_BUILD_TESTS "Build unit tests." ON)
 option(TAMIAS_USE_FETCHCONTENT "Fetch third-party libs with FetchContent when not found." ON)
 
@@ -50,3 +51,4 @@ endif()
 
 message(STATUS "Tamias Vulkan backend: ${TAMIAS_ENABLE_VULKAN_BACKEND}")
 message(STATUS "Tamias OpenGL backend: ${TAMIAS_ENABLE_OPENGL_BACKEND}")
+message(STATUS "Tamias OCCT: ${TAMIAS_HAS_OCCT}")

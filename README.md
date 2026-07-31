@@ -1,6 +1,6 @@
 # Tamias
 
-C++23 / CMake / Qt 6 mesh viewer with a Vulkan-shaped RHI (Vulkan primary).
+C++23 / CMake / Qt 6 mesh viewer with a Vulkan-shaped RHI (Vulkan primary, OpenGL secondary).
 
 ## Status
 
@@ -10,7 +10,8 @@ C++23 / CMake / Qt 6 mesh viewer with a Vulkan-shaped RHI (Vulkan primary).
 | M1 Viewport + RenderThread | Done |
 | M2 Mesh viewer (OBJ/GLB, shaded/wire, turntable) | Done |
 | M3 Multi-doc share + BVH pick | Done |
-| M4 OpenGL stub + `Shape`/`IShapeOps` boundary | Scaffolded |
+| M4 OpenGL RHI + `Shape`/`IShapeOps` boundary | Done |
+| M5 OCCT I/O (STEP/IGES/BREP tessellate) | Done |
 
 ## Build & run
 
@@ -26,7 +27,7 @@ cmake --build --preset relwithdebinfo --parallel
 
 - `src/engine/rhi` — abstract RHI
 - `src/engine/rhi_vulkan` — Vulkan backend
-- `src/engine/rhi_opengl` — OpenGL stub (no share with Vulkan views)
+- `src/engine/rhi_opengl` — OpenGL backend (isolated thread per document)
 - `src/engine/render` — `RenderThread` / `RenderChannel`
 - `src/app` — Qt shell + native viewport
-- `src/modeling` — `Shape` / `IShapeOps` for future OCCT
+- `src/modeling` — `Shape` / `IShapeOps`; OCCT ops when `OCCT_ROOT` is set

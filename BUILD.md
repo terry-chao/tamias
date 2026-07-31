@@ -51,9 +51,22 @@ Use the `linux` preset with vcpkg (`linux-desktop` feature) or install Qt6/Vulka
 | CMake option | Default | Meaning |
 |---|---|---|
 | `TAMIAS_ENABLE_VULKAN_BACKEND` | ON | Vulkan RHI (primary) |
-| `TAMIAS_ENABLE_OPENGL_BACKEND` | ON | OpenGL stub registration (isolation policy) |
+| `TAMIAS_ENABLE_OPENGL_BACKEND` | ON | OpenGL RHI (isolated thread per document) |
+| `TAMIAS_ENABLE_OCCT` | ON | OCCT ShapeOps when `OCCT_ROOT` is set |
 | `TAMIAS_BUILD_TESTS` | ON | gtest targets |
 | `TAMIAS_USE_FETCHCONTENT` | ON | Fetch gtest when not found |
+
+### OCCT (optional)
+
+Set `OCCT_ROOT` to an Open CASCADE install (tested: 7.9.x Windows `vc14-64` layout with `inc/`, `cmake/`, `win64/vc14/{bin,bind,lib,libd}`):
+
+```powershell
+$env:OCCT_ROOT = 'C:\path\to\opencascade-7.9.3-vc14-64'
+```
+
+When `OCCT_ROOT` is present, Tamias builds `OcctShapeOps` and can open STEP/IGES/BREP. Without it, the rest of the app still builds.
+
+On Windows, POST_BUILD copies the linked OCCT toolkit DLLs plus required 3rdparty DLLs (`freetype`, `FreeImage`, `ffmpeg`, `openvr`, `tbb`, `jemalloc`) from the sibling `3rdparty-vc14-64` tree into `build/.../bin/<Config>/` next to `tamias.exe`.
 
 ## Controls
 
@@ -68,3 +81,4 @@ Use the `linux` preset with vcpkg (`linux-desktop` feature) or install Qt6/Vulka
 - OBJ (rapidobj)
 - GLB (minimal built-in loader)
 - ASCII `.gltf` not yet supported — convert to `.glb` or `.obj`
+- STEP / IGES / BREP via OCCT (when built with `OCCT_ROOT`)

@@ -56,10 +56,12 @@ void SettingsDialog::on_backend_changed(int index) {
       static_cast<GraphicsBackend>(backend_combo_->itemData(index).toInt());
   if (backend == GraphicsBackend::OpenGL) {
     backend_hint_->setText(
-        tr("OpenGL support is still a stub. Documents may fail to open until it is "
-           "implemented. Changes apply to newly opened documents."));
+        tr("OpenGL uses an isolated render thread per document (never shared). "
+           "Changes apply to newly opened documents."));
   } else {
-    backend_hint_->setText(tr("Changes apply to newly opened documents."));
+    backend_hint_->setText(
+        tr("Vulkan documents with the same settings share one render thread. "
+           "Changes apply to newly opened documents."));
   }
 }
 

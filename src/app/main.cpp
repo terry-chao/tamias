@@ -1,10 +1,15 @@
 #include "main_window.h"
 
+#include "app_settings.h"
 #include "core/log.h"
 #include "engine/render/render_runtime.h"
+#include "graphics/graphics_backend.h"
+#include "modeling/occt_shape_ops.h"
 
 #include <QApplication>
 #include <QIcon>
+
+#include <string>
 
 namespace tamias {
 void register_linked_rhi_backends();
@@ -18,20 +23,25 @@ int main(int argc, char* argv[]) {
   QApplication::setApplicationVersion("0.1.0");
   app.setWindowIcon(QIcon(QStringLiteral(":/branding/logo.png")));
 
-
   tamias::init_logging(tamias::LogLevel::Info);
   tamias::register_linked_rhi_backends();
+#if defined(TAMIAS_HAS_OCCT)
+  tamias::register_occt_shape_ops();
+#endif
 
-  // Smoke: ensure Vulkan device can be created before showing UI.
+  tamias::AppSettings::instance().load();
+
+  // Smoke: ensure the preferred graphics backend can create a device.
   {
     tamias::DeviceCreateInfo info{};
+    info.backend = tamias::AppSettings::instance().graphics_backend();
     info.enable_validation = true;
     auto device = tamias::RHIDevice::create(info);
     if (!device) {
       tamias::log_error(device.error());
       return 1;
     }
-    tamias::log_info("Vulkan device smoke test OK");
+    tamias::log_info(std::string(tamias::to_string(info.backend)) + " device smoke test OK");
     (*device)->wait_idle();
   }
 

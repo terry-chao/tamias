@@ -8,7 +8,7 @@ endif()
 
 add_subdirectory(render)
 
-# OpenGL backend stub (M4): isolation path, not shared with Vulkan views.
+# OpenGL backend: isolation path, not shared with Vulkan views.
 if(TAMIAS_ENABLE_OPENGL_BACKEND)
   add_subdirectory(rhi_opengl)
 endif()

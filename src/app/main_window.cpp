@@ -4,6 +4,8 @@
 #include "core/log.h"
 #include "io/mesh_io.h"
 #include "mesh_thumbnail.h"
+#include "modeling/occt_shape_ops.h"
+#include "modeling/shape_ops.h"
 #include "settings_dialog.h"
 
 #include <QFileDialog>
@@ -253,7 +255,29 @@ bool MainWindow::open_path(const QString& path) {
   }
 
   const auto file = std::filesystem::path(info.absoluteFilePath().toStdString());
-  auto mesh = load_mesh_file(file);
+  Result<MeshCpu> mesh = Err("no loader");
+  if (occt_supports_extension(file)) {
+#if defined(TAMIAS_HAS_OCCT)
+    auto* ops = ShapeOpsRegistry::instance().find("occt");
+    if (!ops) {
+      QMessageBox::critical(this, tr("Open"), tr("OCCT ShapeOps is not registered."));
+      return false;
+    }
+    auto shape = ops->read_file(file);
+    if (!shape) {
+      QMessageBox::critical(this, tr("Open"), QString::fromStdString(shape.error()));
+      return false;
+    }
+    mesh = (*shape)->tessellate(0.1);
+#else
+    QMessageBox::critical(
+        this, tr("Open"),
+        tr("This build was compiled without OCCT. Set OCCT_ROOT and rebuild."));
+    return false;
+#endif
+  } else {
+    mesh = load_mesh_file(file);
+  }
   if (!mesh) {
     QMessageBox::critical(this, tr("Open"), QString::fromStdString(mesh.error()));
     return false;
@@ -280,9 +304,15 @@ bool MainWindow::open_path(const QString& path) {
 }
 
 void MainWindow::open_file() {
-  const QString path = QFileDialog::getOpenFileName(
-      this, tr("Open Mesh"), QString(),
-      tr("Meshes (*.gltf *.glb *.obj);;glTF (*.gltf *.glb);;OBJ (*.obj)"));
+  QString filters = tr("Meshes (*.gltf *.glb *.obj);;glTF (*.gltf *.glb);;OBJ (*.obj)");
+#if defined(TAMIAS_HAS_OCCT)
+  filters = tr("All Supported (*.gltf *.glb *.obj *.step *.stp *.iges *.igs *.brep);;"
+               "Meshes (*.gltf *.glb *.obj);;"
+               "CAD (*.step *.stp *.iges *.igs *.brep);;"
+               "glTF (*.gltf *.glb);;OBJ (*.obj);;"
+               "STEP (*.step *.stp);;IGES (*.iges *.igs);;BREP (*.brep)");
+#endif
+  const QString path = QFileDialog::getOpenFileName(this, tr("Open"), QString(), filters);
   if (path.isEmpty()) {
     return;
   }

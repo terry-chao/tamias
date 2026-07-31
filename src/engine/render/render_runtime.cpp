@@ -25,6 +25,37 @@ Result<std::vector<std::uint32_t>> load_spirv_file(const std::string& path) {
   return words;
 }
 
+Result<std::string> load_text_file(const std::string& path) {
+  std::ifstream file(path, std::ios::binary | std::ios::ate);
+  if (!file) {
+    return Err("failed to open shader: " + path);
+  }
+  const auto size = file.tellg();
+  if (size < 0) {
+    return Err("invalid shader size: " + path);
+  }
+  file.seekg(0);
+  std::string text(static_cast<std::size_t>(size), '\0');
+  file.read(text.data(), size);
+  return text;
+}
+
+namespace {
+
+std::filesystem::path resolve_shader_path(const std::filesystem::path& name) {
+  const auto cwd = std::filesystem::current_path() / "shaders" / name;
+  if (std::filesystem::exists(cwd)) {
+    return cwd;
+  }
+  const auto out_dir = std::filesystem::path(TAMIAS_SHADER_DIR) / name;
+  if (std::filesystem::exists(out_dir)) {
+    return out_dir;
+  }
+  return std::filesystem::path(TAMIAS_SHADER_SOURCE_DIR) / name;
+}
+
+}  // namespace
+
 RenderThread::RenderThread(RenderDeviceConfig config) : config_(config) {}
 
 RenderThread::~RenderThread() { stop(); }
@@ -179,30 +210,51 @@ Result<void> RenderThread::ensure_pipelines() {
   if (shaded_pipeline_ && wire_pipeline_) {
     return {};
   }
-  const auto shader_dir = std::filesystem::current_path() / "shaders";
-  auto vs_spirv = load_spirv_file((shader_dir / "mesh.vert.spv").string());
-  if (!vs_spirv) {
-    vs_spirv = load_spirv_file((std::filesystem::path(TAMIAS_SHADER_DIR) / "mesh.vert.spv").string());
-  }
-  if (!vs_spirv) {
-    return Err(vs_spirv.error());
-  }
-  auto fs_spirv = load_spirv_file((shader_dir / "mesh.frag.spv").string());
-  if (!fs_spirv) {
-    fs_spirv = load_spirv_file((std::filesystem::path(TAMIAS_SHADER_DIR) / "mesh.frag.spv").string());
-  }
-  if (!fs_spirv) {
-    return Err(fs_spirv.error());
-  }
+
+  // Keep shader source alive for the create_shader_module span lifetime.
+  std::vector<std::uint32_t> vs_spirv;
+  std::vector<std::uint32_t> fs_spirv;
+  std::string vs_glsl;
+  std::string fs_glsl;
 
   ShaderModuleDesc vs_desc{};
-  vs_desc.spirv = *vs_spirv;
+  ShaderModuleDesc fs_desc{};
+  if (device_->backend() == GraphicsBackend::OpenGL) {
+    auto vs_text = load_text_file(resolve_shader_path("mesh.gl.vert").string());
+    if (!vs_text) {
+      return Err(vs_text.error());
+    }
+    auto fs_text = load_text_file(resolve_shader_path("mesh.gl.frag").string());
+    if (!fs_text) {
+      return Err(fs_text.error());
+    }
+    vs_glsl = std::move(*vs_text);
+    fs_glsl = std::move(*fs_text);
+    vs_desc.language = ShaderLanguage::Glsl;
+    vs_desc.glsl = vs_glsl;
+    fs_desc.language = ShaderLanguage::Glsl;
+    fs_desc.glsl = fs_glsl;
+  } else {
+    auto vs_words = load_spirv_file(resolve_shader_path("mesh.vert.spv").string());
+    if (!vs_words) {
+      return Err(vs_words.error());
+    }
+    auto fs_words = load_spirv_file(resolve_shader_path("mesh.frag.spv").string());
+    if (!fs_words) {
+      return Err(fs_words.error());
+    }
+    vs_spirv = std::move(*vs_words);
+    fs_spirv = std::move(*fs_words);
+    vs_desc.language = ShaderLanguage::Spirv;
+    vs_desc.spirv = vs_spirv;
+    fs_desc.language = ShaderLanguage::Spirv;
+    fs_desc.spirv = fs_spirv;
+  }
+
   auto vs = device_->create_shader_module(vs_desc);
   if (!vs) {
     return Err(vs.error());
   }
-  ShaderModuleDesc fs_desc{};
-  fs_desc.spirv = *fs_spirv;
   auto fs = device_->create_shader_module(fs_desc);
   if (!fs) {
     return Err(fs.error());
