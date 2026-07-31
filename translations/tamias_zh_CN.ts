@@ -131,17 +131,30 @@
         <translation>文件(&amp;F)</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="54"/>
-        <source>Open...</source>
-        <translation>打开...</translation>
+        <source>Open File</source>
+        <translation>打开文件</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="59"/>
-        <source>&amp;Settings...</source>
-        <translation>设置(&amp;S)...</translation>
+        <source>Open a model file</source>
+        <translation>打开模型文件</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="60"/>
+        <source>Frame all geometry in the view</source>
+        <translation>框显视图中的全部几何</translation>
+    </message>
+    <message>
+        <source>Settings</source>
+        <translation>设置</translation>
+    </message>
+    <message>
+        <source>Open settings</source>
+        <translation>打开设置</translation>
+    </message>
+    <message>
+        <source>Main</source>
+        <translation>主工具栏</translation>
+    </message>
+    <message>
         <source>Ctrl+,</source>
         <translation>Ctrl+,</translation>
     </message>

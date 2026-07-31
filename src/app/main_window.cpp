@@ -19,11 +19,37 @@
 #include <QKeySequence>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QPainter>
+#include <QPixmap>
 #include <QStatusBar>
+#include <QStyle>
 #include <QToolBar>
 #include <QVector>
 
 namespace tamias {
+namespace {
+
+QIcon themed_mask_icon(const QString& resource, const QColor& color, int extent = 16) {
+  const QIcon source(resource);
+  QIcon result;
+  for (int scale = 1; scale <= 2; ++scale) {
+    const int px = extent * scale;
+    QPixmap canvas(px, px);
+    canvas.setDevicePixelRatio(scale);
+    canvas.fill(Qt::transparent);
+    {
+      QPainter painter(&canvas);
+      painter.setRenderHint(QPainter::Antialiasing, true);
+      source.paint(&painter, QRect(0, 0, extent, extent));
+      painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+      painter.fillRect(QRect(0, 0, extent, extent), color);
+    }
+    result.addPixmap(canvas);
+  }
+  return result;
+}
+
+}  // namespace
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   setWindowTitle("Tamias");
@@ -57,18 +83,31 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   // File is a navigation control to the welcome page — no dropdown actions.
   menuBar()->addAction(tr("&File"), this, &MainWindow::show_home);
 
-  auto* open_action = new QAction(tr("Open..."), this);
+  auto* open_action = new QAction(style()->standardIcon(QStyle::SP_DialogOpenButton),
+                                  tr("Open File"), this);
   open_action->setShortcut(QKeySequence::Open);
+  open_action->setToolTip(tr("Open a model file"));
   connect(open_action, &QAction::triggered, this, &MainWindow::open_file);
   addAction(open_action);
 
-  auto* settings_action = new QAction(tr("&Settings..."), this);
+  auto* frame_all_action = new QAction(
+      themed_mask_icon(QStringLiteral(":/icons/frame_all.svg"),
+                       palette().color(QPalette::WindowText)),
+      tr("&Frame All"), this);
+  frame_all_action->setShortcut(QKeySequence(tr("F")));
+  frame_all_action->setToolTip(tr("Frame all geometry in the view"));
+  connect(frame_all_action, &QAction::triggered, this, &MainWindow::frame_all);
+  addAction(frame_all_action);
+
+  auto* settings_action =
+      new QAction(style()->standardIcon(QStyle::SP_FileDialogDetailedView), tr("Settings"), this);
   settings_action->setShortcut(QKeySequence(tr("Ctrl+,")));
+  settings_action->setToolTip(tr("Open settings"));
   connect(settings_action, &QAction::triggered, this, &MainWindow::open_settings);
   addAction(settings_action);
 
   auto* view_menu = menuBar()->addMenu(tr("&View"));
-  view_menu->addAction(tr("&Frame All"), this, &MainWindow::frame_all, QKeySequence(tr("F")));
+  view_menu->addAction(frame_all_action);
 
   // Settings live under Tools (VS / CAD), and also on the File welcome page.
   auto* tools_menu = menuBar()->addMenu(tr("&Tools"));
@@ -79,10 +118,13 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   connect(exit_action, &QAction::triggered, this, &QWidget::close);
   tools_menu->addAction(exit_action);
 
-  auto* toolbar = addToolBar(tr("View"));
-  toolbar->setObjectName(QStringLiteral("viewToolbar"));
+  auto* toolbar = addToolBar(tr("Main"));
+  toolbar->setObjectName(QStringLiteral("mainToolbar"));
   toolbar->setMovable(false);
-  toolbar->addAction(tr("Frame All"), this, &MainWindow::frame_all);
+  toolbar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+  toolbar->addAction(open_action);
+  toolbar->addAction(frame_all_action);
+  toolbar->addAction(settings_action);
 
   statusBar()->showMessage(tr("Ready — Open a model or try the demo"));
   show_home();

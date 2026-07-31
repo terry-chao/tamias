@@ -3,4 +3,7 @@
   <qresource prefix="/branding">
     <file alias="logo.png">../../assets/branding/logo.png</file>
   </qresource>
+  <qresource prefix="/icons">
+    <file alias="frame_all.svg">../../assets/icons/frame_all.svg</file>
+  </qresource>
 </RCC>
