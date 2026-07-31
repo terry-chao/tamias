@@ -4,15 +4,16 @@
 #include "io/mesh_io.h"
 
 #include <QFileDialog>
+#include <QIcon>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QStatusBar>
-#include <QToolBar>
 
 namespace tamias {
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   setWindowTitle("Tamias");
+  setWindowIcon(QIcon(QStringLiteral(":/branding/logo.png")));
   resize(1280, 800);
 
   tabs_ = new QTabWidget(this);
@@ -31,13 +32,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   view_menu->addAction(tr("&Shaded"), this, &MainWindow::set_shaded);
   view_menu->addAction(tr("&Wireframe"), this, &MainWindow::set_wireframe);
   view_menu->addAction(tr("&Frame All"), this, &MainWindow::frame_all, QKeySequence(tr("F")));
-
-  auto* toolbar = addToolBar(tr("Main"));
-  toolbar->addAction(tr("Open"), this, &MainWindow::open_file);
-  toolbar->addAction(tr("Demo"), this, &MainWindow::new_demo_document);
-  toolbar->addAction(tr("Shaded"), this, &MainWindow::set_shaded);
-  toolbar->addAction(tr("Wire"), this, &MainWindow::set_wireframe);
-  toolbar->addAction(tr("Frame"), this, &MainWindow::frame_all);
 
   statusBar()->showMessage(tr("Ready — Open glTF/OBJ or create a demo cube"));
   new_demo_document();

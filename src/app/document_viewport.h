@@ -48,6 +48,7 @@ class DocumentViewport final : public QWidget {
   QPoint press_mouse_;
   bool orbiting_ = false;
   bool panning_ = false;
+  bool alive_ = true;
 };
 
 }  // namespace tamias

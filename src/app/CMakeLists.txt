@@ -7,7 +7,12 @@ add_executable(tamias
   main_window.cpp
   document_viewport.cpp
   rhi_backends.cpp
+  resources.qrc
 )
+
+if(WIN32)
+  target_sources(tamias PRIVATE app.rc)
+endif()
 
 target_include_directories(tamias PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_compile_definitions(tamias PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)

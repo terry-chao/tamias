@@ -77,8 +77,28 @@ std::uint64_t RenderThread::create_channel() {
 }
 
 void RenderThread::destroy_channel(std::uint64_t channel_id) {
-  std::scoped_lock lock(mutex_);
-  channels_.erase(channel_id);
+  // Channel GPU objects must be destroyed on the render thread, and never while
+  // draw_channel() holds a bare pointer into channels_.
+  if (!running_ || !thread_.joinable() || std::this_thread::get_id() == thread_.get_id()) {
+    std::scoped_lock lock(mutex_);
+    channels_.erase(channel_id);
+    return;
+  }
+
+  auto promise = std::make_shared<std::promise<void>>();
+  auto future = promise->get_future();
+  {
+    std::scoped_lock lock(mutex_);
+    tasks_.push([this, channel_id, promise]() {
+      {
+        std::scoped_lock task_lock(mutex_);
+        channels_.erase(channel_id);
+      }
+      promise->set_value();
+    });
+  }
+  cv_.notify_one();
+  future.get();
 }
 
 Result<std::uint64_t> RenderThread::upload_mesh(MeshCpu mesh) {
@@ -320,14 +340,19 @@ void RenderThread::thread_main() {
         tasks.push_back(std::move(tasks_.front()));
         tasks_.pop();
       }
+    }
+    // Run tasks (including channel destruction) before sampling dirty channels so
+    // destroy_channel() never races with draw_channel().
+    for (auto& task : tasks) {
+      task();
+    }
+    {
+      std::scoped_lock lock(mutex_);
       for (auto& [id, ch] : channels_) {
         if (ch.latest) {
           dirty_channels.push_back(id);
         }
       }
-    }
-    for (auto& task : tasks) {
-      task();
     }
     for (auto id : dirty_channels) {
       ChannelState* channel = nullptr;

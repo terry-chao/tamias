@@ -31,7 +31,13 @@ DocumentViewport::DocumentViewport(std::shared_ptr<Document> document, QWidget* 
   rebuild_bvh();
 }
 
-DocumentViewport::~DocumentViewport() = default;
+DocumentViewport::~DocumentViewport() {
+  // Tear down the swapchain/surface while the native HWND is still valid, and
+  // wait for the render thread so it cannot draw into a destroyed window.
+  alive_ = false;
+  channel_.reset();
+  render_thread_.reset();
+}
 
 void DocumentViewport::set_render_mode(RenderMode mode) {
   mode_ = mode;
@@ -44,6 +50,9 @@ void DocumentViewport::frame_scene() {
 }
 
 void DocumentViewport::request_redraw() {
+  if (!alive_) {
+    return;
+  }
   update();
   submit_current_frame();
 }
@@ -62,7 +71,7 @@ NativeWindowHandle DocumentViewport::native_handle() const {
 }
 
 void DocumentViewport::ensure_channel() {
-  if (channel_) {
+  if (!alive_ || channel_) {
     return;
   }
   RenderDeviceConfig config{};
@@ -79,6 +88,9 @@ void DocumentViewport::ensure_channel() {
 void DocumentViewport::rebuild_bvh() { bvh_.build(*document_); }
 
 void DocumentViewport::submit_current_frame() {
+  if (!alive_) {
+    return;
+  }
   ensure_channel();
   if (!channel_) {
     return;
