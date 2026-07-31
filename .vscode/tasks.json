@@ -1,0 +1,65 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "CMake: configure msvc",
+      "type": "shell",
+      "command": "cmake --preset msvc",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PATH": "C:/Qt/6.8.3/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
+        }
+      },
+      "problemMatcher": [],
+      "group": "build"
+    },
+    {
+      "label": "CMake: configure msvc-ninja (clangd)",
+      "type": "shell",
+      "command": "cmake --preset msvc-ninja",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PATH": "C:/Qt/6.8.3/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
+        }
+      },
+      "problemMatcher": [],
+      "group": "build",
+      "detail": "Needs MSVC on PATH (VsDevCmd). Generates build/msvc-ninja/compile_commands.json for clangd."
+    },
+    {
+      "label": "CMake: build debug",
+      "type": "shell",
+      "command": "cmake --build --preset debug --parallel",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": "$msCompile",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "CMake: build relwithdebinfo",
+      "type": "shell",
+      "command": "cmake --build --preset relwithdebinfo --parallel",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
+      "label": "CMake: build release",
+      "type": "shell",
+      "command": "cmake --build --preset release --parallel",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    }
+  ]
+}

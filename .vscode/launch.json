@@ -1,0 +1,40 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug tamias",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/msvc/bin/Debug/tamias.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}/build/msvc/bin/Debug",
+      "env": {
+        "PATH": "C:/Qt/6.8.3/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
+      },
+      "preLaunchTask": "CMake: build debug"
+    },
+    {
+      "name": "RelWithDebInfo tamias",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/msvc/bin/RelWithDebInfo/tamias.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}/build/msvc/bin/RelWithDebInfo",
+      "env": {
+        "PATH": "C:/Qt/6.8.3/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
+      },
+      "preLaunchTask": "CMake: build relwithdebinfo"
+    },
+    {
+      "name": "CMake Launch Target",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${command:cmake.launchTargetPath}",
+      "args": [],
+      "cwd": "${command:cmake.launchTargetDirectory}",
+      "env": {
+        "PATH": "C:/Qt/6.8.3/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
+      }
+    }
+  ]
+}

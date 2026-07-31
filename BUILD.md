@@ -28,6 +28,20 @@ Dependencies resolved via:
 - Vendored headers in `3rdparty/` (VMA, rapidobj)
 - FetchContent zip for GoogleTest (tests only)
 
+### Cursor / clangd (go-to-definition)
+
+The Visual Studio CMake generator does **not** emit `compile_commands.json`. Configure the Ninja sidecar once (from a VS developer environment):
+
+```powershell
+# From "x64 Native Tools Command Prompt" or after VsDevCmd.bat -arch=x64
+cmake --preset msvc-ninja
+```
+
+Or run the VS Code/Cursor task **CMake: configure msvc-ninja (clangd)**.  
+clangd reads `build/msvc-ninja/compile_commands.json` via `.clangd`. Keep using `msvc` + `debug` for builds/F5.
+
+The `msvc-ninja` preset sets `TAMIAS_CLANGD_RAPIDOBJ_STUB=ON` so the build tree gets a tiny rapidobj stub (real `3rdparty/rapidobj.hpp` crashes some clangd builds). Do **not** ship/run binaries from `build/msvc-ninja`; keep using `msvc` for builds/F5.
+
 ## Linux
 
 Use the `linux` preset with vcpkg (`linux-desktop` feature) or install Qt6/Vulkan via distro packages and adjust `CMAKE_PREFIX_PATH`.
