@@ -75,8 +75,8 @@ add_custom_command(TARGET tamias POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:tamias>/shaders
   COMMAND ${CMAKE_COMMAND} -E copy_directory ${TAMIAS_SHADER_OUTPUT_DIR} $<TARGET_FILE_DIR:tamias>/shaders
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
-          ${TAMIAS_SHADER_SOURCE_DIR}/mesh.gl.vert
-          ${TAMIAS_SHADER_SOURCE_DIR}/mesh.gl.frag
+          ${TAMIAS_SHADER_SOURCE_DIR}/mesh.vert
+          ${TAMIAS_SHADER_SOURCE_DIR}/mesh.frag
           $<TARGET_FILE_DIR:tamias>/shaders
   COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:tamias>/assets/samples
   COMMAND ${CMAKE_COMMAND} -E copy_directory

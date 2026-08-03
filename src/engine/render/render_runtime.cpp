@@ -7,6 +7,8 @@
 #include <fstream>
 #include <future>
 #include <span>
+#include <string>
+#include <string_view>
 
 namespace tamias {
 
@@ -52,6 +54,23 @@ std::filesystem::path resolve_shader_path(const std::filesystem::path& name) {
     return out_dir;
   }
   return std::filesystem::path(TAMIAS_SHADER_SOURCE_DIR) / name;
+}
+
+// Adapt Vulkan-style GLSL so desktop OpenGL can compile it (UBO at binding 0).
+std::string adapt_vulkan_glsl_for_opengl(std::string source) {
+  constexpr std::string_view kVersion = "#version 450";
+  constexpr std::string_view kVersionCore = "#version 450 core";
+  if (source.compare(0, kVersionCore.size(), kVersionCore) != 0 &&
+      source.compare(0, kVersion.size(), kVersion) == 0) {
+    source.replace(0, kVersion.size(), kVersionCore);
+  }
+  constexpr std::string_view kPush = "layout(push_constant)";
+  constexpr std::string_view kUbo = "layout(std140, binding = 0)";
+  for (std::size_t pos = 0; (pos = source.find(kPush, pos)) != std::string::npos;) {
+    source.replace(pos, kPush.size(), kUbo);
+    pos += kUbo.size();
+  }
+  return source;
 }
 
 }  // namespace
@@ -229,16 +248,16 @@ Result<void> RenderThread::ensure_pipelines() {
   ShaderModuleDesc vs_desc{};
   ShaderModuleDesc fs_desc{};
   if (device_->backend() == GraphicsBackend::OpenGL) {
-    auto vs_text = load_text_file(resolve_shader_path("mesh.gl.vert").string());
+    auto vs_text = load_text_file(resolve_shader_path("mesh.vert").string());
     if (!vs_text) {
       return Err(vs_text.error());
     }
-    auto fs_text = load_text_file(resolve_shader_path("mesh.gl.frag").string());
+    auto fs_text = load_text_file(resolve_shader_path("mesh.frag").string());
     if (!fs_text) {
       return Err(fs_text.error());
     }
-    vs_glsl = std::move(*vs_text);
-    fs_glsl = std::move(*fs_text);
+    vs_glsl = adapt_vulkan_glsl_for_opengl(std::move(*vs_text));
+    fs_glsl = adapt_vulkan_glsl_for_opengl(std::move(*fs_text));
     vs_desc.language = ShaderLanguage::Glsl;
     vs_desc.glsl = vs_glsl;
     fs_desc.language = ShaderLanguage::Glsl;
