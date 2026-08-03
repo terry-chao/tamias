@@ -48,7 +48,7 @@ if(TAMIAS_BUILD_TESTS)
   endif()
 endif()
 
-find_program(TAMIAS_GLSLANG_VALIDATOR NAMES glslangValidator
+find_program(TAMIAS_DXC NAMES dxc
   HINTS "$ENV{VULKAN_SDK}/Bin" "$ENV{VULKAN_SDK}/bin")
 
 # --- OCCT (optional, via OCCT_ROOT) ---

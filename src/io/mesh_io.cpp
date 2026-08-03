@@ -2,7 +2,14 @@
 
 #include "core/log.h"
 
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 5311) // rapidobj: deprecated `operator"" _suffix` spacing
+#endif
 #include <rapidobj/rapidobj.hpp>
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 #include <algorithm>
 #include <cctype>

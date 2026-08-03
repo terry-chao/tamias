@@ -149,6 +149,5 @@ class RenderThreadPool {
 };
 
 Result<std::vector<std::uint32_t>> load_spirv_file(const std::string& path);
-Result<std::string> load_text_file(const std::string& path);
 
 }  // namespace tamias

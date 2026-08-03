@@ -8,7 +8,6 @@
 #include <cstddef>
 #include <cstring>
 #include <string>
-#include <string_view>
 #include <vector>
 
 #if defined(_WIN32)
@@ -195,7 +194,6 @@ class OpenGLDevice final : public RHIDevice {
 
   void destroy();
   Result<void> create_dummy_context();
-  Result<GLuint> compile_shader(GLenum type, std::span<const char> source);
 
   DeviceCreateInfo info_{};
   GLuint push_ubo_ = 0;
@@ -596,30 +594,6 @@ Result<void> OpenGLDevice::initialize() {
   return {};
 }
 
-Result<GLuint> OpenGLDevice::compile_shader(GLenum type, std::span<const char> source) {
-  if (auto r = make_current_dummy(); !r) {
-    return Err(r.error());
-  }
-  const GLuint shader = gl::CreateShader(type);
-  const GLchar* src = source.data();
-  const GLint len = static_cast<GLint>(source.size());
-  gl::ShaderSource(shader, 1, &src, &len);
-  gl::CompileShader(shader);
-  GLint status = 0;
-  gl::GetShaderiv(shader, GL_COMPILE_STATUS, &status);
-  if (!status) {
-    GLint log_len = 0;
-    gl::GetShaderiv(shader, GL_INFO_LOG_LENGTH, &log_len);
-    std::string log(static_cast<std::size_t>(std::max(log_len, 1)), '\0');
-    gl::GetShaderInfoLog(shader, log_len, nullptr, log.data());
-    gl::DeleteShader(shader);
-    release_current();
-    return Err(std::string("shader compile failed: ") + log.c_str());
-  }
-  release_current();
-  return shader;
-}
-
 Result<std::unique_ptr<Buffer>> OpenGLDevice::create_buffer(const BufferDesc& desc) {
   if (auto r = make_current_dummy(); !r) {
     return Err(r.error());
@@ -641,19 +615,40 @@ Result<std::unique_ptr<Buffer>> OpenGLDevice::create_buffer(const BufferDesc& de
 
 Result<std::unique_ptr<ShaderModule>> OpenGLDevice::create_shader_module(
     const ShaderModuleDesc& desc) {
-  if (desc.language != ShaderLanguage::Glsl || desc.glsl.empty()) {
-    return Err("OpenGL shaders require GLSL source");
+  if (desc.language != ShaderLanguage::Spirv || desc.spirv.empty()) {
+    return Err("OpenGL shaders require SPIR-V");
   }
-  // Stage is inferred later at pipeline link; compile as vertex first if unknown.
-  // RenderThread creates separate modules; create_pipeline recompiles from stored source.
-  // Store precompiled? We need stage. Heuristic: look for "gl_Position" => vertex.
-  const bool is_vertex = std::string_view(desc.glsl.data(), desc.glsl.size()).find("gl_Position") !=
-                         std::string_view::npos;
-  auto shader = compile_shader(is_vertex ? GL_VERTEX_SHADER : GL_FRAGMENT_SHADER, desc.glsl);
-  if (!shader) {
-    return Err(shader.error());
+  if (!gl::ShaderBinary || !gl::SpecializeShader) {
+    return Err("OpenGL SPIR-V unsupported (need GL_ARB_gl_spirv / glSpecializeShader)");
   }
-  return std::make_unique<OpenGLShaderModule>(*shader);
+  if (auto r = make_current_dummy(); !r) {
+    return Err(r.error());
+  }
+  const GLenum type =
+      desc.stage == ShaderStage::Fragment ? GL_FRAGMENT_SHADER : GL_VERTEX_SHADER;
+  const GLuint shader = gl::CreateShader(type);
+  const auto byte_size = static_cast<GLsizei>(desc.spirv.size_bytes());
+  gl::ShaderBinary(1, &shader, GL_SHADER_BINARY_FORMAT_SPIR_V, desc.spirv.data(), byte_size);
+  if (GLenum err = gl::GetError(); err != 0) {
+    gl::DeleteShader(shader);
+    release_current();
+    return Err("glShaderBinary failed (GL error " + std::to_string(err) + ")");
+  }
+  const GLchar* entry = desc.entry.empty() ? "main" : desc.entry.c_str();
+  gl::SpecializeShader(shader, entry, 0, nullptr, nullptr);
+  GLint status = 0;
+  gl::GetShaderiv(shader, GL_COMPILE_STATUS, &status);
+  if (!status) {
+    GLint log_len = 0;
+    gl::GetShaderiv(shader, GL_INFO_LOG_LENGTH, &log_len);
+    std::string log(static_cast<std::size_t>(std::max(log_len, 1)), '\0');
+    gl::GetShaderInfoLog(shader, log_len, nullptr, log.data());
+    gl::DeleteShader(shader);
+    release_current();
+    return Err(std::string("SPIR-V specialize failed: ") + log.c_str());
+  }
+  release_current();
+  return std::make_unique<OpenGLShaderModule>(shader);
 }
 
 Result<std::unique_ptr<PipelineState>> OpenGLDevice::create_pipeline(const PipelineDesc& desc) {

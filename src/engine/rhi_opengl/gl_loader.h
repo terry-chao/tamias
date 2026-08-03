@@ -92,6 +92,12 @@
 #ifndef GL_TRUE
 #define GL_TRUE 1
 #endif
+#ifndef GL_SHADER_BINARY_FORMAT_SPIR_V
+#define GL_SHADER_BINARY_FORMAT_SPIR_V 0x9551
+#endif
+#ifndef GL_SPIR_V_BINARY
+#define GL_SPIR_V_BINARY 0x9552
+#endif
 
 using GLchar = char;
 using GLsizeiptr = std::ptrdiff_t;
@@ -121,6 +127,11 @@ extern void (*DeleteShader)(GLuint shader);
 extern void (*ShaderSource)(GLuint shader, GLsizei count, const GLchar* const* string,
                             const GLint* length);
 extern void (*CompileShader)(GLuint shader);
+extern void (*ShaderBinary)(GLsizei count, const GLuint* shaders, GLenum binaryFormat,
+                            const void* binary, GLsizei length);
+extern void (*SpecializeShader)(GLuint shader, const GLchar* pEntryPoint,
+                                GLuint numSpecializationConstants, const GLuint* pConstantIndex,
+                                const GLuint* pConstantValue);
 extern void (*GetShaderiv)(GLuint shader, GLenum pname, GLint* params);
 extern void (*GetShaderInfoLog)(GLuint shader, GLsizei bufSize, GLsizei* length, GLchar* infoLog);
 

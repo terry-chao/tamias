@@ -32,6 +32,8 @@ GLuint (*CreateShader)(GLenum) = nullptr;
 void (*DeleteShader)(GLuint) = nullptr;
 void (*ShaderSource)(GLuint, GLsizei, const GLchar* const*, const GLint*) = nullptr;
 void (*CompileShader)(GLuint) = nullptr;
+void (*ShaderBinary)(GLsizei, const GLuint*, GLenum, const void*, GLsizei) = nullptr;
+void (*SpecializeShader)(GLuint, const GLchar*, GLuint, const GLuint*, const GLuint*) = nullptr;
 void (*GetShaderiv)(GLuint, GLenum, GLint*) = nullptr;
 void (*GetShaderInfoLog)(GLuint, GLsizei, GLsizei*, GLchar*) = nullptr;
 
@@ -96,6 +98,11 @@ bool load_procs() {
   ok = load(DeleteShader, "glDeleteShader") && ok;
   ok = load(ShaderSource, "glShaderSource") && ok;
   ok = load(CompileShader, "glCompileShader") && ok;
+  ok = load(ShaderBinary, "glShaderBinary") && ok;
+  // Core in 4.6; on 4.5 + GL_ARB_gl_spirv the entry is glSpecializeShaderARB.
+  if (!load(SpecializeShader, "glSpecializeShader")) {
+    ok = load(SpecializeShader, "glSpecializeShaderARB") && ok;
+  }
   ok = load(GetShaderiv, "glGetShaderiv") && ok;
   ok = load(GetShaderInfoLog, "glGetShaderInfoLog") && ok;
   ok = load(CreateProgram, "glCreateProgram") && ok;

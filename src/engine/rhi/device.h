@@ -75,8 +75,11 @@ struct SwapChainDesc {
 
 enum class ShaderLanguage { Spirv, Glsl };
 
+enum class ShaderStage { Vertex, Fragment };
+
 struct ShaderModuleDesc {
   ShaderLanguage language = ShaderLanguage::Spirv;
+  ShaderStage stage = ShaderStage::Vertex;
   std::span<const std::uint32_t> spirv;
   std::span<const char> glsl;
   std::string entry = "main";

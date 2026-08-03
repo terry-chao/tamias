@@ -13,7 +13,14 @@
 #endif
 
 #define VMA_IMPLEMENTATION
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4100 4189 4324 4505)
+#endif
 #include <vk_mem_alloc.h>
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 #include <vulkan/vulkan.h>
 
 #include <algorithm>
@@ -976,7 +983,7 @@ Result<std::unique_ptr<PipelineState>> VulkanDevice::create_pipeline(const Pipel
   rs.polygonMode = desc.wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
   // Do not rely on GPU face winding here: clip Y-flip + mixed asset windings make
   // frontFace easy to get wrong (hollow "see-through" solids). Solid opacity comes
-  // from depth testing; mesh.frag also discards inward faces in shaded modes.
+  // from depth testing; mesh.frag.hlsl also discards inward faces in shaded modes.
   rs.cullMode = VK_CULL_MODE_NONE;
   rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
   rs.lineWidth = 1.f;

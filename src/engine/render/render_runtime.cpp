@@ -7,8 +7,6 @@
 #include <fstream>
 #include <future>
 #include <span>
-#include <string>
-#include <string_view>
 
 namespace tamias {
 
@@ -27,21 +25,6 @@ Result<std::vector<std::uint32_t>> load_spirv_file(const std::string& path) {
   return words;
 }
 
-Result<std::string> load_text_file(const std::string& path) {
-  std::ifstream file(path, std::ios::binary | std::ios::ate);
-  if (!file) {
-    return Err("failed to open shader: " + path);
-  }
-  const auto size = file.tellg();
-  if (size < 0) {
-    return Err("invalid shader size: " + path);
-  }
-  file.seekg(0);
-  std::string text(static_cast<std::size_t>(size), '\0');
-  file.read(text.data(), size);
-  return text;
-}
-
 namespace {
 
 std::filesystem::path resolve_shader_path(const std::filesystem::path& name) {
@@ -54,23 +37,6 @@ std::filesystem::path resolve_shader_path(const std::filesystem::path& name) {
     return out_dir;
   }
   return std::filesystem::path(TAMIAS_SHADER_SOURCE_DIR) / name;
-}
-
-// Adapt Vulkan-style GLSL so desktop OpenGL can compile it (UBO at binding 0).
-std::string adapt_vulkan_glsl_for_opengl(std::string source) {
-  constexpr std::string_view kVersion = "#version 450";
-  constexpr std::string_view kVersionCore = "#version 450 core";
-  if (source.compare(0, kVersionCore.size(), kVersionCore) != 0 &&
-      source.compare(0, kVersion.size(), kVersion) == 0) {
-    source.replace(0, kVersion.size(), kVersionCore);
-  }
-  constexpr std::string_view kPush = "layout(push_constant)";
-  constexpr std::string_view kUbo = "layout(std140, binding = 0)";
-  for (std::size_t pos = 0; (pos = source.find(kPush, pos)) != std::string::npos;) {
-    source.replace(pos, kPush.size(), kUbo);
-    pos += kUbo.size();
-  }
-  return source;
 }
 
 }  // namespace
@@ -239,45 +205,36 @@ Result<void> RenderThread::ensure_pipelines() {
     return {};
   }
 
-  // Keep shader source alive for the create_shader_module span lifetime.
+  // Keep SPIR-V alive for the create_shader_module span lifetime.
   std::vector<std::uint32_t> vs_spirv;
   std::vector<std::uint32_t> fs_spirv;
-  std::string vs_glsl;
-  std::string fs_glsl;
+
+  const bool opengl = device_->backend() == GraphicsBackend::OpenGL;
+  const char* vs_name = opengl ? "mesh.vert.gl.spv" : "mesh.vert.spv";
+  const char* fs_name = opengl ? "mesh.frag.gl.spv" : "mesh.frag.spv";
+
+  auto vs_words = load_spirv_file(resolve_shader_path(vs_name).string());
+  if (!vs_words) {
+    return Err(vs_words.error());
+  }
+  auto fs_words = load_spirv_file(resolve_shader_path(fs_name).string());
+  if (!fs_words) {
+    return Err(fs_words.error());
+  }
+  vs_spirv = std::move(*vs_words);
+  fs_spirv = std::move(*fs_words);
 
   ShaderModuleDesc vs_desc{};
+  vs_desc.language = ShaderLanguage::Spirv;
+  vs_desc.stage = ShaderStage::Vertex;
+  vs_desc.spirv = vs_spirv;
+  vs_desc.entry = "main";
+
   ShaderModuleDesc fs_desc{};
-  if (device_->backend() == GraphicsBackend::OpenGL) {
-    auto vs_text = load_text_file(resolve_shader_path("mesh.vert").string());
-    if (!vs_text) {
-      return Err(vs_text.error());
-    }
-    auto fs_text = load_text_file(resolve_shader_path("mesh.frag").string());
-    if (!fs_text) {
-      return Err(fs_text.error());
-    }
-    vs_glsl = adapt_vulkan_glsl_for_opengl(std::move(*vs_text));
-    fs_glsl = adapt_vulkan_glsl_for_opengl(std::move(*fs_text));
-    vs_desc.language = ShaderLanguage::Glsl;
-    vs_desc.glsl = vs_glsl;
-    fs_desc.language = ShaderLanguage::Glsl;
-    fs_desc.glsl = fs_glsl;
-  } else {
-    auto vs_words = load_spirv_file(resolve_shader_path("mesh.vert.spv").string());
-    if (!vs_words) {
-      return Err(vs_words.error());
-    }
-    auto fs_words = load_spirv_file(resolve_shader_path("mesh.frag.spv").string());
-    if (!fs_words) {
-      return Err(fs_words.error());
-    }
-    vs_spirv = std::move(*vs_words);
-    fs_spirv = std::move(*fs_words);
-    vs_desc.language = ShaderLanguage::Spirv;
-    vs_desc.spirv = vs_spirv;
-    fs_desc.language = ShaderLanguage::Spirv;
-    fs_desc.spirv = fs_spirv;
-  }
+  fs_desc.language = ShaderLanguage::Spirv;
+  fs_desc.stage = ShaderStage::Fragment;
+  fs_desc.spirv = fs_spirv;
+  fs_desc.entry = "main";
 
   auto vs = device_->create_shader_module(vs_desc);
   if (!vs) {
