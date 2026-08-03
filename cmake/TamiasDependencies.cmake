@@ -14,7 +14,7 @@ add_library(GPUOpen::VulkanMemoryAllocator ALIAS VulkanMemoryAllocator)
 target_include_directories(VulkanMemoryAllocator INTERFACE "${TAMIAS_THIRDPARTY_DIR}")
 
 # rapidobj single header as rapidobj/rapidobj.hpp
-# msvc-ninja may install a clangd stub instead — real header crashes some clangd builds.
+# An IntelliSense-only configuration may install a clangd stub instead.
 option(TAMIAS_CLANGD_RAPIDOBJ_STUB
   "Install clangd-safe rapidobj stub into the build tree (IntelliSense only)." OFF)
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/thirdparty_include/rapidobj")

@@ -18,8 +18,8 @@ $env:Path = "$env:VULKAN_SDK\Bin;C:\Qt\6.11.1\msvc2022_64\bin;$env:Path"
 # Edit CMakePresets.json CMAKE_PREFIX_PATH if your Qt path differs.
 cmake --preset msvc
 cmake --build --preset relwithdebinfo --parallel
-ctest --test-dir build/msvc -C RelWithDebInfo --output-on-failure
-& .\build\msvc\bin\RelWithDebInfo\tamias.exe
+ctest --test-dir build -C RelWithDebInfo --output-on-failure
+& .\build\bin\RelWithDebInfo\tamias.exe
 ```
 
 Dependencies resolved via:
@@ -30,17 +30,15 @@ Dependencies resolved via:
 
 ### Cursor / clangd (go-to-definition)
 
-The Visual Studio CMake generator does **not** emit `compile_commands.json`. Configure the Ninja sidecar once (from a VS developer environment):
+The `msvc` preset uses Ninja Multi-Config for both builds and clangd. Configure it once from a VS developer environment:
 
 ```powershell
 # From "x64 Native Tools Command Prompt" or after VsDevCmd.bat -arch=x64
-cmake --preset msvc-ninja
+cmake --preset msvc
 ```
 
-Or run the VS Code/Cursor task **CMake: configure msvc-ninja (clangd)**.  
-clangd reads `build/msvc-ninja/compile_commands.json` via `.clangd`. Keep using `msvc` + `debug` for builds/F5.
-
-The `msvc-ninja` preset sets `TAMIAS_CLANGD_RAPIDOBJ_STUB=ON` so the build tree gets a tiny rapidobj stub (real `3rdparty/rapidobj.hpp` crashes some clangd builds). Do **not** ship/run binaries from `build/msvc-ninja`; keep using `msvc` for builds/F5.
+Or run the VS Code/Cursor task **CMake: configure msvc**. CMake Tools needs the Visual Studio developer environment for Ninja + MSVC (`.vscode/settings.json` sets `cmake.useVsDeveloperEnvironment` to `always`). clangd reads
+`build/compile_commands.json`, and compilation/F5 use the same build tree.
 
 ## Linux
 
@@ -66,7 +64,7 @@ $env:OCCT_ROOT = 'C:\path\to\opencascade-7.9.3-vc14-64'
 
 When `OCCT_ROOT` is present, Tamias builds `OcctShapeOps` and can open STEP/IGES/BREP. Without it, the rest of the app still builds.
 
-On Windows, POST_BUILD copies the linked OCCT toolkit DLLs plus required 3rdparty DLLs (`freetype`, `FreeImage`, `ffmpeg`, `openvr`, `tbb`, `jemalloc`) from the sibling `3rdparty-vc14-64` tree into `build/.../bin/<Config>/` next to `tamias.exe`.
+On Windows, POST_BUILD copies Qt runtime (`windeployqt`) and, when OCCT is enabled, toolkit plus required 3rdparty DLLs into `build/bin/<Config>/` next to `tamias.exe`, so double-click / F5 works without Qt or OCCT on `PATH`.
 
 ## Controls
 

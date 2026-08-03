@@ -4,39 +4,30 @@
   "configurePresets": [
     {
       "name": "msvc",
-      "displayName": "MSVC x64 (system Qt + FetchContent)",
+      "displayName": "MSVC x64 Ninja Multi-Config",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
         "rhs": "Windows"
       },
-      "generator": "Visual Studio 18 2026",
-      "architecture": "x64",
-      "binaryDir": "${sourceDir}/build/msvc",
-      "cacheVariables": {
-        "CMAKE_PREFIX_PATH": "C:/Qt/6.11.1/msvc2022_64",
-        "TAMIAS_ENABLE_OPENGL_BACKEND": "ON",
-        "TAMIAS_USE_FETCHCONTENT": "ON"
-      }
-    },
-    {
-      "name": "msvc-ninja",
-      "displayName": "MSVC x64 Ninja (compile_commands for clangd)",
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
+      "generator": "Ninja Multi-Config",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
       },
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/msvc-ninja",
+      "toolset": {
+        "value": "host=x64",
+        "strategy": "external"
+      },
+      "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_PREFIX_PATH": "C:/Qt/6.11.1/msvc2022_64",
+        "CMAKE_C_COMPILER": "cl.exe",
+        "CMAKE_CXX_COMPILER": "cl.exe",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_MAKE_PROGRAM": "C:/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe",
         "TAMIAS_ENABLE_OPENGL_BACKEND": "ON",
-        "TAMIAS_USE_FETCHCONTENT": "ON",
-        "TAMIAS_CLANGD_RAPIDOBJ_STUB": "ON"
+        "TAMIAS_USE_FETCHCONTENT": "ON"
       }
     },
     {

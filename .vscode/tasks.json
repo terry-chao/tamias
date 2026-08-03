@@ -3,8 +3,13 @@
   "tasks": [
     {
       "label": "CMake: configure msvc",
-      "type": "shell",
-      "command": "cmake --preset msvc",
+      "type": "process",
+      "command": "cmd.exe",
+      "args": [
+        "/d",
+        "/c",
+        "call \"C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\Common7\\Tools\\VsDevCmd.bat\" -arch=x64 -host_arch=x64 && cmake --preset msvc"
+      ],
       "options": {
         "cwd": "${workspaceFolder}",
         "env": {
@@ -15,23 +20,14 @@
       "group": "build"
     },
     {
-      "label": "CMake: configure msvc-ninja (clangd)",
-      "type": "shell",
-      "command": "cmake --preset msvc-ninja",
-      "options": {
-        "cwd": "${workspaceFolder}",
-        "env": {
-          "PATH": "C:/Qt/6.11.1/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
-        }
-      },
-      "problemMatcher": [],
-      "group": "build",
-      "detail": "Needs MSVC on PATH (VsDevCmd). Generates build/msvc-ninja/compile_commands.json for clangd."
-    },
-    {
       "label": "CMake: build debug",
-      "type": "shell",
-      "command": "cmake --build --preset debug --parallel",
+      "type": "process",
+      "command": "cmd.exe",
+      "args": [
+        "/d",
+        "/c",
+        "call \"C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\Common7\\Tools\\VsDevCmd.bat\" -arch=x64 -host_arch=x64 && cmake --build --preset debug --parallel"
+      ],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -43,8 +39,13 @@
     },
     {
       "label": "CMake: build relwithdebinfo",
-      "type": "shell",
-      "command": "cmake --build --preset relwithdebinfo --parallel",
+      "type": "process",
+      "command": "cmd.exe",
+      "args": [
+        "/d",
+        "/c",
+        "call \"C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\Common7\\Tools\\VsDevCmd.bat\" -arch=x64 -host_arch=x64 && cmake --build --preset relwithdebinfo --parallel"
+      ],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -53,8 +54,13 @@
     },
     {
       "label": "CMake: build release",
-      "type": "shell",
-      "command": "cmake --build --preset release --parallel",
+      "type": "process",
+      "command": "cmd.exe",
+      "args": [
+        "/d",
+        "/c",
+        "call \"C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\Common7\\Tools\\VsDevCmd.bat\" -arch=x64 -host_arch=x64 && cmake --build --preset release --parallel"
+      ],
       "options": {
         "cwd": "${workspaceFolder}"
       },

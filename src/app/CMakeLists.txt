@@ -97,3 +97,8 @@ if(TAMIAS_HAS_OCCT AND WIN32)
     COMMENT "Copying OCCT runtime DLLs next to tamias"
   )
 endif()
+
+if(WIN32)
+  include(${CMAKE_SOURCE_DIR}/cmake/TamiasDeployQt.cmake)
+  tamias_deploy_qt_runtime(tamias)
+endif()

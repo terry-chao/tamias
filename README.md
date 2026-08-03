@@ -20,7 +20,7 @@ See [BUILD.md](BUILD.md).
 ```powershell
 cmake --preset msvc
 cmake --build --preset relwithdebinfo --parallel
-& .\build\msvc\bin\RelWithDebInfo\tamias.exe
+& .\build\bin\RelWithDebInfo\tamias.exe
 ```
 
 ## Layout

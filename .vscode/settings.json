@@ -1,21 +1,16 @@
 {
   "cmake.useCMakePresets": "always",
+  "cmake.useVsDeveloperEnvironment": "always",
   "cmake.configureOnOpen": true,
   "cmake.configurePreset": "msvc",
   "cmake.buildPreset": "debug",
   "cmake.buildBeforeRun": true,
 
-  "C_Cpp.intelliSenseEngine": "disabled",
+  "clangd.enable": false,
 
-  "clangd.arguments": [
-    "--compile-commands-dir=${workspaceFolder}/build/msvc-ninja",
-    "--query-driver=**/cl.exe,**\\cl.exe",
-    "--header-insertion=never",
-    "--background-index"
-  ],
-  "clangd.fallbackFlags": [
-    "-std=c++23",
-    "-I${workspaceFolder}/src"
-  ],
-  "clangd.onConfigChanged": "restart"
+  "C_Cpp.intelliSenseEngine": "default",
+  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+  "C_Cpp.default.compilerPath": "cl.exe",
+  "C_Cpp.default.cppStandard": "c++23",
+  "C_Cpp.default.intelliSenseMode": "msvc-x64"
 }
