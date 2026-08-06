@@ -2,6 +2,7 @@
 
 #include "document/document.h"
 #include "document_viewport.h"
+#include "engine/render/render_runtime.h"
 #include "home_page.h"
 #include "io/document_io.h"
 #include "recent_files.h"
@@ -10,6 +11,8 @@
 #include <QStackedWidget>
 #include <QTabWidget>
 #include <memory>
+
+class QAction;
 
 namespace tamias {
 
@@ -41,6 +44,8 @@ class MainWindow final : public QMainWindow {
   bool write_selected_mesh(const QString& path);
   bool write_tdoc_document(const QString& path);
   void notify_save_success(const QString& path);
+  void set_render_mode(RenderMode mode);
+  void sync_render_mode_actions();
   const MeshCpu* selected_mesh(Document& document) const;
   const MeshCpu* mesh_for_obj_export(Document& document) const;
   int find_open_document(const QString& path) const;
@@ -52,6 +57,9 @@ class MainWindow final : public QMainWindow {
   HomePage* home_ = nullptr;
   QTabWidget* tabs_ = nullptr;
   RecentFilesStore recent_;
+  QAction* wireframe_action_ = nullptr;
+  QAction* shaded_action_ = nullptr;
+  QAction* realistic_action_ = nullptr;
 };
 
 }  // namespace tamias

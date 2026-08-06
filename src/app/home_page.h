@@ -7,8 +7,8 @@
 #include <QWidget>
 
 class QEvent;
-class QGridLayout;
 class QLabel;
+class QListWidget;
 class QWidget;
 
 namespace tamias {
@@ -41,17 +41,18 @@ class HomePage final : public QWidget {
 
  private:
   void apply_theme();
-  void clear_layout(QGridLayout* layout);
-  void clear_cards();
+  void rebuild_open_docs();
+  void show_recent_menu(const QPoint& pos);
 
   bool applying_theme_ = false;
+  QVector<OpenDocumentItem> open_docs_;
+  QWidget* header_ = nullptr;
   QWidget* open_section_ = nullptr;
   QWidget* open_host_ = nullptr;
-  QGridLayout* open_layout_ = nullptr;
-  QWidget* cards_host_ = nullptr;
-  QGridLayout* cards_layout_ = nullptr;
+  QListWidget* recent_list_ = nullptr;
   QWidget* empty_panel_ = nullptr;
   QLabel* empty_label_ = nullptr;
+  QLabel* version_label_ = nullptr;
 };
 
 }  // namespace tamias

@@ -10,6 +10,7 @@
 #include "settings_dialog.h"
 
 #include <QAction>
+#include <QActionGroup>
 #include <QCoreApplication>
 #include <QDialog>
 #include <QDir>
@@ -22,6 +23,7 @@
 #include <QMessageBox>
 #include <QPainter>
 #include <QPixmap>
+#include <QSignalBlocker>
 #include <QStatusBar>
 #include <QStyle>
 #include <QToolBar>
@@ -70,6 +72,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   setCentralWidget(stack_);
 
   connect(tabs_, &QTabWidget::tabCloseRequested, this, &MainWindow::close_tab);
+  connect(tabs_, &QTabWidget::currentChanged, this, [this](int) { sync_render_mode_actions(); });
   connect(home_, &HomePage::newDemoRequested, this, &MainWindow::new_demo_document);
   connect(home_, &HomePage::openRequested, this, &MainWindow::open_file);
   connect(home_, &HomePage::fileActivated, this, &MainWindow::open_recent_path);
@@ -126,6 +129,41 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   auto* view_menu = menuBar()->addMenu(tr("&View"));
   view_menu->addAction(frame_all_action);
 
+  auto* display_menu = view_menu->addMenu(tr("&Display Mode"));
+  auto* display_group = new QActionGroup(this);
+  display_group->setExclusive(true);
+
+  wireframe_action_ = display_menu->addAction(tr("&Wireframe"));
+  wireframe_action_->setCheckable(true);
+  wireframe_action_->setShortcut(QKeySequence(tr("Ctrl+1")));
+  wireframe_action_->setToolTip(tr("Line drawing — edges only"));
+  display_group->addAction(wireframe_action_);
+  connect(wireframe_action_, &QAction::triggered, this, [this] {
+    set_render_mode(RenderMode::Wireframe);
+  });
+  addAction(wireframe_action_);
+
+  shaded_action_ = display_menu->addAction(tr("&Shaded"));
+  shaded_action_->setCheckable(true);
+  shaded_action_->setChecked(true);
+  shaded_action_->setShortcut(QKeySequence(tr("Ctrl+2")));
+  shaded_action_->setToolTip(tr("Simple shaded solid display"));
+  display_group->addAction(shaded_action_);
+  connect(shaded_action_, &QAction::triggered, this, [this] {
+    set_render_mode(RenderMode::Shaded);
+  });
+  addAction(shaded_action_);
+
+  realistic_action_ = display_menu->addAction(tr("&Realistic"));
+  realistic_action_->setCheckable(true);
+  realistic_action_->setShortcut(QKeySequence(tr("Ctrl+3")));
+  realistic_action_->setToolTip(tr("Lit display with specular highlights"));
+  display_group->addAction(realistic_action_);
+  connect(realistic_action_, &QAction::triggered, this, [this] {
+    set_render_mode(RenderMode::Realistic);
+  });
+  addAction(realistic_action_);
+
   // Settings live under Tools (VS / CAD), and also on the File welcome page.
   auto* tools_menu = menuBar()->addMenu(tr("&Tools"));
   tools_menu->addAction(settings_action);
@@ -143,6 +181,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   toolbar->addAction(save_action);
   toolbar->addAction(save_as_action);
   toolbar->addAction(frame_all_action);
+  toolbar->addSeparator();
+  toolbar->addAction(wireframe_action_);
+  toolbar->addAction(shaded_action_);
+  toolbar->addAction(realistic_action_);
+  toolbar->addSeparator();
   toolbar->addAction(settings_action);
 
   statusBar()->showMessage(tr("Ready — Open a model or try the demo"));
@@ -272,6 +315,7 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
     vp->apply_viewport_state(*viewport);
     vp->request_redraw();
   }
+  sync_render_mode_actions();
 }
 
 void MainWindow::new_demo_document() {
@@ -599,6 +643,29 @@ void MainWindow::frame_all() {
   if (auto* vp = current_viewport()) {
     vp->frame_scene();
   }
+}
+
+void MainWindow::set_render_mode(RenderMode mode) {
+  if (auto* vp = current_viewport()) {
+    vp->set_render_mode(mode);
+  }
+  sync_render_mode_actions();
+}
+
+void MainWindow::sync_render_mode_actions() {
+  if (!wireframe_action_ || !shaded_action_ || !realistic_action_) {
+    return;
+  }
+  RenderMode mode = RenderMode::Shaded;
+  if (auto* vp = current_viewport()) {
+    mode = vp->render_mode();
+  }
+  const QSignalBlocker b0(wireframe_action_);
+  const QSignalBlocker b1(shaded_action_);
+  const QSignalBlocker b2(realistic_action_);
+  wireframe_action_->setChecked(mode == RenderMode::Wireframe);
+  shaded_action_->setChecked(mode == RenderMode::Shaded);
+  realistic_action_->setChecked(mode == RenderMode::Realistic);
 }
 
 void MainWindow::close_tab(int index) {

@@ -13,114 +13,100 @@
 <context>
     <name>tamias::HomePage</name>
     <message>
-        <location filename="../src/app/home_page.cpp" line="26"/>
-        <location filename="../src/app/home_page.cpp" line="42"/>
         <source>Unknown</source>
         <translation>未知</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="30"/>
         <source>Today, %1</source>
         <translation>今天，%1</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="34"/>
         <source>Yesterday, %1</source>
         <translation>昨天，%1</translation>
-    </message>
-    <message>
-        <location filename="../src/app/home_page.cpp" line="130"/>
-        <source>Opened  %1</source>
-        <translation>打开于  %1</translation>
-    </message>
-    <message>
-        <location filename="../src/app/home_page.cpp" line="138"/>
-        <source>Created  %1</source>
-        <translation>创建于  %1</translation>
-    </message>
-    <message>
-        <location filename="../src/app/home_page.cpp" line="147"/>
-        <source>File unavailable · click to remove</source>
-        <translation>文件不可用 · 点击移除</translation>
     </message>
     <message>
         <source>Remove from recent</source>
         <translation>从最近打开中移除</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="200"/>
-        <source>OPEN</source>
-        <translation>打开中</translation>
+        <source>Missing</source>
+        <translation>文件缺失</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="213"/>
+        <source>OPEN</source>
+        <translation>已打开</translation>
+    </message>
+    <message>
         <source>Untitled document</source>
         <translation>未命名文档</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="222"/>
-        <source>Continue →</source>
-        <translation>继续 →</translation>
+        <source>CAD Viewer</source>
+        <translation>CAD 查看器</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="343"/>
-        <source>WELCOME BACK</source>
-        <translation>欢迎回来</translation>
+        <source>Start</source>
+        <translation>开始</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="346"/>
-        <source>Ready to bring your next idea to life?</source>
-        <translation>准备好实现下一个想法了吗？</translation>
+        <source>Open…</source>
+        <translation>打开…</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="350"/>
-        <source>Pick up a recent model, open something new, or explore with a demo scene.</source>
-        <translation>继续最近的模型、打开新文件，或从演示场景开始探索。</translation>
+        <source>Open Demo</source>
+        <translation>打开演示</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="359"/>
-        <source>Open a model</source>
-        <translation>打开模型</translation>
-    </message>
-    <message>
-        <location filename="../src/app/home_page.cpp" line="364"/>
-        <source>Try Alvin demo</source>
-        <translation>试用 Alvin 演示模型</translation>
-    </message>
-    <message>
-        <location filename="../src/app/home_page.cpp" line="368"/>
         <source>Settings</source>
         <translation>设置</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="392"/>
-        <source>Open now</source>
-        <translation>当前打开</translation>
+        <source>Version %1</source>
+        <translation>版本 %1</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="396"/>
-        <source>Click to return to a viewport</source>
+        <source>Open Documents</source>
+        <translation>已打开文档</translation>
+    </message>
+    <message>
+        <source>Switch back to a viewport</source>
         <translation>点击返回视口</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="410"/>
-        <source>Jump back in</source>
-        <translation>继续上次</translation>
-    </message>
-    <message>
-        <location filename="../src/app/home_page.cpp" line="414"/>
-        <source>Recently opened</source>
+        <source>Recent Files</source>
         <translation>最近打开</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="431"/>
-        <source>A fresh start</source>
-        <translation>从零开始</translation>
+        <source>Click a preview to open</source>
+        <translation>点击预览打开</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="435"/>
-        <source>Open a model and it will be ready for you here next time.</source>
-        <translation>打开模型后，下次会显示在这里。</translation>
+        <source>Click a row to open</source>
+        <translation>点击一行打开</translation>
+    </message>
+    <message>
+        <source>Double-click to open · Right-click for more</source>
+        <translation>双击打开 · 右键更多操作</translation>
+    </message>
+    <message>
+        <source>Click to open · Right-click for more</source>
+        <translation>单击打开 · 右键更多操作</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>打开</translation>
+    </message>
+    <message>
+        <source>No recent files</source>
+        <translation>暂无最近文件</translation>
+    </message>
+    <message>
+        <source>Use Open on the left to load OBJ / GLB / STEP / TDOC files.</source>
+        <translation>使用左侧「打开」加载 OBJ / GLB / STEP / TDOC 文件。</translation>
+    </message>
+    <message>
+        <source>Use Open above to load OBJ / GLB / STEP / TDOC files.</source>
+        <translation>使用上方「打开」加载 OBJ / GLB / STEP / TDOC 文件。</translation>
     </message>
 </context>
 <context>
