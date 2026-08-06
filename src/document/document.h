@@ -3,6 +3,7 @@
 #include "asset/mesh_asset.h"
 #include "scene/scene.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <string>
 #include <unordered_map>
@@ -18,11 +19,27 @@ class Document {
   [[nodiscard]] const std::filesystem::path& path() const { return path_; }
   void set_path(std::filesystem::path path) { path_ = std::move(path); }
 
+  [[nodiscard]] bool dirty() const { return dirty_; }
+  void mark_dirty() { dirty_ = true; }
+  void clear_dirty() { dirty_ = false; }
+
   [[nodiscard]] Scene& scene() { return scene_; }
   [[nodiscard]] const Scene& scene() const { return scene_; }
 
   MeshAsset& add_mesh(MeshAsset asset) {
     asset.id = next_mesh_id_++;
+    auto& stored = meshes_[asset.id];
+    stored = std::move(asset);
+    return stored;
+  }
+
+  // Insert a mesh keeping its id (used by document load / history restore).
+  MeshAsset& insert_mesh(MeshAsset asset) {
+    if (asset.id == 0) {
+      asset.id = next_mesh_id_++;
+    } else {
+      next_mesh_id_ = std::max(next_mesh_id_, asset.id + 1);
+    }
     auto& stored = meshes_[asset.id];
     stored = std::move(asset);
     return stored;
@@ -41,6 +58,15 @@ class Document {
   [[nodiscard]] std::unordered_map<std::uint64_t, MeshAsset>& meshes() { return meshes_; }
   [[nodiscard]] const std::unordered_map<std::uint64_t, MeshAsset>& meshes() const {
     return meshes_;
+  }
+
+  [[nodiscard]] std::uint64_t next_mesh_id() const { return next_mesh_id_; }
+  void set_next_mesh_id(std::uint64_t id) { next_mesh_id_ = std::max<std::uint64_t>(1, id); }
+
+  void clear_content() {
+    scene_.clear();
+    meshes_.clear();
+    next_mesh_id_ = 1;
   }
 
   [[nodiscard]] Aabb bounds() const {
@@ -67,6 +93,7 @@ class Document {
   Scene scene_;
   std::unordered_map<std::uint64_t, MeshAsset> meshes_;
   std::uint64_t next_mesh_id_ = 1;
+  bool dirty_ = false;
 };
 
 }  // namespace tamias

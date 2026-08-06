@@ -77,6 +77,13 @@ class TurntableCamera {
   [[nodiscard]] float pitch() const { return pitch_; }
   [[nodiscard]] float distance() const { return distance_; }
   [[nodiscard]] Vec3 target() const { return target_; }
+  [[nodiscard]] float fovy() const { return fovy_; }
+  [[nodiscard]] float znear() const { return znear_; }
+  [[nodiscard]] float zfar() const { return zfar_; }
+
+  void set_fovy(float fovy) { fovy_ = fovy; }
+  void set_znear(float znear) { znear_ = std::max(0.001f, znear); }
+  void set_zfar(float zfar) { zfar_ = std::max(znear_ + 0.001f, zfar); }
 
  private:
   Vec3 target_{};

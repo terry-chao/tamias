@@ -2,6 +2,7 @@
 
 #include "app_settings.h"
 #include "core/log.h"
+#include "io/document_io.h"
 #include "io/mesh_io.h"
 #include "mesh_thumbnail.h"
 #include "modeling/occt_shape_ops.h"
@@ -93,7 +94,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   auto* save_action = new QAction(style()->standardIcon(QStyle::SP_DialogSaveButton),
                                   tr("Save"), this);
   save_action->setShortcut(QKeySequence::Save);
-  save_action->setToolTip(tr("Save the selected model"));
+  save_action->setToolTip(tr("Save the document"));
   connect(save_action, &QAction::triggered, this, &MainWindow::save_file);
   addAction(save_action);
 
@@ -102,7 +103,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
                        palette().color(QPalette::WindowText)),
       tr("Save As…"), this);
   save_as_action->setShortcut(QKeySequence::SaveAs);
-  save_as_action->setToolTip(tr("Save the selected model to a new file"));
+  save_as_action->setToolTip(tr("Save the document to a new file"));
   connect(save_as_action, &QAction::triggered, this, &MainWindow::save_file_as);
   addAction(save_as_action);
 
@@ -244,7 +245,8 @@ void MainWindow::open_settings() {
   }
 }
 
-void MainWindow::add_document_tab(std::shared_ptr<Document> document) {
+void MainWindow::add_document_tab(std::shared_ptr<Document> document,
+                                  const ViewportState* viewport) {
   const RenderDeviceConfig config = AppSettings::instance().render_device_config();
   auto thread = RenderThreadPool::instance().acquire(config);
   if (!thread) {
@@ -258,10 +260,18 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document) {
     QMessageBox::critical(this, tr("Upload"), QString::fromStdString(r.error()));
     return;
   }
-  auto* viewport = new DocumentViewport(document, thread, tabs_);
-  const int index = tabs_->addTab(viewport, QString::fromStdString(document->name()));
+  // Parent after addTab so the first present sees a real laid-out size. Applying
+  // viewport (and redrawing) before addTab can create a tiny swapchain that only
+  // fills the top-left corner of the window.
+  auto* vp = new DocumentViewport(document, thread, nullptr);
+  vp->seed_history_baseline();
+  const int index = tabs_->addTab(vp, QString::fromStdString(document->name()));
   tabs_->setCurrentIndex(index);
   show_documents();
+  if (viewport) {
+    vp->apply_viewport_state(*viewport);
+    vp->request_redraw();
+  }
 }
 
 void MainWindow::new_demo_document() {
@@ -293,6 +303,38 @@ bool MainWindow::open_path(const QString& path) {
   }
 
   const auto file = std::filesystem::path(info.absoluteFilePath().toStdString());
+
+  if (is_tdoc_document_path(file)) {
+    auto loaded = load_document(file);
+    if (!loaded) {
+      QMessageBox::critical(this, tr("Open"), QString::fromStdString(loaded.error()));
+      return false;
+    }
+    ViewportState vp_storage = loaded->viewport;
+    const bool has_viewport = loaded->has_viewport;
+    auto document = std::make_shared<Document>(std::move(loaded->document));
+    // Prefer the on-disk filename so tabs/recent show .tdoc even if an older
+    // file still has an imported .obj name in META.
+    document->set_path(file);
+    document->set_name(file.filename().string());
+    add_document_tab(document, has_viewport ? &vp_storage : nullptr);
+
+    const MeshCpu* thumb_mesh = nullptr;
+    if (!document->meshes().empty()) {
+      thumb_mesh = &document->meshes().begin()->second.cpu;
+    }
+    if (thumb_mesh) {
+      const QImage thumb = render_mesh_thumbnail(*thumb_mesh);
+      const QString thumb_path = save_mesh_thumbnail(info.absoluteFilePath(), thumb);
+      recent_.add(info.absoluteFilePath(), thumb_path);
+    } else {
+      recent_.add(info.absoluteFilePath(), QString());
+    }
+    refresh_home();
+    statusBar()->showMessage(tr("Loaded %1").arg(info.absoluteFilePath()), 5000);
+    return true;
+  }
+
   Result<MeshCpu> mesh = Err("no loader");
   if (occt_supports_extension(file)) {
 #if defined(TAMIAS_HAS_OCCT)
@@ -345,13 +387,19 @@ bool MainWindow::open_path(const QString& path) {
 }
 
 void MainWindow::open_file() {
-  QString filters = tr("Meshes (*.gltf *.glb *.obj);;glTF (*.gltf *.glb);;OBJ (*.obj)");
+  QString filters =
+      tr("All Supported (*.tdoc *.gltf *.glb *.obj);;"
+         "Tamias (*.tdoc);;"
+         "Meshes (*.gltf *.glb *.obj);;"
+         "glTF (*.gltf *.glb);;OBJ (*.obj)");
 #if defined(TAMIAS_HAS_OCCT)
-  filters = tr("All Supported (*.gltf *.glb *.obj *.step *.stp *.iges *.igs *.brep);;"
-               "Meshes (*.gltf *.glb *.obj);;"
-               "CAD (*.step *.stp *.iges *.igs *.brep);;"
-               "glTF (*.gltf *.glb);;OBJ (*.obj);;"
-               "STEP (*.step *.stp);;IGES (*.iges *.igs);;BREP (*.brep)");
+  filters =
+      tr("All Supported (*.tdoc *.gltf *.glb *.obj *.step *.stp *.iges *.igs *.brep);;"
+         "Tamias (*.tdoc);;"
+         "Meshes (*.gltf *.glb *.obj);;"
+         "CAD (*.step *.stp *.iges *.igs *.brep);;"
+         "glTF (*.gltf *.glb);;OBJ (*.obj);;"
+         "STEP (*.step *.stp);;IGES (*.iges *.igs);;BREP (*.brep)");
 #endif
   const QString path = QFileDialog::getOpenFileName(this, tr("Open"), QString(), filters);
   if (path.isEmpty()) {
@@ -364,6 +412,10 @@ bool MainWindow::is_obj_path(const QString& path) {
   return QFileInfo(path).suffix().compare(QStringLiteral("obj"), Qt::CaseInsensitive) == 0;
 }
 
+bool MainWindow::is_tdoc_path(const QString& path) {
+  return QFileInfo(path).suffix().compare(QStringLiteral("tdoc"), Qt::CaseInsensitive) == 0;
+}
+
 const MeshCpu* MainWindow::selected_mesh(Document& document) const {
   const SceneNode* node = document.scene().selected_node();
   if (!node) {
@@ -373,6 +425,16 @@ const MeshCpu* MainWindow::selected_mesh(Document& document) const {
   return asset ? &asset->cpu : nullptr;
 }
 
+const MeshCpu* MainWindow::mesh_for_obj_export(Document& document) const {
+  if (const MeshCpu* selected = selected_mesh(document)) {
+    return selected;
+  }
+  if (document.meshes().empty()) {
+    return nullptr;
+  }
+  return &document.meshes().begin()->second.cpu;
+}
+
 bool MainWindow::write_selected_mesh(const QString& path) {
   auto* vp = current_viewport();
   if (!vp) {
@@ -380,10 +442,9 @@ bool MainWindow::write_selected_mesh(const QString& path) {
     return false;
   }
   Document& document = vp->document();
-  const MeshCpu* mesh = selected_mesh(document);
+  const MeshCpu* mesh = mesh_for_obj_export(document);
   if (!mesh) {
-    QMessageBox::information(this, tr("Save"),
-                             tr("Select a model in the viewport, then save again."));
+    QMessageBox::information(this, tr("Save"), tr("The document has no mesh to export."));
     return false;
   }
 
@@ -391,7 +452,8 @@ bool MainWindow::write_selected_mesh(const QString& path) {
   if (!is_obj_path(out_path)) {
     out_path += QStringLiteral(".obj");
   }
-  const auto file = std::filesystem::path(QFileInfo(out_path).absoluteFilePath().toStdString());
+  const QString abs_path = QFileInfo(out_path).absoluteFilePath();
+  const auto file = std::filesystem::path(abs_path.toStdString());
   if (auto r = save_mesh_file(file, *mesh); !r) {
     QMessageBox::critical(this, tr("Save"), QString::fromStdString(r.error()));
     return false;
@@ -403,13 +465,61 @@ bool MainWindow::write_selected_mesh(const QString& path) {
     tabs_->setTabText(index, QString::fromStdString(document.name()));
   }
 
-  const QFileInfo info(QString::fromStdString(file.string()));
   const QImage thumb = render_mesh_thumbnail(*mesh);
-  const QString thumb_path = save_mesh_thumbnail(info.absoluteFilePath(), thumb);
-  recent_.add(info.absoluteFilePath(), thumb_path);
+  const QString thumb_path = save_mesh_thumbnail(abs_path, thumb);
+  recent_.add(abs_path, thumb_path);
   refresh_home();
-  statusBar()->showMessage(tr("Saved %1").arg(info.absoluteFilePath()), 5000);
+  notify_save_success(abs_path);
   return true;
+}
+
+bool MainWindow::write_tdoc_document(const QString& path) {
+  auto* vp = current_viewport();
+  if (!vp) {
+    QMessageBox::information(this, tr("Save"), tr("Open a document first."));
+    return false;
+  }
+  Document& document = vp->document();
+  QString out_path = path;
+  if (!is_tdoc_path(out_path)) {
+    out_path += QStringLiteral(".tdoc");
+  }
+  const QString abs_path = QFileInfo(out_path).absoluteFilePath();
+  const auto file = std::filesystem::path(abs_path.toStdString());
+  // Update identity before serialize so META stores the .tdoc name, not the
+  // imported .obj/.step source name.
+  document.set_path(file);
+  document.set_name(file.filename().string());
+  const ViewportState viewport = vp->capture_viewport_state();
+  if (auto r = save_document(file, document, viewport); !r) {
+    QMessageBox::critical(this, tr("Save"), QString::fromStdString(r.error()));
+    return false;
+  }
+
+  document.clear_dirty();
+  if (const int index = tabs_->indexOf(vp); index >= 0) {
+    tabs_->setTabText(index, QString::fromStdString(document.name()));
+  }
+
+  const MeshCpu* thumb_mesh = selected_mesh(document);
+  if (!thumb_mesh && !document.meshes().empty()) {
+    thumb_mesh = &document.meshes().begin()->second.cpu;
+  }
+  if (thumb_mesh) {
+    const QImage thumb = render_mesh_thumbnail(*thumb_mesh);
+    const QString thumb_path = save_mesh_thumbnail(abs_path, thumb);
+    recent_.add(abs_path, thumb_path);
+  } else {
+    recent_.add(abs_path, QString());
+  }
+  refresh_home();
+  notify_save_success(abs_path);
+  return true;
+}
+
+void MainWindow::notify_save_success(const QString& path) {
+  statusBar()->showMessage(tr("Saved successfully: %1").arg(path), 8000);
+  QMessageBox::information(this, tr("Save"), tr("Saved successfully:\n%1").arg(path));
 }
 
 void MainWindow::save_file() {
@@ -418,15 +528,12 @@ void MainWindow::save_file() {
     QMessageBox::information(this, tr("Save"), tr("Open a document first."));
     return;
   }
-  if (!selected_mesh(vp->document())) {
-    QMessageBox::information(this, tr("Save"),
-                             tr("Select a model in the viewport, then save again."));
-    return;
-  }
 
+  // Save always writes the whole scene as .tdoc. Imported .obj/.step paths are
+  // not overwritten — prompt Save As so the project file is created explicitly.
   const auto& doc_path = vp->document().path();
-  if (!doc_path.empty() && is_obj_path(QString::fromStdString(doc_path.string()))) {
-    write_selected_mesh(QString::fromStdString(doc_path.string()));
+  if (!doc_path.empty() && is_tdoc_path(QString::fromStdString(doc_path.string()))) {
+    write_tdoc_document(QString::fromStdString(doc_path.string()));
     return;
   }
   save_file_as();
@@ -438,31 +545,34 @@ void MainWindow::save_file_as() {
     QMessageBox::information(this, tr("Save"), tr("Open a document first."));
     return;
   }
-  if (!selected_mesh(vp->document())) {
-    QMessageBox::information(this, tr("Save"),
-                             tr("Select a model in the viewport, then save again."));
-    return;
-  }
 
   QString suggested;
   const auto& doc_path = vp->document().path();
   if (!doc_path.empty()) {
     QFileInfo info(QString::fromStdString(doc_path.string()));
     suggested = info.absolutePath() + QLatin1Char('/') + info.completeBaseName() +
-                QStringLiteral(".obj");
+                QStringLiteral(".tdoc");
   } else {
     suggested = QString::fromStdString(vp->document().name());
-    if (!is_obj_path(suggested)) {
-      suggested += QStringLiteral(".obj");
+    if (!is_tdoc_path(suggested) && !is_obj_path(suggested)) {
+      suggested += QStringLiteral(".tdoc");
+    } else if (is_obj_path(suggested)) {
+      suggested = QFileInfo(suggested).completeBaseName() + QStringLiteral(".tdoc");
     }
   }
 
   const QString path = QFileDialog::getSaveFileName(
-      this, tr("Save As"), suggested, tr("OBJ (*.obj)"));
+      this, tr("Save As"), suggested,
+      tr("Tamias Document (*.tdoc);;OBJ Mesh Export (*.obj)"));
   if (path.isEmpty()) {
     return;
   }
-  write_selected_mesh(path);
+  if (is_obj_path(path) ||
+      (!is_tdoc_path(path) && path.endsWith(QStringLiteral(".obj"), Qt::CaseInsensitive))) {
+    write_selected_mesh(path);
+    return;
+  }
+  write_tdoc_document(path);
 }
 
 void MainWindow::open_recent_path(const QString& path) { open_path(path); }

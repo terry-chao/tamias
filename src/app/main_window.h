@@ -3,6 +3,7 @@
 #include "document/document.h"
 #include "document_viewport.h"
 #include "home_page.h"
+#include "io/document_io.h"
 #include "recent_files.h"
 
 #include <QMainWindow>
@@ -32,15 +33,20 @@ class MainWindow final : public QMainWindow {
   void activate_open_document(int index);
 
  private:
-  void add_document_tab(std::shared_ptr<Document> document);
+  void add_document_tab(std::shared_ptr<Document> document,
+                        const ViewportState* viewport = nullptr);
   Result<void> populate_document_meshes(Document& document, RenderThread& thread);
   void refresh_home();
   bool open_path(const QString& path);
   bool write_selected_mesh(const QString& path);
+  bool write_tdoc_document(const QString& path);
+  void notify_save_success(const QString& path);
   const MeshCpu* selected_mesh(Document& document) const;
+  const MeshCpu* mesh_for_obj_export(Document& document) const;
   int find_open_document(const QString& path) const;
   DocumentViewport* current_viewport() const;
   static bool is_obj_path(const QString& path);
+  static bool is_tdoc_path(const QString& path);
 
   QStackedWidget* stack_ = nullptr;
   HomePage* home_ = nullptr;

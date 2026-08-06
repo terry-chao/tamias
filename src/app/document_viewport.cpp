@@ -136,6 +136,44 @@ void DocumentViewport::set_render_mode(RenderMode mode) {
   request_redraw();
 }
 
+ViewportState DocumentViewport::capture_viewport_state() const {
+  ViewportState state;
+  state.target = camera_.target();
+  state.distance = camera_.distance();
+  state.yaw = camera_.yaw();
+  state.pitch = camera_.pitch();
+  state.fovy = camera_.fovy();
+  state.znear = camera_.znear();
+  state.zfar = camera_.zfar();
+  state.render_mode = static_cast<ViewRenderMode>(mode_);
+  return state;
+}
+
+void DocumentViewport::apply_viewport_state(const ViewportState& state) {
+  stop_view_animation();
+  camera_.set_target(state.target);
+  camera_.set_distance(state.distance);
+  camera_.set_yaw_pitch(state.yaw, state.pitch);
+  camera_.set_fovy(state.fovy);
+  // Recompute clip planes from distance so stale znear/zfar cannot clip the scene.
+  const float distance = camera_.distance();
+  camera_.set_znear(std::max(distance * 0.001f, 0.01f));
+  camera_.set_zfar(std::max(distance * 20.f, 100.f));
+  mode_ = static_cast<RenderMode>(state.render_mode);
+  sync_view_cube();
+  // Do not submit here if the widget is not yet laid out — an early present at the
+  // wrong size can leave the swapchain stuck drawing into a corner of the window.
+  if (isVisible() && surface_ && surface_->width() >= 2 && surface_->height() >= 2) {
+    request_redraw();
+  }
+}
+
+void DocumentViewport::seed_history_baseline() {
+  if (auto bytes = serialize_document(*document_); bytes) {
+    history_.reset_with(std::move(*bytes));
+  }
+}
+
 void DocumentViewport::frame_scene() {
   stop_view_animation();
   camera_.frame_aabb(document_->bounds());

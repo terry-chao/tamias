@@ -2,7 +2,9 @@
 
 #include "core/native_window_handle.h"
 #include "document/document.h"
+#include "document/history.h"
 #include "engine/render/render_runtime.h"
+#include "io/document_io.h"
 #include "math/camera.h"
 #include "view/picking.h"
 #include "view_cube_widget.h"
@@ -24,10 +26,16 @@ class DocumentViewport final : public QWidget {
   ~DocumentViewport() override;
 
   [[nodiscard]] Document& document() { return *document_; }
+  [[nodiscard]] DocumentHistory& history() { return history_; }
+  [[nodiscard]] const DocumentHistory& history() const { return history_; }
   void set_render_mode(RenderMode mode);
   [[nodiscard]] RenderMode render_mode() const { return mode_; }
   void frame_scene();
   void request_redraw();
+  [[nodiscard]] ViewportState capture_viewport_state() const;
+  void apply_viewport_state(const ViewportState& state);
+  // Seed undo baseline from the current document body (call after load/open).
+  void seed_history_baseline();
 
  protected:
   void showEvent(QShowEvent* event) override;
@@ -59,6 +67,7 @@ class DocumentViewport final : public QWidget {
   std::shared_ptr<Document> document_;
   std::shared_ptr<RenderThread> render_thread_;
   std::unique_ptr<RenderChannel> channel_;
+  DocumentHistory history_;
   TurntableCamera camera_;
   Bvh bvh_;
   RenderMode mode_ = RenderMode::Shaded;

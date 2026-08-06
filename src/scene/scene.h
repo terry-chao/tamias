@@ -2,6 +2,7 @@
 
 #include "math/math.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -27,8 +28,27 @@ class Scene {
     return nodes_.back();
   }
 
+  // Insert a node keeping its id (used by document load / history restore).
+  SceneNode& insert_node(SceneNode node) {
+    if (node.id == 0) {
+      node.id = next_id_++;
+    } else {
+      next_id_ = std::max(next_id_, node.id + 1);
+    }
+    nodes_.push_back(std::move(node));
+    return nodes_.back();
+  }
+
   [[nodiscard]] const std::vector<SceneNode>& nodes() const { return nodes_; }
   [[nodiscard]] std::vector<SceneNode>& nodes() { return nodes_; }
+
+  [[nodiscard]] std::uint64_t next_id() const { return next_id_; }
+  void set_next_id(std::uint64_t id) { next_id_ = std::max<std::uint64_t>(1, id); }
+
+  void clear() {
+    nodes_.clear();
+    next_id_ = 1;
+  }
 
   void clear_selection() {
     for (auto& n : nodes_) {
