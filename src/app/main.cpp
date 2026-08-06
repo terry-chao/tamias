@@ -34,6 +34,7 @@ int main(int argc, char* argv[]) {
   if (!tamias::apply_ui_language(tamias::AppSettings::instance().ui_language())) {
     tamias::log_error("Failed to load UI translation catalog; falling back to source language");
   }
+  tamias::apply_ui_color_scheme(tamias::AppSettings::instance().ui_color_scheme());
 
   // Smoke: ensure the preferred graphics backend can create a device.
   {

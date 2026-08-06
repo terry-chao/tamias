@@ -6,6 +6,7 @@
 #include <QVector>
 #include <QWidget>
 
+class QEvent;
 class QGridLayout;
 class QLabel;
 class QWidget;
@@ -35,10 +36,15 @@ class HomePage final : public QWidget {
   void recentRemoveRequested(const QString& path);
   void openDocumentActivated(int index);
 
+ protected:
+  void changeEvent(QEvent* event) override;
+
  private:
+  void apply_theme();
   void clear_layout(QGridLayout* layout);
   void clear_cards();
 
+  bool applying_theme_ = false;
   QWidget* open_section_ = nullptr;
   QWidget* open_host_ = nullptr;
   QGridLayout* open_layout_ = nullptr;

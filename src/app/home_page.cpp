@@ -1,11 +1,15 @@
 #include "home_page.h"
 
+#include <QApplication>
+#include <QColor>
 #include <QCoreApplication>
 #include <QEnterEvent>
+#include <QEvent>
 #include <QFileInfo>
 #include <QFocusEvent>
 #include <QFrame>
 #include <QGridLayout>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
@@ -13,20 +17,144 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPalette>
 #include <QPixmap>
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QSizePolicy>
 #include <QStyle>
+#include <QStyleHints>
 #include <QVBoxLayout>
 
 #include <functional>
 
 namespace tamias {
-namespace {
 
 constexpr int kCardRadius = 12;
+constexpr QColor kAccent{0xe8, 0x8f, 0x4d};
+
+bool is_dark_theme() {
+  if (const QStyleHints* hints = QGuiApplication::styleHints()) {
+    switch (hints->colorScheme()) {
+      case Qt::ColorScheme::Dark:
+        return true;
+      case Qt::ColorScheme::Light:
+        return false;
+      case Qt::ColorScheme::Unknown:
+        break;
+    }
+  }
+  return QApplication::palette().color(QPalette::Window).lightness() < 128;
+}
+
+QString home_page_stylesheet(bool dark) {
+  if (dark) {
+    return QStringLiteral(
+        "QScrollArea { background: #0c0c0d; border: none; }"
+        "#homePage, #homeCanvas, #homeContent { background: #0c0c0d; }"
+        "#hero { background: #171719; border: 1px solid #28282b; border-radius: 18px; }"
+        "#heroEyebrow { color: #eaa76b; font-size: 11px; font-weight: 700; }"
+        "#heroTitle { color: #faf7f2; font-size: 32px; font-weight: 700; }"
+        "#heroTagline { color: #aaa6a1; font-size: 14px; }"
+        "#homeSection { color: #f3efe9; font-size: 20px; font-weight: 700; }"
+        "#homeSectionHint { color: #77736f; font-size: 12px; }"
+        "#homeEmptyPanel { background: #151516; border: 1px solid #29292b;"
+        "  border-radius: 12px; }"
+        "#homeEmptyTitle { color: #eee9e2; font-size: 16px; font-weight: 600; }"
+        "#homeEmpty { color: #85817d; font-size: 13px; }"
+        "QPushButton#homeAction {"
+        "  background: #e88f4d; color: #17110d; border: none;"
+        "  padding: 12px 22px; font-weight: 700; border-radius: 8px;"
+        "}"
+        "QPushButton#homeAction:hover { background: #f2a163; }"
+        "QPushButton#homeAction:pressed { background: #d98143; }"
+        "QPushButton#homeActionSecondary {"
+        "  background: #232325; color: #e9e5df;"
+        "  border: 1px solid #38383b; padding: 11px 21px; border-radius: 8px;"
+        "}"
+        "QPushButton#homeActionSecondary:hover { background: #2d2d30; border-color: #505054; }"
+        "#recentCard, #openDocCard {"
+        "  background: transparent;"
+        "  border: none;"
+        "  min-width: 210px; min-height: 250px;"
+        "}"
+        "#openDocCard { min-height: 0; }"
+        "QPushButton#recentRemove {"
+        "  background: rgba(20, 20, 22, 180); color: #eee9e2;"
+        "  border: 1px solid #444448; border-radius: 12px;"
+        "  font-size: 14px; font-weight: 700; padding: 0;"
+        "}"
+        "QPushButton#recentRemove:hover {"
+        "  background: #e88f4d; color: #17110d; border-color: #e88f4d;"
+        "}"
+        "#openBadge { background: #2a2118; color: #e88f4d; border: 1px solid #5a3f28;"
+        "  border-radius: 4px; padding: 4px 8px; font-size: 10px; font-weight: 700; }"
+        "#openHint { color: #e88f4d; font-size: 12px; font-weight: 600; }"
+        "#recentThumb { background: #202022; border: none; }"
+        "#recentPreview { background: transparent; }"
+        "#fileType { background: #2b2b2e; color: #c9c4bd; border: 1px solid #414145;"
+        "  border-radius: 4px; padding: 3px 5px; font-size: 10px; font-weight: 700; }"
+        "#recentName { color: #f1ede7; font-size: 14px; font-weight: 600; }"
+        "#recentPath { color: #77736f; font-size: 10px; }"
+        "#cardDivider { background: #29292b; }"
+        "#recentMeta { color: #99948e; font-size: 11px; }"
+        "#recentMissing { color: #e8a064; font-size: 11px; }");
+  }
+
+  return QStringLiteral(
+      "QScrollArea { background: #f5f3f0; border: none; }"
+      "#homePage, #homeCanvas, #homeContent { background: #f5f3f0; }"
+      "#hero { background: #ffffff; border: 1px solid #e2dfda; border-radius: 18px; }"
+      "#heroEyebrow { color: #c56a2a; font-size: 11px; font-weight: 700; }"
+      "#heroTitle { color: #1c1b1a; font-size: 32px; font-weight: 700; }"
+      "#heroTagline { color: #6b6762; font-size: 14px; }"
+      "#homeSection { color: #1c1b1a; font-size: 20px; font-weight: 700; }"
+      "#homeSectionHint { color: #8a857f; font-size: 12px; }"
+      "#homeEmptyPanel { background: #ffffff; border: 1px solid #e2dfda;"
+      "  border-radius: 12px; }"
+      "#homeEmptyTitle { color: #1c1b1a; font-size: 16px; font-weight: 600; }"
+      "#homeEmpty { color: #8a857f; font-size: 13px; }"
+      "QPushButton#homeAction {"
+      "  background: #e88f4d; color: #17110d; border: none;"
+      "  padding: 12px 22px; font-weight: 700; border-radius: 8px;"
+      "}"
+      "QPushButton#homeAction:hover { background: #f2a163; }"
+      "QPushButton#homeAction:pressed { background: #d98143; }"
+      "QPushButton#homeActionSecondary {"
+      "  background: #ffffff; color: #2a2826;"
+      "  border: 1px solid #d8d4ce; padding: 11px 21px; border-radius: 8px;"
+      "}"
+      "QPushButton#homeActionSecondary:hover { background: #f7f5f2; border-color: #c4bfb8; }"
+      "#recentCard, #openDocCard {"
+      "  background: transparent;"
+      "  border: none;"
+      "  min-width: 210px; min-height: 250px;"
+      "}"
+      "#openDocCard { min-height: 0; }"
+      "QPushButton#recentRemove {"
+      "  background: rgba(255, 255, 255, 210); color: #2a2826;"
+      "  border: 1px solid #d0cbc4; border-radius: 12px;"
+      "  font-size: 14px; font-weight: 700; padding: 0;"
+      "}"
+      "QPushButton#recentRemove:hover {"
+      "  background: #e88f4d; color: #17110d; border-color: #e88f4d;"
+      "}"
+      "#openBadge { background: #fff3e8; color: #c56a2a; border: 1px solid #efc49a;"
+      "  border-radius: 4px; padding: 4px 8px; font-size: 10px; font-weight: 700; }"
+      "#openHint { color: #c56a2a; font-size: 12px; font-weight: 600; }"
+      "#recentThumb { background: #ebe8e3; border: none; }"
+      "#recentPreview { background: transparent; }"
+      "#fileType { background: #ffffff; color: #5c5853; border: 1px solid #d8d4ce;"
+      "  border-radius: 4px; padding: 3px 5px; font-size: 10px; font-weight: 700; }"
+      "#recentName { color: #1c1b1a; font-size: 14px; font-weight: 600; }"
+      "#recentPath { color: #8a857f; font-size: 10px; }"
+      "#cardDivider { background: #e2dfda; }"
+      "#recentMeta { color: #6b6762; font-size: 11px; }"
+      "#recentMissing { color: #c56a2a; font-size: 11px; }");
+}
+
+namespace {
 
 QString format_opened_time(const QDateTime& dt) {
   if (!dt.isValid()) {
@@ -58,10 +186,19 @@ void apply_rounded_mask(QWidget* widget, int radius) {
 void paint_rounded_card(QWidget* widget, bool missing) {
   QPainter p(widget);
   p.setRenderHint(QPainter::Antialiasing, true);
+  const bool dark = is_dark_theme();
   const bool hot = widget->underMouse() || widget->hasFocus();
-  const QColor bg = missing ? QColor(0x13, 0x13, 0x14)
-                            : (hot ? QColor(0x1b, 0x1b, 0x1d) : QColor(0x16, 0x16, 0x17));
-  const QColor border = hot ? QColor(0xe8, 0x8f, 0x4d) : QColor(0x29, 0x29, 0x2b);
+  QColor bg;
+  QColor border;
+  if (dark) {
+    bg = missing ? QColor(0x13, 0x13, 0x14)
+                 : (hot ? QColor(0x1b, 0x1b, 0x1d) : QColor(0x16, 0x16, 0x17));
+    border = hot ? kAccent : QColor(0x29, 0x29, 0x2b);
+  } else {
+    bg = missing ? QColor(0xf0, 0xee, 0xea)
+                 : (hot ? QColor(0xff, 0xff, 0xff) : QColor(0xfa, 0xf9, 0xf7));
+    border = hot ? kAccent : QColor(0xe0, 0xdc, 0xd6);
+  }
   QPainterPath path;
   path.addRoundedRect(QRectF(widget->rect()).adjusted(1.0, 1.0, -1.0, -1.0),
                       kCardRadius - 1, kCardRadius - 1);
@@ -81,9 +218,11 @@ class CardBorderOverlay final : public QWidget {
   void paintEvent(QPaintEvent*) override {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
+    const bool dark = is_dark_theme();
     const QColor border =
-        (card_->underMouse() || card_->hasFocus()) ? QColor(0xe8, 0x8f, 0x4d)
-                                                   : QColor(0x29, 0x29, 0x2b);
+        (card_->underMouse() || card_->hasFocus())
+            ? kAccent
+            : (dark ? QColor(0x29, 0x29, 0x2b) : QColor(0xe0, 0xdc, 0xd6));
     QPainterPath path;
     path.addRoundedRect(QRectF(rect()).adjusted(1.0, 1.0, -1.0, -1.0),
                         kCardRadius - 1, kCardRadius - 1);
@@ -389,55 +528,12 @@ class OpenDocCard final : public QFrame {
 
 HomePage::HomePage(QWidget* parent) : QWidget(parent) {
   setObjectName(QStringLiteral("homePage"));
-  setStyleSheet(QStringLiteral(
-      "#homePage, #homeCanvas, #homeContent { background: #0c0c0d; }"
-      "#hero { background: #171719; border: 1px solid #28282b; border-radius: 18px; }"
-      "#heroEyebrow { color: #eaa76b; font-size: 11px; font-weight: 700; }"
-      "#heroTitle { color: #faf7f2; font-size: 32px; font-weight: 700; }"
-      "#heroTagline { color: #aaa6a1; font-size: 14px; }"
-      "#homeSection { color: #f3efe9; font-size: 20px; font-weight: 700; }"
-      "#homeSectionHint { color: #77736f; font-size: 12px; }"
-      "#homeEmptyPanel { background: #151516; border: 1px solid #29292b;"
-      "  border-radius: 12px; }"
-      "#homeEmptyTitle { color: #eee9e2; font-size: 16px; font-weight: 600; }"
-      "#homeEmpty { color: #85817d; font-size: 13px; }"
-      "QPushButton#homeAction {"
-      "  background: #e88f4d; color: #17110d; border: none;"
-      "  padding: 12px 22px; font-weight: 700; border-radius: 8px;"
-      "}"
-      "QPushButton#homeAction:hover { background: #f2a163; }"
-      "QPushButton#homeAction:pressed { background: #d98143; }"
-      "QPushButton#homeActionSecondary {"
-      "  background: #232325; color: #e9e5df;"
-      "  border: 1px solid #38383b; padding: 11px 21px; border-radius: 8px;"
-      "}"
-      "QPushButton#homeActionSecondary:hover { background: #2d2d30; border-color: #505054; }"
-      "#recentCard, #openDocCard {"
-      "  background: transparent;"
-      "  border: none;"
-      "  min-width: 210px; min-height: 250px;"
-      "}"
-      "#openDocCard { min-height: 0; }"
-      "QPushButton#recentRemove {"
-      "  background: rgba(20, 20, 22, 180); color: #eee9e2;"
-      "  border: 1px solid #444448; border-radius: 12px;"
-      "  font-size: 14px; font-weight: 700; padding: 0;"
-      "}"
-      "QPushButton#recentRemove:hover {"
-      "  background: #e88f4d; color: #17110d; border-color: #e88f4d;"
-      "}"
-      "#openBadge { background: #2a2118; color: #e88f4d; border: 1px solid #5a3f28;"
-      "  border-radius: 4px; padding: 4px 8px; font-size: 10px; font-weight: 700; }"
-      "#openHint { color: #e88f4d; font-size: 12px; font-weight: 600; }"
-      "#recentThumb { background: #202022; border: none; }"
-      "#recentPreview { background: transparent; }"
-      "#fileType { background: #2b2b2e; color: #c9c4bd; border: 1px solid #414145;"
-      "  border-radius: 4px; padding: 3px 5px; font-size: 10px; font-weight: 700; }"
-      "#recentName { color: #f1ede7; font-size: 14px; font-weight: 600; }"
-      "#recentPath { color: #77736f; font-size: 10px; }"
-      "#cardDivider { background: #29292b; }"
-      "#recentMeta { color: #99948e; font-size: 11px; }"
-      "#recentMissing { color: #e8a064; font-size: 11px; }"));
+  apply_theme();
+  if (QStyleHints* hints = QGuiApplication::styleHints()) {
+    connect(hints, &QStyleHints::colorSchemeChanged, this, [this](Qt::ColorScheme) {
+      apply_theme();
+    });
+  }
 
   auto* root = new QVBoxLayout(this);
   root->setContentsMargins(0, 0, 0, 0);
@@ -573,6 +669,28 @@ HomePage::HomePage(QWidget* parent) : QWidget(parent) {
   empty_layout->addWidget(empty_label_);
   content_layout->addWidget(empty_panel_);
   content_layout->addStretch(1);
+}
+
+void HomePage::apply_theme() {
+  if (applying_theme_) {
+    return;
+  }
+  applying_theme_ = true;
+  setStyleSheet(home_page_stylesheet(is_dark_theme()));
+  update();
+  for (QWidget* child : findChildren<QWidget*>()) {
+    child->update();
+  }
+  applying_theme_ = false;
+}
+
+void HomePage::changeEvent(QEvent* event) {
+  // setStyleSheet() itself emits StyleChange/PaletteChange — ignore those while applying.
+  if (!applying_theme_ &&
+      (event->type() == QEvent::PaletteChange || event->type() == QEvent::ThemeChange)) {
+    apply_theme();
+  }
+  QWidget::changeEvent(event);
 }
 
 void HomePage::clear_layout(QGridLayout* layout) {

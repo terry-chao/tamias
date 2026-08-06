@@ -14,7 +14,7 @@ namespace tamias {
 SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
   setWindowTitle(tr("Settings"));
   setModal(true);
-  resize(420, 220);
+  resize(420, 260);
 
   auto* root = new QVBoxLayout(this);
   root->setContentsMargins(18, 16, 18, 14);
@@ -33,6 +33,15 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
       language_combo_->findData(AppSettings::instance().ui_language());
   language_combo_->setCurrentIndex(lang_index >= 0 ? lang_index : 0);
   form->addRow(tr("Language:"), language_combo_);
+
+  theme_combo_ = new QComboBox(this);
+  theme_combo_->addItem(tr("System"), static_cast<int>(UiColorScheme::System));
+  theme_combo_->addItem(tr("Light"), static_cast<int>(UiColorScheme::Light));
+  theme_combo_->addItem(tr("Dark"), static_cast<int>(UiColorScheme::Dark));
+  const int theme_index =
+      theme_combo_->findData(static_cast<int>(AppSettings::instance().ui_color_scheme()));
+  theme_combo_->setCurrentIndex(theme_index >= 0 ? theme_index : 0);
+  form->addRow(tr("Appearance:"), theme_combo_);
 
   backend_combo_ = new QComboBox(this);
   backend_combo_->addItem(tr("Vulkan"), static_cast<int>(GraphicsBackend::Vulkan));
@@ -79,12 +88,19 @@ void SettingsDialog::accept() {
   const auto backend =
       static_cast<GraphicsBackend>(backend_combo_->currentData().toInt());
   const QString language = language_combo_->currentData().toString();
+  const auto theme =
+      static_cast<UiColorScheme>(theme_combo_->currentData().toInt());
   auto& settings = AppSettings::instance();
   language_changed_ = language != settings.ui_language();
   backend_changed_ = backend != settings.graphics_backend();
+  theme_changed_ = theme != settings.ui_color_scheme();
   settings.set_graphics_backend(backend);
   settings.set_ui_language(language);
+  settings.set_ui_color_scheme(theme);
   settings.save();
+  if (theme_changed_) {
+    apply_ui_color_scheme(theme);
+  }
   QDialog::accept();
 }
 

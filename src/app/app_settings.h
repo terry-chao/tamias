@@ -7,6 +7,8 @@
 
 namespace tamias {
 
+enum class UiColorScheme { System, Light, Dark };
+
 class AppSettings {
  public:
   static AppSettings& instance();
@@ -20,6 +22,9 @@ class AppSettings {
   [[nodiscard]] QString ui_language() const { return ui_language_; }
   void set_ui_language(const QString& language);
 
+  [[nodiscard]] UiColorScheme ui_color_scheme() const { return ui_color_scheme_; }
+  void set_ui_color_scheme(UiColorScheme scheme);
+
   [[nodiscard]] RenderDeviceConfig render_device_config() const;
 
  private:
@@ -27,6 +32,9 @@ class AppSettings {
 
   GraphicsBackend graphics_backend_ = GraphicsBackend::Vulkan;
   QString ui_language_ = QStringLiteral("system");
+  UiColorScheme ui_color_scheme_ = UiColorScheme::System;
 };
+
+void apply_ui_color_scheme(UiColorScheme scheme);
 
 }  // namespace tamias
