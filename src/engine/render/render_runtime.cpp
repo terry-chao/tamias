@@ -39,6 +39,29 @@ std::filesystem::path resolve_shader_path(const std::filesystem::path& name) {
   return std::filesystem::path(TAMIAS_SHADER_SOURCE_DIR) / name;
 }
 
+// 世界坐标轴线段（X 红 / Y 绿 / Z 蓝，LineList 拓扑）。
+MeshCpu make_axes_mesh(float length = 1.0f) {
+  MeshCpu mesh;
+  const auto add_line = [&](Vec3 a, Vec3 b, Vec3 color) {
+    const auto base = static_cast<std::uint32_t>(mesh.vertices.size());
+    Vertex va{};
+    va.position = a;
+    va.normal = {0.f, 0.f, 1.f};
+    va.color = color;
+    Vertex vb = va;
+    vb.position = b;
+    mesh.vertices.push_back(va);
+    mesh.vertices.push_back(vb);
+    mesh.indices.push_back(base);
+    mesh.indices.push_back(base + 1);
+  };
+  add_line({0, 0, 0}, {length, 0, 0}, {1, 0, 0});  // X 红
+  add_line({0, 0, 0}, {0, length, 0}, {0, 1, 0});  // Y 绿
+  add_line({0, 0, 0}, {0, 0, length}, {0, 0, 1});  // Z 蓝
+  recompute_bounds(mesh);
+  return mesh;
+}
+
 }  // namespace
 
 RenderThread::RenderThread(RenderDeviceConfig config) : config_(config) {}
@@ -77,6 +100,8 @@ void RenderThread::stop() {
   meshes_.clear();
   shaded_pipeline_.reset();
   wire_pipeline_.reset();
+  line_pipeline_.reset();
+  axes_mesh_ = GpuMesh{};
   vs_.reset();
   fs_.reset();
   if (device_) {
@@ -202,7 +227,7 @@ void RenderThread::resize_surface(std::uint64_t channel_id, NativeWindowHandle w
 }
 
 Result<void> RenderThread::ensure_pipelines() {
-  if (shaded_pipeline_ && wire_pipeline_) {
+  if (shaded_pipeline_ && wire_pipeline_ && line_pipeline_ && axes_mesh_.index_buffer) {
     return {};
   }
 
@@ -264,6 +289,48 @@ Result<void> RenderThread::ensure_pipelines() {
   }
   shaded_pipeline_ = std::move(*p0);
   wire_pipeline_ = std::move(*p1);
+
+  // 坐标轴线管线：LineList + 关深度测试，让轴始终可见。
+  PipelineDesc line = shaded;
+  line.topology = PrimitiveTopology::LineList;
+  line.depth_test = false;
+  auto pl = device_->create_pipeline(line);
+  if (!pl) {
+    return Err(pl.error());
+  }
+  line_pipeline_ = std::move(*pl);
+
+  // 上传坐标轴网格（X 红 / Y 绿 / Z 蓝）。
+  MeshCpu axes = make_axes_mesh();
+  BufferDesc vb{};
+  vb.size = axes.vertices.size() * sizeof(Vertex);
+  vb.usage = BufferDesc::Usage::Vertex;
+  vb.host_visible = true;
+  auto vbuf = device_->create_buffer(vb);
+  if (!vbuf) {
+    return Err(vbuf.error());
+  }
+  if (auto w = (*vbuf)->write(0, std::as_bytes(std::span(axes.vertices))); !w) {
+    return Err(w.error());
+  }
+  BufferDesc ib{};
+  ib.size = axes.indices.size() * sizeof(std::uint32_t);
+  ib.usage = BufferDesc::Usage::Index;
+  ib.host_visible = true;
+  auto ibuf = device_->create_buffer(ib);
+  if (!ibuf) {
+    return Err(ibuf.error());
+  }
+  if (auto w = (*ibuf)->write(0, std::as_bytes(std::span(axes.indices))); !w) {
+    return Err(w.error());
+  }
+  GpuMesh gpu;
+  gpu.vertex_buffer = std::move(*vbuf);
+  gpu.index_buffer = std::move(*ibuf);
+  gpu.index_count = static_cast<std::uint32_t>(axes.indices.size());
+  gpu.bounds = axes.bounds;
+  axes_mesh_ = std::move(gpu);
+
   return {};
 }
 
@@ -358,6 +425,24 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
     DrawIndexedDesc draw{};
     draw.index_count = mesh.index_count;
     channel.command_list->draw_indexed(draw);
+  }
+
+  if (frame.show_axes && line_pipeline_ && axes_mesh_.index_buffer) {
+    PushConstants pc{};
+    pc.mvp = view_proj;  // 世界坐标系：model = 单位阵
+    pc.model = Mat4::identity();
+    pc.color[0] = pc.color[1] = pc.color[2] = pc.color[3] = 1.f;
+    pc.light_dir_selected[0] = pc.light_dir_selected[1] = pc.light_dir_selected[2] = 0.f;
+    pc.light_dir_selected[3] = 0.f;
+    pc.eye_pos_mode[0] = pc.eye_pos_mode[1] = pc.eye_pos_mode[2] = 0.f;
+    pc.eye_pos_mode[3] = 3.f;  // mode 3 = 无光照线条
+    channel.command_list->set_pipeline(*line_pipeline_);
+    channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
+    channel.command_list->set_vertex_buffer(*axes_mesh_.vertex_buffer);
+    channel.command_list->set_index_buffer(*axes_mesh_.index_buffer);
+    DrawIndexedDesc axes_draw{};
+    axes_draw.index_count = axes_mesh_.index_count;
+    channel.command_list->draw_indexed(axes_draw);
   }
 
   channel.command_list->end_render_pass();

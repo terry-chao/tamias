@@ -44,6 +44,7 @@ struct FrameSubmission {
   Vec3 eye_position{};
   RenderMode mode = RenderMode::Shaded;
   std::vector<SceneDrawItem> items;
+  bool show_axes = true;  // 世界坐标轴（X红/Y绿/Z蓝）
   float clear_color[4] = {0.12f, 0.13f, 0.15f, 1.f};
 };
 
@@ -110,6 +111,8 @@ class RenderThread {
   std::unique_ptr<ShaderModule> fs_;
   std::unique_ptr<PipelineState> shaded_pipeline_;
   std::unique_ptr<PipelineState> wire_pipeline_;
+  std::unique_ptr<PipelineState> line_pipeline_;
+  GpuMesh axes_mesh_;
   std::unordered_map<std::uint64_t, GpuMesh> meshes_;
   std::unordered_map<std::uint64_t, std::uint64_t> asset_to_gpu_;  // asset id -> gpu mesh id
   std::unordered_map<std::uint64_t, ChannelState> channels_;

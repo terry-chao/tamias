@@ -89,6 +89,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   // File is a navigation control to the welcome page — no dropdown actions.
   menuBar()->addAction(tr("&File"), this, &MainWindow::show_home);
 
+  auto* new_action = new QAction(style()->standardIcon(QStyle::SP_FileIcon), tr("New"), this);
+  new_action->setShortcut(QKeySequence::New);
+  new_action->setToolTip(tr("New document with a cube"));
+  connect(new_action, &QAction::triggered, this, &MainWindow::new_document);
+  addAction(new_action);
+
   auto* open_action = new QAction(style()->standardIcon(QStyle::SP_DialogOpenButton),
                                   tr("Open File"), this);
   open_action->setShortcut(QKeySequence::Open);
@@ -185,6 +191,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   toolbar->setObjectName(QStringLiteral("mainToolbar"));
   toolbar->setMovable(false);
   toolbar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+  toolbar->addAction(new_action);
   toolbar->addAction(open_action);
   toolbar->addAction(save_action);
   toolbar->addAction(save_as_action);
@@ -364,6 +371,21 @@ void MainWindow::new_parametric_demo() {
     vp->set_parametric_model(std::move(model), asset_id);
   }
 #endif
+}
+
+void MainWindow::new_document() {
+  auto document = std::make_shared<Document>("Untitled");
+  MeshAsset asset{};
+  asset.name = "cube";
+  asset.cpu = make_demo_cube();
+  auto& stored = document->add_mesh(std::move(asset));
+  SceneNode node{};
+  node.name = "cube";
+  node.mesh_asset_id = stored.id;
+  document->scene().add_node(std::move(node));
+  document->recompute_scene();
+  document->mark_dirty();
+  add_document_tab(document);
 }
 
 bool MainWindow::open_path(const QString& path) {

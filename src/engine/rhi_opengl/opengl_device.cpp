@@ -58,8 +58,8 @@ class OpenGLShaderModule final : public ShaderModule {
 
 class OpenGLPipeline final : public PipelineState {
  public:
-  OpenGLPipeline(GLuint program, bool wireframe, bool depth_test)
-      : program_(program), wireframe_(wireframe), depth_test_(depth_test) {}
+  OpenGLPipeline(GLuint program, bool wireframe, bool depth_test, PrimitiveTopology topology)
+      : program_(program), wireframe_(wireframe), depth_test_(depth_test), topology_(topology) {}
   ~OpenGLPipeline() override {
     if (program_) {
       gl::DeleteProgram(program_);
@@ -68,11 +68,13 @@ class OpenGLPipeline final : public PipelineState {
   [[nodiscard]] GLuint program() const { return program_; }
   [[nodiscard]] bool wireframe() const { return wireframe_; }
   [[nodiscard]] bool depth_test() const { return depth_test_; }
+  [[nodiscard]] PrimitiveTopology topology() const { return topology_; }
 
  private:
   GLuint program_ = 0;
   bool wireframe_ = false;
   bool depth_test_ = true;
+  PrimitiveTopology topology_ = PrimitiveTopology::TriangleList;
 };
 
 class OpenGLFence final : public Fence {
@@ -676,7 +678,8 @@ Result<std::unique_ptr<PipelineState>> OpenGLDevice::create_pipeline(const Pipel
     return Err(std::string("program link failed: ") + log.c_str());
   }
   release_current();
-  return std::make_unique<OpenGLPipeline>(program, desc.wireframe, desc.depth_test);
+  return std::make_unique<OpenGLPipeline>(program, desc.wireframe, desc.depth_test,
+                                          desc.topology);
 }
 
 OpenGLSwapChain::OpenGLSwapChain(OpenGLDevice* device, SwapChainDesc desc)
@@ -827,8 +830,9 @@ void OpenGLCommandList::draw_indexed(const DrawIndexedDesc& desc) {
   const auto index_ptr =
       reinterpret_cast<const void*>(static_cast<std::uintptr_t>(
           index_offset_ + desc.first_index * sizeof(std::uint32_t)));
-  gl::DrawElements(GL_TRIANGLES, static_cast<GLsizei>(desc.index_count), GL_UNSIGNED_INT,
-                   index_ptr);
+  const GLenum mode =
+      pipeline_->topology() == PrimitiveTopology::LineList ? GL_LINES : GL_TRIANGLES;
+  gl::DrawElements(mode, static_cast<GLsizei>(desc.index_count), GL_UNSIGNED_INT, index_ptr);
 }
 
 Result<std::unique_ptr<RHIDevice>> create_opengl_device(const DeviceCreateInfo& info) {

@@ -27,6 +27,11 @@ float3 shaded_realistic(float3 n, float3 l, float3 v, float3 base) {
 }
 
 float4 main(VsOutput input) : SV_Target0 {
+  // 无光照彩色线条（坐标轴/overlay），mode == 3。
+  if (input.mode > 2.5) {
+    return float4(input.color, 1.0);
+  }
+
   // Wireframe: flat bright edges, no lighting (mode == 0).
   if (input.mode < 0.5) {
     float3 wire = float3(0.92, 0.94, 0.97);
