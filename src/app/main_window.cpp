@@ -254,20 +254,13 @@ int MainWindow::find_open_document(const QString& path) const {
 }
 
 Result<void> MainWindow::populate_document_meshes(Document& document, RenderThread& thread) {
-  for (auto& [id, asset] : document.meshes()) {
-    (void)id;
-    auto gpu_id = thread.upload_mesh(asset.cpu);
+  for (auto& [asset_id, asset] : document.meshes()) {
+    auto gpu_id = thread.upload_mesh(asset_id, asset.cpu);
     if (!gpu_id) {
       return Err(gpu_id.error());
     }
-    asset.gpu_mesh_id = *gpu_id;
   }
-  for (auto& node : document.scene().nodes()) {
-    if (auto* asset = document.mesh(node.mesh_asset_id)) {
-      node.gpu_mesh_id = asset->gpu_mesh_id;
-      node.world_bounds = asset->cpu.bounds;
-    }
-  }
+  document.recompute_scene();
   return {};
 }
 
@@ -415,7 +408,6 @@ bool MainWindow::open_path(const QString& path) {
   SceneNode node{};
   node.name = stored.name;
   node.mesh_asset_id = stored.id;
-  node.world_bounds = stored.cpu.bounds;
   if (mesh_has_vertex_colors(stored.cpu)) {
     node.color = {1.f, 1.f, 1.f};
   }

@@ -58,7 +58,7 @@ void Bvh::build(const Document& doc) {
   root_ = -1;
   std::vector<std::uint64_t> ids;
   for (const auto& n : doc.scene().nodes()) {
-    if (n.world_bounds.valid()) {
+    if (n.mesh_asset_id != 0 && n.world_bounds.valid()) {
       ids.push_back(n.id);
     }
   }

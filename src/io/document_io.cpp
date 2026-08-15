@@ -13,7 +13,7 @@ namespace tamias {
 namespace {
 
 constexpr char kMagic[4] = {'T', 'M', 'A', 'S'};
-constexpr std::uint32_t kFormatVersion = 1;
+constexpr std::uint32_t kFormatVersion = 2;
 
 constexpr std::uint32_t fourcc(char a, char b, char c, char d) {
   return static_cast<std::uint32_t>(static_cast<std::uint8_t>(a)) |
@@ -213,7 +213,6 @@ Result<void> read_mesh_asset(BinaryReader& r, MeshAsset& asset) {
     return Err(name.error());
   }
   asset.name = std::move(*name);
-  asset.gpu_mesh_id = 0;
   return read_mesh_cpu(r, asset.cpu);
 }
 
@@ -224,16 +223,16 @@ Result<void> write_scene_node(BinaryWriter& w, const SceneNode& node) {
   if (auto r = w.write_string(node.name); !r) {
     return r;
   }
+  if (auto r = w.write_u64(node.parent); !r) {
+    return r;
+  }
   if (auto r = w.write_u64(node.mesh_asset_id); !r) {
     return r;
   }
-  if (auto r = write_mat4(w, node.transform); !r) {
+  if (auto r = write_mat4(w, node.local_transform); !r) {
     return r;
   }
-  if (auto r = write_vec3(w, node.color); !r) {
-    return r;
-  }
-  return write_aabb(w, node.world_bounds);
+  return write_vec3(w, node.color);
 }
 
 Result<void> read_scene_node(BinaryReader& r, SceneNode& node) {
@@ -247,20 +246,21 @@ Result<void> read_scene_node(BinaryReader& r, SceneNode& node) {
     return Err(name.error());
   }
   node.name = std::move(*name);
+  auto parent = r.read_u64();
+  if (!parent) {
+    return Err(parent.error());
+  }
+  node.parent = *parent;
   auto mesh_id = r.read_u64();
   if (!mesh_id) {
     return Err(mesh_id.error());
   }
   node.mesh_asset_id = *mesh_id;
-  node.gpu_mesh_id = 0;
   node.selected = false;
-  if (auto res = read_mat4(r, node.transform); !res) {
+  if (auto res = read_mat4(r, node.local_transform); !res) {
     return res;
   }
-  if (auto res = read_vec3(r, node.color); !res) {
-    return res;
-  }
-  return read_aabb(r, node.world_bounds);
+  return read_vec3(r, node.color);
 }
 
 Result<void> write_viewport(BinaryWriter& w, const ViewportState& vp) {
@@ -410,6 +410,7 @@ Result<Document> read_document_body(BinaryReader& r) {
 
   document.set_next_mesh_id(*next_mesh);
   document.scene().set_next_id(*next_node);
+  document.recompute_scene();
   document.clear_dirty();
   return document;
 }
@@ -669,6 +670,7 @@ Result<LoadedDocument> load_document(const std::filesystem::path& path) {
   }
   loaded.document.set_next_mesh_id(next_mesh_id);
   loaded.document.scene().set_next_id(next_node_id);
+  loaded.document.recompute_scene();
   loaded.document.clear_dirty();
   loaded.viewport = viewport;
   loaded.has_viewport = has_view;

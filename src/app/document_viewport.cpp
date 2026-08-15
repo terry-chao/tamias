@@ -479,10 +479,13 @@ void DocumentViewport::submit_current_frame() {
   frame.eye_position = camera_.eye_position();
   frame.mode = mode_;
   for (const auto& node : document_->scene().nodes()) {
+    if (node.mesh_asset_id == 0) {
+      continue;  // grouping / empty nodes carry no geometry
+    }
     SceneDrawItem item{};
     item.node_id = node.id;
-    item.mesh_id = node.gpu_mesh_id;
-    item.transform = node.transform;
+    item.mesh_asset_id = node.mesh_asset_id;
+    item.transform = node.world_transform;
     item.color = node.color;
     item.selected = node.selected;
     frame.items.push_back(item);

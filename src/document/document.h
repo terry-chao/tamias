@@ -69,6 +69,19 @@ class Document {
     next_mesh_id_ = 1;
   }
 
+  // Sync each node's local bounds from its mesh, then recompute the whole scene's
+  // world transforms + world bounds. Call after load or any transform/parent edit.
+  void recompute_scene() {
+    for (auto& node : scene_.nodes()) {
+      if (node.mesh_asset_id != 0) {
+        if (const MeshAsset* m = mesh(node.mesh_asset_id)) {
+          node.local_bounds = m->cpu.bounds;
+        }
+      }
+    }
+    scene_.recompute_world();
+  }
+
   [[nodiscard]] Aabb bounds() const {
     Aabb box{};
     bool any = false;

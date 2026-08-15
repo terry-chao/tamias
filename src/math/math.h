@@ -61,6 +61,13 @@ inline Mat4 operator*(const Mat4& a, const Mat4& b) {
   return r;
 }
 
+// Affine transform of a point (column-major M; implicit w=1).
+inline Vec3 operator*(const Mat4& m, Vec3 v) {
+  return {m(0, 0) * v.x + m(0, 1) * v.y + m(0, 2) * v.z + m(0, 3),
+          m(1, 0) * v.x + m(1, 1) * v.y + m(1, 2) * v.z + m(1, 3),
+          m(2, 0) * v.x + m(2, 1) * v.y + m(2, 2) * v.z + m(2, 3)};
+}
+
 inline Mat4 translate(Vec3 t) {
   Mat4 r = Mat4::identity();
   r(0, 3) = t.x;
@@ -128,6 +135,22 @@ struct Aabb {
   [[nodiscard]] Vec3 extent() const { return max - min; }
   [[nodiscard]] bool valid() const { return min.x <= max.x; }
 };
+
+// World-space AABB of `box` under `m` (transforms all 8 corners, so it is exact
+// under rotation/scale, not just translation).
+inline Aabb transform_aabb(const Aabb& box, const Mat4& m) {
+  const Vec3 corners[8] = {
+      {box.min.x, box.min.y, box.min.z}, {box.max.x, box.min.y, box.min.z},
+      {box.min.x, box.max.y, box.min.z}, {box.max.x, box.max.y, box.min.z},
+      {box.min.x, box.min.y, box.max.z}, {box.max.x, box.min.y, box.max.z},
+      {box.min.x, box.max.y, box.max.z}, {box.max.x, box.max.y, box.max.z},
+  };
+  Aabb out{};
+  for (const auto& c : corners) {
+    out.expand(m * c);
+  }
+  return out;
+}
 
 struct Ray {
   Vec3 origin;

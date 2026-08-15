@@ -82,10 +82,10 @@ TEST(DocumentIo, FileRoundTrip) {
   SceneNode node{};
   node.name = "cube-node";
   node.mesh_asset_id = stored.id;
-  node.transform = translate({1.f, 2.f, 3.f});
+  node.local_transform = translate({1.f, 2.f, 3.f});
   node.color = {0.2f, 0.4f, 0.6f};
-  node.world_bounds = stored.cpu.bounds;
   doc.scene().add_node(std::move(node));
+  doc.recompute_scene();
   doc.mark_dirty();
 
   ViewportState viewport{};
@@ -111,10 +111,9 @@ TEST(DocumentIo, FileRoundTrip) {
   const auto& loaded_node = loaded->document.scene().nodes().front();
   EXPECT_EQ(loaded_node.name, "cube-node");
   EXPECT_EQ(loaded_node.mesh_asset_id, stored.id);
-  EXPECT_EQ(loaded_node.gpu_mesh_id, 0u);
   EXPECT_FALSE(loaded_node.selected);
   EXPECT_FLOAT_EQ(loaded_node.color.x, 0.2f);
-  EXPECT_FLOAT_EQ(loaded_node.transform(0, 3), 1.f);
+  EXPECT_FLOAT_EQ(loaded_node.local_transform(0, 3), 1.f);
 
   const auto* loaded_mesh = loaded->document.mesh(stored.id);
   ASSERT_NE(loaded_mesh, nullptr);
@@ -178,8 +177,8 @@ TEST(Picking, RayHitsCube) {
   auto& stored = doc.add_mesh(std::move(asset));
   SceneNode node{};
   node.mesh_asset_id = stored.id;
-  node.world_bounds = stored.cpu.bounds;
   doc.scene().add_node(std::move(node));
+  doc.recompute_scene();
 
   Bvh bvh;
   bvh.build(doc);

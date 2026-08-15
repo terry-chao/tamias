@@ -29,8 +29,8 @@ struct GpuMesh {
 
 struct SceneDrawItem {
   std::uint64_t node_id = 0;
-  std::uint64_t mesh_id = 0;
-  Mat4 transform = Mat4::identity();
+  std::uint64_t mesh_asset_id = 0;  // semantic geometry reference (render side maps to GPU)
+  Mat4 transform = Mat4::identity();  // world transform (accumulated on semantic side)
   Vec3 color{0.75f, 0.78f, 0.82f};
   bool selected = false;
 };
@@ -72,8 +72,9 @@ class RenderThread {
   Result<void> start();
   void stop();
 
-  // Upload mesh on the render thread; returns assigned mesh id.
-  Result<std::uint64_t> upload_mesh(MeshCpu mesh);
+  // Upload mesh on the render thread and map it from a semantic asset id; returns
+  // the assigned GPU mesh id. The semantic side refers to geometry by asset id.
+  Result<std::uint64_t> upload_mesh(std::uint64_t asset_id, MeshCpu mesh);
   void submit_frame(std::uint64_t channel_id, FrameSubmission frame);
   void resize_surface(std::uint64_t channel_id, NativeWindowHandle window, std::uint32_t w,
                       std::uint32_t h);
@@ -110,6 +111,7 @@ class RenderThread {
   std::unique_ptr<PipelineState> shaded_pipeline_;
   std::unique_ptr<PipelineState> wire_pipeline_;
   std::unordered_map<std::uint64_t, GpuMesh> meshes_;
+  std::unordered_map<std::uint64_t, std::uint64_t> asset_to_gpu_;  // asset id -> gpu mesh id
   std::unordered_map<std::uint64_t, ChannelState> channels_;
   std::uint64_t next_mesh_id_ = 1;
   std::uint64_t next_channel_id_ = 1;

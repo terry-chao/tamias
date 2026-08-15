@@ -117,12 +117,12 @@ void RenderThread::destroy_channel(std::uint64_t channel_id) {
   future.get();
 }
 
-Result<std::uint64_t> RenderThread::upload_mesh(MeshCpu mesh) {
+Result<std::uint64_t> RenderThread::upload_mesh(std::uint64_t asset_id, MeshCpu mesh) {
   auto promise = std::make_shared<std::promise<Result<std::uint64_t>>>();
   auto future = promise->get_future();
   {
     std::scoped_lock lock(mutex_);
-    tasks_.push([this, mesh = std::move(mesh), promise]() mutable {
+    tasks_.push([this, mesh = std::move(mesh), promise, asset_id]() mutable {
       BufferDesc vb{};
       vb.size = mesh.vertices.size() * sizeof(Vertex);
       vb.usage = BufferDesc::Usage::Vertex;
@@ -160,6 +160,7 @@ Result<std::uint64_t> RenderThread::upload_mesh(MeshCpu mesh) {
       gpu.bounds = mesh.bounds;
       const auto id = next_mesh_id_++;
       meshes_.emplace(id, std::move(gpu));
+      asset_to_gpu_[asset_id] = id;
       promise->set_value(id);
     });
   }
@@ -327,7 +328,11 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
                                                                  : 1.f;
 
   for (const auto& item : frame.items) {
-    auto mesh_it = meshes_.find(item.mesh_id);
+    auto gpu_it = asset_to_gpu_.find(item.mesh_asset_id);
+    if (gpu_it == asset_to_gpu_.end()) {
+      continue;
+    }
+    auto mesh_it = meshes_.find(gpu_it->second);
     if (mesh_it == meshes_.end()) {
       continue;
     }
