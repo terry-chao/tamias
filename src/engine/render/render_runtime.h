@@ -113,6 +113,14 @@ class RenderThread {
   std::unique_ptr<PipelineState> wire_pipeline_;
   std::unique_ptr<PipelineState> line_pipeline_;
   GpuMesh axes_mesh_;
+  std::unique_ptr<ShaderModule> sky_vs_;
+  std::unique_ptr<ShaderModule> sky_fs_;
+  std::unique_ptr<PipelineState> sky_pipeline_;
+  std::unique_ptr<ShaderModule> grid_vs_;
+  std::unique_ptr<ShaderModule> grid_fs_;
+  std::unique_ptr<PipelineState> grid_pipeline_;
+  GpuMesh sky_mesh_;
+  GpuMesh grid_mesh_;
   std::unordered_map<std::uint64_t, GpuMesh> meshes_;
   std::unordered_map<std::uint64_t, std::uint64_t> asset_to_gpu_;  // asset id -> gpu mesh id
   std::unordered_map<std::uint64_t, ChannelState> channels_;

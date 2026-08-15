@@ -62,6 +62,73 @@ MeshCpu make_axes_mesh(float length = 1.0f) {
   return mesh;
 }
 
+// 全屏三角形（顶点已是 NDC 坐标，覆盖整个屏幕）。
+MeshCpu make_fullscreen_triangle() {
+  MeshCpu mesh;
+  const Vec3 verts[3] = {{-1.f, -1.f, 0.f}, {3.f, -1.f, 0.f}, {-1.f, 3.f, 0.f}};
+  for (const auto& p : verts) {
+    Vertex v{};
+    v.position = p;
+    v.normal = {0.f, 0.f, 1.f};
+    mesh.vertices.push_back(v);
+  }
+  mesh.indices = {0, 1, 2};
+  recompute_bounds(mesh);
+  return mesh;
+}
+
+// 地面网格四边形（XZ 平面 y=0 的大四边形，相机锚定；网格线由 shader 程序化生成）。
+MeshCpu make_grid_quad(float extent = 500.f) {
+  MeshCpu mesh;
+  const Vec3 verts[4] = {
+      {-extent, 0.f, -extent},
+      {extent, 0.f, -extent},
+      {extent, 0.f, extent},
+      {-extent, 0.f, extent},
+  };
+  for (const auto& p : verts) {
+    Vertex v{};
+    v.position = p;
+    v.normal = {0.f, 1.f, 0.f};
+    mesh.vertices.push_back(v);
+  }
+  mesh.indices = {0, 1, 2, 0, 2, 3};
+  recompute_bounds(mesh);
+  return mesh;
+}
+
+// 把 CPU 网格上传成 GPU 网格（顶点 + 索引 buffer）。
+Result<GpuMesh> create_gpu_mesh(RHIDevice& device, MeshCpu mesh) {
+  BufferDesc vb{};
+  vb.size = mesh.vertices.size() * sizeof(Vertex);
+  vb.usage = BufferDesc::Usage::Vertex;
+  vb.host_visible = true;
+  auto vbuf = device.create_buffer(vb);
+  if (!vbuf) {
+    return Err(vbuf.error());
+  }
+  if (auto w = (*vbuf)->write(0, std::as_bytes(std::span(mesh.vertices))); !w) {
+    return Err(w.error());
+  }
+  BufferDesc ib{};
+  ib.size = mesh.indices.size() * sizeof(std::uint32_t);
+  ib.usage = BufferDesc::Usage::Index;
+  ib.host_visible = true;
+  auto ibuf = device.create_buffer(ib);
+  if (!ibuf) {
+    return Err(ibuf.error());
+  }
+  if (auto w = (*ibuf)->write(0, std::as_bytes(std::span(mesh.indices))); !w) {
+    return Err(w.error());
+  }
+  GpuMesh gpu;
+  gpu.vertex_buffer = std::move(*vbuf);
+  gpu.index_buffer = std::move(*ibuf);
+  gpu.index_count = static_cast<std::uint32_t>(mesh.indices.size());
+  gpu.bounds = mesh.bounds;
+  return gpu;
+}
+
 }  // namespace
 
 RenderThread::RenderThread(RenderDeviceConfig config) : config_(config) {}
@@ -101,9 +168,17 @@ void RenderThread::stop() {
   shaded_pipeline_.reset();
   wire_pipeline_.reset();
   line_pipeline_.reset();
+  sky_pipeline_.reset();
+  grid_pipeline_.reset();
   axes_mesh_ = GpuMesh{};
+  sky_mesh_ = GpuMesh{};
+  grid_mesh_ = GpuMesh{};
   vs_.reset();
   fs_.reset();
+  sky_vs_.reset();
+  sky_fs_.reset();
+  grid_vs_.reset();
+  grid_fs_.reset();
   if (device_) {
     device_->wait_idle();
     device_.reset();
@@ -227,7 +302,8 @@ void RenderThread::resize_surface(std::uint64_t channel_id, NativeWindowHandle w
 }
 
 Result<void> RenderThread::ensure_pipelines() {
-  if (shaded_pipeline_ && wire_pipeline_ && line_pipeline_ && axes_mesh_.index_buffer) {
+  if (shaded_pipeline_ && wire_pipeline_ && line_pipeline_ && sky_pipeline_ && grid_pipeline_ &&
+      axes_mesh_.index_buffer && sky_mesh_.index_buffer && grid_mesh_.index_buffer) {
     return {};
   }
 
@@ -290,6 +366,103 @@ Result<void> RenderThread::ensure_pipelines() {
   shaded_pipeline_ = std::move(*p0);
   wire_pipeline_ = std::move(*p1);
 
+  // 天空管线（全屏三角形，深度测试关、不写深度）。
+  const char* sky_vs_name = opengl ? "sky.vert.gl.spv" : "sky.vert.spv";
+  const char* sky_fs_name = opengl ? "sky.frag.gl.spv" : "sky.frag.spv";
+  std::vector<std::uint32_t> sky_vs_spirv;
+  std::vector<std::uint32_t> sky_fs_spirv;
+  auto sky_vs_words = load_spirv_file(resolve_shader_path(sky_vs_name).string());
+  if (!sky_vs_words) {
+    return Err(sky_vs_words.error());
+  }
+  auto sky_fs_words = load_spirv_file(resolve_shader_path(sky_fs_name).string());
+  if (!sky_fs_words) {
+    return Err(sky_fs_words.error());
+  }
+  sky_vs_spirv = std::move(*sky_vs_words);
+  sky_fs_spirv = std::move(*sky_fs_words);
+
+  ShaderModuleDesc sky_vs_desc{};
+  sky_vs_desc.language = ShaderLanguage::Spirv;
+  sky_vs_desc.stage = ShaderStage::Vertex;
+  sky_vs_desc.spirv = sky_vs_spirv;
+  sky_vs_desc.entry = "main";
+  ShaderModuleDesc sky_fs_desc{};
+  sky_fs_desc.language = ShaderLanguage::Spirv;
+  sky_fs_desc.stage = ShaderStage::Fragment;
+  sky_fs_desc.spirv = sky_fs_spirv;
+  sky_fs_desc.entry = "main";
+
+  auto sky_vs = device_->create_shader_module(sky_vs_desc);
+  if (!sky_vs) {
+    return Err(sky_vs.error());
+  }
+  auto sky_fs = device_->create_shader_module(sky_fs_desc);
+  if (!sky_fs) {
+    return Err(sky_fs.error());
+  }
+  sky_vs_ = std::move(*sky_vs);
+  sky_fs_ = std::move(*sky_fs);
+
+  PipelineDesc sky{};
+  sky.vertex_shader = sky_vs_.get();
+  sky.fragment_shader = sky_fs_.get();
+  sky.depth_test = false;
+  auto psky = device_->create_pipeline(sky);
+  if (!psky) {
+    return Err(psky.error());
+  }
+  sky_pipeline_ = std::move(*psky);
+
+  // 地面网格管线（网格 shader；测深度但不写深度，不遮挡地下的模型）。
+  const char* grid_vs_name = opengl ? "grid.vert.gl.spv" : "grid.vert.spv";
+  const char* grid_fs_name = opengl ? "grid.frag.gl.spv" : "grid.frag.spv";
+  std::vector<std::uint32_t> grid_vs_spirv;
+  std::vector<std::uint32_t> grid_fs_spirv;
+  auto grid_vs_words = load_spirv_file(resolve_shader_path(grid_vs_name).string());
+  if (!grid_vs_words) {
+    return Err(grid_vs_words.error());
+  }
+  auto grid_fs_words = load_spirv_file(resolve_shader_path(grid_fs_name).string());
+  if (!grid_fs_words) {
+    return Err(grid_fs_words.error());
+  }
+  grid_vs_spirv = std::move(*grid_vs_words);
+  grid_fs_spirv = std::move(*grid_fs_words);
+
+  ShaderModuleDesc grid_vs_desc{};
+  grid_vs_desc.language = ShaderLanguage::Spirv;
+  grid_vs_desc.stage = ShaderStage::Vertex;
+  grid_vs_desc.spirv = grid_vs_spirv;
+  grid_vs_desc.entry = "main";
+  ShaderModuleDesc grid_fs_desc{};
+  grid_fs_desc.language = ShaderLanguage::Spirv;
+  grid_fs_desc.stage = ShaderStage::Fragment;
+  grid_fs_desc.spirv = grid_fs_spirv;
+  grid_fs_desc.entry = "main";
+
+  auto grid_vs = device_->create_shader_module(grid_vs_desc);
+  if (!grid_vs) {
+    return Err(grid_vs.error());
+  }
+  auto grid_fs = device_->create_shader_module(grid_fs_desc);
+  if (!grid_fs) {
+    return Err(grid_fs.error());
+  }
+  grid_vs_ = std::move(*grid_vs);
+  grid_fs_ = std::move(*grid_fs);
+
+  PipelineDesc grid{};
+  grid.vertex_shader = grid_vs_.get();
+  grid.fragment_shader = grid_fs_.get();
+  grid.depth_test = true;
+  grid.depth_write = false;
+  auto pgrid = device_->create_pipeline(grid);
+  if (!pgrid) {
+    return Err(pgrid.error());
+  }
+  grid_pipeline_ = std::move(*pgrid);
+
   // 坐标轴线管线：LineList + 关深度测试，让轴始终可见。
   PipelineDesc line = shaded;
   line.topology = PrimitiveTopology::LineList;
@@ -300,36 +473,24 @@ Result<void> RenderThread::ensure_pipelines() {
   }
   line_pipeline_ = std::move(*pl);
 
-  // 上传坐标轴网格（X 红 / Y 绿 / Z 蓝）。
-  MeshCpu axes = make_axes_mesh();
-  BufferDesc vb{};
-  vb.size = axes.vertices.size() * sizeof(Vertex);
-  vb.usage = BufferDesc::Usage::Vertex;
-  vb.host_visible = true;
-  auto vbuf = device_->create_buffer(vb);
-  if (!vbuf) {
-    return Err(vbuf.error());
+  // 上传环境网格（天空 / 地面网格 / 坐标轴）。
+  auto sky_mesh = create_gpu_mesh(*device_, make_fullscreen_triangle());
+  if (!sky_mesh) {
+    return Err(sky_mesh.error());
   }
-  if (auto w = (*vbuf)->write(0, std::as_bytes(std::span(axes.vertices))); !w) {
-    return Err(w.error());
+  sky_mesh_ = std::move(*sky_mesh);
+
+  auto grid_mesh = create_gpu_mesh(*device_, make_grid_quad());
+  if (!grid_mesh) {
+    return Err(grid_mesh.error());
   }
-  BufferDesc ib{};
-  ib.size = axes.indices.size() * sizeof(std::uint32_t);
-  ib.usage = BufferDesc::Usage::Index;
-  ib.host_visible = true;
-  auto ibuf = device_->create_buffer(ib);
-  if (!ibuf) {
-    return Err(ibuf.error());
+  grid_mesh_ = std::move(*grid_mesh);
+
+  auto axes_mesh = create_gpu_mesh(*device_, make_axes_mesh());
+  if (!axes_mesh) {
+    return Err(axes_mesh.error());
   }
-  if (auto w = (*ibuf)->write(0, std::as_bytes(std::span(axes.indices))); !w) {
-    return Err(w.error());
-  }
-  GpuMesh gpu;
-  gpu.vertex_buffer = std::move(*vbuf);
-  gpu.index_buffer = std::move(*ibuf);
-  gpu.index_count = static_cast<std::uint32_t>(axes.indices.size());
-  gpu.bounds = axes.bounds;
-  axes_mesh_ = std::move(gpu);
+  axes_mesh_ = std::move(*axes_mesh);
 
   return {};
 }
@@ -384,11 +545,57 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
   channel.command_list->set_viewport(0.f, 0.f, static_cast<float>(channel.swap_chain->width()),
                                      static_cast<float>(channel.swap_chain->height()));
   channel.command_list->set_scissor(0, 0, channel.swap_chain->width(), channel.swap_chain->height());
-  channel.command_list->set_pipeline(frame.mode == RenderMode::Wireframe ? *wire_pipeline_
-                                                                         : *shaded_pipeline_);
-
   const Mat4 clip = device_->clip_space_correction_matrix();
   const Mat4 view_proj = clip * frame.proj * frame.view;
+
+  // 天空：全屏渐变背景，深度测试关、不写深度。
+  if (sky_pipeline_ && sky_mesh_.index_buffer) {
+    channel.command_list->set_pipeline(*sky_pipeline_);
+    channel.command_list->set_vertex_buffer(*sky_mesh_.vertex_buffer);
+    channel.command_list->set_index_buffer(*sky_mesh_.index_buffer);
+    DrawIndexedDesc sd{};
+    sd.index_count = sky_mesh_.index_count;
+    channel.command_list->draw_indexed(sd);
+  }
+
+  // 无光照线条（mode 3）：地面网格 + 坐标轴。
+  auto draw_lines = [&](PipelineState& pipeline, const GpuMesh& mesh) {
+    PushConstants pc{};
+    pc.mvp = view_proj;
+    pc.model = Mat4::identity();
+    pc.color[0] = pc.color[1] = pc.color[2] = pc.color[3] = 1.f;
+    pc.eye_pos_mode[3] = 3.f;
+    channel.command_list->set_pipeline(pipeline);
+    channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
+    channel.command_list->set_vertex_buffer(*mesh.vertex_buffer);
+    channel.command_list->set_index_buffer(*mesh.index_buffer);
+    DrawIndexedDesc d{};
+    d.index_count = mesh.index_count;
+    channel.command_list->draw_indexed(d);
+  };
+
+  // 地面网格（相机锚定四边形 + 网格 shader；测深度不写深度）。
+  if (grid_pipeline_ && grid_mesh_.index_buffer) {
+    const Mat4 grid_model = translate({frame.eye_position.x, 0.f, frame.eye_position.z});
+    PushConstants pc{};
+    pc.mvp = view_proj * grid_model;
+    pc.model = grid_model;
+    pc.eye_pos_mode[0] = frame.eye_position.x;
+    pc.eye_pos_mode[1] = frame.eye_position.y;
+    pc.eye_pos_mode[2] = frame.eye_position.z;
+    pc.eye_pos_mode[3] = 0.f;
+    channel.command_list->set_pipeline(*grid_pipeline_);
+    channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
+    channel.command_list->set_vertex_buffer(*grid_mesh_.vertex_buffer);
+    channel.command_list->set_index_buffer(*grid_mesh_.index_buffer);
+    DrawIndexedDesc d{};
+    d.index_count = grid_mesh_.index_count;
+    channel.command_list->draw_indexed(d);
+  }
+
+  // 模型。
+  channel.command_list->set_pipeline(frame.mode == RenderMode::Wireframe ? *wire_pipeline_
+                                                                         : *shaded_pipeline_);
   // 0 = wireframe (unlit), 1 = shaded, 2 = realistic
   const float mode_value = frame.mode == RenderMode::Wireframe  ? 0.f
                            : frame.mode == RenderMode::Realistic ? 2.f
@@ -427,22 +634,9 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
     channel.command_list->draw_indexed(draw);
   }
 
+  // 坐标轴（深度测试关，始终可见）。
   if (frame.show_axes && line_pipeline_ && axes_mesh_.index_buffer) {
-    PushConstants pc{};
-    pc.mvp = view_proj;  // 世界坐标系：model = 单位阵
-    pc.model = Mat4::identity();
-    pc.color[0] = pc.color[1] = pc.color[2] = pc.color[3] = 1.f;
-    pc.light_dir_selected[0] = pc.light_dir_selected[1] = pc.light_dir_selected[2] = 0.f;
-    pc.light_dir_selected[3] = 0.f;
-    pc.eye_pos_mode[0] = pc.eye_pos_mode[1] = pc.eye_pos_mode[2] = 0.f;
-    pc.eye_pos_mode[3] = 3.f;  // mode 3 = 无光照线条
-    channel.command_list->set_pipeline(*line_pipeline_);
-    channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
-    channel.command_list->set_vertex_buffer(*axes_mesh_.vertex_buffer);
-    channel.command_list->set_index_buffer(*axes_mesh_.index_buffer);
-    DrawIndexedDesc axes_draw{};
-    axes_draw.index_count = axes_mesh_.index_count;
-    channel.command_list->draw_indexed(axes_draw);
+    draw_lines(*line_pipeline_, axes_mesh_);
   }
 
   channel.command_list->end_render_pass();

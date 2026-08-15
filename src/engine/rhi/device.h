@@ -92,6 +92,7 @@ struct PipelineDesc {
   ShaderModule* fragment_shader = nullptr;
   PrimitiveTopology topology = PrimitiveTopology::TriangleList;
   bool depth_test = true;
+  bool depth_write = true;
   bool wireframe = false;
   TextureDesc::Format color_format = TextureDesc::Format::B8G8R8A8_SRGB;
   TextureDesc::Format depth_format = TextureDesc::Format::D32_SFLOAT;

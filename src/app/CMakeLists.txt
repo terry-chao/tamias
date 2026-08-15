@@ -68,6 +68,10 @@ endif()
 
 tamias_compile_hlsl(tamias mesh.vert.hlsl vs_6_0 mesh.vert)
 tamias_compile_hlsl(tamias mesh.frag.hlsl ps_6_0 mesh.frag)
+tamias_compile_hlsl(tamias sky.vert.hlsl vs_6_0 sky.vert)
+tamias_compile_hlsl(tamias sky.frag.hlsl ps_6_0 sky.frag)
+tamias_compile_hlsl(tamias grid.vert.hlsl vs_6_0 grid.vert)
+tamias_compile_hlsl(tamias grid.frag.hlsl ps_6_0 grid.frag)
 
 add_custom_command(TARGET tamias POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E rm -rf $<TARGET_FILE_DIR:tamias>/shaders

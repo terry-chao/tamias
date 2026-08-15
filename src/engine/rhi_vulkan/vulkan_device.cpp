@@ -994,7 +994,7 @@ Result<std::unique_ptr<PipelineState>> VulkanDevice::create_pipeline(const Pipel
   VkPipelineDepthStencilStateCreateInfo ds{
       VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
   ds.depthTestEnable = desc.depth_test ? VK_TRUE : VK_FALSE;
-  ds.depthWriteEnable = desc.depth_test ? VK_TRUE : VK_FALSE;
+  ds.depthWriteEnable = desc.depth_write ? VK_TRUE : VK_FALSE;
   ds.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
   ds.depthBoundsTestEnable = VK_FALSE;
   ds.stencilTestEnable = VK_FALSE;

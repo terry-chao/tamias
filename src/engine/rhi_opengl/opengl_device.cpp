@@ -58,8 +58,13 @@ class OpenGLShaderModule final : public ShaderModule {
 
 class OpenGLPipeline final : public PipelineState {
  public:
-  OpenGLPipeline(GLuint program, bool wireframe, bool depth_test, PrimitiveTopology topology)
-      : program_(program), wireframe_(wireframe), depth_test_(depth_test), topology_(topology) {}
+  OpenGLPipeline(GLuint program, bool wireframe, bool depth_test, bool depth_write,
+                 PrimitiveTopology topology)
+      : program_(program),
+        wireframe_(wireframe),
+        depth_test_(depth_test),
+        depth_write_(depth_write),
+        topology_(topology) {}
   ~OpenGLPipeline() override {
     if (program_) {
       gl::DeleteProgram(program_);
@@ -68,12 +73,14 @@ class OpenGLPipeline final : public PipelineState {
   [[nodiscard]] GLuint program() const { return program_; }
   [[nodiscard]] bool wireframe() const { return wireframe_; }
   [[nodiscard]] bool depth_test() const { return depth_test_; }
+  [[nodiscard]] bool depth_write() const { return depth_write_; }
   [[nodiscard]] PrimitiveTopology topology() const { return topology_; }
 
  private:
   GLuint program_ = 0;
   bool wireframe_ = false;
   bool depth_test_ = true;
+  bool depth_write_ = true;
   PrimitiveTopology topology_ = PrimitiveTopology::TriangleList;
 };
 
@@ -679,7 +686,7 @@ Result<std::unique_ptr<PipelineState>> OpenGLDevice::create_pipeline(const Pipel
   }
   release_current();
   return std::make_unique<OpenGLPipeline>(program, desc.wireframe, desc.depth_test,
-                                          desc.topology);
+                                          desc.depth_write, desc.topology);
 }
 
 OpenGLSwapChain::OpenGLSwapChain(OpenGLDevice* device, SwapChainDesc desc)
@@ -774,6 +781,7 @@ void OpenGLCommandList::set_pipeline(PipelineState& pipeline) {
   } else {
     gl::Disable(GL_DEPTH_TEST);
   }
+  gl::DepthMask(pipeline_->depth_write() ? GL_TRUE : GL_FALSE);
 }
 
 void OpenGLCommandList::set_vertex_buffer(Buffer& buffer, std::uint64_t offset) {
