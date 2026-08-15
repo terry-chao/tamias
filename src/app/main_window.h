@@ -41,6 +41,7 @@ class MainWindow final : public QMainWindow {
   Result<void> populate_document_meshes(Document& document, RenderThread& thread);
   void refresh_home();
   bool open_path(const QString& path);
+  void new_parametric_demo();
   bool write_selected_mesh(const QString& path);
   bool write_tdoc_document(const QString& path);
   void notify_save_success(const QString& path);

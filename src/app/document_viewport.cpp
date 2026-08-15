@@ -7,7 +7,12 @@
 #include "engine/rhi_opengl/opengl_backend.h"
 #endif
 
+#if defined(TAMIAS_HAS_OCCT)
+#include "modeling/occt_feature.h"
+#endif
+
 #include <QCoreApplication>
+#include <QKeyEvent>
 #include <QMouseEvent>
 #include <QShowEvent>
 #include <QResizeEvent>
@@ -516,6 +521,7 @@ void DocumentViewport::resizeEvent(QResizeEvent* event) {
 }
 
 void DocumentViewport::mousePressEvent(QMouseEvent* event) {
+  setFocus();  // 让视口能收到按键（P1 参数化演示用 [ ] 改墙厚）
   last_mouse_ = event->pos();
   press_mouse_ = event->pos();
   if (event->button() == Qt::LeftButton) {
@@ -583,6 +589,62 @@ void DocumentViewport::wheelEvent(QWheelEvent* event) {
   camera_.dolly(factor);
   camera_.set_target(focus + (old_target - focus) * factor);
   request_redraw();
+}
+
+void DocumentViewport::set_parametric_model(FeatureModel model, std::uint64_t asset_id) {
+  parametric_model_ = std::make_unique<FeatureModel>(std::move(model));
+  parametric_asset_id_ = asset_id;
+}
+
+void DocumentViewport::adjust_parametric_width(double delta) {
+  if (!parametric_model_) {
+    return;
+  }
+#if defined(TAMIAS_HAS_OCCT)
+  // P1 demo：特征树里只有一个 RectProfile，改它的 width 即改墙厚。
+  for (auto& f : parametric_model_->features()) {
+    if (f.kind == FeatureKind::RectProfile) {
+      const double w = parametric_model_->param(f.id, "width", 0.2);
+      parametric_model_->set_param(f.id, "width", w + delta);
+      break;
+    }
+  }
+  auto mesh = evaluate_feature_model(*parametric_model_, 0.05);
+  if (!mesh) {
+    log_error(mesh.error());
+    return;
+  }
+  MeshAsset* asset = document_->mesh(parametric_asset_id_);
+  if (!asset) {
+    return;
+  }
+  asset->cpu = std::move(*mesh);
+  if (render_thread_) {
+    if (auto gpu = render_thread_->upload_mesh(parametric_asset_id_, asset->cpu); !gpu) {
+      log_error(gpu.error());
+      return;
+    }
+  }
+  document_->recompute_scene();
+  rebuild_bvh();
+  request_redraw();
+#else
+  (void)delta;
+#endif
+}
+
+void DocumentViewport::keyPressEvent(QKeyEvent* event) {
+  switch (event->key()) {
+    case Qt::Key_BracketLeft:   // '[' 变薄
+      adjust_parametric_width(-0.05);
+      break;
+    case Qt::Key_BracketRight:  // ']' 变厚
+      adjust_parametric_width(0.05);
+      break;
+    default:
+      QWidget::keyPressEvent(event);
+      break;
+  }
 }
 
 }  // namespace tamias

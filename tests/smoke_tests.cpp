@@ -4,6 +4,7 @@
 #include "io/mesh_io.h"
 #include "math/math.h"
 #include "view/picking.h"
+#include "modeling/occt_feature.h"
 #include "modeling/occt_shape_ops.h"
 #include "modeling/shape_ops.h"
 #include "engine/render/render_runtime.h"
@@ -209,5 +210,24 @@ TEST(Occt, TessellateBox) {
   ASSERT_TRUE(mesh.has_value()) << mesh.error();
   EXPECT_FALSE(mesh->indices.empty());
   EXPECT_TRUE(mesh->bounds.valid());
+}
+
+TEST(FeatureModel, ChangeParamReevaluates) {
+  FeatureModel model;
+  auto& profile = model.add_feature(FeatureKind::RectProfile, {},
+                                    {{"width", 0.2}, {"height", 3.0}});
+  const std::uint64_t profile_id = profile.id;
+  model.add_feature(FeatureKind::Extrude, {profile_id}, {{"depth", 5.0}});
+
+  auto mesh1 = evaluate_feature_model(model, 0.05);
+  ASSERT_TRUE(mesh1) << mesh1.error();
+  EXPECT_FALSE(mesh1->indices.empty());
+  EXPECT_TRUE(mesh1->bounds.valid());
+
+  model.set_param(profile_id, "width", 0.4);
+  auto mesh2 = evaluate_feature_model(model, 0.05);
+  ASSERT_TRUE(mesh2) << mesh2.error();
+  // 墙变厚：X 方向 extent 增大。
+  EXPECT_GT(mesh2->bounds.extent().x, mesh1->bounds.extent().x);
 }
 #endif

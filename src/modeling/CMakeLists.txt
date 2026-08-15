@@ -1,6 +1,6 @@
 set(_tamias_modeling_sources shape_ops.cpp)
 if(TAMIAS_HAS_OCCT)
-  list(APPEND _tamias_modeling_sources occt_shape_ops.cpp)
+  list(APPEND _tamias_modeling_sources occt_shape_ops.cpp occt_feature.cpp)
 endif()
 
 add_library(tamias_modeling STATIC ${_tamias_modeling_sources})

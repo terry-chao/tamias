@@ -5,6 +5,8 @@
 #include "io/document_io.h"
 #include "io/mesh_io.h"
 #include "mesh_thumbnail.h"
+#include "modeling/feature.h"
+#include "modeling/occt_feature.h"
 #include "modeling/occt_shape_ops.h"
 #include "modeling/shape_ops.h"
 #include "settings_dialog.h"
@@ -167,6 +169,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   // Settings live under Tools (VS / CAD), and also on the File welcome page.
   auto* tools_menu = menuBar()->addMenu(tr("&Tools"));
   tools_menu->addAction(settings_action);
+#if defined(TAMIAS_HAS_OCCT)
+  auto* parametric_action = new QAction(tr("New Parametric Demo (Wall)"), this);
+  parametric_action->setToolTip(tr("Create a parametric wall; press [ or ] to change thickness"));
+  connect(parametric_action, &QAction::triggered, this, &MainWindow::new_parametric_demo);
+  tools_menu->addAction(parametric_action);
+#endif
   tools_menu->addSeparator();
   auto* exit_action = new QAction(tr("E&xit"), this);
   exit_action->setShortcut(QKeySequence::Quit);
@@ -323,6 +331,39 @@ void MainWindow::new_demo_document() {
     return;
   }
   open_path(path);
+}
+
+void MainWindow::new_parametric_demo() {
+#if defined(TAMIAS_HAS_OCCT)
+  FeatureModel model;
+  auto& profile = model.add_feature(FeatureKind::RectProfile, {},
+                                    {{"width", 0.2}, {"height", 3.0}});
+  const std::uint64_t profile_id = profile.id;
+  model.add_feature(FeatureKind::Extrude, {profile_id}, {{"depth", 5.0}});
+
+  auto mesh = evaluate_feature_model(model, 0.05);
+  if (!mesh) {
+    QMessageBox::critical(this, tr("Parametric Demo"), QString::fromStdString(mesh.error()));
+    return;
+  }
+
+  auto document = std::make_shared<Document>("Parametric Wall");
+  MeshAsset asset{};
+  asset.name = "wall";
+  asset.cpu = std::move(*mesh);
+  auto& stored = document->add_mesh(std::move(asset));
+  const std::uint64_t asset_id = stored.id;
+  SceneNode node{};
+  node.name = "wall";
+  node.mesh_asset_id = asset_id;
+  document->scene().add_node(std::move(node));
+  document->recompute_scene();
+
+  add_document_tab(document);
+  if (auto* vp = current_viewport()) {
+    vp->set_parametric_model(std::move(model), asset_id);
+  }
+#endif
 }
 
 bool MainWindow::open_path(const QString& path) {

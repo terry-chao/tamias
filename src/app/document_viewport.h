@@ -6,6 +6,7 @@
 #include "engine/render/render_runtime.h"
 #include "io/document_io.h"
 #include "math/camera.h"
+#include "modeling/feature.h"
 #include "view/picking.h"
 #include "view_cube_widget.h"
 
@@ -36,6 +37,9 @@ class DocumentViewport final : public QWidget {
   void apply_viewport_state(const ViewportState& state);
   // Seed undo baseline from the current document body (call after load/open).
   void seed_history_baseline();
+  // P1 参数化演示：挂一个特征模型到本视口，可按键改参数重算。
+  void set_parametric_model(FeatureModel model, std::uint64_t asset_id);
+  void adjust_parametric_width(double delta);
 
  protected:
   void showEvent(QShowEvent* event) override;
@@ -44,6 +48,7 @@ class DocumentViewport final : public QWidget {
   void mouseMoveEvent(QMouseEvent* event) override;
   void mouseReleaseEvent(QMouseEvent* event) override;
   void wheelEvent(QWheelEvent* event) override;
+  void keyPressEvent(QKeyEvent* event) override;
 
  private slots:
   void on_view_cube_face(ViewCubeFace face);
@@ -71,6 +76,8 @@ class DocumentViewport final : public QWidget {
   TurntableCamera camera_;
   Bvh bvh_;
   RenderMode mode_ = RenderMode::Shaded;
+  std::unique_ptr<FeatureModel> parametric_model_;
+  std::uint64_t parametric_asset_id_ = 0;
   class NativeSurface;
   NativeSurface* surface_ = nullptr;
   void* gl_hwnd_ = nullptr;  // Win32 OpenGL child HWND (UI-thread owned)
