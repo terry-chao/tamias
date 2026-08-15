@@ -1,8 +1,8 @@
 #include "opengl_backend.h"
 
-#include "core/log.h"
+#include "engine/core/log.h"
 #include "gl_loader.h"
-#include "graphics/mesh.h"
+#include "engine/graphics/mesh.h"
 
 #include <algorithm>
 #include <cstddef>

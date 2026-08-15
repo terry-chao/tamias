@@ -1,9 +1,9 @@
 #pragma once
 
-#include "core/native_window_handle.h"
-#include "core/result.h"
-#include "graphics/graphics_backend.h"
-#include "math/math.h"
+#include "engine/core/native_window_handle.h"
+#include "engine/core/result.h"
+#include "engine/graphics/graphics_backend.h"
+#include "engine/math/math.h"
 
 #include <cstdint>
 #include <functional>

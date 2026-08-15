@@ -1,11 +1,11 @@
 #include "main_window.h"
 
 #include "app_settings.h"
-#include "core/log.h"
+#include "engine/core/log.h"
 #include "engine/render/render_runtime.h"
-#include "graphics/graphics_backend.h"
+#include "engine/graphics/graphics_backend.h"
 #include "i18n.h"
-#include "modeling/occt_shape_ops.h"
+#include "engine/modeling/occt_shape_ops.h"
 
 #include <QApplication>
 #include <QIcon>

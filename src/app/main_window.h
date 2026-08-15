@@ -1,10 +1,10 @@
 #pragma once
 
-#include "document/document.h"
+#include "entity/document.h"
 #include "document_viewport.h"
 #include "engine/render/render_runtime.h"
 #include "home_page.h"
-#include "io/document_io.h"
+#include "entity/document_io.h"
 #include "recent_files.h"
 
 #include <QMainWindow>

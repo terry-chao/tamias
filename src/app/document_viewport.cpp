@@ -1,14 +1,14 @@
 #include "document_viewport.h"
 
 #include "app_settings.h"
-#include "core/log.h"
+#include "engine/core/log.h"
 
 #if defined(TAMIAS_HAS_RHI_OPENGL)
 #include "engine/rhi_opengl/opengl_backend.h"
 #endif
 
 #if defined(TAMIAS_HAS_OCCT)
-#include "modeling/occt_feature.h"
+#include "engine/modeling/occt_feature.h"
 #endif
 
 #include <QCoreApplication>

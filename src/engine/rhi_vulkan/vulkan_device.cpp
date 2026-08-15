@@ -1,7 +1,7 @@
 #include "vulkan_backend.h"
 
-#include "core/log.h"
-#include "graphics/mesh.h"
+#include "engine/core/log.h"
+#include "engine/graphics/mesh.h"
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN

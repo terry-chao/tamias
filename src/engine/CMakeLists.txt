@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.24)
 
+add_subdirectory(core)
+add_subdirectory(math)
+add_subdirectory(graphics)
 add_subdirectory(rhi)
 
 if(TAMIAS_ENABLE_VULKAN_BACKEND)
@@ -12,3 +15,6 @@ add_subdirectory(render)
 if(TAMIAS_ENABLE_OPENGL_BACKEND)
   add_subdirectory(rhi_opengl)
 endif()
+
+add_subdirectory(modeling)
+add_subdirectory(io)

@@ -1,14 +1,14 @@
 #include "main_window.h"
 
 #include "app_settings.h"
-#include "core/log.h"
-#include "io/document_io.h"
-#include "io/mesh_io.h"
+#include "engine/core/log.h"
+#include "entity/document_io.h"
+#include "engine/io/mesh_io.h"
 #include "mesh_thumbnail.h"
-#include "modeling/feature.h"
-#include "modeling/occt_feature.h"
-#include "modeling/occt_shape_ops.h"
-#include "modeling/shape_ops.h"
+#include "engine/modeling/feature.h"
+#include "engine/modeling/occt_feature.h"
+#include "engine/modeling/occt_shape_ops.h"
+#include "engine/modeling/shape_ops.h"
 #include "settings_dialog.h"
 
 #include <QAction>

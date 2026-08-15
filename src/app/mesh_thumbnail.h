@@ -1,6 +1,6 @@
 #pragma once
 
-#include "graphics/mesh.h"
+#include "engine/graphics/mesh.h"
 
 #include <QImage>
 #include <QString>

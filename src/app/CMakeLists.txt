@@ -43,12 +43,10 @@ target_link_libraries(tamias
     tamias::graphics
     tamias::rhi
     tamias::render
-    tamias::asset
-    tamias::scene
-    tamias::document
+    tamias::entity
     tamias::io
-    tamias::view
     tamias::modeling
+    tamias::command
     Qt6::Widgets
     Qt6::Gui
     Qt6::Svg

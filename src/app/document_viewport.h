@@ -1,13 +1,13 @@
 #pragma once
 
-#include "core/native_window_handle.h"
-#include "document/document.h"
-#include "document/history.h"
+#include "engine/core/native_window_handle.h"
+#include "entity/document.h"
+#include "command/history.h"
 #include "engine/render/render_runtime.h"
-#include "io/document_io.h"
-#include "math/camera.h"
-#include "modeling/feature.h"
-#include "view/picking.h"
+#include "entity/document_io.h"
+#include "engine/math/camera.h"
+#include "engine/modeling/feature.h"
+#include "entity/picking.h"
 #include "view_cube_widget.h"
 
 #include <QElapsedTimer>

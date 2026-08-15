@@ -1,8 +1,8 @@
 #pragma once
 
 #include "engine/rhi/device.h"
-#include "graphics/mesh.h"
-#include "math/camera.h"
+#include "engine/graphics/mesh.h"
+#include "engine/math/camera.h"
 
 #include <atomic>
 #include <condition_variable>

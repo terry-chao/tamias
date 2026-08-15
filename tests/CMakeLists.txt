@@ -2,7 +2,8 @@ add_executable(tamias_tests smoke_tests.cpp)
 target_link_libraries(tamias_tests
   PRIVATE
     tamias::io
-    tamias::view
+    tamias::entity
+    tamias::command
     tamias::modeling
     tamias::render
     GTest::gtest_main
