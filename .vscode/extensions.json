@@ -1,10 +1,6 @@
 {
   "recommendations": [
     "ms-vscode.cmake-tools",
-    "ms-vscode.cpptools",
-    "ms-vscode.cpptools-extension-pack"
-  ],
-  "unwantedRecommendations": [
-    "llvm-vs-code-extensions.vscode-clangd"
+    "ms-vscode.cpptools"
   ]
 }

@@ -6,11 +6,6 @@
   "cmake.buildPreset": "debug",
   "cmake.buildBeforeRun": true,
 
-  "clangd.enable": false,
-
-  "C_Cpp.intelliSenseEngine": "default",
   "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
-  "C_Cpp.default.compilerPath": "cl.exe",
-  "C_Cpp.default.cppStandard": "c++23",
-  "C_Cpp.default.intelliSenseMode": "msvc-x64"
+  "C_Cpp.default.cppStandard": "c++23"
 }
