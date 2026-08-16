@@ -58,6 +58,13 @@ class BinaryWriter {
     return write_u32(bits);
   }
 
+  Result<void> write_f64(double v) {
+    static_assert(sizeof(double) == 8);
+    std::uint64_t bits = 0;
+    std::memcpy(&bits, &v, sizeof(bits));
+    return write_u64(bits);
+  }
+
   Result<void> write_bool(bool v) { return write_u8(v ? 1u : 0u); }
 
   Result<void> write_string(const std::string& s) {
@@ -149,6 +156,16 @@ class BinaryReader {
       return Err(bits.error());
     }
     float v = 0.f;
+    std::memcpy(&v, &*bits, sizeof(v));
+    return v;
+  }
+
+  Result<double> read_f64() {
+    auto bits = read_u64();
+    if (!bits) {
+      return Err(bits.error());
+    }
+    double v = 0.0;
     std::memcpy(&v, &*bits, sizeof(v));
     return v;
   }

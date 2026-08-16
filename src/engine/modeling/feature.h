@@ -12,6 +12,7 @@ namespace tamias {
 enum class FeatureKind : std::uint8_t {
   RectProfile = 0,  // 矩形轮廓面，params{ width, height }
   Extrude = 1,      // 拉伸，input[0] = 轮廓 feature id，params{ depth }
+  CircleProfile = 2,  // 圆形轮廓面，params{ radius }
 };
 
 struct Feature {

@@ -14,6 +14,8 @@
 #include <TopoDS.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
+#include <gp_Ax2.hxx>
+#include <gp_Circ.hxx>
 #include <gp_Dir.hxx>
 #include <gp_Pnt.hxx>
 #include <gp_Trsf.hxx>
@@ -34,6 +36,14 @@ TopoDS_Face make_rect_face(double width, double height) {
   const gp_Pnt p4(-hw, hh, 0.0);
   BRepBuilderAPI_MakeWire wire(BRepBuilderAPI_MakeEdge(p1, p2), BRepBuilderAPI_MakeEdge(p2, p3),
                                BRepBuilderAPI_MakeEdge(p3, p4), BRepBuilderAPI_MakeEdge(p4, p1));
+  return BRepBuilderAPI_MakeFace(wire).Face();
+}
+
+// 圆形轮廓面（在 XY 平面，中心在原点，半径 radius）。
+TopoDS_Face make_circle_face(double radius) {
+  const gp_Pnt center(0.0, 0.0, 0.0);
+  const gp_Circ circle(gp_Ax2(center, gp_Dir(0.0, 0.0, 1.0)), radius);
+  BRepBuilderAPI_MakeWire wire{BRepBuilderAPI_MakeEdge(circle)};
   return BRepBuilderAPI_MakeFace(wire).Face();
 }
 
@@ -119,6 +129,11 @@ Result<MeshCpu> evaluate_feature_model(const FeatureModel& model, double linear_
         const double w = model.param(f.id, "width", 1.0);
         const double h = model.param(f.id, "height", 1.0);
         s = make_rect_face(w, h);
+        break;
+      }
+      case FeatureKind::CircleProfile: {
+        const double r = model.param(f.id, "radius", 0.5);
+        s = make_circle_face(r);
         break;
       }
       case FeatureKind::Extrude: {
