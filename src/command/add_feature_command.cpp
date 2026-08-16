@@ -17,6 +17,7 @@ Result<void> AddFeatureCommand::apply(bool add) {
   if (entity == nullptr) {
     return Err("AddFeatureCommand: entity not found");
   }
+  const FeatureModel saved = entity->model;  // 求值失败时回滚
   if (add) {
     if (entity->model.features().empty()) {
       return Err("AddFeatureCommand: entity has no geometry");
@@ -30,10 +31,12 @@ Result<void> AddFeatureCommand::apply(bool add) {
 
   auto mesh = geometry_builder().build(entity->model, 0.05);
   if (!mesh) {
+    entity->model = saved;
     return Err(mesh.error());
   }
   MeshAsset* asset = document_->mesh(entity->mesh_asset_id);
   if (asset == nullptr) {
+    entity->model = saved;
     return Err("AddFeatureCommand: mesh asset not found");
   }
   asset->cpu = std::move(*mesh);

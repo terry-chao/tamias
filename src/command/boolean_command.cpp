@@ -40,6 +40,7 @@ Result<void> BooleanCommand::apply(bool combined) {
 
     auto mesh = geometry_builder().build(a->model, 0.05);
     if (!mesh) {
+      a->model = a_model_old_;  // 回滚
       return Err(mesh.error());
     }
     MeshAsset* asset = document_->mesh(a->mesh_asset_id);
