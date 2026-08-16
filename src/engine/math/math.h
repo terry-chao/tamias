@@ -85,6 +85,18 @@ inline Mat4 scale(Vec3 s) {
   return r;
 }
 
+// 绕 Y 轴旋转（Y-up 世界的 yaw）。+Z 转到 (sin a, 0, cos a)。
+inline Mat4 rotate_y(float angle) {
+  const float c = std::cos(angle);
+  const float s = std::sin(angle);
+  Mat4 r = Mat4::identity();
+  r(0, 0) = c;
+  r(0, 2) = s;
+  r(2, 0) = -s;
+  r(2, 2) = c;
+  return r;
+}
+
 // Vulkan clip space: Y down in NDC after correction; we keep OpenGL-like math and
 // let the device supply clipSpaceCorrectionMatrix().
 inline Mat4 perspective(float fovy_rad, float aspect, float znear, float zfar) {
