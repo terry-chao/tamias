@@ -501,6 +501,18 @@ Click an object to select it, or use a create tool</source>
         <translation>未选择对象
 点击视口选中对象，或用创建工具建模</translation>
     </message>
+    <message>
+        <source>Fillet</source>
+        <translation>倒圆角</translation>
+    </message>
+    <message>
+        <source>Chamfer</source>
+        <translation>倒斜角</translation>
+    </message>
+    <message>
+        <source>Modify</source>
+        <translation>修改</translation>
+    </message>
 </context>
 <context>
     <name>tamias::SettingsDialog</name>
@@ -656,6 +668,18 @@ Click an object to select it, or use a create tool</source>
     <message>
         <source>Radius</source>
         <translation>半径</translation>
+    </message>
+    <message>
+        <source>Edge</source>
+        <translation>边</translation>
+    </message>
+    <message>
+        <source>Distance</source>
+        <translation>距离</translation>
+    </message>
+    <message>
+        <source>Operation</source>
+        <translation>运算</translation>
     </message>
 </context>
 </TS>

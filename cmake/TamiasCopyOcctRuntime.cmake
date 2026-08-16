@@ -9,7 +9,7 @@ file(MAKE_DIRECTORY "${DEST_DIR}")
 
 set(_occt_toolkit_dlls
   TKernel TKMath TKG2d TKG3d TKGeomBase TKBRep
-  TKGeomAlgo TKTopAlgo TKPrim TKBO TKBool TKMesh TKShHealing TKHLR
+  TKGeomAlgo TKTopAlgo TKPrim TKFillet TKBO TKBool TKMesh TKShHealing TKHLR
   TKService TKV3d
   TKCDF TKLCAF TKCAF TKVCAF TKXCAF
   TKDE TKXSBase TKDESTEP TKDEIGES

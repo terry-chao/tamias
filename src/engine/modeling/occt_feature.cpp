@@ -2,9 +2,14 @@
 
 #if defined(TAMIAS_HAS_OCCT)
 
+#include <BRepAlgoAPI_Common.hxx>
+#include <BRepAlgoAPI_Cut.hxx>
+#include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
+#include <BRepFilletAPI_MakeChamfer.hxx>
+#include <BRepFilletAPI_MakeFillet.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
 #include <BRep_Tool.hxx>
@@ -12,6 +17,7 @@
 #include <TopExp_Explorer.hxx>
 #include <TopLoc_Location.hxx>
 #include <TopoDS.hxx>
+#include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
 #include <gp_Ax2.hxx>
@@ -45,6 +51,18 @@ TopoDS_Face make_circle_face(double radius) {
   const gp_Circ circle(gp_Ax2(center, gp_Dir(0.0, 0.0, 1.0)), radius);
   BRepBuilderAPI_MakeWire wire{BRepBuilderAPI_MakeEdge(circle)};
   return BRepBuilderAPI_MakeFace(wire).Face();
+}
+
+// 取 shape 的第 index 条边（拓扑命名「索引法」：按 TopExp 遍历顺序，脆但简单）。
+TopoDS_Edge nth_edge(const TopoDS_Shape& shape, int index) {
+  int i = 0;
+  for (TopExp_Explorer exp(shape, TopAbs_EDGE); exp.More(); exp.Next()) {
+    if (i == index) {
+      return TopoDS::Edge(exp.Current());
+    }
+    ++i;
+  }
+  return TopoDS_Edge();
 }
 
 // 简化的 BRep → 三角网（无 XCAF 颜色逻辑；与 occt_shape_ops 的 tessellate 职责不同）。
@@ -146,6 +164,76 @@ Result<MeshCpu> evaluate_feature_model(const FeatureModel& model, double linear_
         }
         const double depth = model.param(f.id, "depth", 1.0);
         s = BRepPrimAPI_MakePrism(it->second, gp_Vec(0.0, 0.0, depth)).Shape();
+        break;
+      }
+      case FeatureKind::Boolean: {
+        if (f.inputs.size() < 2) {
+          return Err("Boolean feature needs two shape inputs");
+        }
+        const auto a = shapes.find(f.inputs[0]);
+        const auto b = shapes.find(f.inputs[1]);
+        if (a == shapes.end() || b == shapes.end()) {
+          return Err("Boolean references a missing shape");
+        }
+        const int op = static_cast<int>(model.param(f.id, "operation", 0.0));
+        switch (op) {
+          case 1:
+            s = BRepAlgoAPI_Common(a->second, b->second).Shape();
+            break;
+          case 2:
+            s = BRepAlgoAPI_Cut(a->second, b->second).Shape();
+            break;
+          case 0:
+          default:
+            s = BRepAlgoAPI_Fuse(a->second, b->second).Shape();
+            break;
+        }
+        break;
+      }
+      case FeatureKind::Fillet: {
+        if (f.inputs.empty()) {
+          return Err("Fillet feature has no shape input");
+        }
+        const auto it = shapes.find(f.inputs[0]);
+        if (it == shapes.end()) {
+          return Err("Fillet references a missing shape");
+        }
+        const double radius = model.param(f.id, "radius", 0.1);
+        const int edge_idx = static_cast<int>(model.param(f.id, "edge", 0.0));
+        const TopoDS_Edge edge = nth_edge(it->second, edge_idx);
+        if (edge.IsNull()) {
+          return Err("Fillet: edge index out of range");
+        }
+        BRepFilletAPI_MakeFillet fillet(it->second);
+        fillet.Add(radius, edge);
+        fillet.Build();
+        if (!fillet.IsDone()) {
+          return Err("Fillet failed");
+        }
+        s = fillet.Shape();
+        break;
+      }
+      case FeatureKind::Chamfer: {
+        if (f.inputs.empty()) {
+          return Err("Chamfer feature has no shape input");
+        }
+        const auto it = shapes.find(f.inputs[0]);
+        if (it == shapes.end()) {
+          return Err("Chamfer references a missing shape");
+        }
+        const double distance = model.param(f.id, "distance", 0.1);
+        const int edge_idx = static_cast<int>(model.param(f.id, "edge", 0.0));
+        const TopoDS_Edge edge = nth_edge(it->second, edge_idx);
+        if (edge.IsNull()) {
+          return Err("Chamfer: edge index out of range");
+        }
+        BRepFilletAPI_MakeChamfer chamfer(it->second);
+        chamfer.Add(distance, edge);
+        chamfer.Build();
+        if (!chamfer.IsDone()) {
+          return Err("Chamfer failed");
+        }
+        s = chamfer.Shape();
         break;
       }
       default:

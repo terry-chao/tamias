@@ -1,5 +1,7 @@
 #include "command/command_system.h"
 
+#include "command/add_feature_command.h"
+#include "command/boolean_command.h"
 #include "command/create_primitive_command.h"
 #include "command/create_wall_command.h"
 #include "command/set_feature_param_command.h"
@@ -51,6 +53,29 @@ void register_commands(CommandRegistry& registry) {
         doc, static_cast<std::uint64_t>(arg_int(args, "entity_id", 0)),
         static_cast<std::uint64_t>(arg_int(args, "feature_id", 0)),
         arg_string(args, "param_name", ""), arg_double(args, "value", 0.0));
+  });
+
+  registry.register_command("fillet", [](Document& doc, const CommandArgs& args) {
+    return std::make_unique<AddFeatureCommand>(
+        doc, static_cast<std::uint64_t>(arg_int(args, "entity_id", 0)), FeatureKind::Fillet,
+        std::unordered_map<std::string, double>{
+            {"radius", arg_double(args, "radius", 0.1)},
+            {"edge", static_cast<double>(arg_int(args, "edge", 0))}});
+  });
+
+  registry.register_command("chamfer", [](Document& doc, const CommandArgs& args) {
+    return std::make_unique<AddFeatureCommand>(
+        doc, static_cast<std::uint64_t>(arg_int(args, "entity_id", 0)), FeatureKind::Chamfer,
+        std::unordered_map<std::string, double>{
+            {"distance", arg_double(args, "distance", 0.1)},
+            {"edge", static_cast<double>(arg_int(args, "edge", 0))}});
+  });
+
+  registry.register_command("boolean", [](Document& doc, const CommandArgs& args) {
+    return std::make_unique<BooleanCommand>(
+        doc, static_cast<std::uint64_t>(arg_int(args, "a", 0)),
+        static_cast<std::uint64_t>(arg_int(args, "b", 0)),
+        static_cast<BooleanOp>(arg_int(args, "operation", 0)));
   });
 }
 

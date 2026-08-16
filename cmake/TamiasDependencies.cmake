@@ -78,7 +78,7 @@ if(TAMIAS_ENABLE_OCCT)
     # STEP/IGES toolkits pull XCAF/Visualization transitively on OCCT 7.9.
     set(_tamias_occt_libs
       TKernel TKMath TKG2d TKG3d TKGeomBase TKBRep
-      TKGeomAlgo TKTopAlgo TKPrim TKBO TKBool TKMesh TKShHealing TKHLR
+      TKGeomAlgo TKTopAlgo TKPrim TKFillet TKBO TKBool TKMesh TKShHealing TKHLR
       TKService TKV3d
       TKCDF TKLCAF TKCAF TKVCAF TKXCAF
       TKDE TKXSBase TKDESTEP TKDEIGES)

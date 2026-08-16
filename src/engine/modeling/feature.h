@@ -13,7 +13,13 @@ enum class FeatureKind : std::uint8_t {
   RectProfile = 0,  // 矩形轮廓面，params{ width, height }
   Extrude = 1,      // 拉伸，input[0] = 轮廓 feature id，params{ depth }
   CircleProfile = 2,  // 圆形轮廓面，params{ radius }
+  Boolean = 3,      // 布尔运算，inputs[0..1] = 两个 shape，params{ operation }
+  Fillet = 4,       // 倒圆角，inputs[0] = shape，params{ radius, edge }
+  Chamfer = 5,      // 倒斜角，inputs[0] = shape，params{ distance, edge }
 };
+
+// 布尔运算类型（存成 Boolean 特征的 operation 参数）。
+enum class BooleanOp : std::uint8_t { Fuse = 0, Common = 1, Cut = 2 };
 
 struct Feature {
   std::uint64_t id = 0;
@@ -59,6 +65,33 @@ class FeatureModel {
     if (Feature* f = find(id)) {
       f->params[name] = value;
     }
+  }
+
+  // 删除特征。不修 dangling 引用——只应删「树根/输出」这类不被引用的特征（undo 用）。
+  void remove_feature(std::uint64_t id) {
+    for (auto it = features_.begin(); it != features_.end(); ++it) {
+      if (it->id == id) {
+        features_.erase(it);
+        return;
+      }
+    }
+  }
+
+  // 把 another 的特征追加到本树末尾，重映射其 id 与 inputs 引用。要求 another 的特征按
+  // 拓扑序排列（依赖在前，add_feature 的插入顺序即如此）。返回 another 旧 id → 新 id。
+  std::unordered_map<std::uint64_t, std::uint64_t> append(const FeatureModel& another) {
+    std::unordered_map<std::uint64_t, std::uint64_t> remap;
+    for (const Feature& f : another.features()) {
+      Feature nf = f;
+      const std::uint64_t old_id = nf.id;
+      nf.id = next_id_++;
+      for (std::uint64_t& in : nf.inputs) {
+        in = remap.at(in);
+      }
+      remap[old_id] = nf.id;
+      features_.push_back(std::move(nf));
+    }
+    return remap;
   }
 
   [[nodiscard]] double param(std::uint64_t id, const std::string& name,

@@ -709,6 +709,28 @@ void DocumentViewport::set_entity_param(std::uint64_t entity_id, std::uint64_t f
               /*notify=*/false);
 }
 
+void DocumentViewport::fillet_selected(double radius) {
+  const Entity* e = document_->selected_entity();
+  if (e == nullptr) {
+    log_error("fillet: no entity selected");
+    return;
+  }
+  run_command("fillet", {{"entity_id", static_cast<std::int64_t>(e->id)},
+                         {"radius", radius},
+                         {"edge", static_cast<std::int64_t>(0)}});
+}
+
+void DocumentViewport::chamfer_selected(double distance) {
+  const Entity* e = document_->selected_entity();
+  if (e == nullptr) {
+    log_error("chamfer: no entity selected");
+    return;
+  }
+  run_command("chamfer", {{"entity_id", static_cast<std::int64_t>(e->id)},
+                          {"distance", distance},
+                          {"edge", static_cast<std::int64_t>(0)}});
+}
+
 void DocumentViewport::resync_all_meshes() {
   if (!render_thread_) {
     return;

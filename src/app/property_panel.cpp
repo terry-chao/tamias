@@ -29,6 +29,28 @@ QString PropertyPanel::param_label(EntityKind entity_kind, FeatureKind feature_k
   // 求值器把特征树按 Z-up 构造后转到 Y-up（(x,y,z)→(x,z,-y)），因此：
   //   RectProfile.width → 视口 X，RectProfile.height → 视口 Z，Extrude.depth → 视口 Y。
   const auto is = [&](const char* n) { return param_name == QLatin1String(n); };
+  // 特征级参数（与实体类型无关）。
+  if (feature_kind == FeatureKind::Fillet) {
+    if (is("radius")) {
+      return tr("Radius");
+    }
+    if (is("edge")) {
+      return tr("Edge");
+    }
+  }
+  if (feature_kind == FeatureKind::Chamfer) {
+    if (is("distance")) {
+      return tr("Distance");
+    }
+    if (is("edge")) {
+      return tr("Edge");
+    }
+  }
+  if (feature_kind == FeatureKind::Boolean) {
+    if (is("operation")) {
+      return tr("Operation");
+    }
+  }
   switch (entity_kind) {
     case EntityKind::Wall:
       if (feature_kind == FeatureKind::RectProfile) {

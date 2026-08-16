@@ -69,6 +69,8 @@ class MainWindow final : public QMainWindow {
   QAction* wall_action_ = nullptr;
   QAction* box_action_ = nullptr;
   QAction* cylinder_action_ = nullptr;
+  QAction* fillet_action_ = nullptr;
+  QAction* chamfer_action_ = nullptr;
   QComboBox* render_mode_combo_ = nullptr;
   PropertyPanel* property_panel_ = nullptr;
 };

@@ -46,6 +46,9 @@ class DocumentViewport final : public QWidget {
   // 改实体某个特征参数（走 set_param 命令，可撤销；供属性面板调用）。
   void set_entity_param(std::uint64_t entity_id, std::uint64_t feature_id,
                         const std::string& param_name, double value);
+  // 给选中实体追加倒圆角 / 倒斜角特征（走 fillet/chamfer 命令，可撤销）。
+  void fillet_selected(double radius = 0.1);
+  void chamfer_selected(double distance = 0.1);
 
  signals:
   void tool_mode_changed(ToolMode mode);

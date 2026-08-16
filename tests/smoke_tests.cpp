@@ -382,4 +382,120 @@ TEST(CommandSystem, DispatchCreateWallUndoRedo) {
   EXPECT_EQ(doc.entities().size(), 1u);
   EXPECT_EQ(doc.meshes().size(), 1u);
 }
+
+TEST(FeatureModel, FilletIncreasesFaces) {
+  FeatureModel model;
+  const std::uint64_t profile =
+      model.add_feature(FeatureKind::RectProfile, {}, {{"width", 1.0}, {"height", 1.0}}).id;
+  model.add_feature(FeatureKind::Extrude, {profile}, {{"depth", 1.0}});
+
+  auto before = evaluate_feature_model(model, 0.05);
+  ASSERT_TRUE(before) << before.error();
+
+  const std::uint64_t root = model.output_feature()->id;
+  model.add_feature(FeatureKind::Fillet, {root}, {{"radius", 0.1}, {"edge", 0.0}});
+  auto after = evaluate_feature_model(model, 0.05);
+  ASSERT_TRUE(after) << after.error();
+  // 圆角边引入更多三角面。
+  EXPECT_GT(after->indices.size(), before->indices.size());
+}
+
+TEST(FeatureModel, ChamferProducesMesh) {
+  FeatureModel model;
+  const std::uint64_t profile =
+      model.add_feature(FeatureKind::RectProfile, {}, {{"width", 1.0}, {"height", 1.0}}).id;
+  model.add_feature(FeatureKind::Extrude, {profile}, {{"depth", 1.0}});
+
+  const std::uint64_t root = model.output_feature()->id;
+  model.add_feature(FeatureKind::Chamfer, {root}, {{"distance", 0.1}, {"edge", 0.0}});
+  auto mesh = evaluate_feature_model(model, 0.05);
+  ASSERT_TRUE(mesh) << mesh.error();
+  EXPECT_FALSE(mesh->indices.empty());
+  EXPECT_TRUE(mesh->bounds.valid());
+}
+
+TEST(FeatureModel, BooleanUnionAddsGeometry) {
+  // 单独盒子。
+  FeatureModel box;
+  const std::uint64_t b =
+      box.add_feature(FeatureKind::RectProfile, {}, {{"width", 1.0}, {"height", 1.0}}).id;
+  box.add_feature(FeatureKind::Extrude, {b}, {{"depth", 1.0}});
+  auto box_mesh = evaluate_feature_model(box, 0.05);
+  ASSERT_TRUE(box_mesh) << box_mesh.error();
+
+  // 盒子 ∪ 圆柱（同坐标系内）。
+  FeatureModel combined;
+  const std::uint64_t p1 =
+      combined.add_feature(FeatureKind::RectProfile, {}, {{"width", 1.0}, {"height", 1.0}}).id;
+  const std::uint64_t e1 = combined.add_feature(FeatureKind::Extrude, {p1}, {{"depth", 1.0}}).id;
+  const std::uint64_t p2 = combined.add_feature(FeatureKind::CircleProfile, {}, {{"radius", 0.5}}).id;
+  const std::uint64_t e2 = combined.add_feature(FeatureKind::Extrude, {p2}, {{"depth", 2.0}}).id;
+  combined.add_feature(FeatureKind::Boolean, {e1, e2}, {{"operation", 0.0}});
+  auto union_mesh = evaluate_feature_model(combined, 0.05);
+  ASSERT_TRUE(union_mesh) << union_mesh.error();
+  EXPECT_GT(union_mesh->indices.size(), box_mesh->indices.size());
+}
+
+TEST(CommandSystem, AddFeatureUndoRedo) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+  Document doc("cmd");
+
+  // 建一面墙。
+  ASSERT_TRUE(system.dispatch(doc, "create_wall", {{"thickness", 0.2}, {"height", 3.0}}));
+  ASSERT_TRUE(system.feed_point({0.f, 0.f, 0.f}));
+  ASSERT_TRUE(system.feed_point({0.f, 0.f, 5.f}));
+  ASSERT_EQ(doc.entities().size(), 1u);
+  const std::uint64_t eid = doc.entities().begin()->first;
+  EXPECT_EQ(doc.entity(eid)->model.features().size(), 2u);
+
+  // 倒圆角。
+  auto r = system.dispatch(doc, "fillet",
+                           {{"entity_id", static_cast<std::int64_t>(eid)}, {"radius", 0.05},
+                            {"edge", static_cast<std::int64_t>(0)}});
+  ASSERT_TRUE(r) << r.error();
+  EXPECT_EQ(doc.entity(eid)->model.features().size(), 3u);
+
+  ASSERT_TRUE(system.can_undo());
+  system.undo();
+  EXPECT_EQ(doc.entity(eid)->model.features().size(), 2u);
+  ASSERT_TRUE(system.can_redo());
+  system.redo();
+  EXPECT_EQ(doc.entity(eid)->model.features().size(), 3u);
+}
+
+TEST(CommandSystem, BooleanUndoRedo) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+  Document doc("cmd");
+
+  // 建两个盒子（同放置，布尔合并局部几何）。
+  ASSERT_TRUE(system.dispatch(doc, "create_box", {}));
+  ASSERT_TRUE(system.feed_point({0.f, 0.f, 0.f}));
+  ASSERT_TRUE(system.dispatch(doc, "create_box", {}));
+  ASSERT_TRUE(system.feed_point({0.f, 0.f, 0.f}));
+  ASSERT_EQ(doc.entities().size(), 2u);
+
+  std::uint64_t a = 0;
+  std::uint64_t b = 0;
+  for (const auto& [id, unused] : doc.entities()) {
+    (void)unused;
+    (a == 0) ? a = id : b = id;
+  }
+
+  auto r = system.dispatch(doc, "boolean",
+                           {{"a", static_cast<std::int64_t>(a)}, {"b", static_cast<std::int64_t>(b)},
+                            {"operation", static_cast<std::int64_t>(0)}});
+  ASSERT_TRUE(r) << r.error();
+  EXPECT_EQ(doc.entities().size(), 1u);
+
+  ASSERT_TRUE(system.can_undo());
+  system.undo();
+  EXPECT_EQ(doc.entities().size(), 2u);
+  ASSERT_TRUE(system.can_redo());
+  system.redo();
+  EXPECT_EQ(doc.entities().size(), 1u);
+}
 #endif

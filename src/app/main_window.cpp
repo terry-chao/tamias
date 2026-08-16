@@ -167,6 +167,26 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   addAction(cylinder_action_);
 #endif
 
+#if defined(TAMIAS_HAS_OCCT)
+  fillet_action_ = new QAction(tr("Fillet"), this);
+  fillet_action_->setToolTip(tr("Fillet the selected entity's first edge"));
+  connect(fillet_action_, &QAction::triggered, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->fillet_selected(0.1);
+    }
+  });
+  addAction(fillet_action_);
+
+  chamfer_action_ = new QAction(tr("Chamfer"), this);
+  chamfer_action_->setToolTip(tr("Chamfer the selected entity's first edge"));
+  connect(chamfer_action_, &QAction::triggered, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->chamfer_selected(0.1);
+    }
+  });
+  addAction(chamfer_action_);
+#endif
+
   auto* settings_action =
       new QAction(style()->standardIcon(QStyle::SP_FileDialogDetailedView), tr("Settings"), this);
   settings_action->setShortcut(QKeySequence(tr("Ctrl+,")));
@@ -273,6 +293,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   create_menu->addAction(wall_action_);
   create_menu->addAction(box_action_);
   create_menu->addAction(cylinder_action_);
+
+  auto* modify_menu = menuBar()->addMenu(tr("&Modify"));
+  modify_menu->addAction(fillet_action_);
+  modify_menu->addAction(chamfer_action_);
 #endif
 
   auto* tools_menu = menuBar()->addMenu(tr("&Tools"));
@@ -294,6 +318,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   toolbar->addAction(wall_action_);
   toolbar->addAction(box_action_);
   toolbar->addAction(cylinder_action_);
+  toolbar->addAction(fillet_action_);
+  toolbar->addAction(chamfer_action_);
   toolbar->addSeparator();
 #endif
   toolbar->addAction(frame_all_action);
