@@ -1,9 +1,10 @@
+#include "command/command_system.h"
 #include "command/history.h"
 #include "engine/io/binary_archive.h"
-#include "entity/document_io.h"
+#include "engine/document/document_io.h"
 #include "engine/io/mesh_io.h"
 #include "engine/math/math.h"
-#include "entity/picking.h"
+#include "engine/document/picking.h"
 #include "engine/modeling/occt_feature.h"
 #include "engine/modeling/occt_shape_ops.h"
 #include "engine/modeling/shape_ops.h"
@@ -12,6 +13,32 @@
 #include <gtest/gtest.h>
 
 using namespace tamias;
+
+namespace {
+
+// 手动给文档加一个墙实体（绕过 OCCT 求值，供序列化/渲染测试）。
+std::uint64_t add_wall_entity(Document& doc, Vec3 start, Vec3 end) {
+  auto wall = std::make_unique<Wall>(Wall::drag(start, end, 0.2, 3.0));
+  MeshAsset mesh_asset{};
+  mesh_asset.name = wall->name;
+  mesh_asset.cpu = make_demo_cube();
+  auto& stored_mesh = doc.add_mesh(std::move(mesh_asset));
+  wall->mesh_asset_id = stored_mesh.id;
+
+  SceneNode node{};
+  node.name = wall->name;
+  node.mesh_asset_id = wall->mesh_asset_id;
+  node.local_transform = wall->local_transform;
+  SceneNode& stored_node = doc.scene().add_node(std::move(node));
+  wall->id = stored_node.id;
+
+  const std::uint64_t id = wall->id;
+  doc.insert_entity(std::move(wall));
+  doc.recompute_scene();
+  return id;
+}
+
+}  // namespace
 
 TEST(Math, AabbExpand) {
   Aabb box{};
@@ -125,6 +152,66 @@ TEST(DocumentIo, FileRoundTrip) {
   std::filesystem::remove(path, ec);
 }
 
+TEST(DocumentIo, EntityRoundTrip) {
+  Document doc("entity");
+  const std::uint64_t wall_id = add_wall_entity(doc, {0.f, 0.f, 0.f}, {0.f, 0.f, 5.f});
+
+  auto bytes = serialize_document(doc);
+  ASSERT_TRUE(bytes) << bytes.error();
+  auto restored = deserialize_document(*bytes);
+  ASSERT_TRUE(restored) << restored.error();
+
+  const Entity* re = restored->entity(wall_id);
+  ASSERT_NE(re, nullptr);
+  EXPECT_EQ(re->name, "wall");
+  EXPECT_EQ(re->kind(), EntityKind::Wall);
+  EXPECT_EQ(re->model.features().size(), 2u);
+  EXPECT_EQ(re->model.features()[0].kind, FeatureKind::RectProfile);
+  EXPECT_DOUBLE_EQ(re->model.param(re->model.features()[0].id, "width", 0.0), 0.2);
+  EXPECT_EQ(re->model.features()[1].kind, FeatureKind::Extrude);
+}
+
+TEST(DocumentIo, EntityFileRoundTrip) {
+  Document doc("entity-file");
+  const std::uint64_t wall_id = add_wall_entity(doc, {0.f, 0.f, 0.f}, {0.f, 0.f, 5.f});
+
+  ViewportState viewport{};
+  const auto path = std::filesystem::temp_directory_path() / "tamias_entity_roundtrip.tdoc";
+  ASSERT_TRUE(save_document(path, doc, viewport)) << "save failed";
+  auto loaded = load_document(path);
+  ASSERT_TRUE(loaded) << loaded.error();
+  const Entity* re = loaded->document.entity(wall_id);
+  ASSERT_NE(re, nullptr);
+  EXPECT_EQ(re->kind(), EntityKind::Wall);
+  EXPECT_EQ(re->model.features().size(), 2u);
+
+  std::error_code ec;
+  std::filesystem::remove(path, ec);
+}
+
+TEST(Document, RenderItemsAndSelection) {
+  Document doc("render");
+  add_wall_entity(doc, {0.f, 0.f, 0.f}, {0.f, 0.f, 5.f});
+  add_wall_entity(doc, {2.f, 0.f, 0.f}, {2.f, 0.f, 5.f});
+
+  auto items = doc.render_items();
+  ASSERT_EQ(items.size(), 2u);
+
+  const std::uint64_t first_id = items[0].node_id;
+  doc.select(first_id);
+  items = doc.render_items();
+  bool found_selected = false;
+  for (const auto& item : items) {
+    if (item.node_id == first_id) {
+      EXPECT_TRUE(item.selected);
+      found_selected = true;
+    }
+  }
+  EXPECT_TRUE(found_selected);
+  ASSERT_NE(doc.selected_entity(), nullptr);
+  EXPECT_EQ(doc.selected_entity()->id, first_id);
+}
+
 TEST(DocumentHistory, UndoRedoSnapshots) {
   Document doc("hist");
   MeshAsset asset{};
@@ -229,5 +316,39 @@ TEST(FeatureModel, ChangeParamReevaluates) {
   ASSERT_TRUE(mesh2) << mesh2.error();
   // 墙变厚：X 方向 extent 增大。
   EXPECT_GT(mesh2->bounds.extent().x, mesh1->bounds.extent().x);
+}
+
+TEST(Entity, CreateGeom) {
+  Wall wall = Wall::drag({0.f, 0.f, 0.f}, {0.f, 0.f, 5.f}, 0.2, 3.0);
+  auto mesh = wall.createGeom();
+  ASSERT_TRUE(mesh) << mesh.error();
+  EXPECT_FALSE(mesh->indices.empty());
+  EXPECT_TRUE(mesh->bounds.valid());
+}
+
+TEST(CommandSystem, DispatchCreateWallUndoRedo) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document doc("cmd");
+  CommandArgs args = {{"start", Vec3{0.f, 0.f, 0.f}},
+                      {"end", Vec3{0.f, 0.f, 5.f}},
+                      {"thickness", 0.2},
+                      {"height", 3.0}};
+  auto r = system.dispatch(doc, "create_wall", args);
+  ASSERT_TRUE(r) << r.error();
+  EXPECT_EQ(doc.entities().size(), 1u);
+  EXPECT_EQ(doc.meshes().size(), 1u);
+
+  ASSERT_TRUE(system.can_undo());
+  system.undo();
+  EXPECT_EQ(doc.entities().size(), 0u);
+  EXPECT_TRUE(doc.meshes().empty());
+
+  ASSERT_TRUE(system.can_redo());
+  system.redo();
+  EXPECT_EQ(doc.entities().size(), 1u);
+  EXPECT_EQ(doc.meshes().size(), 1u);
 }
 #endif

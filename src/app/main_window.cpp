@@ -2,11 +2,9 @@
 
 #include "app_settings.h"
 #include "engine/core/log.h"
-#include "entity/document_io.h"
+#include "engine/document/document_io.h"
 #include "engine/io/mesh_io.h"
 #include "mesh_thumbnail.h"
-#include "engine/modeling/feature.h"
-#include "engine/modeling/occt_feature.h"
 #include "engine/modeling/occt_shape_ops.h"
 #include "engine/modeling/shape_ops.h"
 #include "settings_dialog.h"
@@ -128,6 +126,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   connect(frame_all_action, &QAction::triggered, this, &MainWindow::frame_all);
   addAction(frame_all_action);
 
+#if defined(TAMIAS_HAS_OCCT)
   auto* create_group = new QActionGroup(this);
   create_group->setExclusive(true);
 
@@ -161,6 +160,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
           [this] { set_create_tool(ToolMode::Cylinder); });
   create_group->addAction(cylinder_action_);
   addAction(cylinder_action_);
+#endif
 
   auto* settings_action =
       new QAction(style()->standardIcon(QStyle::SP_FileDialogDetailedView), tr("Settings"), this);
@@ -263,19 +263,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     }
   });
 
+#if defined(TAMIAS_HAS_OCCT)
   auto* create_menu = menuBar()->addMenu(tr("&Create"));
   create_menu->addAction(wall_action_);
   create_menu->addAction(box_action_);
   create_menu->addAction(cylinder_action_);
+#endif
 
   auto* tools_menu = menuBar()->addMenu(tr("&Tools"));
   tools_menu->addAction(settings_action);
-#if defined(TAMIAS_HAS_OCCT)
-  auto* parametric_action = new QAction(tr("New Parametric Demo (Wall)"), this);
-  parametric_action->setToolTip(tr("Create a parametric wall; press [ or ] to change thickness"));
-  connect(parametric_action, &QAction::triggered, this, &MainWindow::new_parametric_demo);
-  tools_menu->addAction(parametric_action);
-#endif
 
   auto* toolbar = addToolBar(tr("Main"));
   toolbar->setObjectName(QStringLiteral("mainToolbar"));
@@ -289,10 +285,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   toolbar->addAction(undo_action);
   toolbar->addAction(redo_action);
   toolbar->addSeparator();
+#if defined(TAMIAS_HAS_OCCT)
   toolbar->addAction(wall_action_);
   toolbar->addAction(box_action_);
   toolbar->addAction(cylinder_action_);
   toolbar->addSeparator();
+#endif
   toolbar->addAction(frame_all_action);
   toolbar->addSeparator();
   toolbar->addWidget(render_mode_combo_);
@@ -416,14 +414,17 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
   // fills the top-left corner of the window.
   auto* vp = new DocumentViewport(document, thread, nullptr);
   connect(vp, &DocumentViewport::tool_mode_changed, this, [this](ToolMode mode) {
+#if defined(TAMIAS_HAS_OCCT)
     const QSignalBlocker b0(wall_action_);
     const QSignalBlocker b1(box_action_);
     const QSignalBlocker b2(cylinder_action_);
     wall_action_->setChecked(mode == ToolMode::Wall);
     box_action_->setChecked(mode == ToolMode::Box);
     cylinder_action_->setChecked(mode == ToolMode::Cylinder);
+#else
+    (void)mode;
+#endif
   });
-  vp->seed_history_baseline();
   const int index = tabs_->addTab(vp, QString::fromStdString(document->name()));
   tabs_->setCurrentIndex(index);
   show_documents();
@@ -448,51 +449,9 @@ void MainWindow::new_demo_document() {
   open_path(path);
 }
 
-void MainWindow::new_parametric_demo() {
-#if defined(TAMIAS_HAS_OCCT)
-  FeatureModel model;
-  auto& profile = model.add_feature(FeatureKind::RectProfile, {},
-                                    {{"width", 0.2}, {"height", 3.0}});
-  const std::uint64_t profile_id = profile.id;
-  model.add_feature(FeatureKind::Extrude, {profile_id}, {{"depth", 5.0}});
-
-  auto mesh = evaluate_feature_model(model, 0.05);
-  if (!mesh) {
-    QMessageBox::critical(this, tr("Parametric Demo"), QString::fromStdString(mesh.error()));
-    return;
-  }
-
-  auto document = std::make_shared<Document>("Parametric Wall");
-  MeshAsset asset{};
-  asset.name = "wall";
-  asset.cpu = std::move(*mesh);
-  auto& stored = document->add_mesh(std::move(asset));
-  const std::uint64_t asset_id = stored.id;
-  SceneNode node{};
-  node.name = "wall";
-  node.mesh_asset_id = asset_id;
-  document->scene().add_node(std::move(node));
-  document->recompute_scene();
-
-  add_document_tab(document);
-  if (auto* vp = current_viewport()) {
-    vp->set_parametric_model(std::move(model), asset_id);
-  }
-#endif
-}
-
 void MainWindow::new_document() {
   auto document = std::make_shared<Document>("Untitled");
-  MeshAsset asset{};
-  asset.name = "cube";
-  asset.cpu = make_demo_cube();
-  auto& stored = document->add_mesh(std::move(asset));
-  SceneNode node{};
-  node.name = "cube";
-  node.mesh_asset_id = stored.id;
-  document->scene().add_node(std::move(node));
-  document->recompute_scene();
-  document->mark_dirty();
+  document->add_import_mesh("cube", make_demo_cube(), Mat4::identity(), {0.75f, 0.78f, 0.82f});
   add_document_tab(document);
 }
 
@@ -572,20 +531,15 @@ bool MainWindow::open_path(const QString& path) {
   }
   auto document = std::make_shared<Document>(file.filename().string());
   document->set_path(file);
-  MeshAsset asset{};
-  asset.name = file.filename().string();
-  asset.cpu = std::move(*mesh);
-  auto& stored = document->add_mesh(std::move(asset));
-  SceneNode node{};
-  node.name = stored.name;
-  node.mesh_asset_id = stored.id;
-  if (mesh_has_vertex_colors(stored.cpu)) {
-    node.color = {1.f, 1.f, 1.f};
-  }
-  document->scene().add_node(std::move(node));
+  const bool has_colors = mesh_has_vertex_colors(*mesh);
+  const Vec3 color = has_colors ? Vec3{1.f, 1.f, 1.f} : Vec3{0.75f, 0.78f, 0.82f};
+  const std::uint64_t mesh_id =
+      document->add_import_mesh(file.filename().string(), std::move(*mesh), Mat4::identity(),
+                                color);
   add_document_tab(document);
 
-  const QImage thumb = render_mesh_thumbnail(stored.cpu);
+  const MeshAsset* asset = document->mesh(mesh_id);
+  const QImage thumb = render_mesh_thumbnail(asset->cpu);
   const QString thumb_path = save_mesh_thumbnail(info.absoluteFilePath(), thumb);
   recent_.add(info.absoluteFilePath(), thumb_path);
   refresh_home();
@@ -624,11 +578,7 @@ bool MainWindow::is_tdoc_path(const QString& path) {
 }
 
 const MeshCpu* MainWindow::selected_mesh(Document& document) const {
-  const SceneNode* node = document.scene().selected_node();
-  if (!node) {
-    return nullptr;
-  }
-  const MeshAsset* asset = document.mesh(node->mesh_asset_id);
+  const MeshAsset* asset = document.selected_mesh();
   return asset ? &asset->cpu : nullptr;
 }
 

@@ -1,10 +1,10 @@
 #pragma once
 
-#include "entity/document.h"
+#include "engine/document/document.h"
 #include "document_viewport.h"
 #include "engine/render/render_runtime.h"
 #include "home_page.h"
-#include "entity/document_io.h"
+#include "engine/document/document_io.h"
 #include "recent_files.h"
 
 #include <QMainWindow>
@@ -43,7 +43,6 @@ class MainWindow final : public QMainWindow {
   void refresh_home();
   bool open_path(const QString& path);
   void new_document();
-  void new_parametric_demo();
   void set_create_tool(ToolMode mode);
   bool write_selected_mesh(const QString& path);
   bool write_tdoc_document(const QString& path);

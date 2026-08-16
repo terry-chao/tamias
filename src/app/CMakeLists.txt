@@ -43,7 +43,7 @@ target_link_libraries(tamias
     tamias::graphics
     tamias::rhi
     tamias::render
-    tamias::entity
+    tamias::document
     tamias::io
     tamias::modeling
     tamias::command

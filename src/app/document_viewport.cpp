@@ -2,15 +2,11 @@
 
 #include "app_settings.h"
 #include "command/create_primitive_command.h"
-#include "command/create_wall_command.h"
 #include "engine/core/log.h"
+#include "engine/modeling/feature.h"
 
 #if defined(TAMIAS_HAS_RHI_OPENGL)
 #include "engine/rhi_opengl/opengl_backend.h"
-#endif
-
-#if defined(TAMIAS_HAS_OCCT)
-#include "engine/modeling/occt_feature.h"
 #endif
 
 #include <QCoreApplication>
@@ -172,12 +168,6 @@ void DocumentViewport::apply_viewport_state(const ViewportState& state) {
   // wrong size can leave the swapchain stuck drawing into a corner of the window.
   if (isVisible() && surface_ && surface_->width() >= 2 && surface_->height() >= 2) {
     request_redraw();
-  }
-}
-
-void DocumentViewport::seed_history_baseline() {
-  if (auto bytes = serialize_document(*document_); bytes) {
-    history_.reset_with(std::move(*bytes));
   }
 }
 
@@ -485,18 +475,7 @@ void DocumentViewport::submit_current_frame() {
   frame.proj = camera_.proj_matrix(aspect);
   frame.eye_position = camera_.eye_position();
   frame.mode = mode_;
-  for (const auto& node : document_->scene().nodes()) {
-    if (node.mesh_asset_id == 0) {
-      continue;  // grouping / empty nodes carry no geometry
-    }
-    SceneDrawItem item{};
-    item.node_id = node.id;
-    item.mesh_asset_id = node.mesh_asset_id;
-    item.transform = node.world_transform;
-    item.color = node.color;
-    item.selected = node.selected;
-    frame.items.push_back(item);
-  }
+  frame.items = document_->render_items();
   frame.show_preview_line = (tool_mode_ == ToolMode::Wall) && wall_placing_;
   if (frame.show_preview_line) {
     frame.preview_start = wall_start_;
@@ -528,7 +507,7 @@ void DocumentViewport::resizeEvent(QResizeEvent* event) {
 }
 
 void DocumentViewport::mousePressEvent(QMouseEvent* event) {
-  setFocus();  // 让视口能收到按键（P1 参数化演示用 [ ] 改墙厚）
+  setFocus();  // 让视口能收到按键（[ ] 改选中对象的参数）
   last_mouse_ = event->pos();
   press_mouse_ = event->pos();
   if (event->button() == Qt::LeftButton) {
@@ -545,10 +524,10 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
           }
           break;
         case ToolMode::Box:
-          create_primitive(make_box_mesh(1.f, 1.f, 1.f), "box", ground);
+          create_primitive(PrimitiveKind::Box, ground);
           break;
         case ToolMode::Cylinder:
-          create_primitive(make_cylinder_mesh(0.5f, 2.f), "cylinder", ground);
+          create_primitive(PrimitiveKind::Cylinder, ground);
           break;
         case ToolMode::None:
           break;
@@ -593,11 +572,9 @@ void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
           camera_ray(camera_, aspect, static_cast<float>(event->pos().x() * dpr),
                      static_cast<float>(event->pos().y() * dpr),
                      static_cast<float>(width() * dpr), static_cast<float>(height() * dpr));
-      document_->scene().clear_selection();
+      document_->clear_selection();
       if (auto hit = bvh_.closest_hit(ray, *document_)) {
-        if (auto* node = document_->scene().find(hit->node_id)) {
-          node->selected = true;
-        }
+        document_->select(hit->node_id);
       }
       request_redraw();
     }
@@ -624,58 +601,16 @@ void DocumentViewport::wheelEvent(QWheelEvent* event) {
   request_redraw();
 }
 
-void DocumentViewport::set_parametric_model(FeatureModel model, std::uint64_t asset_id) {
-  parametric_model_ = std::make_unique<FeatureModel>(std::move(model));
-  parametric_asset_id_ = asset_id;
-}
-
-void DocumentViewport::adjust_parametric_width(double delta) {
-  if (!parametric_model_) {
-    return;
-  }
-#if defined(TAMIAS_HAS_OCCT)
-  // P1 demo：特征树里只有一个 RectProfile，改它的 width 即改墙厚。
-  for (auto& f : parametric_model_->features()) {
-    if (f.kind == FeatureKind::RectProfile) {
-      const double w = parametric_model_->param(f.id, "width", 0.2);
-      parametric_model_->set_param(f.id, "width", w + delta);
-      break;
-    }
-  }
-  auto mesh = evaluate_feature_model(*parametric_model_, 0.05);
-  if (!mesh) {
-    log_error(mesh.error());
-    return;
-  }
-  MeshAsset* asset = document_->mesh(parametric_asset_id_);
-  if (!asset) {
-    return;
-  }
-  asset->cpu = std::move(*mesh);
-  if (render_thread_) {
-    if (auto gpu = render_thread_->upload_mesh(parametric_asset_id_, asset->cpu); !gpu) {
-      log_error(gpu.error());
-      return;
-    }
-  }
-  document_->recompute_scene();
-  rebuild_bvh();
-  request_redraw();
-#else
-  (void)delta;
-#endif
-}
-
 void DocumentViewport::keyPressEvent(QKeyEvent* event) {
   switch (event->key()) {
     case Qt::Key_Escape:
       cancel_tool();
       break;
-    case Qt::Key_BracketLeft:   // '[' 变薄
-      adjust_parametric_width(-0.05);
+    case Qt::Key_BracketLeft:   // '[' 减参数
+      adjust_selected_param(-0.05);
       break;
-    case Qt::Key_BracketRight:  // ']' 变厚
-      adjust_parametric_width(0.05);
+    case Qt::Key_BracketRight:  // ']' 加参数
+      adjust_selected_param(0.05);
       break;
     default:
       QWidget::keyPressEvent(event);
@@ -703,16 +638,51 @@ void DocumentViewport::cancel_tool() {
 }
 
 void DocumentViewport::create_wall(Vec3 start, Vec3 end) {
-  auto command = std::make_unique<CreateWallCommand>(*document_, start, end, 0.2, 3.0);
-  if (auto r = command->execute(); r) {
-    if (auto* asset = document_->mesh(command->mesh_id())) {
-      if (render_thread_) {
-        if (auto gpu = render_thread_->upload_mesh(asset->id, asset->cpu); !gpu) {
-          log_error(gpu.error());
-        }
-      }
+  run_command("create_wall",
+              {{"start", start}, {"end", end}, {"thickness", 0.2}, {"height", 3.0}});
+}
+
+void DocumentViewport::create_primitive(PrimitiveKind kind, Vec3 position) {
+  run_command(kind == PrimitiveKind::Box ? "create_box" : "create_cylinder",
+              {{"position", position}});
+}
+
+void DocumentViewport::adjust_selected_param(double delta) {
+  Entity* entity = document_->selected_entity();
+  if (entity == nullptr) {
+    return;
+  }
+  // 找可编辑的轮廓特征：RectProfile 的 width，或 CircleProfile 的 radius。
+  std::uint64_t feature_id = 0;
+  std::string param_name;
+  double current = 0.0;
+  for (const auto& f : entity->model.features()) {
+    if (f.kind == FeatureKind::RectProfile) {
+      feature_id = f.id;
+      param_name = "width";
+      current = entity->model.param(f.id, "width", 0.0);
+      break;
     }
-    command_stack_.push_executed(std::move(command));
+    if (f.kind == FeatureKind::CircleProfile) {
+      feature_id = f.id;
+      param_name = "radius";
+      current = entity->model.param(f.id, "radius", 0.0);
+      break;
+    }
+  }
+  if (feature_id == 0) {
+    return;
+  }
+  run_command("set_param",
+              {{"entity_id", static_cast<std::int64_t>(entity->id)},
+               {"feature_id", static_cast<std::int64_t>(feature_id)},
+               {"param_name", param_name},
+               {"value", current + delta}});
+}
+
+void DocumentViewport::run_command(const std::string& name, const CommandArgs& args) {
+  if (auto r = command_system_.dispatch(*document_, name, args); r) {
+    resync_all_meshes();
     document_->recompute_scene();
     rebuild_bvh();
     request_redraw();
@@ -721,41 +691,35 @@ void DocumentViewport::create_wall(Vec3 start, Vec3 end) {
   }
 }
 
-void DocumentViewport::create_primitive(MeshCpu mesh, std::string name, Vec3 position) {
-  auto command = std::make_unique<CreatePrimitiveCommand>(*document_, std::move(mesh),
-                                                          std::move(name), position);
-  if (auto r = command->execute(); r) {
-    if (auto* asset = document_->mesh(command->mesh_id())) {
-      if (render_thread_) {
-        if (auto gpu = render_thread_->upload_mesh(asset->id, asset->cpu); !gpu) {
-          log_error(gpu.error());
-        }
-      }
+void DocumentViewport::resync_all_meshes() {
+  if (!render_thread_) {
+    return;
+  }
+  for (const auto& [unused, asset] : document_->meshes()) {
+    (void)unused;
+    if (auto gpu = render_thread_->upload_mesh(asset.id, asset.cpu); !gpu) {
+      log_error(gpu.error());
     }
-    command_stack_.push_executed(std::move(command));
-    document_->recompute_scene();
-    rebuild_bvh();
-    request_redraw();
-  } else {
-    log_error(r.error());
   }
 }
 
 void DocumentViewport::undo() {
-  if (!command_stack_.can_undo()) {
+  if (!command_system_.can_undo()) {
     return;
   }
-  command_stack_.undo();
+  command_system_.undo();
+  resync_all_meshes();
   document_->recompute_scene();
   rebuild_bvh();
   request_redraw();
 }
 
 void DocumentViewport::redo() {
-  if (!command_stack_.can_redo()) {
+  if (!command_system_.can_redo()) {
     return;
   }
-  command_stack_.redo();
+  command_system_.redo();
+  resync_all_meshes();
   document_->recompute_scene();
   rebuild_bvh();
   request_redraw();

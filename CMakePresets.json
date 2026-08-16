@@ -20,6 +20,7 @@
         "strategy": "external"
       },
       "binaryDir": "${sourceDir}/build",
+      "environment": { "VSLANG": "1033" },
       "cacheVariables": {
         "CMAKE_PREFIX_PATH": "C:/Qt/6.11.1/msvc2022_64",
         "CMAKE_C_COMPILER": "cl.exe",
@@ -53,17 +54,20 @@
     {
       "name": "release",
       "configurePreset": "msvc",
-      "configuration": "Release"
+      "configuration": "Release",
+      "environment": { "VSLANG": "1033" }
     },
     {
       "name": "relwithdebinfo",
       "configurePreset": "msvc",
-      "configuration": "RelWithDebInfo"
+      "configuration": "RelWithDebInfo",
+      "environment": { "VSLANG": "1033" }
     },
     {
       "name": "debug",
       "configurePreset": "msvc",
-      "configuration": "Debug"
+      "configuration": "Debug",
+      "environment": { "VSLANG": "1033" }
     },
     {
       "name": "linux-relwithdebinfo",

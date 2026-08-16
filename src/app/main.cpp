@@ -1,6 +1,7 @@
 #include "main_window.h"
 
 #include "app_settings.h"
+#include "command/command_system.h"
 #include "engine/core/log.h"
 #include "engine/render/render_runtime.h"
 #include "engine/graphics/graphics_backend.h"
@@ -26,6 +27,7 @@ int main(int argc, char* argv[]) {
 
   tamias::init_logging(tamias::LogLevel::Info);
   tamias::register_linked_rhi_backends();
+  tamias::register_commands(tamias::command_registry());
 #if defined(TAMIAS_HAS_OCCT)
   tamias::register_occt_shape_ops();
 #endif

@@ -1,14 +1,12 @@
 #pragma once
 
 #include "engine/core/native_window_handle.h"
-#include "entity/document.h"
-#include "command/command_stack.h"
-#include "command/history.h"
+#include "engine/document/document.h"
+#include "command/command_system.h"
 #include "engine/render/render_runtime.h"
-#include "entity/document_io.h"
+#include "engine/document/document_io.h"
 #include "engine/math/camera.h"
-#include "engine/modeling/feature.h"
-#include "entity/picking.h"
+#include "engine/document/picking.h"
 #include "view_cube_widget.h"
 
 #include <QElapsedTimer>
@@ -18,6 +16,9 @@
 #include <memory>
 
 namespace tamias {
+
+// 基础几何体种类（定义见 command/create_primitive_command.h）。
+enum class PrimitiveKind;
 
 // 当前激活的创建工具。
 enum class ToolMode { None, Wall, Box, Cylinder };
@@ -31,19 +32,12 @@ class DocumentViewport final : public QWidget {
   ~DocumentViewport() override;
 
   [[nodiscard]] Document& document() { return *document_; }
-  [[nodiscard]] DocumentHistory& history() { return history_; }
-  [[nodiscard]] const DocumentHistory& history() const { return history_; }
   void set_render_mode(RenderMode mode);
   [[nodiscard]] RenderMode render_mode() const { return mode_; }
   void frame_scene();
   void request_redraw();
   [[nodiscard]] ViewportState capture_viewport_state() const;
   void apply_viewport_state(const ViewportState& state);
-  // Seed undo baseline from the current document body (call after load/open).
-  void seed_history_baseline();
-  // P1 参数化演示：挂一个特征模型到本视口，可按键改参数重算。
-  void set_parametric_model(FeatureModel model, std::uint64_t asset_id);
-  void adjust_parametric_width(double delta);
   // 设置当前创建工具（None / Wall / Box / Cylinder）。
   void set_tool(ToolMode mode);
   [[nodiscard]] ToolMode tool_mode() const { return tool_mode_; }
@@ -83,19 +77,19 @@ class DocumentViewport final : public QWidget {
   [[nodiscard]] Vec3 cursor_world_position(const QPoint& pos) const;
   [[nodiscard]] Vec3 cursor_ground_position(const QPoint& pos) const;
   void create_wall(Vec3 start, Vec3 end);
-  void create_primitive(MeshCpu mesh, std::string name, Vec3 position);
+  void create_primitive(PrimitiveKind kind, Vec3 position);
+  void adjust_selected_param(double delta);
+  void run_command(const std::string& name, const CommandArgs& args);
+  void resync_all_meshes();
   void cancel_tool();
 
   std::shared_ptr<Document> document_;
   std::shared_ptr<RenderThread> render_thread_;
   std::unique_ptr<RenderChannel> channel_;
-  DocumentHistory history_;
   TurntableCamera camera_;
   Bvh bvh_;
   RenderMode mode_ = RenderMode::Shaded;
-  std::unique_ptr<FeatureModel> parametric_model_;
-  std::uint64_t parametric_asset_id_ = 0;
-  CommandStack command_stack_;
+  CommandSystem command_system_{command_registry()};
   ToolMode tool_mode_ = ToolMode::None;
   bool wall_placing_ = false;
   Vec3 wall_start_{};
