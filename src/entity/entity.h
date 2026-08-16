@@ -13,7 +13,7 @@ namespace tamias {
 
 enum class EntityKind : std::uint8_t { Wall = 0, Box = 1, Cylinder = 2 };
 
-// 领域实体基类：参数化对象。持有特征树（造型配方）+ 放置 + 网格引用。
+// 领域实体基类：参数化对象，持有特征树（造型配方）+ 放置 + 网格引用。
 // SceneNode 是内部 render/select 单元，实体语义包裹它（entity id == scene node id）。
 // 造型信息（几何生成）委托 createGeom 抽象（IGeometryBuilder），本类保持内核无关。
 class Entity {
@@ -35,24 +35,5 @@ class Entity {
 
 // 按 kind 构造一个实体（供反序列化 / clone 用）。
 std::unique_ptr<Entity> make_entity(EntityKind kind);
-
-class Wall final : public Entity {
- public:
-  Wall() { kind_ = EntityKind::Wall; }
-  // drag 操作：两点 → 墙（纯操作，无鼠标）。
-  static Wall drag(Vec3 start, Vec3 end, double thickness, double height);
-};
-
-class Box final : public Entity {
- public:
-  Box() { kind_ = EntityKind::Box; }
-  static Box at(Vec3 position);
-};
-
-class Cylinder final : public Entity {
- public:
-  Cylinder() { kind_ = EntityKind::Cylinder; }
-  static Cylinder at(Vec3 position);
-};
 
 }  // namespace tamias

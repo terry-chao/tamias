@@ -24,16 +24,16 @@ Entity* Document::add_entity(std::unique_ptr<Entity> entity, MeshCpu mesh) {
   return raw;
 }
 
-Entity* Document::add_wall(Wall wall, MeshCpu mesh) {
-  return add_entity(std::make_unique<Wall>(std::move(wall)), std::move(mesh));
+Entity* Document::add_wall(WallEntity wall, MeshCpu mesh) {
+  return add_entity(std::make_unique<WallEntity>(std::move(wall)), std::move(mesh));
 }
 
-Entity* Document::add_box(Box box, MeshCpu mesh) {
-  return add_entity(std::make_unique<Box>(std::move(box)), std::move(mesh));
+Entity* Document::add_box(BoxEntity box, MeshCpu mesh) {
+  return add_entity(std::make_unique<BoxEntity>(std::move(box)), std::move(mesh));
 }
 
-Entity* Document::add_cylinder(Cylinder cylinder, MeshCpu mesh) {
-  return add_entity(std::make_unique<Cylinder>(std::move(cylinder)), std::move(mesh));
+Entity* Document::add_cylinder(CylinderEntity cylinder, MeshCpu mesh) {
+  return add_entity(std::make_unique<CylinderEntity>(std::move(cylinder)), std::move(mesh));
 }
 
 void Document::remove_entity(std::uint64_t id) {

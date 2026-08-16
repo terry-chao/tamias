@@ -34,6 +34,7 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/TamiasShaders.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/TamiasDependencies.cmake")
 
 add_subdirectory(src/engine)
+add_subdirectory(src/entity)
 add_subdirectory(src/command)
 add_subdirectory(src/app)
 

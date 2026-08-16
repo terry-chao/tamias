@@ -9,7 +9,7 @@ namespace tamias {
 // 基础几何体种类。
 enum class PrimitiveKind { Box, Cylinder };
 
-// 创建一个参数化基础几何体（box / cylinder）：command → Box::at / Cylinder::at → 实体 → Document。
+// 创建一个参数化基础几何体（box / cylinder）：command → BoxEntity::at / CylinderEntity::at → 实体 → Document。
 class CreatePrimitiveCommand final : public Command {
  public:
   CreatePrimitiveCommand(Document& document, PrimitiveKind kind, Vec3 position);

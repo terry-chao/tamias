@@ -1,6 +1,7 @@
 #include "create_primitive_command.h"
 
-#include "engine/document/entity.h"
+#include "entity/box_entity.h"
+#include "entity/cylinder_entity.h"
 
 namespace tamias {
 
@@ -11,14 +12,14 @@ CreatePrimitiveCommand::CreatePrimitiveCommand(Document& document, PrimitiveKind
 Result<void> CreatePrimitiveCommand::execute() {
   Entity* added = nullptr;
   if (kind_ == PrimitiveKind::Box) {
-    Box box = Box::at(position_);        // ① 建实体
-    auto geometry = box.createGeom();    // ② 造型
+    BoxEntity box = BoxEntity::at(position_);  // ① 建实体
+    auto geometry = box.createGeom();          // ② 造型
     if (!geometry) {
       return Err(geometry.error());
     }
     added = document_->add_box(std::move(box), std::move(*geometry));  // ③ 入文档
   } else {
-    Cylinder cylinder = Cylinder::at(position_);
+    CylinderEntity cylinder = CylinderEntity::at(position_);
     auto geometry = cylinder.createGeom();
     if (!geometry) {
       return Err(geometry.error());

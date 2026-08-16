@@ -18,7 +18,7 @@ namespace {
 
 // 手动给文档加一个墙实体（绕过 OCCT 求值，供序列化/渲染测试）。
 std::uint64_t add_wall_entity(Document& doc, Vec3 start, Vec3 end) {
-  auto wall = std::make_unique<Wall>(Wall::drag(start, end, 0.2, 3.0));
+  auto wall = std::make_unique<WallEntity>(WallEntity::drag(start, end, 0.2, 3.0));
   MeshAsset mesh_asset{};
   mesh_asset.name = wall->name;
   mesh_asset.cpu = make_demo_cube();
@@ -319,7 +319,7 @@ TEST(FeatureModel, ChangeParamReevaluates) {
 }
 
 TEST(Entity, CreateGeom) {
-  Wall wall = Wall::drag({0.f, 0.f, 0.f}, {0.f, 0.f, 5.f}, 0.2, 3.0);
+  WallEntity wall = WallEntity::drag({0.f, 0.f, 0.f}, {0.f, 0.f, 5.f}, 0.2, 3.0);
   auto mesh = wall.createGeom();
   ASSERT_TRUE(mesh) << mesh.error();
   EXPECT_FALSE(mesh->indices.empty());

@@ -6,7 +6,7 @@
 
 namespace tamias {
 
-// 创建一面参数化墙：command → drag（Wall::drag）→ Wall 实体 → Document（内部建网格 + 场景节点）。
+// 创建一面参数化墙：command → drag（WallEntity::drag）→ WallEntity 实体 → Document。
 class CreateWallCommand final : public Command {
  public:
   CreateWallCommand(Document& document, Vec3 start, Vec3 end, double thickness, double height);

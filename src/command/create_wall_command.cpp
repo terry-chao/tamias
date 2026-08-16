@@ -1,6 +1,6 @@
 #include "create_wall_command.h"
 
-#include "engine/document/entity.h"
+#include "entity/wall_entity.h"
 
 namespace tamias {
 
@@ -13,7 +13,7 @@ CreateWallCommand::CreateWallCommand(Document& document, Vec3 start, Vec3 end, d
       height_(height) {}
 
 Result<void> CreateWallCommand::execute() {
-  Wall wall = Wall::drag(start_, end_, thickness_, height_);  // ① drag 操作
+  WallEntity wall = WallEntity::drag(start_, end_, thickness_, height_);  // ① drag 操作
   auto geometry = wall.createGeom();                           // ② 造型（实体 createGeom）
   if (!geometry) {
     return Err(geometry.error());
