@@ -3,6 +3,7 @@
 #include "engine/rhi/device.h"
 #include "engine/graphics/mesh.h"
 #include "engine/math/camera.h"
+#include "engine/render/render_types.h"
 
 #include <atomic>
 #include <condition_variable>
@@ -18,21 +19,11 @@
 
 namespace tamias {
 
-enum class RenderMode { Wireframe, Shaded, Realistic };
-
 struct GpuMesh {
   std::unique_ptr<Buffer> vertex_buffer;
   std::unique_ptr<Buffer> index_buffer;
   std::uint32_t index_count = 0;
   Aabb bounds{};
-};
-
-struct SceneDrawItem {
-  std::uint64_t node_id = 0;
-  std::uint64_t mesh_asset_id = 0;  // semantic geometry reference (render side maps to GPU)
-  Mat4 transform = Mat4::identity();  // world transform (accumulated on semantic side)
-  Vec3 color{0.75f, 0.78f, 0.82f};
-  bool selected = false;
 };
 
 struct FrameSubmission {
