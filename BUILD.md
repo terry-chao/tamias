@@ -28,18 +28,6 @@ Dependencies resolved via:
 - Vendored headers in `3rdparty/` (VMA, rapidobj)
 - FetchContent zip for GoogleTest (tests only)
 
-### Cursor / clangd (go-to-definition)
-
-The `msvc` preset uses Ninja Multi-Config for both builds and clangd. Configure it once from a VS developer environment:
-
-```powershell
-# From "x64 Native Tools Command Prompt" or after VsDevCmd.bat -arch=x64
-cmake --preset msvc
-```
-
-Or run the VS Code/Cursor task **CMake: configure msvc**. CMake Tools needs the Visual Studio developer environment for Ninja + MSVC (`.vscode/settings.json` sets `cmake.useVsDeveloperEnvironment` to `always`). clangd reads
-`build/compile_commands.json`, and compilation/F5 use the same build tree.
-
 ## Linux
 
 Use the `linux` preset with vcpkg (`linux-desktop` feature) or install Qt6/Vulkan via distro packages and adjust `CMAKE_PREFIX_PATH`.
