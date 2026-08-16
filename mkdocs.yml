@@ -1,0 +1,43 @@
+site_name: Tamias
+site_description: 跨 MCAD / BIM 的几何查看 + 参数化编辑内核
+site_url: https://terry-chao.github.io/tamias/
+repo_url: https://github.com/terry-chao/tamias
+repo_name: terry-chao/tamias
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: zh
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - search.suggest
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: 切换深色模式
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: 切换浅色模式
+
+markdown_extensions:
+  - admonition
+  - tables
+  - pymdownx.highlight
+  - pymdownx.superfences
+
+nav:
+  - 首页: index.md
+  - 路线图: ROADMAP.md
+  - 特征树求值器: FEATURE-TREE-EVALUATOR.md
+  - MCAD/BIM 决策: DECISION-MCAD-BIM.md
+  - MCAD 管线: MCAD-PIPELINE.md

@@ -17,3 +17,5 @@ out/
 *.user
 *.suo
 *.sdf
+site/
+.cache/

@@ -18,9 +18,9 @@
 
 | 层 | 文件 | 职责 | 跟 OCCT 的关系 |
 |---|---|---|---|
-| **配方（数据）** | [feature.h](../src/engine/modeling/feature.h) `FeatureModel` | 存特征树，纯数据，能序列化进 `.tdoc` | **零依赖 OCCT** |
-| **边界（抽象）** | [geom_builder.h](../src/engine/modeling/geom_builder.h) `IGeometryBuilder` | 只定义一个接口 `build(model) → MeshCpu` | 只声明，不实现 |
-| **执行（实现）** | [occt_geom_builder.cpp](../src/engine/modeling/occt_geom_builder.cpp) + [occt_feature.cpp](../src/engine/modeling/occt_feature.cpp) | 真正调 OCCT 求值 | **全项目唯一碰 OCCT 几何的地方** |
+| **配方（数据）** | [feature.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/feature.h) `FeatureModel` | 存特征树，纯数据，能序列化进 `.tdoc` | **零依赖 OCCT** |
+| **边界（抽象）** | [geom_builder.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/geom_builder.h) `IGeometryBuilder` | 只定义一个接口 `build(model) → MeshCpu` | 只声明，不实现 |
+| **执行（实现）** | [occt_geom_builder.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt_geom_builder.cpp) + [occt_feature.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt_feature.cpp) | 真正调 OCCT 求值 | **全项目唯一碰 OCCT 几何的地方** |
 
 最关键的一点：`FeatureModel` 里**没有任何 OCCT 类型**（没有 `TopoDS_Shape`），只有 `uint64_t id`、`FeatureKind`、`unordered_map<string,double> params`。所以它能存盘。OCCT 的 `TopoDS_Shape` 只在求值器内部活一瞬间，算完就转成 `MeshCpu` 交出去，不往外泄漏。
 
@@ -39,7 +39,7 @@ struct Feature {
 };
 ```
 
-一个实体（盒子）的特征树，`BoxEntity` 构造时写死（[box_entity.cpp](../src/entity/box_entity.cpp)）：
+一个实体（盒子）的特征树，`BoxEntity` 构造时写死（[box_entity.cpp](https://github.com/terry-chao/tamias/blob/main/src/entity/box_entity.cpp)）：
 
 ```
 特征1: RectProfile   inputs=[]          params={width:1.0, height:1.0}
@@ -54,7 +54,7 @@ struct Feature {
 
 ## 3. 求值器怎么工作
 
-入口是 [occt_feature.cpp](../src/engine/modeling/occt_feature.cpp) 的 `evaluate_feature_model(model, deflection)`，流程：
+入口是 [occt_feature.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt_feature.cpp) 的 `evaluate_feature_model(model, deflection)`，流程：
 
 ```
 建一个 shapes 表（id → TopoDS_Shape），一开始是空的
@@ -114,7 +114,7 @@ OCCT 是 **Z-up**（Z 朝上），Tamias 视口是 **Y-up**（glTF/Blender 惯�
 
 ## 6. 「改参数 → 重算」闭环
 
-以改一个盒子的 `depth` 为例（[set_feature_param_command.cpp](../src/command/set_feature_param_command.cpp)）：
+以改一个盒子的 `depth` 为例（[set_feature_param_command.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/set_feature_param_command.cpp)）：
 
 ```
 set_param(feature_id, "depth", 2.0)
