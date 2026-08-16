@@ -709,6 +709,24 @@ void DocumentViewport::set_entity_param(std::uint64_t entity_id, std::uint64_t f
               /*notify=*/false);
 }
 
+void DocumentViewport::set_entity_material(std::uint64_t entity_id, const Material& material) {
+  // 纯视觉：材质只影响渲染，不重建网格/场景/BVH，仅重绘一帧。
+  // 属性面板自己已展示新值，无需 notify 刷新（避免重建丢焦点）。
+  if (auto r = command_system_.dispatch(
+          *document_, "set_material",
+          {{"entity_id", static_cast<std::int64_t>(entity_id)},
+           {"material_id", static_cast<std::int64_t>(material.id)},
+           {"name", material.name},
+           {"base_color", material.base_color},
+           {"roughness", static_cast<double>(material.roughness)},
+           {"metallic", static_cast<double>(material.metallic)}});
+      r) {
+    request_redraw();
+  } else {
+    log_error(r.error());
+  }
+}
+
 void DocumentViewport::fillet_selected(double radius) {
   const Entity* e = document_->selected_entity();
   if (e == nullptr) {

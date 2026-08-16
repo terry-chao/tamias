@@ -4,6 +4,7 @@ add_library(tamias_command STATIC
   create_wall_command.cpp
   create_primitive_command.cpp
   set_feature_param_command.cpp
+  set_material_command.cpp
   command_system.cpp
   register_commands.cpp
 )

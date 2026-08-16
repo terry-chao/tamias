@@ -1,13 +1,21 @@
 #include "property_panel.h"
 
+#include "engine/document/document.h"
+
 #include <QAbstractSpinBox>
+#include <QColorDialog>
+#include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QLabel>
+#include <QPushButton>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace tamias {
@@ -95,7 +103,8 @@ PropertyPanel::PropertyPanel(QWidget* parent) : QWidget(parent) {
   root_->setSpacing(0);
 }
 
-void PropertyPanel::show_entity(const Entity* entity, const QString& fallback_note) {
+void PropertyPanel::show_entity(const Entity* entity, const Document* document,
+                                const QString& fallback_note) {
   // 整块重建内容区。旧块用 deleteLater：刷新可能由旧块里 spinbox 的 valueChanged
   // 信号链同步触发，直接 delete 会在该信号栈内销毁正被使用的 widget。
   if (content_) {
@@ -160,7 +169,147 @@ void PropertyPanel::show_entity(const Entity* entity, const QString& fallback_no
   }
 
   column->addLayout(form);
+  add_material_editor(content_, column, eid, entity, document);
   column->addStretch(1);
+}
+
+void PropertyPanel::add_material_editor(QWidget* parent, QVBoxLayout* column,
+                                        std::uint64_t entity_id, const Entity* entity,
+                                        const Document* document) {
+  auto* header = new QLabel(tr("Material"), parent);
+  header->setStyleSheet(QStringLiteral("font-weight: 600; color: #9aa0a6; margin-top: 4px;"));
+  column->addWidget(header);
+
+  auto* form = new QFormLayout();
+  form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+  form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+
+  // 材质库快照（拷贝一份，避免在信号 lambda 里持有 Document 裸指针 —— 面板可跨文档存活）。
+  auto materials = std::make_shared<std::unordered_map<std::uint64_t, Material>>();
+  Material current;  // 默认材质（灰），entity 未赋值材质时的初始快照
+  if (document != nullptr) {
+    for (const auto& [mid, mat] : document->materials()) {
+      (*materials)[mid] = mat;
+    }
+    if (entity->material_id != 0) {
+      if (const Material* m = document->material(entity->material_id)) {
+        current = *m;
+      }
+    }
+  }
+  auto current_sp = std::make_shared<Material>(current);
+
+  // 颜色色块：点击弹 QColorDialog，改 base_color 并转成自定义材质（id=0 → 新建）。
+  auto color_style = [](const QColor& c) {
+    return QStringLiteral("background-color: %1; border: 1px solid #555; min-height: 22px;")
+        .arg(c.name());
+  };
+  auto* color_button = new QPushButton(parent);
+  color_button->setCursor(Qt::PointingHandCursor);
+  color_button->setStyleSheet(color_style(
+      QColor::fromRgbF(current_sp->base_color.x, current_sp->base_color.y, current_sp->base_color.z)));
+
+  auto* rough_spin = new QDoubleSpinBox(parent);
+  rough_spin->setRange(0.0, 1.0);
+  rough_spin->setDecimals(2);
+  rough_spin->setSingleStep(0.05);
+  rough_spin->setKeyboardTracking(false);
+  rough_spin->setValue(current_sp->roughness);
+
+  auto* metal_spin = new QDoubleSpinBox(parent);
+  metal_spin->setRange(0.0, 1.0);
+  metal_spin->setDecimals(2);
+  metal_spin->setSingleStep(0.05);
+  metal_spin->setKeyboardTracking(false);
+  metal_spin->setValue(current_sp->metallic);
+
+  // 材质下拉：选库材质 → 引用（保留 id）；列表含自定义材质（空名显示 "(Custom)"）。
+  auto* combo = new QComboBox(parent);
+  std::vector<std::uint64_t> ids;
+  ids.reserve(materials->size());
+  for (const auto& [mid, unused] : *materials) {
+    (void)unused;
+    ids.push_back(mid);
+  }
+  std::sort(ids.begin(), ids.end());  // 稳定顺序：Default（id=1）排最前
+  int selected = -1;
+  for (const std::uint64_t mid : ids) {
+    const Material& mat = materials->at(mid);
+    const QString label = mat.name.empty() ? tr("(Custom)") : QString::fromStdString(mat.name);
+    combo->addItem(label, static_cast<qulonglong>(mid));
+    if (entity->material_id == mid) {
+      selected = combo->count() - 1;
+    }
+  }
+  if (selected >= 0) {
+    combo->setCurrentIndex(selected);
+  }
+
+  // 刷新颜色色块 + 数值 spinbox（不触发它们的 valueChanged/clicked 回环）。
+  auto refresh_widgets = [color_button, rough_spin, metal_spin, color_style](const Material& m) {
+    const QSignalBlocker b0(color_button);
+    const QSignalBlocker b1(rough_spin);
+    const QSignalBlocker b2(metal_spin);
+    color_button->setStyleSheet(
+        color_style(QColor::fromRgbF(m.base_color.x, m.base_color.y, m.base_color.z)));
+    rough_spin->setValue(m.roughness);
+    metal_spin->setValue(m.metallic);
+  };
+
+  connect(color_button, &QPushButton::clicked, this,
+          [this, entity_id, current_sp, color_button, color_style](bool) {
+            const QColor initial = QColor::fromRgbF(current_sp->base_color.x,
+                                                    current_sp->base_color.y,
+                                                    current_sp->base_color.z);
+            const QColor chosen = QColorDialog::getColor(initial, this, tr("Material Color"));
+            if (!chosen.isValid()) {
+              return;
+            }
+            current_sp->base_color = {static_cast<float>(chosen.redF()),
+                                      static_cast<float>(chosen.greenF()),
+                                      static_cast<float>(chosen.blueF())};
+            current_sp->id = 0;  // 改色 → 新建自定义材质
+            current_sp->name.clear();
+            color_button->setStyleSheet(color_style(chosen));
+            emit material_edited(entity_id, *current_sp);
+          });
+
+  connect(rough_spin, &QDoubleSpinBox::valueChanged, this,
+          [this, entity_id, current_sp](double value) {
+            current_sp->roughness = static_cast<float>(value);
+            current_sp->id = 0;
+            current_sp->name.clear();
+            emit material_edited(entity_id, *current_sp);
+          });
+
+  connect(metal_spin, &QDoubleSpinBox::valueChanged, this,
+          [this, entity_id, current_sp](double value) {
+            current_sp->metallic = static_cast<float>(value);
+            current_sp->id = 0;
+            current_sp->name.clear();
+            emit material_edited(entity_id, *current_sp);
+          });
+
+  connect(combo, &QComboBox::currentIndexChanged, this,
+          [this, combo, entity_id, current_sp, materials, refresh_widgets](int index) {
+            if (index < 0) {
+              return;
+            }
+            const auto mid = static_cast<std::uint64_t>(combo->itemData(index).toULongLong());
+            const auto it = materials->find(mid);
+            if (it == materials->end()) {
+              return;
+            }
+            *current_sp = it->second;  // 引用库材质（保留 id）
+            refresh_widgets(*current_sp);
+            emit material_edited(entity_id, *current_sp);
+          });
+
+  form->addRow(tr("Preset"), combo);
+  form->addRow(tr("Color"), color_button);
+  form->addRow(tr("Roughness"), rough_spin);
+  form->addRow(tr("Metallic"), metal_spin);
+  column->addLayout(form);
 }
 
 }  // namespace tamias

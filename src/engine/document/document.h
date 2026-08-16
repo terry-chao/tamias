@@ -7,6 +7,7 @@
 #include "entity/cylinder_entity.h"
 #include "entity/wall_entity.h"
 #include "engine/render/render_types.h"
+#include "engine/render/material.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -19,7 +20,9 @@ namespace tamias {
 
 class Document {
  public:
-  explicit Document(std::string name = "Untitled") : name_(std::move(name)) {}
+  explicit Document(std::string name = "Untitled") : name_(std::move(name)) {
+    seed_default_materials();
+  }
 
   [[nodiscard]] const std::string& name() const { return name_; }
   void set_name(std::string name) { name_ = std::move(name); }
@@ -69,6 +72,73 @@ class Document {
 
   [[nodiscard]] std::uint64_t next_mesh_id() const { return next_mesh_id_; }
   void set_next_mesh_id(std::uint64_t id) { next_mesh_id_ = std::max<std::uint64_t>(1, id); }
+
+  // ===== 材质库（共享命名材质，实体存 material_id 引用）=====
+
+  Material& add_material(Material material) {
+    material.id = next_material_id_++;
+    auto& stored = materials_[material.id];
+    stored = std::move(material);
+    return stored;
+  }
+
+  // 插入保留 id 的材质（供 load / undo-redo 用）。
+  Material& insert_material(Material material) {
+    if (material.id == 0) {
+      material.id = next_material_id_++;
+    } else {
+      next_material_id_ = std::max(next_material_id_, material.id + 1);
+    }
+    auto& stored = materials_[material.id];
+    stored = std::move(material);
+    return stored;
+  }
+
+  Material* material(std::uint64_t id) {
+    auto it = materials_.find(id);
+    return it == materials_.end() ? nullptr : &it->second;
+  }
+  const Material* material(std::uint64_t id) const {
+    auto it = materials_.find(id);
+    return it == materials_.end() ? nullptr : &it->second;
+  }
+  [[nodiscard]] const std::unordered_map<std::uint64_t, Material>& materials() const {
+    return materials_;
+  }
+  [[nodiscard]] std::uint64_t next_material_id() const { return next_material_id_; }
+  void set_next_material_id(std::uint64_t id) {
+    next_material_id_ = std::max<std::uint64_t>(1, id);
+  }
+
+  // ===== 纹理资产（RGBA8 字节，解码在 app 层）=====
+
+  TextureAsset& add_texture(TextureAsset asset) {
+    asset.id = next_texture_id_++;
+    auto& stored = textures_[asset.id];
+    stored = std::move(asset);
+    return stored;
+  }
+  TextureAsset& insert_texture(TextureAsset asset) {
+    if (asset.id == 0) {
+      asset.id = next_texture_id_++;
+    } else {
+      next_texture_id_ = std::max(next_texture_id_, asset.id + 1);
+    }
+    auto& stored = textures_[asset.id];
+    stored = std::move(asset);
+    return stored;
+  }
+  const TextureAsset* texture(std::uint64_t id) const {
+    auto it = textures_.find(id);
+    return it == textures_.end() ? nullptr : &it->second;
+  }
+  [[nodiscard]] const std::unordered_map<std::uint64_t, TextureAsset>& textures() const {
+    return textures_;
+  }
+  [[nodiscard]] std::uint64_t next_texture_id() const { return next_texture_id_; }
+  void set_next_texture_id(std::uint64_t id) {
+    next_texture_id_ = std::max<std::uint64_t>(1, id);
+  }
 
   void clear_content() {
     scene_.clear();
@@ -192,13 +262,18 @@ class Document {
 
  private:
   Entity* add_entity(std::unique_ptr<Entity> entity, MeshCpu mesh);
+  void seed_default_materials();
 
   std::string name_;
   std::filesystem::path path_;
   Scene scene_;
   std::unordered_map<std::uint64_t, MeshAsset> meshes_;
   std::unordered_map<std::uint64_t, std::unique_ptr<Entity>> entities_;
+  std::unordered_map<std::uint64_t, Material> materials_;
+  std::unordered_map<std::uint64_t, TextureAsset> textures_;
   std::uint64_t next_mesh_id_ = 1;
+  std::uint64_t next_material_id_ = 1;
+  std::uint64_t next_texture_id_ = 1;
   bool dirty_ = false;
 };
 

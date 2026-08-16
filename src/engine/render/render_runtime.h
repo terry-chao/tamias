@@ -91,6 +91,7 @@ class RenderThread {
     Mat4 mvp;
     Mat4 model;
     float color[4];
+    float material[4];  // x=roughness, y=metallic, z=has_albedo, w=has_normal
     float light_dir_selected[4];
     float eye_pos_mode[4];
   };

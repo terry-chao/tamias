@@ -13,7 +13,7 @@ namespace tamias {
 namespace {
 
 constexpr char kMagic[4] = {'T', 'M', 'A', 'S'};
-constexpr std::uint32_t kFormatVersion = 4;
+constexpr std::uint32_t kFormatVersion = 5;
 
 constexpr std::uint32_t fourcc(char a, char b, char c, char d) {
   return static_cast<std::uint32_t>(static_cast<std::uint8_t>(a)) |
@@ -27,6 +27,8 @@ constexpr std::uint32_t kChunkMesh = fourcc('M', 'E', 'S', 'H');
 constexpr std::uint32_t kChunkScen = fourcc('S', 'C', 'E', 'N');
 constexpr std::uint32_t kChunkView = fourcc('V', 'I', 'E', 'W');
 constexpr std::uint32_t kChunkFeat = fourcc('F', 'E', 'A', 'T');
+constexpr std::uint32_t kChunkMatl = fourcc('M', 'A', 'T', 'L');
+constexpr std::uint32_t kChunkTex = fourcc('T', 'E', 'X', 'T');
 
 Result<void> write_vec2(BinaryWriter& w, const Vec2& v) {
   if (auto r = w.write_f32(v.x); !r) {
@@ -301,6 +303,114 @@ Result<void> read_feature_model(BinaryReader& r, FeatureModel& model) {
   return {};
 }
 
+Result<void> write_material(BinaryWriter& w, const Material& m) {
+  if (auto r = w.write_u64(m.id); !r) {
+    return r;
+  }
+  if (auto r = w.write_string(m.name); !r) {
+    return r;
+  }
+  if (auto r = write_vec3(w, m.base_color); !r) {
+    return r;
+  }
+  if (auto r = w.write_f32(m.roughness); !r) {
+    return r;
+  }
+  if (auto r = w.write_f32(m.metallic); !r) {
+    return r;
+  }
+  if (auto r = w.write_u64(m.albedo_texture_id); !r) {
+    return r;
+  }
+  return w.write_u64(m.normal_texture_id);
+}
+
+Result<void> read_material(BinaryReader& r, Material& m) {
+  auto id = r.read_u64();
+  if (!id) {
+    return Err(id.error());
+  }
+  m.id = *id;
+  auto name = r.read_string();
+  if (!name) {
+    return Err(name.error());
+  }
+  m.name = std::move(*name);
+  if (auto res = read_vec3(r, m.base_color); !res) {
+    return res;
+  }
+  auto rough = r.read_f32();
+  if (!rough) {
+    return Err(rough.error());
+  }
+  m.roughness = *rough;
+  auto metal = r.read_f32();
+  if (!metal) {
+    return Err(metal.error());
+  }
+  m.metallic = *metal;
+  auto albedo = r.read_u64();
+  if (!albedo) {
+    return Err(albedo.error());
+  }
+  m.albedo_texture_id = *albedo;
+  auto normal = r.read_u64();
+  if (!normal) {
+    return Err(normal.error());
+  }
+  m.normal_texture_id = *normal;
+  return {};
+}
+
+Result<void> write_texture_asset(BinaryWriter& w, const TextureAsset& t) {
+  if (auto r = w.write_u64(t.id); !r) {
+    return r;
+  }
+  if (auto r = w.write_u32(t.width); !r) {
+    return r;
+  }
+  if (auto r = w.write_u32(t.height); !r) {
+    return r;
+  }
+  if (auto r = w.write_u64(static_cast<std::uint64_t>(t.rgba.size())); !r) {
+    return r;
+  }
+  if (!t.rgba.empty()) {
+    return w.write_bytes(t.rgba.data(), t.rgba.size());
+  }
+  return {};
+}
+
+Result<void> read_texture_asset(BinaryReader& r, TextureAsset& t) {
+  auto id = r.read_u64();
+  if (!id) {
+    return Err(id.error());
+  }
+  t.id = *id;
+  auto width = r.read_u32();
+  if (!width) {
+    return Err(width.error());
+  }
+  t.width = *width;
+  auto height = r.read_u32();
+  if (!height) {
+    return Err(height.error());
+  }
+  t.height = *height;
+  auto size = r.read_u64();
+  if (!size) {
+    return Err(size.error());
+  }
+  if (*size > r.remaining()) {
+    return Err("document_io: texture size too large");
+  }
+  t.rgba.resize(static_cast<std::size_t>(*size));
+  if (*size > 0) {
+    return r.read_bytes(t.rgba.data(), t.rgba.size());
+  }
+  return {};
+}
+
 Result<void> write_entity(BinaryWriter& w, const Entity& e) {
   if (auto r = w.write_u64(e.id); !r) {
     return r;
@@ -312,6 +422,9 @@ Result<void> write_entity(BinaryWriter& w, const Entity& e) {
     return r;
   }
   if (auto r = w.write_u64(e.mesh_asset_id); !r) {
+    return r;
+  }
+  if (auto r = w.write_u64(e.material_id); !r) {
     return r;
   }
   if (auto r = write_mat4(w, e.local_transform); !r) {
@@ -337,6 +450,10 @@ Result<void> read_entity(BinaryReader& r, std::unique_ptr<Entity>& out) {
   if (!mesh_id) {
     return Err(mesh_id.error());
   }
+  auto material_id = r.read_u64();
+  if (!material_id) {
+    return Err(material_id.error());
+  }
   Mat4 transform{};
   if (auto res = read_mat4(r, transform); !res) {
     return res;
@@ -346,6 +463,7 @@ Result<void> read_entity(BinaryReader& r, std::unique_ptr<Entity>& out) {
   entity->id = *id;
   entity->name = std::move(*name);
   entity->mesh_asset_id = *mesh_id;
+  entity->material_id = *material_id;
   entity->local_transform = transform;
   if (auto res = read_feature_model(r, entity->model); !res) {
     return res;
@@ -478,6 +596,12 @@ Result<void> write_document_body(BinaryWriter& w, const Document& document) {
   if (auto r = w.write_u64(document.scene().next_id()); !r) {
     return r;
   }
+  if (auto r = w.write_u64(document.next_material_id()); !r) {
+    return r;
+  }
+  if (auto r = w.write_u64(document.next_texture_id()); !r) {
+    return r;
+  }
 
   if (auto r = w.write_u64(static_cast<std::uint64_t>(document.meshes().size())); !r) {
     return r;
@@ -518,6 +642,36 @@ Result<void> write_document_body(BinaryWriter& w, const Document& document) {
       return r;
     }
   }
+
+  if (auto r = w.write_u64(static_cast<std::uint64_t>(document.materials().size())); !r) {
+    return r;
+  }
+  std::vector<std::uint64_t> material_ids;
+  material_ids.reserve(document.materials().size());
+  for (const auto& [id, _] : document.materials()) {
+    material_ids.push_back(id);
+  }
+  std::sort(material_ids.begin(), material_ids.end());
+  for (std::uint64_t id : material_ids) {
+    if (auto r = write_material(w, document.materials().at(id)); !r) {
+      return r;
+    }
+  }
+
+  if (auto r = w.write_u64(static_cast<std::uint64_t>(document.textures().size())); !r) {
+    return r;
+  }
+  std::vector<std::uint64_t> texture_ids;
+  texture_ids.reserve(document.textures().size());
+  for (const auto& [id, _] : document.textures()) {
+    texture_ids.push_back(id);
+  }
+  std::sort(texture_ids.begin(), texture_ids.end());
+  for (std::uint64_t id : texture_ids) {
+    if (auto r = write_texture_asset(w, document.textures().at(id)); !r) {
+      return r;
+    }
+  }
   return {};
 }
 
@@ -535,6 +689,14 @@ Result<Document> read_document_body(BinaryReader& r) {
   auto next_node = r.read_u64();
   if (!next_node) {
     return Err(next_node.error());
+  }
+  auto next_material = r.read_u64();
+  if (!next_material) {
+    return Err(next_material.error());
+  }
+  auto next_texture = r.read_u64();
+  if (!next_texture) {
+    return Err(next_texture.error());
   }
 
   auto mesh_count = r.read_u64();
@@ -573,8 +735,34 @@ Result<Document> read_document_body(BinaryReader& r) {
     document.insert_entity(std::move(entity));
   }
 
+  auto material_count = r.read_u64();
+  if (!material_count) {
+    return Err(material_count.error());
+  }
+  for (std::uint64_t i = 0; i < *material_count; ++i) {
+    Material material{};
+    if (auto res = read_material(r, material); !res) {
+      return Err(res.error());
+    }
+    document.insert_material(std::move(material));
+  }
+
+  auto texture_count = r.read_u64();
+  if (!texture_count) {
+    return Err(texture_count.error());
+  }
+  for (std::uint64_t i = 0; i < *texture_count; ++i) {
+    TextureAsset texture{};
+    if (auto res = read_texture_asset(r, texture); !res) {
+      return Err(res.error());
+    }
+    document.insert_texture(std::move(texture));
+  }
+
   document.set_next_mesh_id(*next_mesh);
   document.scene().set_next_id(*next_node);
+  document.set_next_material_id(*next_material);
+  document.set_next_texture_id(*next_texture);
   document.recompute_scene();
   document.clear_dirty();
   return document;
@@ -628,6 +816,12 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
   if (auto r = meta_w.write_u64(document.scene().next_id()); !r) {
     return r;
   }
+  if (auto r = meta_w.write_u64(document.next_material_id()); !r) {
+    return r;
+  }
+  if (auto r = meta_w.write_u64(document.next_texture_id()); !r) {
+    return r;
+  }
 
   BinaryWriter mesh_w;
   std::vector<std::uint64_t> mesh_ids;
@@ -671,6 +865,38 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
     }
   }
 
+  BinaryWriter matl_w;
+  std::vector<std::uint64_t> material_ids;
+  material_ids.reserve(document.materials().size());
+  for (const auto& [id, _] : document.materials()) {
+    material_ids.push_back(id);
+  }
+  std::sort(material_ids.begin(), material_ids.end());
+  if (auto r = matl_w.write_u64(static_cast<std::uint64_t>(material_ids.size())); !r) {
+    return r;
+  }
+  for (std::uint64_t id : material_ids) {
+    if (auto r = write_material(matl_w, document.materials().at(id)); !r) {
+      return r;
+    }
+  }
+
+  BinaryWriter tex_w;
+  std::vector<std::uint64_t> texture_ids;
+  texture_ids.reserve(document.textures().size());
+  for (const auto& [id, _] : document.textures()) {
+    texture_ids.push_back(id);
+  }
+  std::sort(texture_ids.begin(), texture_ids.end());
+  if (auto r = tex_w.write_u64(static_cast<std::uint64_t>(texture_ids.size())); !r) {
+    return r;
+  }
+  for (std::uint64_t id : texture_ids) {
+    if (auto r = write_texture_asset(tex_w, document.textures().at(id)); !r) {
+      return r;
+    }
+  }
+
   BinaryWriter view_w;
   if (auto r = write_viewport(view_w, viewport); !r) {
     return r;
@@ -683,7 +909,7 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
   if (auto r = file.write_u32(kFormatVersion); !r) {
     return r;
   }
-  if (auto r = file.write_u32(5); !r) {  // chunk_count
+  if (auto r = file.write_u32(7); !r) {  // chunk_count
     return r;
   }
   if (auto r = append_chunk(file, kChunkMeta, meta_w.data()); !r) {
@@ -696,6 +922,12 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
     return r;
   }
   if (auto r = append_chunk(file, kChunkFeat, feat_w.data()); !r) {
+    return r;
+  }
+  if (auto r = append_chunk(file, kChunkMatl, matl_w.data()); !r) {
+    return r;
+  }
+  if (auto r = append_chunk(file, kChunkTex, tex_w.data()); !r) {
     return r;
   }
   if (auto r = append_chunk(file, kChunkView, view_w.data()); !r) {
@@ -754,9 +986,13 @@ Result<LoadedDocument> load_document(const std::filesystem::path& path) {
   std::string name = "Untitled";
   std::uint64_t next_mesh_id = 1;
   std::uint64_t next_node_id = 1;
+  std::uint64_t next_material_id = 1;
+  std::uint64_t next_texture_id = 1;
   std::vector<MeshAsset> meshes;
   std::vector<SceneNode> nodes;
   std::vector<std::unique_ptr<Entity>> entities;
+  std::vector<Material> materials;
+  std::vector<TextureAsset> textures;
   ViewportState viewport{};
   bool has_meta = false;
   bool has_mesh = false;
@@ -799,6 +1035,16 @@ Result<LoadedDocument> load_document(const std::filesystem::path& path) {
         return Err(nn.error());
       }
       next_node_id = *nn;
+      auto nmat = chunk_r.read_u64();
+      if (!nmat) {
+        return Err(nmat.error());
+      }
+      next_material_id = *nmat;
+      auto ntex = chunk_r.read_u64();
+      if (!ntex) {
+        return Err(ntex.error());
+      }
+      next_texture_id = *ntex;
       has_meta = true;
     } else if (*id == kChunkMesh) {
       auto count = chunk_r.read_u64();
@@ -844,6 +1090,34 @@ Result<LoadedDocument> load_document(const std::filesystem::path& path) {
         }
         entities.push_back(std::move(entity));
       }
+    } else if (*id == kChunkMatl) {
+      auto count = chunk_r.read_u64();
+      if (!count) {
+        return Err(count.error());
+      }
+      materials.clear();
+      materials.reserve(static_cast<std::size_t>(*count));
+      for (std::uint64_t m = 0; m < *count; ++m) {
+        Material mat{};
+        if (auto res = read_material(chunk_r, mat); !res) {
+          return Err(res.error());
+        }
+        materials.push_back(std::move(mat));
+      }
+    } else if (*id == kChunkTex) {
+      auto count = chunk_r.read_u64();
+      if (!count) {
+        return Err(count.error());
+      }
+      textures.clear();
+      textures.reserve(static_cast<std::size_t>(*count));
+      for (std::uint64_t t = 0; t < *count; ++t) {
+        TextureAsset tex{};
+        if (auto res = read_texture_asset(chunk_r, tex); !res) {
+          return Err(res.error());
+        }
+        textures.push_back(std::move(tex));
+      }
     } else if (*id == kChunkView) {
       if (auto res = read_viewport(chunk_r, viewport); !res) {
         return Err(res.error());
@@ -870,8 +1144,16 @@ Result<LoadedDocument> load_document(const std::filesystem::path& path) {
   for (auto& entity : entities) {
     loaded.document.insert_entity(std::move(entity));
   }
+  for (auto& mat : materials) {
+    loaded.document.insert_material(std::move(mat));
+  }
+  for (auto& tex : textures) {
+    loaded.document.insert_texture(std::move(tex));
+  }
   loaded.document.set_next_mesh_id(next_mesh_id);
   loaded.document.scene().set_next_id(next_node_id);
+  loaded.document.set_next_material_id(next_material_id);
+  loaded.document.set_next_texture_id(next_texture_id);
   loaded.document.recompute_scene();
   loaded.document.clear_dirty();
   loaded.viewport = viewport;

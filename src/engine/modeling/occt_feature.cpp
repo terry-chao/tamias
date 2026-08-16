@@ -26,7 +26,10 @@
 #include <gp_Pnt.hxx>
 #include <gp_Trsf.hxx>
 #include <gp_Vec.hxx>
+#include <Standard_Failure.hxx>
+#include <Standard_Type.hxx>
 
+#include <exception>
 #include <unordered_map>
 
 namespace tamias {
@@ -93,7 +96,7 @@ Result<MeshCpu> tessellate_shape(const TopoDS_Shape& shape, double deflection) {
       Vertex v{};
       v.position = {static_cast<float>(p.X()), static_cast<float>(p.Y()),
                     static_cast<float>(p.Z())};
-      v.color = {0.75f, 0.78f, 0.82f};
+      v.color = {1.0f, 1.0f, 1.0f};  // 白：让材质 base_color 透出（材质走 push constant）
       if (tri->HasNormals()) {
         gp_Dir n = tri->Normal(i);
         if (reversed) {
@@ -138,7 +141,9 @@ Result<MeshCpu> tessellate_shape(const TopoDS_Shape& shape, double deflection) {
 
 }  // namespace
 
-Result<MeshCpu> evaluate_feature_model(const FeatureModel& model, double linear_deflection) {
+// 求值实现：不捕获异常，由外层 evaluate_feature_model 统一转成 Result 错误。
+static Result<MeshCpu> evaluate_feature_model_impl(const FeatureModel& model,
+                                                  double linear_deflection) {
   std::unordered_map<std::uint64_t, TopoDS_Shape> shapes;
   for (const auto& f : model.features()) {
     TopoDS_Shape s;
@@ -251,6 +256,16 @@ Result<MeshCpu> evaluate_feature_model(const FeatureModel& model, double linear_
     return Err("output feature has no shape");
   }
   return tessellate_shape(it->second, linear_deflection);
+}
+
+Result<MeshCpu> evaluate_feature_model(const FeatureModel& model, double linear_deflection) {
+  try {
+    return evaluate_feature_model_impl(model, linear_deflection);
+  } catch (const Standard_Failure& e) {
+    return Err(std::string("OCCT evaluation failed: ") + e.DynamicType()->Name());
+  } catch (const std::exception& e) {
+    return Err(std::string("OCCT evaluation failed: ") + e.what());
+  }
 }
 
 }  // namespace tamias

@@ -644,6 +644,10 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
     pc.color[1] = item.color.y;
     pc.color[2] = item.color.z;
     pc.color[3] = 1.f;
+    pc.material[0] = item.roughness;
+    pc.material[1] = item.metallic;
+    pc.material[2] = item.albedo_texture_id != 0 ? 1.f : 0.f;
+    pc.material[3] = item.normal_texture_id != 0 ? 1.f : 0.f;
     pc.light_dir_selected[0] = 0.45f;
     pc.light_dir_selected[1] = 0.35f;
     pc.light_dir_selected[2] = 0.82f;

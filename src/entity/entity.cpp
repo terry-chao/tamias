@@ -25,6 +25,7 @@ std::unique_ptr<Entity> Entity::clone() const {
   e->name = name;
   e->model = model;
   e->mesh_asset_id = mesh_asset_id;
+  e->material_id = material_id;
   e->local_transform = local_transform;
   return e;
 }

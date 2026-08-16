@@ -5,7 +5,7 @@ float3 shaded_simple(float3 n, float3 l, float3 base) {
   return base * ndotl;
 }
 
-float3 shaded_realistic(float3 n, float3 l, float3 v, float3 base) {
+float3 shaded_realistic(float3 n, float3 l, float3 v, float3 base, float rough, float metal) {
   // Hemisphere ambient (Z-up)
   float hemi = saturate(0.5 * n.z + 0.5);
   float3 ambient = lerp(float3(0.06, 0.07, 0.09), float3(0.28, 0.30, 0.34), hemi) * base;
@@ -14,9 +14,13 @@ float3 shaded_realistic(float3 n, float3 l, float3 v, float3 base) {
   float3 diffuse = base * ndotl;
 
   float3 h = normalize(l + v);
-  float spec = pow(max(dot(n, h), 0.0), 48.0);
+  // 粗糙度越高，高光越散（指数越小）。
+  float shininess = lerp(256.0, 8.0, saturate(rough));
+  float spec = pow(max(dot(n, h), 0.0), shininess);
   float fresnel = pow(1.0 - max(dot(n, v), 0.0), 3.0);
-  float3 specular = float3(0.95, 0.97, 1.0) * spec * (0.25 + 0.55 * fresnel);
+  // 金属度越高，高光越接近本体色（金属反射自身色）；非金属用中性白。
+  float3 spec_color = lerp(float3(0.04, 0.04, 0.04), base, saturate(metal));
+  float3 specular = spec_color * spec * (0.25 + 0.55 * fresnel);
 
   // Soft fill from opposite side so cavities stay readable.
   float fill = max(dot(n, normalize(float3(-l.x, -l.y, 0.35))), 0.0) * 0.18;
@@ -52,10 +56,12 @@ float4 main(VsOutput input) : SV_Target0 {
 
   float3 l = normalize(pc.light_dir_selected.xyz);
   float3 base = pc.color.rgb * input.color;
+  float rough = pc.material.x;
+  float metal = pc.material.y;
 
   float3 lit;
   if (input.mode > 1.5) {
-    lit = shaded_realistic(n, l, v, base);
+    lit = shaded_realistic(n, l, v, base, rough, metal);
   } else {
     lit = shaded_simple(n, l, base);
   }

@@ -172,7 +172,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   fillet_action_->setToolTip(tr("Fillet the selected entity's first edge"));
   connect(fillet_action_, &QAction::triggered, this, [this] {
     if (auto* vp = current_viewport()) {
-      vp->fillet_selected(0.1);
+      vp->fillet_selected(0.05);
     }
   });
   addAction(fillet_action_);
@@ -181,7 +181,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   chamfer_action_->setToolTip(tr("Chamfer the selected entity's first edge"));
   connect(chamfer_action_, &QAction::triggered, this, [this] {
     if (auto* vp = current_viewport()) {
-      vp->chamfer_selected(0.1);
+      vp->chamfer_selected(0.05);
     }
   });
   addAction(chamfer_action_);
@@ -333,11 +333,19 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   property_dock->setWidget(property_panel_);
   property_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
   addDockWidget(Qt::RightDockWidgetArea, property_dock);
+  // View 菜单里加一个开关，属性面板关闭后还能重新打开。
+  view_menu->addAction(property_dock->toggleViewAction());
   connect(property_panel_, &PropertyPanel::param_edited, this,
           [this](std::uint64_t entity_id, std::uint64_t feature_id, const QString& param_name,
                  double value) {
             if (auto* vp = current_viewport()) {
               vp->set_entity_param(entity_id, feature_id, param_name.toStdString(), value);
+            }
+          });
+  connect(property_panel_, &PropertyPanel::material_edited, this,
+          [this](std::uint64_t entity_id, Material material) {
+            if (auto* vp = current_viewport()) {
+              vp->set_entity_material(entity_id, std::move(material));
             }
           });
   refresh_property_panel();
@@ -807,21 +815,21 @@ void MainWindow::refresh_property_panel() {
   }
   DocumentViewport* vp = current_viewport();
   if (vp == nullptr) {
-    property_panel_->show_entity(nullptr, tr("No document open"));
+    property_panel_->show_entity(nullptr, nullptr, tr("No document open"));
     return;
   }
   const Document& doc = vp->document();
   if (const Entity* entity = doc.selected_entity()) {
-    property_panel_->show_entity(entity, QString());
+    property_panel_->show_entity(entity, &doc, QString());
     return;
   }
   if (const SceneNode* node = doc.scene().selected_node()) {
-    property_panel_->show_entity(nullptr, tr("Imported mesh: %1\n(no editable parameters)")
-                                               .arg(QString::fromStdString(node->name)));
+    property_panel_->show_entity(nullptr, nullptr, tr("Imported mesh: %1\n(no editable parameters)")
+                                                        .arg(QString::fromStdString(node->name)));
     return;
   }
   property_panel_->show_entity(
-      nullptr, tr("No selection\nClick an object to select it, or use a create tool"));
+      nullptr, nullptr, tr("No selection\nClick an object to select it, or use a create tool"));
 }
 
 void MainWindow::frame_all() {

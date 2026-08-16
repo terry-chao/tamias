@@ -2,6 +2,23 @@
 
 namespace tamias {
 
+void Document::seed_default_materials() {
+  auto seed = [this](std::string name, Vec3 color, float roughness, float metallic) {
+    Material m{};
+    m.name = std::move(name);
+    m.base_color = color;
+    m.roughness = roughness;
+    m.metallic = metallic;
+    add_material(std::move(m));
+  };
+  seed("Default", {0.75f, 0.78f, 0.82f}, 0.9f, 0.0f);
+  seed("Concrete", {0.62f, 0.62f, 0.60f}, 0.9f, 0.0f);
+  seed("Steel", {0.55f, 0.57f, 0.62f}, 0.4f, 0.9f);
+  seed("Glass", {0.80f, 0.88f, 0.90f}, 0.1f, 0.0f);
+  seed("Wood", {0.55f, 0.40f, 0.26f}, 0.7f, 0.0f);
+  seed("Plaster", {0.92f, 0.90f, 0.85f}, 0.95f, 0.0f);
+}
+
 // 只接收已求值的实体 + 几何，不做造型（造型在 Entity::createGeom，见 entity.cpp）。
 Entity* Document::add_entity(std::unique_ptr<Entity> entity, MeshCpu mesh) {
   MeshAsset asset{};
@@ -79,6 +96,16 @@ std::vector<SceneDrawItem> Document::render_items() const {
     item.transform = node.world_transform;
     item.color = node.color;
     item.selected = node.selected;
+    // 实体带材质：解析 material_id → base_color/rough/metallic/纹理 id；否则回退节点色（导入网格）。
+    if (const Entity* e = entity(node.id); e != nullptr && e->material_id != 0) {
+      if (const Material* m = material(e->material_id)) {
+        item.color = m->base_color;
+        item.roughness = m->roughness;
+        item.metallic = m->metallic;
+        item.albedo_texture_id = m->albedo_texture_id;
+        item.normal_texture_id = m->normal_texture_id;
+      }
+    }
     items.push_back(item);
   }
   return items;

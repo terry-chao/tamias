@@ -5,6 +5,7 @@ struct PushConstants {
   float4x4 mvp;
   float4x4 model;
   float4 color;
+  float4 material;           // x = roughness, y = metallic, z = has_albedo, w = has_normal
   float4 light_dir_selected; // xyz = light dir, w = selected flag
   float4 eye_pos_mode;       // xyz = eye world, w = render mode
 };

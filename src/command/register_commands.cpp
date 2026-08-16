@@ -5,6 +5,7 @@
 #include "command/create_primitive_command.h"
 #include "command/create_wall_command.h"
 #include "command/set_feature_param_command.h"
+#include "command/set_material_command.h"
 
 namespace tamias {
 namespace {
@@ -76,6 +77,20 @@ void register_commands(CommandRegistry& registry) {
         doc, static_cast<std::uint64_t>(arg_int(args, "a", 0)),
         static_cast<std::uint64_t>(arg_int(args, "b", 0)),
         static_cast<BooleanOp>(arg_int(args, "operation", 0)));
+  });
+
+  registry.register_command("set_material", [](Document& doc, const CommandArgs& args) {
+    Material material{};
+    material.id = static_cast<std::uint64_t>(arg_int(args, "material_id", 0));
+    material.name = arg_string(args, "name", "");
+    if (const auto it = args.find("base_color");
+        it != args.end() && std::holds_alternative<Vec3>(it->second)) {
+      material.base_color = std::get<Vec3>(it->second);
+    }
+    material.roughness = static_cast<float>(arg_double(args, "roughness", 0.6));
+    material.metallic = static_cast<float>(arg_double(args, "metallic", 0.0));
+    return std::make_unique<SetMaterialCommand>(
+        doc, static_cast<std::uint64_t>(arg_int(args, "entity_id", 0)), std::move(material));
   });
 }
 

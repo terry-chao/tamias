@@ -30,6 +30,7 @@ class Entity {
   std::string name;
   FeatureModel model;                      // 特征树（造型配方）
   std::uint64_t mesh_asset_id = 0;         // 评估结果喂给的网格资产
+  std::uint64_t material_id = 0;           // 材质库引用（0 = 默认材质）
   Mat4 local_transform = Mat4::identity();  // 放置（墙=位置+朝向，盒子/圆柱=位置）
 };
 
