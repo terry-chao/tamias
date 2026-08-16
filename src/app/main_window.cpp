@@ -13,6 +13,7 @@
 
 #include <QAction>
 #include <QActionGroup>
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QDialog>
 #include <QDir>
@@ -86,10 +87,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   connect(home_, &HomePage::openDocumentActivated, this, &MainWindow::activate_open_document);
   connect(home_, &HomePage::settingsRequested, this, &MainWindow::open_settings);
 
-  // File is a navigation control to the welcome page — no dropdown actions.
-  menuBar()->addAction(tr("&File"), this, &MainWindow::show_home);
-
-  auto* new_action = new QAction(style()->standardIcon(QStyle::SP_FileIcon), tr("New"), this);
+  auto* new_action = new QAction(
+      themed_mask_icon(QStringLiteral(":/icons/new.svg"),
+                       palette().color(QPalette::WindowText)),
+      tr("New"), this);
   new_action->setShortcut(QKeySequence::New);
   new_action->setToolTip(tr("New document with a cube"));
   connect(new_action, &QAction::triggered, this, &MainWindow::new_document);
@@ -127,6 +128,40 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   connect(frame_all_action, &QAction::triggered, this, &MainWindow::frame_all);
   addAction(frame_all_action);
 
+  auto* create_group = new QActionGroup(this);
+  create_group->setExclusive(true);
+
+  wall_action_ = new QAction(
+      themed_mask_icon(QStringLiteral(":/icons/wall.svg"),
+                       palette().color(QPalette::WindowText)),
+      tr("Wall"), this);
+  wall_action_->setCheckable(true);
+  wall_action_->setToolTip(tr("Create a wall: click start, then click end"));
+  connect(wall_action_, &QAction::triggered, this, [this] { set_create_tool(ToolMode::Wall); });
+  create_group->addAction(wall_action_);
+  addAction(wall_action_);
+
+  box_action_ = new QAction(
+      themed_mask_icon(QStringLiteral(":/icons/box.svg"),
+                       palette().color(QPalette::WindowText)),
+      tr("Box"), this);
+  box_action_->setCheckable(true);
+  box_action_->setToolTip(tr("Create a box: click to place"));
+  connect(box_action_, &QAction::triggered, this, [this] { set_create_tool(ToolMode::Box); });
+  create_group->addAction(box_action_);
+  addAction(box_action_);
+
+  cylinder_action_ = new QAction(
+      themed_mask_icon(QStringLiteral(":/icons/cylinder.svg"),
+                       palette().color(QPalette::WindowText)),
+      tr("Cylinder"), this);
+  cylinder_action_->setCheckable(true);
+  cylinder_action_->setToolTip(tr("Create a cylinder: click to place"));
+  connect(cylinder_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::Cylinder); });
+  create_group->addAction(cylinder_action_);
+  addAction(cylinder_action_);
+
   auto* settings_action =
       new QAction(style()->standardIcon(QStyle::SP_FileDialogDetailedView), tr("Settings"), this);
   settings_action->setShortcut(QKeySequence(tr("Ctrl+,")));
@@ -134,8 +169,53 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   connect(settings_action, &QAction::triggered, this, &MainWindow::open_settings);
   addAction(settings_action);
 
+  auto* home_action = new QAction(tr("&Home"), this);
+  home_action->setToolTip(tr("Back to the welcome page"));
+  connect(home_action, &QAction::triggered, this, &MainWindow::show_home);
+  addAction(home_action);
+
+  auto* undo_action =
+      new QAction(style()->standardIcon(QStyle::SP_ArrowBack), tr("&Undo"), this);
+  undo_action->setShortcut(QKeySequence::Undo);
+  connect(undo_action, &QAction::triggered, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->undo();
+    }
+  });
+  addAction(undo_action);
+
+  auto* redo_action =
+      new QAction(style()->standardIcon(QStyle::SP_ArrowForward), tr("&Redo"), this);
+  redo_action->setShortcut(QKeySequence::Redo);
+  connect(redo_action, &QAction::triggered, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->redo();
+    }
+  });
+  addAction(redo_action);
+
+  auto* exit_action = new QAction(tr("E&xit"), this);
+  exit_action->setShortcut(QKeySequence::Quit);
+  connect(exit_action, &QAction::triggered, this, &QWidget::close);
+
+  // ===== 菜单栏 =====
+  auto* file_menu = menuBar()->addMenu(tr("&File"));
+  file_menu->addAction(new_action);
+  file_menu->addAction(open_action);
+  file_menu->addSeparator();
+  file_menu->addAction(save_action);
+  file_menu->addAction(save_as_action);
+  file_menu->addSeparator();
+  file_menu->addAction(exit_action);
+
+  auto* edit_menu = menuBar()->addMenu(tr("&Edit"));
+  edit_menu->addAction(undo_action);
+  edit_menu->addAction(redo_action);
+
   auto* view_menu = menuBar()->addMenu(tr("&View"));
+  view_menu->addAction(home_action);
   view_menu->addAction(frame_all_action);
+  view_menu->addSeparator();
 
   auto* display_menu = view_menu->addMenu(tr("&Display Mode"));
   auto* display_group = new QActionGroup(this);
@@ -172,7 +252,22 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   });
   addAction(realistic_action_);
 
-  // Settings live under Tools (VS / CAD), and also on the File welcome page.
+  render_mode_combo_ = new QComboBox(this);
+  render_mode_combo_->addItem(tr("Wireframe"), static_cast<int>(RenderMode::Wireframe));
+  render_mode_combo_->addItem(tr("Shaded"), static_cast<int>(RenderMode::Shaded));
+  render_mode_combo_->addItem(tr("Realistic"), static_cast<int>(RenderMode::Realistic));
+  render_mode_combo_->setToolTip(tr("Render mode"));
+  connect(render_mode_combo_, &QComboBox::currentIndexChanged, this, [this](int index) {
+    if (index >= 0) {
+      set_render_mode(static_cast<RenderMode>(render_mode_combo_->itemData(index).toInt()));
+    }
+  });
+
+  auto* create_menu = menuBar()->addMenu(tr("&Create"));
+  create_menu->addAction(wall_action_);
+  create_menu->addAction(box_action_);
+  create_menu->addAction(cylinder_action_);
+
   auto* tools_menu = menuBar()->addMenu(tr("&Tools"));
   tools_menu->addAction(settings_action);
 #if defined(TAMIAS_HAS_OCCT)
@@ -181,11 +276,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   connect(parametric_action, &QAction::triggered, this, &MainWindow::new_parametric_demo);
   tools_menu->addAction(parametric_action);
 #endif
-  tools_menu->addSeparator();
-  auto* exit_action = new QAction(tr("E&xit"), this);
-  exit_action->setShortcut(QKeySequence::Quit);
-  connect(exit_action, &QAction::triggered, this, &QWidget::close);
-  tools_menu->addAction(exit_action);
 
   auto* toolbar = addToolBar(tr("Main"));
   toolbar->setObjectName(QStringLiteral("mainToolbar"));
@@ -195,16 +285,26 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   toolbar->addAction(open_action);
   toolbar->addAction(save_action);
   toolbar->addAction(save_as_action);
+  toolbar->addSeparator();
+  toolbar->addAction(undo_action);
+  toolbar->addAction(redo_action);
+  toolbar->addSeparator();
+  toolbar->addAction(wall_action_);
+  toolbar->addAction(box_action_);
+  toolbar->addAction(cylinder_action_);
+  toolbar->addSeparator();
   toolbar->addAction(frame_all_action);
   toolbar->addSeparator();
-  toolbar->addAction(wireframe_action_);
-  toolbar->addAction(shaded_action_);
-  toolbar->addAction(realistic_action_);
-  toolbar->addSeparator();
-  toolbar->addAction(settings_action);
+  toolbar->addWidget(render_mode_combo_);
 
   statusBar()->showMessage(tr("Ready — Open a model or try the demo"));
   show_home();
+}
+
+void MainWindow::set_create_tool(ToolMode mode) {
+  if (auto* vp = current_viewport()) {
+    vp->set_tool(mode);
+  }
 }
 
 void MainWindow::show_home() {
@@ -315,6 +415,14 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
   // viewport (and redrawing) before addTab can create a tiny swapchain that only
   // fills the top-left corner of the window.
   auto* vp = new DocumentViewport(document, thread, nullptr);
+  connect(vp, &DocumentViewport::tool_mode_changed, this, [this](ToolMode mode) {
+    const QSignalBlocker b0(wall_action_);
+    const QSignalBlocker b1(box_action_);
+    const QSignalBlocker b2(cylinder_action_);
+    wall_action_->setChecked(mode == ToolMode::Wall);
+    box_action_->setChecked(mode == ToolMode::Box);
+    cylinder_action_->setChecked(mode == ToolMode::Cylinder);
+  });
   vp->seed_history_baseline();
   const int index = tabs_->addTab(vp, QString::fromStdString(document->name()));
   tabs_->setCurrentIndex(index);
@@ -721,6 +829,13 @@ void MainWindow::sync_render_mode_actions() {
   wireframe_action_->setChecked(mode == RenderMode::Wireframe);
   shaded_action_->setChecked(mode == RenderMode::Shaded);
   realistic_action_->setChecked(mode == RenderMode::Realistic);
+  if (render_mode_combo_) {
+    const QSignalBlocker bc(render_mode_combo_);
+    const int idx = render_mode_combo_->findData(static_cast<int>(mode));
+    if (idx >= 0) {
+      render_mode_combo_->setCurrentIndex(idx);
+    }
+  }
 }
 
 void MainWindow::close_tab(int index) {

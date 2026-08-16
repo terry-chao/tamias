@@ -2,6 +2,7 @@
 
 #include "engine/core/native_window_handle.h"
 #include "entity/document.h"
+#include "command/command_stack.h"
 #include "command/history.h"
 #include "engine/render/render_runtime.h"
 #include "entity/document_io.h"
@@ -17,6 +18,9 @@
 #include <memory>
 
 namespace tamias {
+
+// 当前激活的创建工具。
+enum class ToolMode { None, Wall, Box, Cylinder };
 
 class DocumentViewport final : public QWidget {
   Q_OBJECT
@@ -40,6 +44,15 @@ class DocumentViewport final : public QWidget {
   // P1 参数化演示：挂一个特征模型到本视口，可按键改参数重算。
   void set_parametric_model(FeatureModel model, std::uint64_t asset_id);
   void adjust_parametric_width(double delta);
+  // 设置当前创建工具（None / Wall / Box / Cylinder）。
+  void set_tool(ToolMode mode);
+  [[nodiscard]] ToolMode tool_mode() const { return tool_mode_; }
+  // 撤销 / 重做最近一条命令。
+  void undo();
+  void redo();
+
+ signals:
+  void tool_mode_changed(ToolMode mode);
 
  protected:
   void showEvent(QShowEvent* event) override;
@@ -68,6 +81,10 @@ class DocumentViewport final : public QWidget {
   void start_view_animation(float target_yaw, float target_pitch);
   void stop_view_animation();
   [[nodiscard]] Vec3 cursor_world_position(const QPoint& pos) const;
+  [[nodiscard]] Vec3 cursor_ground_position(const QPoint& pos) const;
+  void create_wall(Vec3 start, Vec3 end);
+  void create_primitive(MeshCpu mesh, std::string name, Vec3 position);
+  void cancel_tool();
 
   std::shared_ptr<Document> document_;
   std::shared_ptr<RenderThread> render_thread_;
@@ -78,6 +95,10 @@ class DocumentViewport final : public QWidget {
   RenderMode mode_ = RenderMode::Shaded;
   std::unique_ptr<FeatureModel> parametric_model_;
   std::uint64_t parametric_asset_id_ = 0;
+  CommandStack command_stack_;
+  ToolMode tool_mode_ = ToolMode::None;
+  bool wall_placing_ = false;
+  Vec3 wall_start_{};
   class NativeSurface;
   NativeSurface* surface_ = nullptr;
   void* gl_hwnd_ = nullptr;  // Win32 OpenGL child HWND (UI-thread owned)

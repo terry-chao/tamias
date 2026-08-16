@@ -13,6 +13,7 @@
 #include <memory>
 
 class QAction;
+class QComboBox;
 
 namespace tamias {
 
@@ -43,6 +44,7 @@ class MainWindow final : public QMainWindow {
   bool open_path(const QString& path);
   void new_document();
   void new_parametric_demo();
+  void set_create_tool(ToolMode mode);
   bool write_selected_mesh(const QString& path);
   bool write_tdoc_document(const QString& path);
   void notify_save_success(const QString& path);
@@ -62,6 +64,10 @@ class MainWindow final : public QMainWindow {
   QAction* wireframe_action_ = nullptr;
   QAction* shaded_action_ = nullptr;
   QAction* realistic_action_ = nullptr;
+  QAction* wall_action_ = nullptr;
+  QAction* box_action_ = nullptr;
+  QAction* cylinder_action_ = nullptr;
+  QComboBox* render_mode_combo_ = nullptr;
 };
 
 }  // namespace tamias

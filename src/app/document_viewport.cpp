@@ -1,6 +1,8 @@
 #include "document_viewport.h"
 
 #include "app_settings.h"
+#include "command/create_primitive_command.h"
+#include "command/create_wall_command.h"
 #include "engine/core/log.h"
 
 #if defined(TAMIAS_HAS_RHI_OPENGL)
@@ -495,6 +497,11 @@ void DocumentViewport::submit_current_frame() {
     item.selected = node.selected;
     frame.items.push_back(item);
   }
+  frame.show_preview_line = (tool_mode_ == ToolMode::Wall) && wall_placing_;
+  if (frame.show_preview_line) {
+    frame.preview_start = wall_start_;
+    frame.preview_end = cursor_ground_position(last_mouse_);
+  }
   channel_->submit(std::move(frame));
 }
 
@@ -525,6 +532,30 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
   last_mouse_ = event->pos();
   press_mouse_ = event->pos();
   if (event->button() == Qt::LeftButton) {
+    if (tool_mode_ != ToolMode::None) {
+      const Vec3 ground = cursor_ground_position(event->pos());
+      switch (tool_mode_) {
+        case ToolMode::Wall:
+          if (!wall_placing_) {
+            wall_start_ = ground;
+            wall_placing_ = true;
+          } else {
+            create_wall(wall_start_, ground);
+            wall_placing_ = false;
+          }
+          break;
+        case ToolMode::Box:
+          create_primitive(make_box_mesh(1.f, 1.f, 1.f), "box", ground);
+          break;
+        case ToolMode::Cylinder:
+          create_primitive(make_cylinder_mesh(0.5f, 2.f), "cylinder", ground);
+          break;
+        case ToolMode::None:
+          break;
+      }
+      request_redraw();
+      return;
+    }
     stop_view_animation();
     orbiting_ = true;
   } else if (event->button() == Qt::MiddleButton || event->button() == Qt::RightButton) {
@@ -544,6 +575,8 @@ void DocumentViewport::mouseMoveEvent(QMouseEvent* event) {
     const float scale = camera_.distance() * 0.002f;
     camera_.pan(-delta.x() * scale, delta.y() * scale);
     request_redraw();
+  } else if (wall_placing_) {
+    request_redraw();  // 更新预览线
   } else {
     sync_coord_readout();
   }
@@ -635,6 +668,9 @@ void DocumentViewport::adjust_parametric_width(double delta) {
 
 void DocumentViewport::keyPressEvent(QKeyEvent* event) {
   switch (event->key()) {
+    case Qt::Key_Escape:
+      cancel_tool();
+      break;
     case Qt::Key_BracketLeft:   // '[' 变薄
       adjust_parametric_width(-0.05);
       break;
@@ -645,6 +681,102 @@ void DocumentViewport::keyPressEvent(QKeyEvent* event) {
       QWidget::keyPressEvent(event);
       break;
   }
+}
+
+void DocumentViewport::set_tool(ToolMode mode) {
+  tool_mode_ = mode;
+  wall_placing_ = false;
+  if (mode != ToolMode::None) {
+    setFocus();
+  }
+  request_redraw();
+  emit tool_mode_changed(mode);
+}
+
+void DocumentViewport::cancel_tool() {
+  if (wall_placing_) {
+    wall_placing_ = false;  // 取消当前墙放置，仍留在墙工具
+    request_redraw();
+  } else if (tool_mode_ != ToolMode::None) {
+    set_tool(ToolMode::None);  // 退出工具
+  }
+}
+
+void DocumentViewport::create_wall(Vec3 start, Vec3 end) {
+  auto command = std::make_unique<CreateWallCommand>(*document_, start, end, 0.2, 3.0);
+  if (auto r = command->execute(); r) {
+    if (auto* asset = document_->mesh(command->mesh_id())) {
+      if (render_thread_) {
+        if (auto gpu = render_thread_->upload_mesh(asset->id, asset->cpu); !gpu) {
+          log_error(gpu.error());
+        }
+      }
+    }
+    command_stack_.push_executed(std::move(command));
+    document_->recompute_scene();
+    rebuild_bvh();
+    request_redraw();
+  } else {
+    log_error(r.error());
+  }
+}
+
+void DocumentViewport::create_primitive(MeshCpu mesh, std::string name, Vec3 position) {
+  auto command = std::make_unique<CreatePrimitiveCommand>(*document_, std::move(mesh),
+                                                          std::move(name), position);
+  if (auto r = command->execute(); r) {
+    if (auto* asset = document_->mesh(command->mesh_id())) {
+      if (render_thread_) {
+        if (auto gpu = render_thread_->upload_mesh(asset->id, asset->cpu); !gpu) {
+          log_error(gpu.error());
+        }
+      }
+    }
+    command_stack_.push_executed(std::move(command));
+    document_->recompute_scene();
+    rebuild_bvh();
+    request_redraw();
+  } else {
+    log_error(r.error());
+  }
+}
+
+void DocumentViewport::undo() {
+  if (!command_stack_.can_undo()) {
+    return;
+  }
+  command_stack_.undo();
+  document_->recompute_scene();
+  rebuild_bvh();
+  request_redraw();
+}
+
+void DocumentViewport::redo() {
+  if (!command_stack_.can_redo()) {
+    return;
+  }
+  command_stack_.redo();
+  document_->recompute_scene();
+  rebuild_bvh();
+  request_redraw();
+}
+
+Vec3 DocumentViewport::cursor_ground_position(const QPoint& pos) const {
+  const auto dpr = devicePixelRatioF();
+  const float aspect = static_cast<float>((std::max)(1, width())) /
+                       static_cast<float>((std::max)(1, height()));
+  const Ray ray =
+      camera_ray(camera_, aspect, static_cast<float>(pos.x() * dpr),
+                 static_cast<float>(pos.y() * dpr), static_cast<float>(width() * dpr),
+                 static_cast<float>(height() * dpr));
+  // 与地面平面 y=0 求交。
+  if (std::fabs(ray.direction.y) > 1e-6f) {
+    const float t = -ray.origin.y / ray.direction.y;
+    if (t > 0.f) {
+      return ray.origin + ray.direction * t;
+    }
+  }
+  return ray.origin + ray.direction * camera_.distance();
 }
 
 }  // namespace tamias

@@ -6,5 +6,9 @@
   <qresource prefix="/icons">
     <file alias="frame_all.svg">../../assets/icons/frame_all.svg</file>
     <file alias="save_as.svg">../../assets/icons/save_as.svg</file>
+    <file alias="new.svg">../../assets/icons/new.svg</file>
+    <file alias="wall.svg">../../assets/icons/wall.svg</file>
+    <file alias="box.svg">../../assets/icons/box.svg</file>
+    <file alias="cylinder.svg">../../assets/icons/cylinder.svg</file>
   </qresource>
 </RCC>
