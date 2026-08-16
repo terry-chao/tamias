@@ -3,6 +3,7 @@
 #include "engine/core/log.h"
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <future>
@@ -97,6 +98,23 @@ MeshCpu make_grid_quad(float extent = 500.f) {
   return mesh;
 }
 
+// 预览线（单元线：原点 → +Z，黄色；用变换映射到起点→终点）。
+MeshCpu make_preview_line_mesh() {
+  MeshCpu mesh;
+  const Vec3 yellow{1.f, 0.85f, 0.3f};
+  Vertex a{};
+  a.position = {0.f, 0.f, 0.f};
+  a.normal = {0.f, 1.f, 0.f};
+  a.color = yellow;
+  Vertex b = a;
+  b.position = {0.f, 0.f, 1.f};
+  mesh.vertices.push_back(a);
+  mesh.vertices.push_back(b);
+  mesh.indices = {0, 1};
+  recompute_bounds(mesh);
+  return mesh;
+}
+
 // 把 CPU 网格上传成 GPU 网格（顶点 + 索引 buffer）。
 Result<GpuMesh> create_gpu_mesh(RHIDevice& device, MeshCpu mesh) {
   BufferDesc vb{};
@@ -173,6 +191,7 @@ void RenderThread::stop() {
   axes_mesh_ = GpuMesh{};
   sky_mesh_ = GpuMesh{};
   grid_mesh_ = GpuMesh{};
+  preview_line_mesh_ = GpuMesh{};
   vs_.reset();
   fs_.reset();
   sky_vs_.reset();
@@ -303,7 +322,8 @@ void RenderThread::resize_surface(std::uint64_t channel_id, NativeWindowHandle w
 
 Result<void> RenderThread::ensure_pipelines() {
   if (shaded_pipeline_ && wire_pipeline_ && line_pipeline_ && sky_pipeline_ && grid_pipeline_ &&
-      axes_mesh_.index_buffer && sky_mesh_.index_buffer && grid_mesh_.index_buffer) {
+      axes_mesh_.index_buffer && sky_mesh_.index_buffer && grid_mesh_.index_buffer &&
+      preview_line_mesh_.index_buffer) {
     return {};
   }
 
@@ -492,6 +512,12 @@ Result<void> RenderThread::ensure_pipelines() {
   }
   axes_mesh_ = std::move(*axes_mesh);
 
+  auto preview_line_mesh = create_gpu_mesh(*device_, make_preview_line_mesh());
+  if (!preview_line_mesh) {
+    return Err(preview_line_mesh.error());
+  }
+  preview_line_mesh_ = std::move(*preview_line_mesh);
+
   return {};
 }
 
@@ -637,6 +663,26 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
   // 坐标轴（深度测试关，始终可见）。
   if (frame.show_axes && line_pipeline_ && axes_mesh_.index_buffer) {
     draw_lines(*line_pipeline_, axes_mesh_);
+  }
+
+  // 预览线（放置墙体时：起点 → 光标，深度测试关）。
+  if (frame.show_preview_line && line_pipeline_ && preview_line_mesh_.index_buffer) {
+    const Vec3 d = frame.preview_end - frame.preview_start;
+    const float length = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+    const float yaw = std::atan2(d.x, d.z);
+    const Mat4 model =
+        translate(frame.preview_start) * rotate_y(yaw) * scale({1.f, 1.f, length});
+    PushConstants pc{};
+    pc.mvp = view_proj * model;
+    pc.model = model;
+    pc.eye_pos_mode[3] = 3.f;  // mode 3 = 无光照线条
+    channel.command_list->set_pipeline(*line_pipeline_);
+    channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
+    channel.command_list->set_vertex_buffer(*preview_line_mesh_.vertex_buffer);
+    channel.command_list->set_index_buffer(*preview_line_mesh_.index_buffer);
+    DrawIndexedDesc pd{};
+    pd.index_count = preview_line_mesh_.index_count;
+    channel.command_list->draw_indexed(pd);
   }
 
   channel.command_list->end_render_pass();

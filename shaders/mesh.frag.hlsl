@@ -32,11 +32,11 @@ float4 main(VsOutput input) : SV_Target0 {
     return float4(input.color, 1.0);
   }
 
-  // Wireframe: flat bright edges, no lighting (mode == 0).
+  // Wireframe: flat dark edges, no lighting (mode == 0) — 深色在浅色天空下更清晰。
   if (input.mode < 0.5) {
-    float3 wire = float3(0.92, 0.94, 0.97);
+    float3 wire = float3(0.15, 0.17, 0.20);
     if (input.selected > 0.5) {
-      wire = float3(1.0, 0.82, 0.35);
+      wire = float3(1.0, 0.55, 0.10);
     }
     return float4(wire, 1.0);
   }
