@@ -1,0 +1,57 @@
+#pragma once
+
+#include "command/command.h"
+#include "command/command_stack.h"
+#include "engine/math/math.h"
+
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <variant>
+
+namespace tamias {
+
+class Document;
+
+// 命令参数：异构值（数值 / 整数 id / 向量 / 字符串）。
+using CommandArg = std::variant<double, std::int64_t, Vec3, std::string>;
+using CommandArgs = std::unordered_map<std::string, CommandArg>;
+
+// 命令注册表：名字 → 工厂。全局单例，启动时加载一次。
+class CommandRegistry {
+ public:
+  using Factory = std::function<std::unique_ptr<Command>(Document&, const CommandArgs&)>;
+
+  void register_command(std::string name, Factory factory);
+  [[nodiscard]] std::unique_ptr<Command> create(const std::string& name, Document& doc,
+                                                const CommandArgs& args) const;
+
+ private:
+  std::unordered_map<std::string, Factory> registry_;
+};
+
+[[nodiscard]] CommandRegistry& command_registry();
+
+// 启动时调用：注册所有命令（create_wall / create_box / create_cylinder / set_param）。
+void register_commands(CommandRegistry& registry);
+
+// 命令系统：按名分发命令，统一管 undo 栈。每视口一份（undo 按文档隔离）。
+class CommandSystem {
+ public:
+  explicit CommandSystem(const CommandRegistry& registry) : registry_(registry) {}
+
+  [[nodiscard]] Result<void> dispatch(Document& doc, const std::string& name,
+                                      const CommandArgs& args);
+  void undo();
+  void redo();
+  [[nodiscard]] bool can_undo() const { return stack_.can_undo(); }
+  [[nodiscard]] bool can_redo() const { return stack_.can_redo(); }
+
+ private:
+  const CommandRegistry& registry_;
+  CommandStack stack_;
+};
+
+}  // namespace tamias

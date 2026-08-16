@@ -1,48 +1,50 @@
 #include "create_primitive_command.h"
 
+#include "engine/document/entity.h"
+
 namespace tamias {
 
-CreatePrimitiveCommand::CreatePrimitiveCommand(Document& document, MeshCpu mesh, std::string name,
+CreatePrimitiveCommand::CreatePrimitiveCommand(Document& document, PrimitiveKind kind,
                                                Vec3 position)
-    : document_(&document),
-      cpu_mesh_(std::move(mesh)),
-      name_(std::move(name)),
-      position_(position) {}
+    : document_(&document), kind_(kind), position_(position) {}
 
 Result<void> CreatePrimitiveCommand::execute() {
-  MeshAsset asset{};
-  asset.name = name_;
-  asset.cpu = cpu_mesh_;  // 复制，保留 cpu_mesh_ 以便重复 execute
-  MeshAsset& stored_mesh = document_->add_mesh(std::move(asset));
-  const std::uint64_t mesh_id = stored_mesh.id;
-
-  SceneNode node{};
-  node.name = name_;
-  node.mesh_asset_id = mesh_id;
-  node.local_transform = translate(position_);
-  SceneNode& stored_node = document_->scene().add_node(std::move(node));
-  const std::uint64_t node_id = stored_node.id;
-
-  document_->recompute_scene();
-  document_->mark_dirty();
-
-  mesh_ = *document_->mesh(mesh_id);
-  node_ = *document_->scene().find(node_id);
+  Entity* added = nullptr;
+  if (kind_ == PrimitiveKind::Box) {
+    Box box = Box::at(position_);        // ① 建实体
+    auto geometry = box.createGeom();    // ② 造型
+    if (!geometry) {
+      return Err(geometry.error());
+    }
+    added = document_->add_box(std::move(box), std::move(*geometry));  // ③ 入文档
+  } else {
+    Cylinder cylinder = Cylinder::at(position_);
+    auto geometry = cylinder.createGeom();
+    if (!geometry) {
+      return Err(geometry.error());
+    }
+    added = document_->add_cylinder(std::move(cylinder), std::move(*geometry));
+  }
+  if (added == nullptr) {
+    return Err("CreatePrimitiveCommand: add primitive failed");
+  }
+  entity_ = added->clone();
+  if (const MeshAsset* mesh = document_->mesh(added->mesh_asset_id)) {
+    mesh_ = *mesh;
+  }
   return {};
 }
 
 void CreatePrimitiveCommand::undo() {
-  document_->scene().remove_node(node_.id);
-  document_->remove_mesh(mesh_.id);
-  document_->recompute_scene();
-  document_->mark_dirty();
+  if (entity_) {
+    document_->remove_entity(entity_->id);
+  }
 }
 
 void CreatePrimitiveCommand::redo() {
-  document_->insert_mesh(mesh_);
-  document_->scene().insert_node(node_);
-  document_->recompute_scene();
-  document_->mark_dirty();
+  if (entity_) {
+    document_->insert_entity(entity_->clone(), mesh_);
+  }
 }
 
 }  // namespace tamias

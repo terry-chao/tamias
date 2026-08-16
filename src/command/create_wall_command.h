@@ -2,11 +2,11 @@
 
 #include "command/command.h"
 #include "engine/math/math.h"
-#include "entity/document.h"
+#include "engine/document/document.h"
 
 namespace tamias {
 
-// 创建一面墙（长方体）：墙厚 × 墙高 × 两点间长度，放置在两点之间的地面上。
+// 创建一面参数化墙：command → drag（Wall::drag）→ Wall 实体 → Document（内部建网格 + 场景节点）。
 class CreateWallCommand final : public Command {
  public:
   CreateWallCommand(Document& document, Vec3 start, Vec3 end, double thickness, double height);
@@ -16,7 +16,6 @@ class CreateWallCommand final : public Command {
   void redo() override;
 
   [[nodiscard]] std::uint64_t mesh_id() const { return mesh_.id; }
-  [[nodiscard]] std::uint64_t node_id() const { return node_.id; }
 
  private:
   Document* document_ = nullptr;
@@ -25,7 +24,7 @@ class CreateWallCommand final : public Command {
   double thickness_ = 0.2;
   double height_ = 3.0;
   MeshAsset mesh_{};
-  SceneNode node_{};
+  std::unique_ptr<Entity> entity_;
 };
 
 }  // namespace tamias
