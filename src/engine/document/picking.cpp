@@ -4,6 +4,24 @@
 #include <limits>
 
 namespace tamias {
+namespace {
+
+// 把世界空间射线逆变换到节点的局部空间。网格顶点存在局部空间，而拾取射线是世界空间，
+// 两者不能直接相交——否则任何带 transform 的节点（墙/非原点的盒子/圆柱）都会漏选。
+// 当前场景变换都是刚体（平移 + 旋转，无缩放），所以逆变换 = Rᵀ·(p - t)；方向只旋转
+// 不平移，且刚体保距，交点 t 不变。
+Ray to_local_ray(const Ray& ray, const Mat4& m) {
+  const Vec3 t{m(0, 3), m(1, 3), m(2, 3)};
+  const auto rotate = [&](Vec3 v) {
+    // Rᵀ · v（R 是 m 左上 3×3，列主序下 R(row,col) = m(row,col)）。
+    return Vec3{m(0, 0) * v.x + m(1, 0) * v.y + m(2, 0) * v.z,
+                m(0, 1) * v.x + m(1, 1) * v.y + m(2, 1) * v.z,
+                m(0, 2) * v.x + m(1, 2) * v.y + m(2, 2) * v.z};
+  };
+  return {rotate(ray.origin - t), rotate(ray.direction)};
+}
+
+}  // namespace
 
 std::int32_t Bvh::build_range(std::vector<std::uint64_t>& ids, const Document& doc, int begin,
                               int end) {
@@ -93,13 +111,14 @@ std::optional<PickHit> Bvh::closest_hit(const Ray& ray, const Document& doc) con
       if (!asset) {
         continue;
       }
+      const Ray local_ray = to_local_ray(ray, sn->world_transform);
       const auto& mesh = asset->cpu;
       for (std::uint32_t t = 0; t + 2 < mesh.indices.size(); t += 3) {
         const auto i0 = mesh.indices[t];
         const auto i1 = mesh.indices[t + 1];
         const auto i2 = mesh.indices[t + 2];
         float hit_t = 0.f;
-        if (intersect_triangle(ray, mesh.vertices[i0].position, mesh.vertices[i1].position,
+        if (intersect_triangle(local_ray, mesh.vertices[i0].position, mesh.vertices[i1].position,
                                mesh.vertices[i2].position, hit_t) &&
             hit_t < best_t) {
           best_t = hit_t;

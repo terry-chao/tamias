@@ -275,6 +275,29 @@ TEST(Picking, RayHitsCube) {
   ASSERT_TRUE(hit.has_value());
 }
 
+TEST(Picking, RayHitsTransformedNode) {
+  Document doc("t");
+  MeshAsset asset{};
+  asset.cpu = make_demo_cube();
+  auto& stored = doc.add_mesh(std::move(asset));
+  SceneNode node{};
+  node.mesh_asset_id = stored.id;
+  // 非单位变换（平移 + 绕 Y 旋转）：模拟墙体的放置。旧实现在三角形相交时忽略
+  // 此变换、直接用世界射线打局部顶点，导致带 transform 的节点永远选不中。
+  node.local_transform = translate({2.f, 0.f, 3.f}) * rotate_y(1.2f);
+  SceneNode& placed = doc.scene().add_node(std::move(node));
+  doc.recompute_scene();
+
+  Bvh bvh;
+  bvh.build(doc);
+  // 从正上方垂直打下，穿过节点世界包围盒中心。
+  const Vec3 center = placed.world_bounds.center();
+  Ray ray{center + Vec3{0.f, 5.f, 0.f}, {0.f, -1.f, 0.f}};
+  auto hit = bvh.closest_hit(ray, doc);
+  ASSERT_TRUE(hit.has_value());
+  EXPECT_EQ(hit->node_id, placed.id);
+}
+
 TEST(Modeling, MeshShapeTessellate) {
   MeshShape shape(make_demo_cube());
   auto mesh = shape.tessellate(0.1);
