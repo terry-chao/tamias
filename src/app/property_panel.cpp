@@ -89,6 +89,7 @@ QString PropertyPanel::param_label(EntityKind entity_kind, FeatureKind feature_k
 }
 
 PropertyPanel::PropertyPanel(QWidget* parent) : QWidget(parent) {
+  setMinimumWidth(260);  // 默认别太窄，给名称+数值留够空间
   root_ = new QVBoxLayout(this);
   root_->setContentsMargins(8, 8, 8, 8);
   root_->setSpacing(0);
