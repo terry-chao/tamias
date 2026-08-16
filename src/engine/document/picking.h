@@ -1,6 +1,6 @@
 #pragma once
 
-#include "entity/document.h"
+#include "engine/document/document.h"
 #include "engine/math/camera.h"
 #include "engine/math/math.h"
 

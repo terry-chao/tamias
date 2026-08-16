@@ -18,3 +18,4 @@ endif()
 
 add_subdirectory(modeling)
 add_subdirectory(io)
+add_subdirectory(document)

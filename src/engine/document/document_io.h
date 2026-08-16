@@ -1,7 +1,7 @@
 #pragma once
 
 #include "engine/core/result.h"
-#include "entity/document.h"
+#include "engine/document/document.h"
 #include "engine/math/math.h"
 
 #include <cstdint>

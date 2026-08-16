@@ -1,4 +1,4 @@
-#include "entity/scene.h"
+#include "engine/document/scene.h"
 
 #include <functional>
 

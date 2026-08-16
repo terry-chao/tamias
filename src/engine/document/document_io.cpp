@@ -13,7 +13,7 @@ namespace tamias {
 namespace {
 
 constexpr char kMagic[4] = {'T', 'M', 'A', 'S'};
-constexpr std::uint32_t kFormatVersion = 2;
+constexpr std::uint32_t kFormatVersion = 4;
 
 constexpr std::uint32_t fourcc(char a, char b, char c, char d) {
   return static_cast<std::uint32_t>(static_cast<std::uint8_t>(a)) |
@@ -26,6 +26,7 @@ constexpr std::uint32_t kChunkMeta = fourcc('M', 'E', 'T', 'A');
 constexpr std::uint32_t kChunkMesh = fourcc('M', 'E', 'S', 'H');
 constexpr std::uint32_t kChunkScen = fourcc('S', 'C', 'E', 'N');
 constexpr std::uint32_t kChunkView = fourcc('V', 'I', 'E', 'W');
+constexpr std::uint32_t kChunkFeat = fourcc('F', 'E', 'A', 'T');
 
 Result<void> write_vec2(BinaryWriter& w, const Vec2& v) {
   if (auto r = w.write_f32(v.x); !r) {
@@ -216,6 +217,143 @@ Result<void> read_mesh_asset(BinaryReader& r, MeshAsset& asset) {
   return read_mesh_cpu(r, asset.cpu);
 }
 
+// 特征树序列化：feature id 由插入顺序隐含（1..N），只存 kind / inputs / params。
+Result<void> write_feature_model(BinaryWriter& w, const FeatureModel& model) {
+  if (auto r = w.write_u64(static_cast<std::uint64_t>(model.features().size())); !r) {
+    return r;
+  }
+  for (const auto& f : model.features()) {
+    if (auto r = w.write_u8(static_cast<std::uint8_t>(f.kind)); !r) {
+      return r;
+    }
+    if (auto r = w.write_u64(static_cast<std::uint64_t>(f.inputs.size())); !r) {
+      return r;
+    }
+    for (std::uint64_t in : f.inputs) {
+      if (auto r = w.write_u64(in); !r) {
+        return r;
+      }
+    }
+    if (auto r = w.write_u64(static_cast<std::uint64_t>(f.params.size())); !r) {
+      return r;
+    }
+    // Deterministic order: sort param keys for stable snapshots.
+    std::vector<std::string> keys;
+    keys.reserve(f.params.size());
+    for (const auto& [k, _] : f.params) {
+      keys.push_back(k);
+    }
+    std::sort(keys.begin(), keys.end());
+    for (const auto& k : keys) {
+      if (auto r = w.write_string(k); !r) {
+        return r;
+      }
+      if (auto r = w.write_f64(f.params.at(k)); !r) {
+        return r;
+      }
+    }
+  }
+  return {};
+}
+
+Result<void> read_feature_model(BinaryReader& r, FeatureModel& model) {
+  auto count = r.read_u64();
+  if (!count) {
+    return Err(count.error());
+  }
+  for (std::uint64_t i = 0; i < *count; ++i) {
+    auto kind_u8 = r.read_u8();
+    if (!kind_u8) {
+      return Err(kind_u8.error());
+    }
+    auto input_count = r.read_u64();
+    if (!input_count) {
+      return Err(input_count.error());
+    }
+    std::vector<std::uint64_t> inputs;
+    inputs.reserve(static_cast<std::size_t>(*input_count));
+    for (std::uint64_t j = 0; j < *input_count; ++j) {
+      auto in = r.read_u64();
+      if (!in) {
+        return Err(in.error());
+      }
+      inputs.push_back(*in);
+    }
+    auto param_count = r.read_u64();
+    if (!param_count) {
+      return Err(param_count.error());
+    }
+    std::unordered_map<std::string, double> params;
+    params.reserve(static_cast<std::size_t>(*param_count));
+    for (std::uint64_t j = 0; j < *param_count; ++j) {
+      auto key = r.read_string();
+      if (!key) {
+        return Err(key.error());
+      }
+      auto val = r.read_f64();
+      if (!val) {
+        return Err(val.error());
+      }
+      params.emplace(std::move(*key), *val);
+    }
+    model.add_feature(static_cast<FeatureKind>(*kind_u8), std::move(inputs), std::move(params));
+  }
+  return {};
+}
+
+Result<void> write_entity(BinaryWriter& w, const Entity& e) {
+  if (auto r = w.write_u64(e.id); !r) {
+    return r;
+  }
+  if (auto r = w.write_string(e.name); !r) {
+    return r;
+  }
+  if (auto r = w.write_u8(static_cast<std::uint8_t>(e.kind())); !r) {
+    return r;
+  }
+  if (auto r = w.write_u64(e.mesh_asset_id); !r) {
+    return r;
+  }
+  if (auto r = write_mat4(w, e.local_transform); !r) {
+    return r;
+  }
+  return write_feature_model(w, e.model);
+}
+
+Result<void> read_entity(BinaryReader& r, std::unique_ptr<Entity>& out) {
+  auto id = r.read_u64();
+  if (!id) {
+    return Err(id.error());
+  }
+  auto name = r.read_string();
+  if (!name) {
+    return Err(name.error());
+  }
+  auto kind_u8 = r.read_u8();
+  if (!kind_u8) {
+    return Err(kind_u8.error());
+  }
+  auto mesh_id = r.read_u64();
+  if (!mesh_id) {
+    return Err(mesh_id.error());
+  }
+  Mat4 transform{};
+  if (auto res = read_mat4(r, transform); !res) {
+    return res;
+  }
+
+  auto entity = make_entity(static_cast<EntityKind>(*kind_u8));
+  entity->id = *id;
+  entity->name = std::move(*name);
+  entity->mesh_asset_id = *mesh_id;
+  entity->local_transform = transform;
+  if (auto res = read_feature_model(r, entity->model); !res) {
+    return res;
+  }
+  out = std::move(entity);
+  return {};
+}
+
 Result<void> write_scene_node(BinaryWriter& w, const SceneNode& node) {
   if (auto r = w.write_u64(node.id); !r) {
     return r;
@@ -365,6 +503,21 @@ Result<void> write_document_body(BinaryWriter& w, const Document& document) {
       return r;
     }
   }
+
+  if (auto r = w.write_u64(static_cast<std::uint64_t>(document.entities().size())); !r) {
+    return r;
+  }
+  std::vector<std::uint64_t> entity_ids;
+  entity_ids.reserve(document.entities().size());
+  for (const auto& [id, _] : document.entities()) {
+    entity_ids.push_back(id);
+  }
+  std::sort(entity_ids.begin(), entity_ids.end());
+  for (std::uint64_t id : entity_ids) {
+    if (auto r = write_entity(w, *document.entities().at(id)); !r) {
+      return r;
+    }
+  }
   return {};
 }
 
@@ -406,6 +559,18 @@ Result<Document> read_document_body(BinaryReader& r) {
       return Err(res.error());
     }
     document.scene().insert_node(std::move(node));
+  }
+
+  auto entity_count = r.read_u64();
+  if (!entity_count) {
+    return Err(entity_count.error());
+  }
+  for (std::uint64_t i = 0; i < *entity_count; ++i) {
+    std::unique_ptr<Entity> entity;
+    if (auto res = read_entity(r, entity); !res) {
+      return Err(res.error());
+    }
+    document.insert_entity(std::move(entity));
   }
 
   document.set_next_mesh_id(*next_mesh);
@@ -490,6 +655,22 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
     }
   }
 
+  BinaryWriter feat_w;
+  std::vector<std::uint64_t> entity_ids;
+  entity_ids.reserve(document.entities().size());
+  for (const auto& [id, _] : document.entities()) {
+    entity_ids.push_back(id);
+  }
+  std::sort(entity_ids.begin(), entity_ids.end());
+  if (auto r = feat_w.write_u64(static_cast<std::uint64_t>(entity_ids.size())); !r) {
+    return r;
+  }
+  for (std::uint64_t id : entity_ids) {
+    if (auto r = write_entity(feat_w, *document.entities().at(id)); !r) {
+      return r;
+    }
+  }
+
   BinaryWriter view_w;
   if (auto r = write_viewport(view_w, viewport); !r) {
     return r;
@@ -502,7 +683,7 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
   if (auto r = file.write_u32(kFormatVersion); !r) {
     return r;
   }
-  if (auto r = file.write_u32(4); !r) {  // chunk_count
+  if (auto r = file.write_u32(5); !r) {  // chunk_count
     return r;
   }
   if (auto r = append_chunk(file, kChunkMeta, meta_w.data()); !r) {
@@ -512,6 +693,9 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
     return r;
   }
   if (auto r = append_chunk(file, kChunkScen, scen_w.data()); !r) {
+    return r;
+  }
+  if (auto r = append_chunk(file, kChunkFeat, feat_w.data()); !r) {
     return r;
   }
   if (auto r = append_chunk(file, kChunkView, view_w.data()); !r) {
@@ -572,6 +756,7 @@ Result<LoadedDocument> load_document(const std::filesystem::path& path) {
   std::uint64_t next_node_id = 1;
   std::vector<MeshAsset> meshes;
   std::vector<SceneNode> nodes;
+  std::vector<std::unique_ptr<Entity>> entities;
   ViewportState viewport{};
   bool has_meta = false;
   bool has_mesh = false;
@@ -645,6 +830,20 @@ Result<LoadedDocument> load_document(const std::filesystem::path& path) {
         nodes.push_back(std::move(node));
       }
       has_scen = true;
+    } else if (*id == kChunkFeat) {
+      auto count = chunk_r.read_u64();
+      if (!count) {
+        return Err(count.error());
+      }
+      entities.clear();
+      entities.reserve(static_cast<std::size_t>(*count));
+      for (std::uint64_t f = 0; f < *count; ++f) {
+        std::unique_ptr<Entity> entity;
+        if (auto res = read_entity(chunk_r, entity); !res) {
+          return Err(res.error());
+        }
+        entities.push_back(std::move(entity));
+      }
     } else if (*id == kChunkView) {
       if (auto res = read_viewport(chunk_r, viewport); !res) {
         return Err(res.error());
@@ -667,6 +866,9 @@ Result<LoadedDocument> load_document(const std::filesystem::path& path) {
   }
   for (auto& node : nodes) {
     loaded.document.scene().insert_node(std::move(node));
+  }
+  for (auto& entity : entities) {
+    loaded.document.insert_entity(std::move(entity));
   }
   loaded.document.set_next_mesh_id(next_mesh_id);
   loaded.document.scene().set_next_id(next_node_id);
