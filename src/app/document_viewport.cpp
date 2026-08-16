@@ -567,6 +567,7 @@ void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
         document_->select(hit->node_id);
       }
       request_redraw();
+      emit selection_changed();
     }
   }
   if (event->button() == Qt::MiddleButton || event->button() == Qt::RightButton) {
@@ -682,15 +683,30 @@ void DocumentViewport::adjust_selected_param(double delta) {
                {"value", current + delta}});
 }
 
-void DocumentViewport::run_command(const std::string& name, const CommandArgs& args) {
+void DocumentViewport::run_command(const std::string& name, const CommandArgs& args,
+                                   bool notify) {
   if (auto r = command_system_.dispatch(*document_, name, args); r) {
     resync_all_meshes();
     document_->recompute_scene();
     rebuild_bvh();
     request_redraw();
+    if (notify) {
+      emit document_changed();
+    }
   } else {
     log_error(r.error());
   }
+}
+
+void DocumentViewport::set_entity_param(std::uint64_t entity_id, std::uint64_t feature_id,
+                                        const std::string& param_name, double value) {
+  // 属性面板自己已经在 spinbox 里展示了新值，无需再通知刷新（避免重建丢焦点）。
+  run_command("set_param",
+              {{"entity_id", static_cast<std::int64_t>(entity_id)},
+               {"feature_id", static_cast<std::int64_t>(feature_id)},
+               {"param_name", param_name},
+               {"value", value}},
+              /*notify=*/false);
 }
 
 void DocumentViewport::resync_all_meshes() {
@@ -714,6 +730,7 @@ void DocumentViewport::undo() {
   document_->recompute_scene();
   rebuild_bvh();
   request_redraw();
+  emit document_changed();
 }
 
 void DocumentViewport::redo() {
@@ -725,6 +742,7 @@ void DocumentViewport::redo() {
   document_->recompute_scene();
   rebuild_bvh();
   request_redraw();
+  emit document_changed();
 }
 
 Vec3 DocumentViewport::cursor_ground_position(const QPoint& pos) const {

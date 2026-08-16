@@ -13,7 +13,9 @@
 #include <QLabel>
 #include <QTimer>
 #include <QWidget>
+#include <cstdint>
 #include <memory>
+#include <string>
 
 namespace tamias {
 
@@ -41,9 +43,14 @@ class DocumentViewport final : public QWidget {
   // 撤销 / 重做最近一条命令。
   void undo();
   void redo();
+  // 改实体某个特征参数（走 set_param 命令，可撤销；供属性面板调用）。
+  void set_entity_param(std::uint64_t entity_id, std::uint64_t feature_id,
+                        const std::string& param_name, double value);
 
  signals:
   void tool_mode_changed(ToolMode mode);
+  void selection_changed();  // 选中对象变化
+  void document_changed();   // 文档内容/参数变化（undo/redo/命令执行后）
 
  protected:
   void showEvent(QShowEvent* event) override;
@@ -74,7 +81,7 @@ class DocumentViewport final : public QWidget {
   [[nodiscard]] Vec3 cursor_world_position(const QPoint& pos) const;
   [[nodiscard]] Vec3 cursor_ground_position(const QPoint& pos) const;
   void adjust_selected_param(double delta);
-  void run_command(const std::string& name, const CommandArgs& args);
+  void run_command(const std::string& name, const CommandArgs& args, bool notify = true);
   void dispatch_tool_command(ToolMode mode);
   void resync_all_meshes();
   void cancel_tool();

@@ -481,6 +481,26 @@ Remove it from Recent?</source>
 
 从最近列表中移除？</translation>
     </message>
+    <message>
+        <source>Properties</source>
+        <translation>属性</translation>
+    </message>
+    <message>
+        <source>No document open</source>
+        <translation>未打开文档</translation>
+    </message>
+    <message>
+        <source>Imported mesh: %1
+(no editable parameters)</source>
+        <translation>导入网格：%1
+（无可编辑参数）</translation>
+    </message>
+    <message>
+        <source>No selection
+Click an object to select it, or use a create tool</source>
+        <translation>未选择对象
+点击视口选中对象，或用创建工具建模</translation>
+    </message>
 </context>
 <context>
     <name>tamias::SettingsDialog</name>
@@ -577,6 +597,65 @@ Remove it from Recent?</source>
         <location filename="../src/app/view_cube_widget.cpp" line="242"/>
         <source>Bottom</source>
         <translation>下</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::PropertyPanel</name>
+    <message>
+        <source>Rectangle profile</source>
+        <translation>矩形轮廓</translation>
+    </message>
+    <message>
+        <source>Circle profile</source>
+        <translation>圆形轮廓</translation>
+    </message>
+    <message>
+        <source>Extrude</source>
+        <translation>拉伸</translation>
+    </message>
+    <message>
+        <source>Feature</source>
+        <translation>特征</translation>
+    </message>
+    <message>
+        <source>Wall</source>
+        <translation>墙</translation>
+    </message>
+    <message>
+        <source>Box</source>
+        <translation>立方体</translation>
+    </message>
+    <message>
+        <source>Cylinder</source>
+        <translation>圆柱</translation>
+    </message>
+    <message>
+        <source>Entity</source>
+        <translation>实体</translation>
+    </message>
+    <message>
+        <source>Thickness</source>
+        <translation>厚度</translation>
+    </message>
+    <message>
+        <source>Length</source>
+        <translation>长度</translation>
+    </message>
+    <message>
+        <source>Width</source>
+        <translation>宽</translation>
+    </message>
+    <message>
+        <source>Depth</source>
+        <translation>深</translation>
+    </message>
+    <message>
+        <source>Height</source>
+        <translation>高</translation>
+    </message>
+    <message>
+        <source>Radius</source>
+        <translation>半径</translation>
     </message>
 </context>
 </TS>

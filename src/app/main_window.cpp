@@ -7,6 +7,7 @@
 #include "mesh_thumbnail.h"
 #include "engine/modeling/occt_shape_ops.h"
 #include "engine/modeling/shape_ops.h"
+#include "property_panel.h"
 #include "settings_dialog.h"
 
 #include <QAction>
@@ -15,6 +16,7 @@
 #include <QCoreApplication>
 #include <QDialog>
 #include <QDir>
+#include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QIcon>
@@ -73,7 +75,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   setCentralWidget(stack_);
 
   connect(tabs_, &QTabWidget::tabCloseRequested, this, &MainWindow::close_tab);
-  connect(tabs_, &QTabWidget::currentChanged, this, [this](int) { sync_render_mode_actions(); });
+  connect(tabs_, &QTabWidget::currentChanged, this, [this](int) {
+    sync_render_mode_actions();
+    refresh_property_panel();
+  });
   connect(home_, &HomePage::newDemoRequested, this, &MainWindow::new_demo_document);
   connect(home_, &HomePage::openRequested, this, &MainWindow::open_file);
   connect(home_, &HomePage::fileActivated, this, &MainWindow::open_recent_path);
@@ -295,6 +300,22 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   toolbar->addSeparator();
   toolbar->addWidget(render_mode_combo_);
 
+  // 右侧属性面板：展示/编辑选中实体的参数。
+  property_panel_ = new PropertyPanel(this);
+  auto* property_dock = new QDockWidget(tr("Properties"), this);
+  property_dock->setObjectName(QStringLiteral("propertyDock"));
+  property_dock->setWidget(property_panel_);
+  property_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+  addDockWidget(Qt::RightDockWidgetArea, property_dock);
+  connect(property_panel_, &PropertyPanel::param_edited, this,
+          [this](std::uint64_t entity_id, std::uint64_t feature_id, const QString& param_name,
+                 double value) {
+            if (auto* vp = current_viewport()) {
+              vp->set_entity_param(entity_id, feature_id, param_name.toStdString(), value);
+            }
+          });
+  refresh_property_panel();
+
   statusBar()->showMessage(tr("Ready — Open a model or try the demo"));
   show_home();
 }
@@ -425,6 +446,8 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
     (void)mode;
 #endif
   });
+  connect(vp, &DocumentViewport::selection_changed, this, &MainWindow::refresh_property_panel);
+  connect(vp, &DocumentViewport::document_changed, this, &MainWindow::refresh_property_panel);
   const int index = tabs_->addTab(vp, QString::fromStdString(document->name()));
   tabs_->setCurrentIndex(index);
   show_documents();
@@ -750,6 +773,29 @@ DocumentViewport* MainWindow::current_viewport() const {
     return nullptr;
   }
   return qobject_cast<DocumentViewport*>(tabs_->currentWidget());
+}
+
+void MainWindow::refresh_property_panel() {
+  if (property_panel_ == nullptr) {
+    return;
+  }
+  DocumentViewport* vp = current_viewport();
+  if (vp == nullptr) {
+    property_panel_->show_entity(nullptr, tr("No document open"));
+    return;
+  }
+  const Document& doc = vp->document();
+  if (const Entity* entity = doc.selected_entity()) {
+    property_panel_->show_entity(entity, QString());
+    return;
+  }
+  if (const SceneNode* node = doc.scene().selected_node()) {
+    property_panel_->show_entity(nullptr, tr("Imported mesh: %1\n(no editable parameters)")
+                                               .arg(QString::fromStdString(node->name)));
+    return;
+  }
+  property_panel_->show_entity(
+      nullptr, tr("No selection\nClick an object to select it, or use a create tool"));
 }
 
 void MainWindow::frame_all() {
