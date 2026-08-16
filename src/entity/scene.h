@@ -69,6 +69,16 @@ class Scene {
     next_id_ = 1;
   }
 
+  // 删除指定节点（供命令撤销用）。
+  void remove_node(std::uint64_t id) {
+    for (auto it = nodes_.begin(); it != nodes_.end(); ++it) {
+      if (it->id == id) {
+        nodes_.erase(it);
+        return;
+      }
+    }
+  }
+
   void clear_selection() {
     for (auto& n : nodes_) {
       n.selected = false;

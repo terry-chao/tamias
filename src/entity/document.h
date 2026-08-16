@@ -69,6 +69,9 @@ class Document {
     next_mesh_id_ = 1;
   }
 
+  // 删除指定网格资产（供命令撤销用）。
+  void remove_mesh(std::uint64_t id) { meshes_.erase(id); }
+
   // Sync each node's local bounds from its mesh, then recompute the whole scene's
   // world transforms + world bounds. Call after load or any transform/parent edit.
   void recompute_scene() {
