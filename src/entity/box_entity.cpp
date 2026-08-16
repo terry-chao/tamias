@@ -2,14 +2,12 @@
 
 namespace tamias {
 
-BoxEntity BoxEntity::at(Vec3 position) {
-  BoxEntity box;
-  box.name = "box";
-  auto& profile =
-      box.model.add_feature(FeatureKind::RectProfile, {}, {{"width", 1.0}, {"height", 1.0}});
-  box.model.add_feature(FeatureKind::Extrude, {profile.id}, {{"depth", 1.0}});
-  box.local_transform = translate(position);
-  return box;
+BoxEntity::BoxEntity(Vec3 position) {
+  kind_ = EntityKind::Box;
+  name = "box";
+  auto& profile = model.add_feature(FeatureKind::RectProfile, {}, {{"width", 1.0}, {"height", 1.0}});
+  model.add_feature(FeatureKind::Extrude, {profile.id}, {{"depth", 1.0}});
+  local_transform = translate(position);
 }
 
 }  // namespace tamias

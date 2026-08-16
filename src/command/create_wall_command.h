@@ -1,15 +1,19 @@
 #pragma once
 
 #include "command/command.h"
-#include "engine/math/math.h"
 #include "engine/document/document.h"
 
 namespace tamias {
 
-// 创建一面参数化墙：command → drag（WallEntity::drag）→ WallEntity 实体 → Document。
+// 创建一面参数化墙（交互式）：dispatch 后武装，拖拽两个点确定墙，然后 createGeom 造型。
 class CreateWallCommand final : public Command {
  public:
-  CreateWallCommand(Document& document, Vec3 start, Vec3 end, double thickness, double height);
+  CreateWallCommand(Document& document, double thickness, double height);
+
+  [[nodiscard]] bool interactive() const override { return true; }
+  [[nodiscard]] Result<bool> on_point(Vec3 point) override;
+  [[nodiscard]] bool has_start() const override { return has_start_; }
+  [[nodiscard]] Vec3 start() const override { return start_; }
 
   [[nodiscard]] Result<void> execute() override;
   void undo() override;
@@ -19,10 +23,11 @@ class CreateWallCommand final : public Command {
 
  private:
   Document* document_ = nullptr;
-  Vec3 start_{};
-  Vec3 end_{};
   double thickness_ = 0.2;
   double height_ = 3.0;
+  bool has_start_ = false;
+  Vec3 start_{};
+  Vec3 end_{};
   MeshAsset mesh_{};
   std::unique_ptr<Entity> entity_;
 };

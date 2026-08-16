@@ -4,21 +4,26 @@
 
 namespace tamias {
 
-CreateWallCommand::CreateWallCommand(Document& document, Vec3 start, Vec3 end, double thickness,
-                                     double height)
-    : document_(&document),
-      start_(start),
-      end_(end),
-      thickness_(thickness),
-      height_(height) {}
+CreateWallCommand::CreateWallCommand(Document& document, double thickness, double height)
+    : document_(&document), thickness_(thickness), height_(height) {}
+
+Result<bool> CreateWallCommand::on_point(Vec3 point) {
+  if (!has_start_) {
+    start_ = point;
+    has_start_ = true;
+    return false;  // 第一点，还没完
+  }
+  end_ = point;
+  return true;  // 第二点，齐了
+}
 
 Result<void> CreateWallCommand::execute() {
-  WallEntity wall = WallEntity::drag(start_, end_, thickness_, height_);  // ① drag 操作
-  auto geometry = wall.createGeom();                           // ② 造型（实体 createGeom）
+  WallEntity wall(start_, end_, thickness_, height_);  // 两点构造实体
+  auto geometry = wall.createGeom();                    // 造型（实体 createGeom）
   if (!geometry) {
     return Err(geometry.error());
   }
-  Entity* added = document_->add_wall(std::move(wall), std::move(*geometry));  // ③ 入文档
+  Entity* added = document_->add_wall(std::move(wall), std::move(*geometry));  // 入文档
   if (added == nullptr) {
     return Err("CreateWallCommand: add_wall failed");
   }

@@ -17,9 +17,6 @@
 
 namespace tamias {
 
-// 基础几何体种类（定义见 command/create_primitive_command.h）。
-enum class PrimitiveKind;
-
 // 当前激活的创建工具。
 enum class ToolMode { None, Wall, Box, Cylinder };
 
@@ -76,10 +73,9 @@ class DocumentViewport final : public QWidget {
   void stop_view_animation();
   [[nodiscard]] Vec3 cursor_world_position(const QPoint& pos) const;
   [[nodiscard]] Vec3 cursor_ground_position(const QPoint& pos) const;
-  void create_wall(Vec3 start, Vec3 end);
-  void create_primitive(PrimitiveKind kind, Vec3 position);
   void adjust_selected_param(double delta);
   void run_command(const std::string& name, const CommandArgs& args);
+  void dispatch_tool_command(ToolMode mode);
   void resync_all_meshes();
   void cancel_tool();
 
@@ -91,8 +87,6 @@ class DocumentViewport final : public QWidget {
   RenderMode mode_ = RenderMode::Shaded;
   CommandSystem command_system_{command_registry()};
   ToolMode tool_mode_ = ToolMode::None;
-  bool wall_placing_ = false;
-  Vec3 wall_start_{};
   class NativeSurface;
   NativeSurface* surface_ = nullptr;
   void* gl_hwnd_ = nullptr;  // Win32 OpenGL child HWND (UI-thread owned)

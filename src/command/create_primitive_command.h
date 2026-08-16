@@ -1,7 +1,6 @@
 #pragma once
 
 #include "command/command.h"
-#include "engine/math/math.h"
 #include "engine/document/document.h"
 
 namespace tamias {
@@ -9,10 +8,13 @@ namespace tamias {
 // 基础几何体种类。
 enum class PrimitiveKind { Box, Cylinder };
 
-// 创建一个参数化基础几何体（box / cylinder）：command → BoxEntity::at / CylinderEntity::at → 实体 → Document。
+// 创建一个参数化基础几何体（交互式）：dispatch 后武装，点一个位置确定，然后 createGeom 造型。
 class CreatePrimitiveCommand final : public Command {
  public:
-  CreatePrimitiveCommand(Document& document, PrimitiveKind kind, Vec3 position);
+  CreatePrimitiveCommand(Document& document, PrimitiveKind kind);
+
+  [[nodiscard]] bool interactive() const override { return true; }
+  [[nodiscard]] Result<bool> on_point(Vec3 point) override;
 
   [[nodiscard]] Result<void> execute() override;
   void undo() override;

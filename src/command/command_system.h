@@ -38,12 +38,21 @@ class CommandRegistry {
 void register_commands(CommandRegistry& registry);
 
 // 命令系统：按名分发命令，统一管 undo 栈。每视口一份（undo 按文档隔离）。
+// 交互式命令（拖拽）在 dispatch 后进入 pending，视口喂点，点齐后自动 execute + 压栈。
 class CommandSystem {
  public:
   explicit CommandSystem(const CommandRegistry& registry) : registry_(registry) {}
 
   [[nodiscard]] Result<void> dispatch(Document& doc, const std::string& name,
                                       const CommandArgs& args);
+  // 给 pending 命令喂一个交互点；返回 true 表示命令已完成。
+  [[nodiscard]] Result<bool> feed_point(Vec3 point);
+  void cancel();  // 取消 pending
+
+  [[nodiscard]] bool has_pending() const { return pending_ != nullptr; }
+  [[nodiscard]] bool drag_started() const { return pending_ && pending_->has_start(); }
+  [[nodiscard]] Vec3 drag_start() const { return pending_ ? pending_->start() : Vec3{}; }
+
   void undo();
   void redo();
   [[nodiscard]] bool can_undo() const { return stack_.can_undo(); }
@@ -52,6 +61,7 @@ class CommandSystem {
  private:
   const CommandRegistry& registry_;
   CommandStack stack_;
+  std::unique_ptr<Command> pending_;
 };
 
 }  // namespace tamias

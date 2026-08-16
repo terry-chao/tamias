@@ -21,13 +21,6 @@ std::int64_t arg_int(const CommandArgs& args, const std::string& name, std::int6
              : fallback;
 }
 
-Vec3 arg_vec3(const CommandArgs& args, const std::string& name, Vec3 fallback) {
-  const auto it = args.find(name);
-  return (it != args.end() && std::holds_alternative<Vec3>(it->second))
-             ? std::get<Vec3>(it->second)
-             : fallback;
-}
-
 std::string arg_string(const CommandArgs& args, const std::string& name, std::string fallback) {
   const auto it = args.find(name);
   return (it != args.end() && std::holds_alternative<std::string>(it->second))
@@ -39,19 +32,18 @@ std::string arg_string(const CommandArgs& args, const std::string& name, std::st
 
 void register_commands(CommandRegistry& registry) {
   registry.register_command("create_wall", [](Document& doc, const CommandArgs& args) {
-    return std::make_unique<CreateWallCommand>(
-        doc, arg_vec3(args, "start", {}), arg_vec3(args, "end", {}),
-        arg_double(args, "thickness", 0.2), arg_double(args, "height", 3.0));
+    return std::make_unique<CreateWallCommand>(doc, arg_double(args, "thickness", 0.2),
+                                               arg_double(args, "height", 3.0));
   });
 
   registry.register_command("create_box", [](Document& doc, const CommandArgs& args) {
-    return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Box,
-                                                    arg_vec3(args, "position", {}));
+    (void)args;
+    return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Box);
   });
 
   registry.register_command("create_cylinder", [](Document& doc, const CommandArgs& args) {
-    return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Cylinder,
-                                                    arg_vec3(args, "position", {}));
+    (void)args;
+    return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Cylinder);
   });
 
   registry.register_command("set_param", [](Document& doc, const CommandArgs& args) {

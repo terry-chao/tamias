@@ -26,12 +26,38 @@ Result<void> CommandSystem::dispatch(Document& doc, const std::string& name,
   if (!command) {
     return Err("CommandSystem: unknown command '" + name + "'");
   }
+  if (command->interactive()) {
+    pending_ = std::move(command);  // 武装，等待交互点
+    return {};
+  }
   if (auto r = command->execute(); !r) {
     return r;
   }
   stack_.push_executed(std::move(command));
   return {};
 }
+
+Result<bool> CommandSystem::feed_point(Vec3 point) {
+  if (!pending_) {
+    return Err("CommandSystem: no pending command");
+  }
+  auto done = pending_->on_point(point);
+  if (!done) {
+    return Err(done.error());
+  }
+  if (*done) {
+    if (auto r = pending_->execute(); !r) {
+      pending_.reset();
+      return Err(r.error());
+    }
+    stack_.push_executed(std::move(pending_));
+    pending_.reset();
+    return true;  // 完成
+  }
+  return false;  // 还没完
+}
+
+void CommandSystem::cancel() { pending_.reset(); }
 
 void CommandSystem::undo() { stack_.undo(); }
 void CommandSystem::redo() { stack_.redo(); }

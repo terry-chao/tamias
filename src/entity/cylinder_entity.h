@@ -8,7 +8,7 @@ namespace tamias {
 class CylinderEntity final : public Entity {
  public:
   CylinderEntity() { kind_ = EntityKind::Cylinder; }
-  static CylinderEntity at(Vec3 position);
+  explicit CylinderEntity(Vec3 position);
 };
 
 }  // namespace tamias

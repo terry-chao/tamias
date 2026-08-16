@@ -18,7 +18,7 @@ namespace {
 
 // 手动给文档加一个墙实体（绕过 OCCT 求值，供序列化/渲染测试）。
 std::uint64_t add_wall_entity(Document& doc, Vec3 start, Vec3 end) {
-  auto wall = std::make_unique<WallEntity>(WallEntity::drag(start, end, 0.2, 3.0));
+  auto wall = std::make_unique<WallEntity>(start, end, 0.2, 3.0);
   MeshAsset mesh_asset{};
   mesh_asset.name = wall->name;
   mesh_asset.cpu = make_demo_cube();
@@ -319,7 +319,7 @@ TEST(FeatureModel, ChangeParamReevaluates) {
 }
 
 TEST(Entity, CreateGeom) {
-  WallEntity wall = WallEntity::drag({0.f, 0.f, 0.f}, {0.f, 0.f, 5.f}, 0.2, 3.0);
+  WallEntity wall({0.f, 0.f, 0.f}, {0.f, 0.f, 5.f}, 0.2, 3.0);
   auto mesh = wall.createGeom();
   ASSERT_TRUE(mesh) << mesh.error();
   EXPECT_FALSE(mesh->indices.empty());
@@ -332,12 +332,20 @@ TEST(CommandSystem, DispatchCreateWallUndoRedo) {
   CommandSystem system(registry);
 
   Document doc("cmd");
-  CommandArgs args = {{"start", Vec3{0.f, 0.f, 0.f}},
-                      {"end", Vec3{0.f, 0.f, 5.f}},
-                      {"thickness", 0.2},
-                      {"height", 3.0}};
+  // 交互式命令：dispatch 只是武装，喂两个点后才创建。
+  CommandArgs args = {{"thickness", 0.2}, {"height", 3.0}};
   auto r = system.dispatch(doc, "create_wall", args);
   ASSERT_TRUE(r) << r.error();
+  EXPECT_EQ(doc.entities().size(), 0u);  // pending，还没创建
+
+  auto p1 = system.feed_point({0.f, 0.f, 0.f});  // 第一点
+  ASSERT_TRUE(p1) << p1.error();
+  EXPECT_FALSE(*p1);  // 还没完
+  EXPECT_EQ(doc.entities().size(), 0u);
+
+  auto p2 = system.feed_point({0.f, 0.f, 5.f});  // 第二点
+  ASSERT_TRUE(p2) << p2.error();
+  EXPECT_TRUE(*p2);  // 完成
   EXPECT_EQ(doc.entities().size(), 1u);
   EXPECT_EQ(doc.meshes().size(), 1u);
 

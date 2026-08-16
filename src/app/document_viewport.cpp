@@ -1,7 +1,6 @@
 #include "document_viewport.h"
 
 #include "app_settings.h"
-#include "command/create_primitive_command.h"
 #include "engine/core/log.h"
 #include "engine/modeling/feature.h"
 
@@ -476,9 +475,9 @@ void DocumentViewport::submit_current_frame() {
   frame.eye_position = camera_.eye_position();
   frame.mode = mode_;
   frame.items = document_->render_items();
-  frame.show_preview_line = (tool_mode_ == ToolMode::Wall) && wall_placing_;
+  frame.show_preview_line = (tool_mode_ == ToolMode::Wall) && command_system_.drag_started();
   if (frame.show_preview_line) {
-    frame.preview_start = wall_start_;
+    frame.preview_start = command_system_.drag_start();
     frame.preview_end = cursor_ground_position(last_mouse_);
   }
   channel_->submit(std::move(frame));
@@ -513,24 +512,15 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
   if (event->button() == Qt::LeftButton) {
     if (tool_mode_ != ToolMode::None) {
       const Vec3 ground = cursor_ground_position(event->pos());
-      switch (tool_mode_) {
-        case ToolMode::Wall:
-          if (!wall_placing_) {
-            wall_start_ = ground;
-            wall_placing_ = true;
-          } else {
-            create_wall(wall_start_, ground);
-            wall_placing_ = false;
-          }
-          break;
-        case ToolMode::Box:
-          create_primitive(PrimitiveKind::Box, ground);
-          break;
-        case ToolMode::Cylinder:
-          create_primitive(PrimitiveKind::Cylinder, ground);
-          break;
-        case ToolMode::None:
-          break;
+      auto r = command_system_.feed_point(ground);  // 喂交互点给 pending 命令
+      if (!r) {
+        log_error(r.error());
+        return;
+      }
+      if (*r) {  // 命令完成（墙=第二点，box/cylinder=第一点）
+        set_tool(ToolMode::None);
+        resync_all_meshes();
+        rebuild_bvh();
       }
       request_redraw();
       return;
@@ -554,7 +544,7 @@ void DocumentViewport::mouseMoveEvent(QMouseEvent* event) {
     const float scale = camera_.distance() * 0.002f;
     camera_.pan(-delta.x() * scale, delta.y() * scale);
     request_redraw();
-  } else if (wall_placing_) {
+  } else if (command_system_.drag_started()) {
     request_redraw();  // 更新预览线
   } else {
     sync_coord_readout();
@@ -620,31 +610,43 @@ void DocumentViewport::keyPressEvent(QKeyEvent* event) {
 
 void DocumentViewport::set_tool(ToolMode mode) {
   tool_mode_ = mode;
-  wall_placing_ = false;
   if (mode != ToolMode::None) {
+    command_system_.cancel();  // 取消之前的 pending
     setFocus();
+    dispatch_tool_command(mode);  // 点按钮 → 立即 dispatch 命令（armed）
+  } else {
+    command_system_.cancel();
   }
   request_redraw();
   emit tool_mode_changed(mode);
 }
 
+void DocumentViewport::dispatch_tool_command(ToolMode mode) {
+  if (mode == ToolMode::Wall) {
+    if (auto r = command_system_.dispatch(*document_, "create_wall",
+                                          {{"thickness", 0.2}, {"height", 3.0}});
+        !r) {
+      log_error(r.error());
+    }
+  } else if (mode == ToolMode::Box) {
+    if (auto r = command_system_.dispatch(*document_, "create_box", {}); !r) {
+      log_error(r.error());
+    }
+  } else if (mode == ToolMode::Cylinder) {
+    if (auto r = command_system_.dispatch(*document_, "create_cylinder", {}); !r) {
+      log_error(r.error());
+    }
+  }
+}
+
 void DocumentViewport::cancel_tool() {
-  if (wall_placing_) {
-    wall_placing_ = false;  // 取消当前墙放置，仍留在墙工具
+  if (tool_mode_ == ToolMode::Wall && command_system_.drag_started()) {
+    command_system_.cancel();
+    dispatch_tool_command(ToolMode::Wall);  // 取消当前放置，仍留在墙工具
     request_redraw();
   } else if (tool_mode_ != ToolMode::None) {
     set_tool(ToolMode::None);  // 退出工具
   }
-}
-
-void DocumentViewport::create_wall(Vec3 start, Vec3 end) {
-  run_command("create_wall",
-              {{"start", start}, {"end", end}, {"thickness", 0.2}, {"height", 3.0}});
-}
-
-void DocumentViewport::create_primitive(PrimitiveKind kind, Vec3 position) {
-  run_command(kind == PrimitiveKind::Box ? "create_box" : "create_cylinder",
-              {{"position", position}});
 }
 
 void DocumentViewport::adjust_selected_param(double delta) {

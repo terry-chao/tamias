@@ -8,7 +8,7 @@ namespace tamias {
 class BoxEntity final : public Entity {
  public:
   BoxEntity() { kind_ = EntityKind::Box; }
-  static BoxEntity at(Vec3 position);
+  explicit BoxEntity(Vec3 position);
 };
 
 }  // namespace tamias
