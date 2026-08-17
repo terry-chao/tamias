@@ -5,8 +5,8 @@
 
 namespace tamias {
 
-WallEntity::WallEntity(Vec3 start, Vec3 end, double thickness, double height) {
-  kind_ = EntityKind::Wall;
+WallEntity::WallEntity(Vec3 start, Vec3 end, double thickness, double height)
+    : FamilyEntity(EntityKind::Wall, "Basic Wall") {
   name = "wall";
   const Vec3 d = end - start;
   const float length = std::max(std::sqrt(d.x * d.x + d.z * d.z), 1e-3f);

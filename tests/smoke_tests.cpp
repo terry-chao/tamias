@@ -6,6 +6,7 @@
 #include "entity/box_entity.h"
 #include "entity/column_entity.h"
 #include "entity/door_entity.h"
+#include "entity/family_entity.h"
 #include "entity/slab_entity.h"
 #include "entity/wall_entity.h"
 #include "entity/window_entity.h"
@@ -364,6 +365,10 @@ TEST(Entity, CreateGeom) {
   ASSERT_TRUE(mesh) << mesh.error();
   EXPECT_FALSE(mesh->indices.empty());
   EXPECT_TRUE(mesh->bounds.valid());
+
+  BoxEntity box({0.f, 0.f, 0.f});
+  EXPECT_TRUE(dynamic_cast<const FamilyEntity*>(&wall) != nullptr);
+  EXPECT_FALSE(dynamic_cast<const FamilyEntity*>(&box) != nullptr);
 }
 
 TEST(Entity, ParametricGeometryHasNormals) {

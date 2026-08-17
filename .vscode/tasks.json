@@ -13,6 +13,11 @@
         "kind": "build",
         "isDefault": true
       },
+      "presentation": {
+        "reveal": "silent",
+        "close": true,
+        "showReuseMessage": false
+      },
       "problemMatcher": [],
       "detail": "调试前编译最新的 tamias 目标"
     }

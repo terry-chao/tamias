@@ -5,6 +5,7 @@
       "name": "CMake Launch Target",
       "type": "cppvsdbg",
       "request": "launch",
+      "preLaunchTask": "Tamias: 编译",
       "program": "${command:cmake.launchTargetPath}",
       "args": [],
       "cwd": "${command:cmake.launchTargetDirectory}",

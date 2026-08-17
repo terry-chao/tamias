@@ -2,8 +2,8 @@
 
 namespace tamias {
 
-SlabEntity::SlabEntity(Vec3 position, double length, double width, double thickness) {
-  kind_ = EntityKind::Slab;
+SlabEntity::SlabEntity(Vec3 position, double length, double width, double thickness)
+    : FamilyEntity(EntityKind::Slab, "Concrete Slab") {
   name = "slab";
   auto& profile =
       model.add_feature(FeatureKind::RectProfile, {}, {{"width", length}, {"height", width}});

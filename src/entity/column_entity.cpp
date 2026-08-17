@@ -2,8 +2,8 @@
 
 namespace tamias {
 
-ColumnEntity::ColumnEntity(Vec3 position, double width, double depth, double height) {
-  kind_ = EntityKind::Column;
+ColumnEntity::ColumnEntity(Vec3 position, double width, double depth, double height)
+    : FamilyEntity(EntityKind::Column, "Concrete Column") {
   name = "column";
   auto& profile =
       model.add_feature(FeatureKind::RectProfile, {}, {{"width", width}, {"height", depth}});

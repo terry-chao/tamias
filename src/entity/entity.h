@@ -30,6 +30,7 @@ class Entity {
   virtual ~Entity() = default;
 
   [[nodiscard]] EntityKind kind() const { return kind_; }
+  [[nodiscard]] virtual bool is_family_entity() const { return false; }
   [[nodiscard]] std::unique_ptr<Entity> clone() const;
   // 造型：委托 createGeom 抽象（IGeometryBuilder），生成几何。
   [[nodiscard]] Result<MeshCpu> createGeom(double deflection = 0.05) const;

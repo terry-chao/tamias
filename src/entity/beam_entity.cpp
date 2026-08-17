@@ -5,8 +5,8 @@
 
 namespace tamias {
 
-BeamEntity::BeamEntity(Vec3 start, Vec3 end, double width, double depth) {
-  kind_ = EntityKind::Beam;
+BeamEntity::BeamEntity(Vec3 start, Vec3 end, double width, double depth)
+    : FamilyEntity(EntityKind::Beam, "Concrete Beam") {
   name = "beam";
   const Vec3 d = end - start;
   const float length = std::max(std::sqrt(d.x * d.x + d.z * d.z), 1e-3f);

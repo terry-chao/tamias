@@ -4,8 +4,11 @@
   "cmake.configureOnOpen": true,
   "cmake.configurePreset": "msvc",
   "cmake.buildPreset": "debug",
-  "cmake.buildBeforeRun": true,
+  "cmake.buildBeforeRun": false,
   "cmake.saveBeforeBuild": true,
+  "cmake.debugConfig": {
+    "preLaunchTask": "Tamias: 编译"
+  },
 
   "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
   "C_Cpp.default.cppStandard": "c++23"

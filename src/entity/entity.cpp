@@ -5,6 +5,7 @@
 #include "entity/column_entity.h"
 #include "entity/cylinder_entity.h"
 #include "entity/door_entity.h"
+#include "entity/family_entity.h"
 #include "entity/slab_entity.h"
 #include "entity/wall_entity.h"
 #include "entity/window_entity.h"
@@ -42,6 +43,11 @@ std::unique_ptr<Entity> Entity::clone() const {
   e->mesh_asset_id = mesh_asset_id;
   e->material_id = material_id;
   e->local_transform = local_transform;
+  if (auto* family = dynamic_cast<FamilyEntity*>(e.get())) {
+    if (const auto* self_family = dynamic_cast<const FamilyEntity*>(this)) {
+      family->set_family_type(self_family->family_type());
+    }
+  }
   return e;
 }
 
