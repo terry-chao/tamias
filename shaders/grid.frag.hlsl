@@ -16,10 +16,6 @@ float4 main(VsOutput input) : SV_Target0 {
   float2 major_px = major_d * major_scale / max(deriv, 1e-5);
   float major_strength = 1.0 - saturate(min(major_px.x, major_px.y));
 
-  // 世界轴：X 轴（z=0，红），Z 轴（x=0，蓝）。
-  float x_axis_strength = 1.0 - saturate(abs(coord.y) / max(deriv.y, 1e-5));
-  float z_axis_strength = 1.0 - saturate(abs(coord.x) / max(deriv.x, 1e-5));
-
   // 距相机水平距离淡出，远处与天空地平线融为一体。
   float dist = length(input.world_pos.xz - pc.eye_pos_mode.xz);
   float fade = 1.0 - smoothstep(40.0, 160.0, dist);
@@ -29,15 +25,11 @@ float4 main(VsOutput input) : SV_Target0 {
 
   float3 minor_color = float3(0.54, 0.56, 0.60);
   float3 major_color = float3(0.34, 0.36, 0.42);
-  float3 x_axis_color = float3(0.92, 0.24, 0.16);
-  float3 z_axis_color = float3(0.16, 0.38, 0.92);
   float3 horizon = float3(0.86, 0.88, 0.92);
 
   float3 color = horizon;
   color = lerp(color, minor_color, saturate(minor_strength * 0.55));
   color = lerp(color, major_color, saturate(major_strength * 0.85));
-  color = lerp(color, x_axis_color, saturate(x_axis_strength * 0.95));
-  color = lerp(color, z_axis_color, saturate(z_axis_strength * 0.95));
   color = lerp(horizon, color, fade);
   return float4(color, 1.0);
 }

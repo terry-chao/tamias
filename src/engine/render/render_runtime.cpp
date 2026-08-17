@@ -667,7 +667,7 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
 
   // 地面网格（相机锚定四边形 + 网格 shader；测深度不写深度）。
   if (grid_pipeline_ && grid_mesh_.index_buffer) {
-    const Mat4 grid_model = translate({frame.eye_position.x, -0.02f, frame.eye_position.z});
+    const Mat4 grid_model = translate({frame.eye_position.x, 0.0f, frame.eye_position.z});
     PushConstants pc{};
     pc.mvp = view_proj * grid_model;
     pc.model = grid_model;

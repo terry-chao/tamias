@@ -573,6 +573,10 @@ Click an object to select it, or use a create tool</source>
         <source>Modify</source>
         <translation>修改</translation>
     </message>
+    <message>
+        <source>&amp;Modify</source>
+        <translation>修改(&amp;M)</translation>
+    </message>
 </context>
 <context>
     <name>tamias::SettingsDialog</name>
