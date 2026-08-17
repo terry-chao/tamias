@@ -3,9 +3,6 @@
 #include "engine/document/mesh_asset.h"
 #include "engine/document/scene.h"
 #include "entity/entity.h"
-#include "entity/box_entity.h"
-#include "entity/cylinder_entity.h"
-#include "entity/wall_entity.h"
 #include "engine/render/render_types.h"
 #include "engine/render/material.h"
 
@@ -152,10 +149,9 @@ class Document {
 
   // ===== 领域实体 API（封装 SceneNode，command/app 不直接碰节点）=====
 
-  // 添加已求值的参数化实体（几何由调用方经 Entity::createGeom 求得）。
-  Entity* add_wall(WallEntity wall, MeshCpu mesh);
-  Entity* add_box(BoxEntity box, MeshCpu mesh);
-  Entity* add_cylinder(CylinderEntity cylinder, MeshCpu mesh);
+  // 添加已求值的参数化实体。Document 不关心具体 Entity 子类；
+  // 几何由调用方经 Entity::createGeom 求得，然后统一交给本方法。
+  Entity* add_entity(std::unique_ptr<Entity> entity, MeshCpu mesh);
 
   Entity* entity(std::uint64_t id) {
     auto it = entities_.find(id);
@@ -261,7 +257,6 @@ class Document {
   }
 
  private:
-  Entity* add_entity(std::unique_ptr<Entity> entity, MeshCpu mesh);
   void seed_default_materials();
 
   std::string name_;

@@ -23,7 +23,8 @@ Result<void> CreateWallCommand::execute() {
   if (!geometry) {
     return Err(geometry.error());
   }
-  Entity* added = document_->add_wall(std::move(wall), std::move(*geometry));  // 入文档
+  Entity* added = document_->add_entity(std::make_unique<WallEntity>(std::move(wall)),
+                                        std::move(*geometry));  // 入文档
   if (added == nullptr) {
     return Err("CreateWallCommand: add_wall failed");
   }

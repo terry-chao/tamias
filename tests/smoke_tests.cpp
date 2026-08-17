@@ -2,6 +2,13 @@
 #include "command/history.h"
 #include "engine/io/binary_archive.h"
 #include "engine/document/document_io.h"
+#include "entity/beam_entity.h"
+#include "entity/box_entity.h"
+#include "entity/column_entity.h"
+#include "entity/door_entity.h"
+#include "entity/slab_entity.h"
+#include "entity/wall_entity.h"
+#include "entity/window_entity.h"
 #include "engine/io/mesh_io.h"
 #include "engine/math/math.h"
 #include "engine/document/picking.h"
@@ -372,6 +379,25 @@ TEST(Entity, ParametricGeometryHasNormals) {
   ASSERT_TRUE(wall_mesh) << wall_mesh.error();
   for (const auto& v : wall_mesh->vertices) {
     EXPECT_GT(length(v.normal), 0.9f);
+  }
+}
+
+TEST(Entity, BuildingComponentsCreateGeom) {
+  const BeamEntity beam({0.f, 0.f, 0.f}, {4.f, 0.f, 0.f}, 0.3, 0.5);
+  const ColumnEntity column({0.f, 0.f, 0.f}, 0.4, 0.4, 3.0);
+  const SlabEntity slab({0.f, 0.f, 0.f}, 4.0, 3.0, 0.2);
+  const DoorEntity door({0.f, 0.f, 0.f}, 1.0, 2.1, 0.05);
+  const WindowEntity window({0.f, 0.f, 0.f}, 1.2, 1.2, 0.08);
+
+  for (const Entity* e : {static_cast<const Entity*>(&beam),
+                          static_cast<const Entity*>(&column),
+                          static_cast<const Entity*>(&slab),
+                          static_cast<const Entity*>(&door),
+                          static_cast<const Entity*>(&window)}) {
+    auto mesh = e->createGeom();
+    ASSERT_TRUE(mesh) << mesh.error();
+    EXPECT_FALSE(mesh->indices.empty());
+    EXPECT_TRUE(mesh->bounds.valid());
   }
 }
 

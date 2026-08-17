@@ -183,6 +183,26 @@
         <translation>创建(&amp;C)</translation>
     </message>
     <message>
+        <source>Create</source>
+        <translation>创建</translation>
+    </message>
+    <message>
+        <source>Create a parametric component</source>
+        <translation>创建参数化构件</translation>
+    </message>
+    <message>
+        <source>Primitives</source>
+        <translation>基本体</translation>
+    </message>
+    <message>
+        <source>Building Components</source>
+        <translation>建筑构件</translation>
+    </message>
+    <message>
+        <source>Modify the selected entity</source>
+        <translation>修改选中的构件</translation>
+    </message>
+    <message>
         <location filename="../src/app/main_window.cpp" line="271"/>
         <source>New Parametric Demo (Wall)</source>
         <translation>新建参数化演示（墙）</translation>
@@ -251,6 +271,46 @@
         <location filename="../src/app/main_window.cpp" line="156"/>
         <source>Create a cylinder: click to place</source>
         <translation>创建圆柱：点击放置</translation>
+    </message>
+    <message>
+        <source>Beam</source>
+        <translation>梁</translation>
+    </message>
+    <message>
+        <source>Create a beam: click start, then click end</source>
+        <translation>创建梁：点击起点，再点击终点</translation>
+    </message>
+    <message>
+        <source>Column</source>
+        <translation>柱</translation>
+    </message>
+    <message>
+        <source>Create a column: click to place</source>
+        <translation>创建柱：点击放置</translation>
+    </message>
+    <message>
+        <source>Slab</source>
+        <translation>板</translation>
+    </message>
+    <message>
+        <source>Create a slab: click to place</source>
+        <translation>创建板：点击放置</translation>
+    </message>
+    <message>
+        <source>Door</source>
+        <translation>门</translation>
+    </message>
+    <message>
+        <source>Create a door: click to place</source>
+        <translation>创建门：点击放置</translation>
+    </message>
+    <message>
+        <source>Window</source>
+        <translation>窗</translation>
+    </message>
+    <message>
+        <source>Create a window: click to place</source>
+        <translation>创建窗：点击放置</translation>
     </message>
     <message>
         <location filename="../src/app/main_window.cpp" line="169"/>
@@ -640,6 +700,26 @@ Click an object to select it, or use a create tool</source>
     <message>
         <source>Cylinder</source>
         <translation>圆柱</translation>
+    </message>
+    <message>
+        <source>Beam</source>
+        <translation>梁</translation>
+    </message>
+    <message>
+        <source>Column</source>
+        <translation>柱</translation>
+    </message>
+    <message>
+        <source>Slab</source>
+        <translation>板</translation>
+    </message>
+    <message>
+        <source>Door</source>
+        <translation>门</translation>
+    </message>
+    <message>
+        <source>Window</source>
+        <translation>窗</translation>
     </message>
     <message>
         <source>Entity</source>

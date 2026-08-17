@@ -31,6 +31,16 @@ QString PropertyPanel::entity_label(EntityKind kind) {
       return tr("Box");
     case EntityKind::Cylinder:
       return tr("Cylinder");
+    case EntityKind::Beam:
+      return tr("Beam");
+    case EntityKind::Column:
+      return tr("Column");
+    case EntityKind::Slab:
+      return tr("Slab");
+    case EntityKind::Door:
+      return tr("Door");
+    case EntityKind::Window:
+      return tr("Window");
   }
   return tr("Entity");
 }
@@ -92,6 +102,55 @@ QString PropertyPanel::param_label(EntityKind entity_kind, FeatureKind feature_k
         return tr("Radius");
       }
       if (feature_kind == FeatureKind::Extrude && is("depth")) {
+        return tr("Height");
+      }
+      break;
+    case EntityKind::Beam:
+      if (feature_kind == FeatureKind::RectProfile) {
+        if (is("width")) {
+          return tr("Width");
+        }
+        if (is("height")) {
+          return tr("Length");
+        }
+      } else if (feature_kind == FeatureKind::Extrude && is("depth")) {
+        return tr("Depth");
+      }
+      break;
+    case EntityKind::Column:
+      if (feature_kind == FeatureKind::RectProfile) {
+        if (is("width")) {
+          return tr("Width");
+        }
+        if (is("height")) {
+          return tr("Depth");
+        }
+      } else if (feature_kind == FeatureKind::Extrude && is("depth")) {
+        return tr("Height");
+      }
+      break;
+    case EntityKind::Slab:
+      if (feature_kind == FeatureKind::RectProfile) {
+        if (is("width")) {
+          return tr("Length");
+        }
+        if (is("height")) {
+          return tr("Width");
+        }
+      } else if (feature_kind == FeatureKind::Extrude && is("depth")) {
+        return tr("Thickness");
+      }
+      break;
+    case EntityKind::Door:
+    case EntityKind::Window:
+      if (feature_kind == FeatureKind::RectProfile) {
+        if (is("width")) {
+          return tr("Width");
+        }
+        if (is("height")) {
+          return tr("Thickness");
+        }
+      } else if (feature_kind == FeatureKind::Extrude && is("depth")) {
         return tr("Height");
       }
       break;

@@ -3,6 +3,11 @@ add_library(tamias_entity STATIC
   wall_entity.cpp
   box_entity.cpp
   cylinder_entity.cpp
+  beam_entity.cpp
+  column_entity.cpp
+  slab_entity.cpp
+  door_entity.cpp
+  window_entity.cpp
 )
 add_library(tamias::entity ALIAS tamias_entity)
 target_include_directories(tamias_entity PUBLIC ${CMAKE_SOURCE_DIR}/src)

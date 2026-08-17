@@ -3,6 +3,7 @@
 #include "app_settings.h"
 #include "engine/core/log.h"
 #include "engine/document/document_io.h"
+#include "entity/box_entity.h"
 #include "engine/io/mesh_io.h"
 #include "mesh_thumbnail.h"
 #include "engine/modeling/occt_shape_ops.h"
@@ -22,15 +23,20 @@
 #include <QIcon>
 #include <QImage>
 #include <QKeySequence>
+#include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPainter>
 #include <QPixmap>
 #include <QSignalBlocker>
+#include <QSize>
+#include <QSizePolicy>
 #include <QStatusBar>
 #include <QStyle>
 #include <QToolBar>
+#include <QToolButton>
 #include <QVector>
+#include <QWidget>
 
 namespace tamias {
 namespace {
@@ -131,17 +137,18 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   addAction(frame_all_action);
 
 #if defined(TAMIAS_HAS_OCCT)
-  auto* create_group = new QActionGroup(this);
-  create_group->setExclusive(true);
+  create_group_ = new QActionGroup(this);
+  create_group_->setExclusive(true);
 
   wall_action_ = new QAction(
       themed_mask_icon(QStringLiteral(":/icons/wall.svg"),
                        palette().color(QPalette::WindowText)),
       tr("Wall"), this);
   wall_action_->setCheckable(true);
+  wall_action_->setProperty("toolMode", static_cast<int>(ToolMode::Wall));
   wall_action_->setToolTip(tr("Create a wall: click start, then click end"));
   connect(wall_action_, &QAction::triggered, this, [this] { set_create_tool(ToolMode::Wall); });
-  create_group->addAction(wall_action_);
+  create_group_->addAction(wall_action_);
   addAction(wall_action_);
 
   box_action_ = new QAction(
@@ -149,9 +156,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
                        palette().color(QPalette::WindowText)),
       tr("Box"), this);
   box_action_->setCheckable(true);
+  box_action_->setProperty("toolMode", static_cast<int>(ToolMode::Box));
   box_action_->setToolTip(tr("Create a box: click to place"));
   connect(box_action_, &QAction::triggered, this, [this] { set_create_tool(ToolMode::Box); });
-  create_group->addAction(box_action_);
+  create_group_->addAction(box_action_);
   addAction(box_action_);
 
   cylinder_action_ = new QAction(
@@ -159,11 +167,54 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
                        palette().color(QPalette::WindowText)),
       tr("Cylinder"), this);
   cylinder_action_->setCheckable(true);
+  cylinder_action_->setProperty("toolMode", static_cast<int>(ToolMode::Cylinder));
   cylinder_action_->setToolTip(tr("Create a cylinder: click to place"));
   connect(cylinder_action_, &QAction::triggered, this,
           [this] { set_create_tool(ToolMode::Cylinder); });
-  create_group->addAction(cylinder_action_);
+  create_group_->addAction(cylinder_action_);
   addAction(cylinder_action_);
+
+  beam_action_ = new QAction(tr("Beam"), this);
+  beam_action_->setCheckable(true);
+  beam_action_->setProperty("toolMode", static_cast<int>(ToolMode::Beam));
+  beam_action_->setToolTip(tr("Create a beam: click start, then click end"));
+  connect(beam_action_, &QAction::triggered, this, [this] { set_create_tool(ToolMode::Beam); });
+  create_group_->addAction(beam_action_);
+  addAction(beam_action_);
+
+  column_action_ = new QAction(tr("Column"), this);
+  column_action_->setCheckable(true);
+  column_action_->setProperty("toolMode", static_cast<int>(ToolMode::Column));
+  column_action_->setToolTip(tr("Create a column: click to place"));
+  connect(column_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::Column); });
+  create_group_->addAction(column_action_);
+  addAction(column_action_);
+
+  slab_action_ = new QAction(tr("Slab"), this);
+  slab_action_->setCheckable(true);
+  slab_action_->setProperty("toolMode", static_cast<int>(ToolMode::Slab));
+  slab_action_->setToolTip(tr("Create a slab: click to place"));
+  connect(slab_action_, &QAction::triggered, this, [this] { set_create_tool(ToolMode::Slab); });
+  create_group_->addAction(slab_action_);
+  addAction(slab_action_);
+
+  door_action_ = new QAction(tr("Door"), this);
+  door_action_->setCheckable(true);
+  door_action_->setProperty("toolMode", static_cast<int>(ToolMode::Door));
+  door_action_->setToolTip(tr("Create a door: click to place"));
+  connect(door_action_, &QAction::triggered, this, [this] { set_create_tool(ToolMode::Door); });
+  create_group_->addAction(door_action_);
+  addAction(door_action_);
+
+  window_action_ = new QAction(tr("Window"), this);
+  window_action_->setCheckable(true);
+  window_action_->setProperty("toolMode", static_cast<int>(ToolMode::Window));
+  window_action_->setToolTip(tr("Create a window: click to place"));
+  connect(window_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::Window); });
+  create_group_->addAction(window_action_);
+  addAction(window_action_);
 #endif
 
 #if defined(TAMIAS_HAS_OCCT)
@@ -292,6 +343,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   create_menu->addAction(wall_action_);
   create_menu->addAction(box_action_);
   create_menu->addAction(cylinder_action_);
+  create_menu->addAction(beam_action_);
+  create_menu->addAction(column_action_);
+  create_menu->addAction(slab_action_);
+  create_menu->addAction(door_action_);
+  create_menu->addAction(window_action_);
 
   auto* modify_menu = menuBar()->addMenu(tr("&Modify"));
   modify_menu->addAction(fillet_action_);
@@ -304,7 +360,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   auto* toolbar = addToolBar(tr("Main"));
   toolbar->setObjectName(QStringLiteral("mainToolbar"));
   toolbar->setMovable(false);
-  toolbar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+  toolbar->setFloatable(false);
+  toolbar->setIconSize(QSize(20, 20));
+  toolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);
   toolbar->addAction(new_action);
   toolbar->addAction(open_action);
   toolbar->addAction(save_action);
@@ -314,13 +372,42 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   toolbar->addAction(redo_action);
   toolbar->addSeparator();
 #if defined(TAMIAS_HAS_OCCT)
-  toolbar->addAction(wall_action_);
-  toolbar->addAction(box_action_);
-  toolbar->addAction(cylinder_action_);
-  toolbar->addAction(fillet_action_);
-  toolbar->addAction(chamfer_action_);
-  toolbar->addSeparator();
+  auto* create_button = new QToolButton(toolbar);
+  create_button->setText(tr("Create"));
+  create_button->setToolTip(tr("Create a parametric component"));
+  create_button->setAutoRaise(true);
+  create_button->setPopupMode(QToolButton::InstantPopup);
+  create_button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+  auto* create_toolbar_menu = new QMenu(create_button);
+  auto* basic_menu = create_toolbar_menu->addMenu(tr("Primitives"));
+  basic_menu->addAction(box_action_);
+  basic_menu->addAction(cylinder_action_);
+  auto* building_menu = create_toolbar_menu->addMenu(tr("Building Components"));
+  building_menu->addAction(wall_action_);
+  building_menu->addAction(beam_action_);
+  building_menu->addAction(column_action_);
+  building_menu->addAction(slab_action_);
+  building_menu->addAction(door_action_);
+  building_menu->addAction(window_action_);
+  create_button->setMenu(create_toolbar_menu);
+  toolbar->addWidget(create_button);
+
+  auto* modify_button = new QToolButton(toolbar);
+  modify_button->setText(tr("Modify"));
+  modify_button->setToolTip(tr("Modify the selected entity"));
+  modify_button->setAutoRaise(true);
+  modify_button->setPopupMode(QToolButton::InstantPopup);
+  modify_button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+  auto* modify_toolbar_menu = new QMenu(modify_button);
+  modify_toolbar_menu->addAction(fillet_action_);
+  modify_toolbar_menu->addAction(chamfer_action_);
+  modify_button->setMenu(modify_toolbar_menu);
+  toolbar->addWidget(modify_button);
 #endif
+
+  auto* toolbar_spacer = new QWidget(toolbar);
+  toolbar_spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+  toolbar->addWidget(toolbar_spacer);
   toolbar->addAction(frame_all_action);
   toolbar->addSeparator();
   toolbar->addWidget(render_mode_combo_);
@@ -358,7 +445,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     BoxEntity box(Vec3{0.0f, 0.0f, 0.0f});
     auto geom = box.createGeom();
     if (geom) {
-      Entity* e = doc->add_box(std::move(box), std::move(*geom));
+      Entity* e = doc->add_entity(std::make_unique<BoxEntity>(std::move(box)),
+                                  std::move(*geom));
       e->material_id = 2;  // Concrete (id=2 in seed_default_materials)
       doc->recompute_scene();
     }
@@ -369,7 +457,36 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 void MainWindow::set_create_tool(ToolMode mode) {
   if (auto* vp = current_viewport()) {
     vp->set_tool(mode);
+    sync_create_tool_actions(mode);
+    return;
   }
+  sync_create_tool_actions(ToolMode::None);
+}
+
+void MainWindow::sync_create_tool_actions(ToolMode mode) {
+#if defined(TAMIAS_HAS_OCCT)
+  if (!create_group_) {
+    return;
+  }
+  const bool was_exclusive = create_group_->isExclusive();
+  create_group_->setExclusive(false);
+  const auto actions = create_group_->actions();
+  for (QAction* action : actions) {
+    action->setChecked(false);
+  }
+  if (mode != ToolMode::None) {
+    const int expected = static_cast<int>(mode);
+    for (QAction* action : actions) {
+      if (action->property("toolMode").toInt() == expected) {
+        action->setChecked(true);
+        break;
+      }
+    }
+  }
+  create_group_->setExclusive(was_exclusive);
+#else
+  (void)mode;
+#endif
 }
 
 void MainWindow::show_home() {
@@ -482,12 +599,7 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
   auto* vp = new DocumentViewport(document, thread, nullptr);
   connect(vp, &DocumentViewport::tool_mode_changed, this, [this](ToolMode mode) {
 #if defined(TAMIAS_HAS_OCCT)
-    const QSignalBlocker b0(wall_action_);
-    const QSignalBlocker b1(box_action_);
-    const QSignalBlocker b2(cylinder_action_);
-    wall_action_->setChecked(mode == ToolMode::Wall);
-    box_action_->setChecked(mode == ToolMode::Box);
-    cylinder_action_->setChecked(mode == ToolMode::Cylinder);
+    sync_create_tool_actions(mode);
 #else
     (void)mode;
 #endif

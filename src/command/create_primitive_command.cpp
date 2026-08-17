@@ -1,7 +1,11 @@
 #include "create_primitive_command.h"
 
 #include "entity/box_entity.h"
+#include "entity/column_entity.h"
 #include "entity/cylinder_entity.h"
+#include "entity/door_entity.h"
+#include "entity/slab_entity.h"
+#include "entity/window_entity.h"
 
 namespace tamias {
 
@@ -15,20 +19,67 @@ Result<bool> CreatePrimitiveCommand::on_point(Vec3 point) {
 
 Result<void> CreatePrimitiveCommand::execute() {
   Entity* added = nullptr;
-  if (kind_ == PrimitiveKind::Box) {
-    BoxEntity box(position_);            // 建实体
-    auto geometry = box.createGeom();    // 造型
-    if (!geometry) {
-      return Err(geometry.error());
+  switch (kind_) {
+    case PrimitiveKind::Box: {
+      BoxEntity box(position_);
+      auto geometry = box.createGeom();
+      if (!geometry) {
+        return Err(geometry.error());
+      }
+      added = document_->add_entity(std::make_unique<BoxEntity>(std::move(box)),
+                                    std::move(*geometry));
+      break;
     }
-    added = document_->add_box(std::move(box), std::move(*geometry));  // 入文档
-  } else {
-    CylinderEntity cylinder(position_);
-    auto geometry = cylinder.createGeom();
-    if (!geometry) {
-      return Err(geometry.error());
+    case PrimitiveKind::Cylinder: {
+      CylinderEntity cylinder(position_);
+      auto geometry = cylinder.createGeom();
+      if (!geometry) {
+        return Err(geometry.error());
+      }
+      added = document_->add_entity(std::make_unique<CylinderEntity>(std::move(cylinder)),
+                                    std::move(*geometry));
+      break;
     }
-    added = document_->add_cylinder(std::move(cylinder), std::move(*geometry));
+    case PrimitiveKind::Column: {
+      ColumnEntity column(position_);
+      auto geometry = column.createGeom();
+      if (!geometry) {
+        return Err(geometry.error());
+      }
+      added = document_->add_entity(std::make_unique<ColumnEntity>(std::move(column)),
+                                    std::move(*geometry));
+      break;
+    }
+    case PrimitiveKind::Slab: {
+      SlabEntity slab(position_);
+      auto geometry = slab.createGeom();
+      if (!geometry) {
+        return Err(geometry.error());
+      }
+      added = document_->add_entity(std::make_unique<SlabEntity>(std::move(slab)),
+                                    std::move(*geometry));
+      break;
+    }
+    case PrimitiveKind::Door: {
+      DoorEntity door(position_);
+      auto geometry = door.createGeom();
+      if (!geometry) {
+        return Err(geometry.error());
+      }
+      added = document_->add_entity(std::make_unique<DoorEntity>(std::move(door)),
+                                    std::move(*geometry));
+      break;
+    }
+    case PrimitiveKind::Window: {
+      WindowEntity window(position_);
+      auto geometry = window.createGeom();
+      if (!geometry) {
+        return Err(geometry.error());
+      }
+      added = document_->add_entity(std::make_unique<WindowEntity>(std::move(window)),
+                                    std::move(*geometry));
+      break;
+    }
   }
   if (added == nullptr) {
     return Err("CreatePrimitiveCommand: add primitive failed");

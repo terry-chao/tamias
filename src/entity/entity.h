@@ -11,7 +11,16 @@
 
 namespace tamias {
 
-enum class EntityKind : std::uint8_t { Wall = 0, Box = 1, Cylinder = 2 };
+enum class EntityKind : std::uint8_t {
+  Wall = 0,
+  Box = 1,
+  Cylinder = 2,
+  Beam = 3,
+  Column = 4,
+  Slab = 5,
+  Door = 6,
+  Window = 7,
+};
 
 // 领域实体基类：参数化对象，持有特征树（造型配方）+ 放置 + 网格引用。
 // SceneNode 是内部 render/select 单元，实体语义包裹它（entity id == scene node id）。

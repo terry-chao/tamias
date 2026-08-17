@@ -2,6 +2,7 @@
 
 #include "command/add_feature_command.h"
 #include "command/boolean_command.h"
+#include "command/create_beam_command.h"
 #include "command/create_primitive_command.h"
 #include "command/create_wall_command.h"
 #include "command/set_feature_param_command.h"
@@ -39,6 +40,11 @@ void register_commands(CommandRegistry& registry) {
                                                arg_double(args, "height", 3.0));
   });
 
+  registry.register_command("create_beam", [](Document& doc, const CommandArgs& args) {
+    return std::make_unique<CreateBeamCommand>(doc, arg_double(args, "width", 0.3),
+                                               arg_double(args, "depth", 0.5));
+  });
+
   registry.register_command("create_box", [](Document& doc, const CommandArgs& args) {
     (void)args;
     return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Box);
@@ -47,6 +53,26 @@ void register_commands(CommandRegistry& registry) {
   registry.register_command("create_cylinder", [](Document& doc, const CommandArgs& args) {
     (void)args;
     return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Cylinder);
+  });
+
+  registry.register_command("create_column", [](Document& doc, const CommandArgs& args) {
+    (void)args;
+    return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Column);
+  });
+
+  registry.register_command("create_slab", [](Document& doc, const CommandArgs& args) {
+    (void)args;
+    return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Slab);
+  });
+
+  registry.register_command("create_door", [](Document& doc, const CommandArgs& args) {
+    (void)args;
+    return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Door);
+  });
+
+  registry.register_command("create_window", [](Document& doc, const CommandArgs& args) {
+    (void)args;
+    return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Window);
   });
 
   registry.register_command("set_param", [](Document& doc, const CommandArgs& args) {

@@ -1,8 +1,13 @@
 #include "entity/entity.h"
 
 #include "entity/box_entity.h"
+#include "entity/beam_entity.h"
+#include "entity/column_entity.h"
 #include "entity/cylinder_entity.h"
+#include "entity/door_entity.h"
+#include "entity/slab_entity.h"
 #include "entity/wall_entity.h"
+#include "entity/window_entity.h"
 #include "engine/modeling/occt_geom_builder.h"
 
 namespace tamias {
@@ -13,6 +18,16 @@ std::unique_ptr<Entity> make_entity(EntityKind kind) {
       return std::make_unique<BoxEntity>();
     case EntityKind::Cylinder:
       return std::make_unique<CylinderEntity>();
+    case EntityKind::Beam:
+      return std::make_unique<BeamEntity>();
+    case EntityKind::Column:
+      return std::make_unique<ColumnEntity>();
+    case EntityKind::Slab:
+      return std::make_unique<SlabEntity>();
+    case EntityKind::Door:
+      return std::make_unique<DoorEntity>();
+    case EntityKind::Window:
+      return std::make_unique<WindowEntity>();
     case EntityKind::Wall:
     default:
       return std::make_unique<WallEntity>();

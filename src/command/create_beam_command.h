@@ -5,16 +5,15 @@
 
 namespace tamias {
 
-// 单点放置的参数化构件。
-enum class PrimitiveKind { Box, Cylinder, Column, Slab, Door, Window };
-
-// 创建一个参数化基础几何体（交互式）：dispatch 后武装，点一个位置确定，然后 createGeom 造型。
-class CreatePrimitiveCommand final : public Command {
+// 创建参数化梁（交互式）：两个点确定跨度和方向，截面尺寸由参数给定。
+class CreateBeamCommand final : public Command {
  public:
-  CreatePrimitiveCommand(Document& document, PrimitiveKind kind);
+  CreateBeamCommand(Document& document, double width, double depth);
 
   [[nodiscard]] bool interactive() const override { return true; }
   [[nodiscard]] Result<bool> on_point(Vec3 point) override;
+  [[nodiscard]] bool has_start() const override { return has_start_; }
+  [[nodiscard]] Vec3 start() const override { return start_; }
 
   [[nodiscard]] Result<void> execute() override;
   void undo() override;
@@ -24,8 +23,11 @@ class CreatePrimitiveCommand final : public Command {
 
  private:
   Document* document_ = nullptr;
-  PrimitiveKind kind_ = PrimitiveKind::Box;
-  Vec3 position_{};
+  double width_ = 0.3;
+  double depth_ = 0.5;
+  bool has_start_ = false;
+  Vec3 start_{};
+  Vec3 end_{};
   MeshAsset mesh_{};
   std::unique_ptr<Entity> entity_;
 };

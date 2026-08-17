@@ -21,7 +21,7 @@
 namespace tamias {
 
 // 当前激活的创建工具。
-enum class ToolMode { None, Wall, Box, Cylinder };
+enum class ToolMode { None, Wall, Box, Cylinder, Beam, Column, Slab, Door, Window };
 
 class DocumentViewport final : public QWidget {
   Q_OBJECT

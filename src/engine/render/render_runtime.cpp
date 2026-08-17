@@ -79,8 +79,8 @@ MeshCpu make_fullscreen_triangle() {
   return mesh;
 }
 
-// 地面网格四边形（XZ 平面 y=0 的大四边形，相机锚定；网格线由 shader 程序化生成）。
-MeshCpu make_grid_quad(float extent = 500.f) {
+// 地面网格四边形（XZ 平面 y=-0.01 的大四边形，相机锚定；网格线由 shader 程序化生成）。
+MeshCpu make_grid_quad(float extent = 2000.f) {
   MeshCpu mesh;
   const Vec3 verts[4] = {
       {-extent, 0.f, -extent},
@@ -667,7 +667,7 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
 
   // 地面网格（相机锚定四边形 + 网格 shader；测深度不写深度）。
   if (grid_pipeline_ && grid_mesh_.index_buffer) {
-    const Mat4 grid_model = translate({frame.eye_position.x, 0.f, frame.eye_position.z});
+    const Mat4 grid_model = translate({frame.eye_position.x, -0.02f, frame.eye_position.z});
     PushConstants pc{};
     pc.mvp = view_proj * grid_model;
     pc.model = grid_model;

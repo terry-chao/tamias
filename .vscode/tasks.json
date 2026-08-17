@@ -1,0 +1,20 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Tamias: 编译",
+      "type": "cmake",
+      "command": "build",
+      "preset": "${command:cmake.activeBuildPresetName}",
+      "targets": [
+        "tamias"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [],
+      "detail": "调试前编译最新的 tamias 目标"
+    }
+  ]
+}

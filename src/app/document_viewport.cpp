@@ -638,6 +638,28 @@ void DocumentViewport::dispatch_tool_command(ToolMode mode) {
     if (auto r = command_system_.dispatch(*document_, "create_cylinder", {}); !r) {
       log_error(r.error());
     }
+  } else if (mode == ToolMode::Beam) {
+    if (auto r = command_system_.dispatch(*document_, "create_beam",
+                                          {{"width", 0.3}, {"depth", 0.5}});
+        !r) {
+      log_error(r.error());
+    }
+  } else if (mode == ToolMode::Column) {
+    if (auto r = command_system_.dispatch(*document_, "create_column", {}); !r) {
+      log_error(r.error());
+    }
+  } else if (mode == ToolMode::Slab) {
+    if (auto r = command_system_.dispatch(*document_, "create_slab", {}); !r) {
+      log_error(r.error());
+    }
+  } else if (mode == ToolMode::Door) {
+    if (auto r = command_system_.dispatch(*document_, "create_door", {}); !r) {
+      log_error(r.error());
+    }
+  } else if (mode == ToolMode::Window) {
+    if (auto r = command_system_.dispatch(*document_, "create_window", {}); !r) {
+      log_error(r.error());
+    }
   }
 }
 
