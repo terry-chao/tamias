@@ -681,5 +681,81 @@ Click an object to select it, or use a create tool</source>
         <source>Operation</source>
         <translation>运算</translation>
     </message>
+    <message>
+        <source>Material</source>
+        <translation>材质</translation>
+    </message>
+    <message>
+        <source>Preset</source>
+        <translation>预设</translation>
+    </message>
+    <message>
+        <source>Color</source>
+        <translation>颜色</translation>
+    </message>
+    <message>
+        <source>Roughness</source>
+        <translation>粗糙度</translation>
+    </message>
+    <message>
+        <source>Metallic</source>
+        <translation>金属度</translation>
+    </message>
+    <message>
+        <source>Albedo texture</source>
+        <translation>反照率贴图</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>无</translation>
+    </message>
+    <message>
+        <source>Texture #%1</source>
+        <translation>贴图 #%1</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>清除</translation>
+    </message>
+    <message>
+        <source>(Custom)</source>
+        <translation>（自定义）</translation>
+    </message>
+    <message>
+        <source>Material Color</source>
+        <translation>材质颜色</translation>
+    </message>
+    <message>
+        <source>Select albedo texture</source>
+        <translation>选择反照率贴图</translation>
+    </message>
+    <message>
+        <source>Images (*.png *.jpg *.jpeg *.bmp)</source>
+        <translation>图片 (*.png *.jpg *.jpeg *.bmp)</translation>
+    </message>
+    <message>
+        <source>Default</source>
+        <translation>默认</translation>
+    </message>
+    <message>
+        <source>Concrete</source>
+        <translation>混凝土</translation>
+    </message>
+    <message>
+        <source>Steel</source>
+        <translation>钢材</translation>
+    </message>
+    <message>
+        <source>Glass</source>
+        <translation>玻璃</translation>
+    </message>
+    <message>
+        <source>Wood</source>
+        <translation>木材</translation>
+    </message>
+    <message>
+        <source>Plaster</source>
+        <translation>石膏</translation>
+    </message>
 </context>
 </TS>

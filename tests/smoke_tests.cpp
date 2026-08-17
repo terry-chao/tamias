@@ -212,6 +212,16 @@ TEST(Document, RenderItemsAndSelection) {
   EXPECT_EQ(doc.selected_entity()->id, first_id);
 }
 
+TEST(Document, DefaultMaterialsHaveAlbedoTextures) {
+  Document doc("materials");
+  ASSERT_EQ(doc.textures().size(), 6u);
+  for (const auto& [id, material] : doc.materials()) {
+    (void)id;
+    EXPECT_NE(material.albedo_texture_id, 0u);
+    EXPECT_NE(doc.texture(material.albedo_texture_id), nullptr);
+  }
+}
+
 TEST(DocumentHistory, UndoRedoSnapshots) {
   Document doc("hist");
   MeshAsset asset{};

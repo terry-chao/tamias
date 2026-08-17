@@ -7,6 +7,7 @@
 #include <QString>
 #include <QWidget>
 #include <cstdint>
+#include <string>
 
 class QVBoxLayout;
 
@@ -37,6 +38,8 @@ class PropertyPanel final : public QWidget {
   // 参数在实体语义下的显示名（墙：厚度/长度/高度；盒子：宽/深/高；圆柱：半径/高）。
   static QString param_label(EntityKind entity_kind, FeatureKind feature_kind,
                              const QString& param_name);
+  // 内置材质使用可翻译显示名；自定义材质保持原名称。
+  static QString material_display_name(const std::string& name);
   // 追加材质编辑区（下拉 / 颜色 / roughness / metallic / albedo 贴图）到 column。
   void add_material_editor(QWidget* parent, QVBoxLayout* column, std::uint64_t entity_id,
                            const Entity* entity, Document* document);

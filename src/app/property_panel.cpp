@@ -99,6 +99,28 @@ QString PropertyPanel::param_label(EntityKind entity_kind, FeatureKind feature_k
   return param_name;  // 未知组合：回退原始参数名
 }
 
+QString PropertyPanel::material_display_name(const std::string& name) {
+  if (name == "Default") {
+    return tr("Default");
+  }
+  if (name == "Concrete") {
+    return tr("Concrete");
+  }
+  if (name == "Steel") {
+    return tr("Steel");
+  }
+  if (name == "Glass") {
+    return tr("Glass");
+  }
+  if (name == "Wood") {
+    return tr("Wood");
+  }
+  if (name == "Plaster") {
+    return tr("Plaster");
+  }
+  return name.empty() ? tr("(Custom)") : QString::fromStdString(name);
+}
+
 PropertyPanel::PropertyPanel(QWidget* parent) : QWidget(parent) {
   setMinimumWidth(260);  // 默认别太窄，给名称+数值留够空间
   root_ = new QVBoxLayout(this);
@@ -238,7 +260,7 @@ void PropertyPanel::add_material_editor(QWidget* parent, QVBoxLayout* column,
   int selected = -1;
   for (const std::uint64_t mid : ids) {
     const Material& mat = materials->at(mid);
-    const QString label = mat.name.empty() ? tr("(Custom)") : QString::fromStdString(mat.name);
+    const QString label = material_display_name(mat.name);
     combo->addItem(label, static_cast<qulonglong>(mid));
     if (entity->material_id == mid) {
       selected = combo->count() - 1;
