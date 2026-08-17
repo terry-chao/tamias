@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <future>
@@ -183,6 +184,9 @@ void RenderThread::stop() {
   running_ = false;
   channels_.clear();
   meshes_.clear();
+  textures_.clear();
+  texture_asset_to_gpu_.clear();
+  default_texture_.reset();
   shaded_pipeline_.reset();
   wire_pipeline_.reset();
   line_pipeline_.reset();
@@ -287,6 +291,47 @@ Result<std::uint64_t> RenderThread::upload_mesh(std::uint64_t asset_id, MeshCpu 
   return future.get();
 }
 
+Result<std::uint64_t> RenderThread::upload_texture(std::uint64_t asset_id, TextureAsset asset) {
+  auto promise = std::make_shared<std::promise<Result<std::uint64_t>>>();
+  auto future = promise->get_future();
+  {
+    std::scoped_lock lock(mutex_);
+    tasks_.push([this, asset = std::move(asset), promise, asset_id]() mutable {
+      // 幂等：同一资产只上传一次，后续直接返回缓存的 GPU 纹理 id。
+      if (auto it = texture_asset_to_gpu_.find(asset_id); it != texture_asset_to_gpu_.end()) {
+        promise->set_value(it->second);
+        return;
+      }
+      log_info("upload_texture: id=" + std::to_string(asset_id) + " " +
+               std::to_string(asset.width) + "x" + std::to_string(asset.height) +
+               " first_rgba=" + std::to_string(static_cast<int>(asset.rgba[0])) + "," +
+               std::to_string(static_cast<int>(asset.rgba[1])) + "," +
+               std::to_string(static_cast<int>(asset.rgba[2])) + "," +
+               std::to_string(static_cast<int>(asset.rgba[3])));
+      TextureDesc desc{};
+      desc.width = asset.width;
+      desc.height = asset.height;
+      desc.format = TextureDesc::Format::R8G8B8A8_SRGB;
+      desc.usage = TextureDesc::Usage::Sampled;
+      auto tex = device_->create_texture(desc);
+      if (!tex) {
+        promise->set_value(Err(tex.error()));
+        return;
+      }
+      if (auto w = (*tex)->write(0, std::as_bytes(std::span(asset.rgba))); !w) {
+        promise->set_value(Err(w.error()));
+        return;
+      }
+      const auto id = next_texture_id_++;
+      textures_.emplace(id, GpuTexture{std::move(*tex)});
+      texture_asset_to_gpu_[asset_id] = id;
+      promise->set_value(id);
+    });
+  }
+  cv_.notify_one();
+  return future.get();
+}
+
 void RenderThread::submit_frame(std::uint64_t channel_id, FrameSubmission frame) {
   std::scoped_lock lock(mutex_);
   auto it = channels_.find(channel_id);
@@ -323,7 +368,7 @@ void RenderThread::resize_surface(std::uint64_t channel_id, NativeWindowHandle w
 Result<void> RenderThread::ensure_pipelines() {
   if (shaded_pipeline_ && wire_pipeline_ && line_pipeline_ && sky_pipeline_ && grid_pipeline_ &&
       axes_mesh_.index_buffer && sky_mesh_.index_buffer && grid_mesh_.index_buffer &&
-      preview_line_mesh_.index_buffer) {
+      preview_line_mesh_.index_buffer && default_texture_) {
     return {};
   }
 
@@ -518,6 +563,24 @@ Result<void> RenderThread::ensure_pipelines() {
   }
   preview_line_mesh_ = std::move(*preview_line_mesh);
 
+  // 默认 1×1 白纹理：无贴图材质也须绑定合法纹理（Vulkan 描述符要求），采样结果为白色。
+  if (!default_texture_) {
+    TextureDesc td{};
+    td.width = 1;
+    td.height = 1;
+    td.format = TextureDesc::Format::R8G8B8A8_SRGB;
+    td.usage = TextureDesc::Usage::Sampled;
+    auto tex = device_->create_texture(td);
+    if (!tex) {
+      return Err(tex.error());
+    }
+    const std::byte white[4] = {std::byte{255}, std::byte{255}, std::byte{255}, std::byte{255}};
+    if (auto w = (*tex)->write(0, std::span<const std::byte>{white, 4}); !w) {
+      return Err(w.error());
+    }
+    default_texture_ = std::move(*tex);
+  }
+
   return {};
 }
 
@@ -592,6 +655,8 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
     pc.color[0] = pc.color[1] = pc.color[2] = pc.color[3] = 1.f;
     pc.eye_pos_mode[3] = 3.f;
     channel.command_list->set_pipeline(pipeline);
+    // 网格 shader 静态引用贴图描述符，即使 mode==3 不采样也须绑定合法资源。
+    channel.command_list->set_texture(*default_texture_, 0);
     channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
     channel.command_list->set_vertex_buffer(*mesh.vertex_buffer);
     channel.command_list->set_index_buffer(*mesh.index_buffer);
@@ -637,6 +702,30 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
       continue;
     }
     const GpuMesh& mesh = mesh_it->second;
+
+    // 绑定 albedo 纹理：有贴图且已上传 → 实纹理；否则默认白纹理（has_albedo=0 走纯色）。
+    Texture* bound = default_texture_.get();
+    bool has_albedo = false;
+    if (item.albedo_texture_id != 0) {
+      auto tex_it = texture_asset_to_gpu_.find(item.albedo_texture_id);
+      if (tex_it != texture_asset_to_gpu_.end()) {
+        auto gtex_it = textures_.find(tex_it->second);
+        if (gtex_it != textures_.end()) {
+          bound = gtex_it->second.texture.get();
+          has_albedo = true;
+        }
+      }
+    }
+    if (!logged_texture_diag_) {
+      log_info("draw texture diag: albedo_id=" + std::to_string(item.albedo_texture_id) +
+               " has_albedo=" + (has_albedo ? "1" : "0") +
+               " gpu_tex_count=" + std::to_string(textures_.size()) +
+               " color=" + std::to_string(item.color.x) + "," + std::to_string(item.color.y) +
+               "," + std::to_string(item.color.z));
+      logged_texture_diag_ = true;
+    }
+    channel.command_list->set_texture(*bound, 0);
+
     PushConstants pc{};
     pc.mvp = view_proj * item.transform;
     pc.model = item.transform;
@@ -646,7 +735,7 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
     pc.color[3] = 1.f;
     pc.material[0] = item.roughness;
     pc.material[1] = item.metallic;
-    pc.material[2] = item.albedo_texture_id != 0 ? 1.f : 0.f;
+    pc.material[2] = has_albedo ? 1.f : 0.f;
     pc.material[3] = item.normal_texture_id != 0 ? 1.f : 0.f;
     pc.light_dir_selected[0] = 0.45f;
     pc.light_dir_selected[1] = 0.35f;
@@ -681,6 +770,7 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
     pc.model = model;
     pc.eye_pos_mode[3] = 3.f;  // mode 3 = 无光照线条
     channel.command_list->set_pipeline(*line_pipeline_);
+    channel.command_list->set_texture(*default_texture_, 0);
     channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
     channel.command_list->set_vertex_buffer(*preview_line_mesh_.vertex_buffer);
     channel.command_list->set_index_buffer(*preview_line_mesh_.index_buffer);

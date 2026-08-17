@@ -52,7 +52,7 @@ inline bool any(BufferDesc::Usage a, BufferDesc::Usage b) {
 struct TextureDesc {
   std::uint32_t width = 1;
   std::uint32_t height = 1;
-  enum class Format { B8G8R8A8_SRGB, D32_SFLOAT };
+  enum class Format { B8G8R8A8_SRGB, R8G8B8A8_SRGB, R8G8B8A8_UNORM, D32_SFLOAT };
   Format format = Format::B8G8R8A8_SRGB;
   enum class Usage : std::uint32_t {
     ColorAttachment = 1u << 0,
@@ -117,6 +117,8 @@ class Texture {
  public:
   virtual ~Texture() = default;
   [[nodiscard]] virtual const TextureDesc& desc() const = 0;
+  // 上传整个 mip level 0 的像素字节（RGBA8，size == width*height*4）。offset 必须为 0。
+  virtual Result<void> write(std::uint64_t offset, std::span<const std::byte> data) = 0;
 };
 
 class ShaderModule {
@@ -157,6 +159,7 @@ class CommandList {
   virtual void set_vertex_buffer(Buffer& buffer, std::uint64_t offset = 0) = 0;
   virtual void set_index_buffer(Buffer& buffer, std::uint64_t offset = 0) = 0;
   virtual void set_push_constants(std::span<const std::byte> data) = 0;
+  virtual void set_texture(Texture& texture, std::uint32_t slot = 0) = 0;
   virtual void draw_indexed(const DrawIndexedDesc& desc) = 0;
   virtual void set_viewport(float x, float y, float w, float h, float min_depth = 0.f,
                             float max_depth = 1.f) = 0;

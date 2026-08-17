@@ -6,7 +6,10 @@
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QFileDialog>
 #include <QFormLayout>
+#include <QHBoxLayout>
+#include <QImage>
 #include <QLabel>
 #include <QPushButton>
 #include <QSignalBlocker>
@@ -103,7 +106,7 @@ PropertyPanel::PropertyPanel(QWidget* parent) : QWidget(parent) {
   root_->setSpacing(0);
 }
 
-void PropertyPanel::show_entity(const Entity* entity, const Document* document,
+void PropertyPanel::show_entity(const Entity* entity, Document* document,
                                 const QString& fallback_note) {
   // 整块重建内容区。旧块用 deleteLater：刷新可能由旧块里 spinbox 的 valueChanged
   // 信号链同步触发，直接 delete 会在该信号栈内销毁正被使用的 widget。
@@ -175,7 +178,7 @@ void PropertyPanel::show_entity(const Entity* entity, const Document* document,
 
 void PropertyPanel::add_material_editor(QWidget* parent, QVBoxLayout* column,
                                         std::uint64_t entity_id, const Entity* entity,
-                                        const Document* document) {
+                                        Document* document) {
   auto* header = new QLabel(tr("Material"), parent);
   header->setStyleSheet(QStringLiteral("font-weight: 600; color: #9aa0a6; margin-top: 4px;"));
   column->addWidget(header);
@@ -309,6 +312,61 @@ void PropertyPanel::add_material_editor(QWidget* parent, QVBoxLayout* column,
   form->addRow(tr("Color"), color_button);
   form->addRow(tr("Roughness"), rough_spin);
   form->addRow(tr("Metallic"), metal_spin);
+
+  // Albedo 贴图：选图 → QImage 解码成 RGBA8 → add_texture 入库 → 引用该纹理 id。
+  auto albedo_label = [](std::uint64_t id) {
+    return id == 0 ? tr("None") : tr("Texture #%1").arg(id);
+  };
+  auto* tex_button = new QPushButton(albedo_label(current_sp->albedo_texture_id), parent);
+  tex_button->setCursor(Qt::PointingHandCursor);
+  auto* tex_clear = new QPushButton(tr("Clear"), parent);
+  tex_clear->setEnabled(current_sp->albedo_texture_id != 0);
+
+  connect(tex_button, &QPushButton::clicked, this,
+          [this, entity_id, current_sp, document, tex_button, tex_clear, albedo_label](bool) {
+            const QString path =
+                QFileDialog::getOpenFileName(this, tr("Select albedo texture"), QString(),
+                                             tr("Images (*.png *.jpg *.jpeg *.bmp)"));
+            if (path.isEmpty()) {
+              return;
+            }
+            QImage image(path);
+            if (image.isNull()) {
+              return;
+            }
+            image = image.convertToFormat(QImage::Format_RGBA8888);
+            TextureAsset asset{};
+            asset.width = static_cast<std::uint32_t>(image.width());
+            asset.height = static_cast<std::uint32_t>(image.height());
+            const auto* bits = image.constBits();
+            asset.rgba.assign(bits, bits + image.sizeInBytes());
+            const std::uint64_t tid = document->add_texture(std::move(asset)).id;
+            current_sp->albedo_texture_id = tid;
+            current_sp->id = 0;  // 改贴图 → 新建自定义材质
+            current_sp->name.clear();
+            tex_button->setText(albedo_label(tid));
+            tex_clear->setEnabled(true);
+            emit material_edited(entity_id, *current_sp);
+          });
+
+  connect(tex_clear, &QPushButton::clicked, this,
+          [this, entity_id, current_sp, tex_button, tex_clear, albedo_label](bool) {
+            current_sp->albedo_texture_id = 0;
+            current_sp->id = 0;
+            current_sp->name.clear();
+            tex_button->setText(albedo_label(0));
+            tex_clear->setEnabled(false);
+            emit material_edited(entity_id, *current_sp);
+          });
+
+  auto* tex_row = new QWidget(parent);
+  auto* tex_layout = new QHBoxLayout(tex_row);
+  tex_layout->setContentsMargins(0, 0, 0, 0);
+  tex_layout->setSpacing(4);
+  tex_layout->addWidget(tex_button, 1);
+  tex_layout->addWidget(tex_clear);
+  form->addRow(tr("Albedo texture"), tex_row);
+
   column->addLayout(form);
 }
 

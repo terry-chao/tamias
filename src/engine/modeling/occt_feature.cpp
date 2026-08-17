@@ -119,9 +119,25 @@ Result<MeshCpu> tessellate_shape(const TopoDS_Shape& shape, double deflection) {
       if (reversed) {
         std::swap(n2, n3);
       }
-      mesh.indices.push_back(static_cast<std::uint32_t>(base + n1 - 1));
-      mesh.indices.push_back(static_cast<std::uint32_t>(base + n2 - 1));
-      mesh.indices.push_back(static_cast<std::uint32_t>(base + n3 - 1));
+      const std::uint32_t i0 = static_cast<std::uint32_t>(base + n1 - 1);
+      const std::uint32_t i1 = static_cast<std::uint32_t>(base + n2 - 1);
+      const std::uint32_t i2 = static_cast<std::uint32_t>(base + n3 - 1);
+      mesh.indices.push_back(i0);
+      mesh.indices.push_back(i1);
+      mesh.indices.push_back(i2);
+
+      // OCCT 的 Poly_Triangulation 不保证 HasNormals()。若法线缺失，按三角形
+      // 绕序回退计算；否则 Vertex.normal 保持零向量，mesh.frag 的背面剔除与
+      // 光照会把实体渲成黑色。
+      if (!tri->HasNormals()) {
+        const Vec3 a = mesh.vertices[i0].position;
+        const Vec3 b = mesh.vertices[i1].position;
+        const Vec3 c = mesh.vertices[i2].position;
+        const Vec3 n = normalize(cross(b - a, c - a));
+        mesh.vertices[i0].normal = n;
+        mesh.vertices[i1].normal = n;
+        mesh.vertices[i2].normal = n;
+      }
     }
   }
 

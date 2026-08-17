@@ -98,6 +98,43 @@
 #ifndef GL_SPIR_V_BINARY
 #define GL_SPIR_V_BINARY 0x9552
 #endif
+// 纹理采样相关常量（GL 1.3+，Windows 自带 gl.h 可能缺失）。
+#ifndef GL_TEXTURE_2D
+#define GL_TEXTURE_2D 0x0DE1
+#endif
+#ifndef GL_TEXTURE0
+#define GL_TEXTURE0 0x84C0
+#endif
+#ifndef GL_RGBA
+#define GL_RGBA 0x1908
+#endif
+#ifndef GL_UNSIGNED_BYTE
+#define GL_UNSIGNED_BYTE 0x1401
+#endif
+#ifndef GL_RGBA8
+#define GL_RGBA8 0x8058
+#endif
+#ifndef GL_SRGB8_ALPHA8
+#define GL_SRGB8_ALPHA8 0x8C43
+#endif
+#ifndef GL_TEXTURE_MIN_FILTER
+#define GL_TEXTURE_MIN_FILTER 0x2801
+#endif
+#ifndef GL_TEXTURE_MAG_FILTER
+#define GL_TEXTURE_MAG_FILTER 0x2800
+#endif
+#ifndef GL_TEXTURE_WRAP_S
+#define GL_TEXTURE_WRAP_S 0x2802
+#endif
+#ifndef GL_TEXTURE_WRAP_T
+#define GL_TEXTURE_WRAP_T 0x2803
+#endif
+#ifndef GL_LINEAR
+#define GL_LINEAR 0x2601
+#endif
+#ifndef GL_REPEAT
+#define GL_REPEAT 0x2901
+#endif
 
 using GLchar = char;
 using GLsizeiptr = std::ptrdiff_t;
@@ -114,6 +151,15 @@ extern void (*BindBuffer)(GLenum target, GLuint buffer);
 extern void (*BufferData)(GLenum target, GLsizeiptr size, const void* data, GLenum usage);
 extern void (*BufferSubData)(GLenum target, GLintptr offset, GLsizeiptr size, const void* data);
 extern void (*BindBufferBase)(GLenum target, GLuint index, GLuint buffer);
+
+extern void (*GenTextures)(GLsizei n, GLuint* textures);
+extern void (*DeleteTextures)(GLsizei n, const GLuint* textures);
+extern void (*BindTexture)(GLenum target, GLuint texture);
+extern void (*ActiveTexture)(GLenum texture);
+extern void (*TexImage2D)(GLenum target, GLint level, GLint internalformat, GLsizei width,
+                          GLsizei height, GLint border, GLenum format, GLenum type,
+                          const void* pixels);
+extern void (*TexParameteri)(GLenum target, GLenum pname, GLint param);
 
 extern void (*GenVertexArrays)(GLsizei n, GLuint* arrays);
 extern void (*DeleteVertexArrays)(GLsizei n, const GLuint* arrays);

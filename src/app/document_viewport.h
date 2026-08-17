@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_set>
 
 namespace tamias {
 
@@ -89,6 +90,7 @@ class DocumentViewport final : public QWidget {
   void run_command(const std::string& name, const CommandArgs& args, bool notify = true);
   void dispatch_tool_command(ToolMode mode);
   void resync_all_meshes();
+  void resync_textures();
   void cancel_tool();
 
   std::shared_ptr<Document> document_;
@@ -117,6 +119,7 @@ class DocumentViewport final : public QWidget {
   bool panning_ = false;
   bool alive_ = true;
   bool has_cursor_ = false;
+  std::unordered_set<std::uint64_t> uploaded_textures_;  // 已上传过的纹理资产 id
 };
 
 }  // namespace tamias

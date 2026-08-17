@@ -17,6 +17,15 @@ ConstantBuffer<PushConstants> pc;
 ConstantBuffer<PushConstants> pc : register(b0);
 #endif
 
+// Albedo 贴图 + 采样器。has_albedo 为 0 时仍须绑定合法资源（运行时用默认白纹理兜底）。
+#if defined(TAMIAS_VULKAN)
+[[vk::binding(0, 0)]] Texture2D albedo_tex;
+[[vk::binding(1, 0)]] SamplerState albedo_samp;
+#else
+Texture2D albedo_tex : register(t0);
+SamplerState albedo_samp : register(s0);
+#endif
+
 struct VsInput {
   [[vk::location(0)]] float3 position : POSITION;
   [[vk::location(1)]] float3 normal : NORMAL;

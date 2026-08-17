@@ -1,18 +1,53 @@
 #include "engine/document/document.h"
 
+#include <cmath>
+
 namespace tamias {
 
 void Document::seed_default_materials() {
-  auto seed = [this](std::string name, Vec3 color, float roughness, float metallic) {
+  // 程序生成一张默认混凝土纹理（256×256 RGBA8）：灰基色 + 值噪声斑点。
+  constexpr std::uint32_t kTex = 256;
+  TextureAsset concrete;
+  concrete.width = kTex;
+  concrete.height = kTex;
+  concrete.rgba.resize(static_cast<std::size_t>(kTex) * kTex * 4);
+  // 纹理以 sRGB 格式上传，故存的是 sRGB 编码值（采样时 GPU 还原成线性），避免二次变暗。
+  const auto linear_to_srgb = [](float x) -> float {
+    return x <= 0.0031308f ? 12.92f * x : 1.055f * std::pow(x, 1.f / 2.4f) - 0.055f;
+  };
+  for (std::uint32_t y = 0; y < kTex; ++y) {
+    for (std::uint32_t x = 0; x < kTex; ++x) {
+      const auto hash = [](std::uint32_t a, std::uint32_t b) -> float {
+        std::uint32_t n = a * 374761393u + b * 668265263u;
+        n = (n ^ (n >> 13)) * 1274126177u;
+        n ^= n >> 16;
+        return static_cast<float>(n & 0xFFFFu) / 65535.0f;
+      };
+      const float coarse = hash(x >> 3, y >> 3);
+      const float fine = hash(x, y);
+      const float v = 0.58f + 0.10f * coarse + 0.06f * fine;  // 线性灰
+      const std::size_t i = (static_cast<std::size_t>(y) * kTex + x) * 4;
+      const auto b = static_cast<std::uint8_t>(std::clamp(linear_to_srgb(v), 0.f, 1.f) * 255.f);
+      concrete.rgba[i + 0] = b;
+      concrete.rgba[i + 1] = b;
+      concrete.rgba[i + 2] = b;
+      concrete.rgba[i + 3] = 255;
+    }
+  }
+  const std::uint64_t concrete_tex_id = add_texture(std::move(concrete)).id;
+
+  auto seed = [this](std::string name, Vec3 color, float roughness, float metallic,
+                     std::uint64_t albedo = 0) {
     Material m{};
     m.name = std::move(name);
     m.base_color = color;
     m.roughness = roughness;
     m.metallic = metallic;
+    m.albedo_texture_id = albedo;
     add_material(std::move(m));
   };
   seed("Default", {0.75f, 0.78f, 0.82f}, 0.9f, 0.0f);
-  seed("Concrete", {0.62f, 0.62f, 0.60f}, 0.9f, 0.0f);
+  seed("Concrete", {0.62f, 0.62f, 0.60f}, 0.9f, 0.0f, concrete_tex_id);
   seed("Steel", {0.55f, 0.57f, 0.62f}, 0.4f, 0.9f);
   seed("Glass", {0.80f, 0.88f, 0.90f}, 0.1f, 0.0f);
   seed("Wood", {0.55f, 0.40f, 0.26f}, 0.7f, 0.0f);

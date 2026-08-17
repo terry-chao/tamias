@@ -22,6 +22,14 @@ void (*BufferData)(GLenum, GLsizeiptr, const void*, GLenum) = nullptr;
 void (*BufferSubData)(GLenum, GLintptr, GLsizeiptr, const void*) = nullptr;
 void (*BindBufferBase)(GLenum, GLuint, GLuint) = nullptr;
 
+void (*GenTextures)(GLsizei, GLuint*) = nullptr;
+void (*DeleteTextures)(GLsizei, const GLuint*) = nullptr;
+void (*BindTexture)(GLenum, GLuint) = nullptr;
+void (*ActiveTexture)(GLenum) = nullptr;
+void (*TexImage2D)(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum,
+                   const void*) = nullptr;
+void (*TexParameteri)(GLenum, GLenum, GLint) = nullptr;
+
 void (*GenVertexArrays)(GLsizei, GLuint*) = nullptr;
 void (*DeleteVertexArrays)(GLsizei, const GLuint*) = nullptr;
 void (*BindVertexArray)(GLuint) = nullptr;
@@ -89,6 +97,12 @@ bool load_procs() {
   ok = load(BufferData, "glBufferData") && ok;
   ok = load(BufferSubData, "glBufferSubData") && ok;
   ok = load(BindBufferBase, "glBindBufferBase") && ok;
+  ok = load(GenTextures, "glGenTextures") && ok;
+  ok = load(DeleteTextures, "glDeleteTextures") && ok;
+  ok = load(BindTexture, "glBindTexture") && ok;
+  ok = load(ActiveTexture, "glActiveTexture") && ok;
+  ok = load(TexImage2D, "glTexImage2D") && ok;
+  ok = load(TexParameteri, "glTexParameteri") && ok;
   ok = load(GenVertexArrays, "glGenVertexArrays") && ok;
   ok = load(DeleteVertexArrays, "glDeleteVertexArrays") && ok;
   ok = load(BindVertexArray, "glBindVertexArray") && ok;

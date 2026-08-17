@@ -89,6 +89,10 @@ void register_commands(CommandRegistry& registry) {
     }
     material.roughness = static_cast<float>(arg_double(args, "roughness", 0.6));
     material.metallic = static_cast<float>(arg_double(args, "metallic", 0.0));
+    material.albedo_texture_id =
+        static_cast<std::uint64_t>(arg_int(args, "albedo_texture_id", 0));
+    material.normal_texture_id =
+        static_cast<std::uint64_t>(arg_int(args, "normal_texture_id", 0));
     return std::make_unique<SetMaterialCommand>(
         doc, static_cast<std::uint64_t>(arg_int(args, "entity_id", 0)), std::move(material));
   });

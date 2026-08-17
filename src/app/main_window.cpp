@@ -79,7 +79,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     sync_render_mode_actions();
     refresh_property_panel();
   });
-  connect(home_, &HomePage::newDemoRequested, this, &MainWindow::new_demo_document);
   connect(home_, &HomePage::openRequested, this, &MainWindow::open_file);
   connect(home_, &HomePage::fileActivated, this, &MainWindow::open_recent_path);
   connect(home_, &HomePage::missingFileActivated, this, &MainWindow::on_missing_recent);
@@ -352,6 +351,19 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
   statusBar()->showMessage(tr("Ready — Open a model or try the demo"));
   show_home();
+
+  // ===== TEMP DEBUG: auto-create a concrete box to diagnose black texture =====
+  {
+    auto doc = std::make_shared<Document>("DbgConcrete");
+    BoxEntity box(Vec3{0.0f, 0.0f, 0.0f});
+    auto geom = box.createGeom();
+    if (geom) {
+      Entity* e = doc->add_box(std::move(box), std::move(*geom));
+      e->material_id = 2;  // Concrete (id=2 in seed_default_materials)
+      doc->recompute_scene();
+    }
+    add_document_tab(doc);
+  }
 }
 
 void MainWindow::set_create_tool(ToolMode mode) {
@@ -490,20 +502,6 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
     vp->request_redraw();
   }
   sync_render_mode_actions();
-}
-
-void MainWindow::new_demo_document() {
-  const QString relative = QStringLiteral("assets/samples/alvin.obj");
-  QString path = QDir(QCoreApplication::applicationDirPath()).filePath(relative);
-  if (!QFileInfo::exists(path)) {
-    path = QDir(QStringLiteral(TAMIAS_SOURCE_DIR)).filePath(relative);
-  }
-  if (!QFileInfo::exists(path)) {
-    QMessageBox::warning(this, tr("Demo"),
-                         tr("Demo model not found:\n%1").arg(relative));
-    return;
-  }
-  open_path(path);
 }
 
 void MainWindow::new_document() {
@@ -818,7 +816,7 @@ void MainWindow::refresh_property_panel() {
     property_panel_->show_entity(nullptr, nullptr, tr("No document open"));
     return;
   }
-  const Document& doc = vp->document();
+  Document& doc = vp->document();
   if (const Entity* entity = doc.selected_entity()) {
     property_panel_->show_entity(entity, &doc, QString());
     return;

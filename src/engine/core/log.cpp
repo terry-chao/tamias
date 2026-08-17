@@ -4,6 +4,16 @@
 #include <cstdio>
 #include <mutex>
 
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 namespace tamias {
 namespace {
 
@@ -39,8 +49,19 @@ void write_line(LogLevel level, std::string_view msg) {
 #else
   localtime_r(&t, &tm);
 #endif
-  std::fprintf(stderr, "[%02d:%02d:%02d] [%s] %.*s\n", tm.tm_hour, tm.tm_min, tm.tm_sec,
-               level_name(level), static_cast<int>(msg.size()), msg.data());
+  char line[1024];
+  const int n = std::snprintf(line, sizeof(line), "[%02d:%02d:%02d] [%s] %.*s\n",
+                              tm.tm_hour, tm.tm_min, tm.tm_sec, level_name(level),
+                              static_cast<int>(msg.size()), msg.data());
+  if (n < 0) {
+    return;
+  }
+  std::fprintf(stderr, "%s", line);
+#if defined(_WIN32)
+  // 同时发到调试器：VSCode 的「调试控制台」/「输出」面板走 OutputDebugString 通道，
+  // 而 GUI/调试场景下 stderr 常常不可见。
+  OutputDebugStringA(line);
+#endif
 }
 
 }  // namespace

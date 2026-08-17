@@ -252,12 +252,6 @@ HomePage::HomePage(QWidget* parent) : QWidget(parent) {
   connect(open_btn, &QPushButton::clicked, this, &HomePage::openRequested);
   header_layout->addWidget(open_btn, 0, Qt::AlignVCenter);
 
-  auto* demo_btn = new QPushButton(tr("Open Demo"), header_);
-  demo_btn->setObjectName(QStringLiteral("homeActionSecondary"));
-  demo_btn->setCursor(Qt::PointingHandCursor);
-  connect(demo_btn, &QPushButton::clicked, this, &HomePage::newDemoRequested);
-  header_layout->addWidget(demo_btn, 0, Qt::AlignVCenter);
-
   auto* settings_btn = new QPushButton(tr("Settings"), header_);
   settings_btn->setObjectName(QStringLiteral("homeActionSecondary"));
   settings_btn->setCursor(Qt::PointingHandCursor);

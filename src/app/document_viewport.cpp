@@ -464,6 +464,7 @@ void DocumentViewport::submit_current_frame() {
   }
 #endif
   channel_->resize(native_handle(), w, h);
+  resync_textures();
 
   FrameSubmission frame{};
   frame.window = native_handle();
@@ -719,7 +720,9 @@ void DocumentViewport::set_entity_material(std::uint64_t entity_id, const Materi
            {"name", material.name},
            {"base_color", material.base_color},
            {"roughness", static_cast<double>(material.roughness)},
-           {"metallic", static_cast<double>(material.metallic)}});
+           {"metallic", static_cast<double>(material.metallic)},
+           {"albedo_texture_id", static_cast<std::int64_t>(material.albedo_texture_id)},
+           {"normal_texture_id", static_cast<std::int64_t>(material.normal_texture_id)}});
       r) {
     request_redraw();
   } else {
@@ -757,6 +760,22 @@ void DocumentViewport::resync_all_meshes() {
     (void)unused;
     if (auto gpu = render_thread_->upload_mesh(asset.id, asset.cpu); !gpu) {
       log_error(gpu.error());
+    }
+  }
+}
+
+void DocumentViewport::resync_textures() {
+  if (!render_thread_) {
+    return;
+  }
+  for (const auto& [id, asset] : document_->textures()) {
+    if (uploaded_textures_.count(id)) {
+      continue;
+    }
+    if (auto gpu = render_thread_->upload_texture(id, asset); !gpu) {
+      log_error(gpu.error());
+    } else {
+      uploaded_textures_.insert(id);
     }
   }
 }

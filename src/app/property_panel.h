@@ -22,7 +22,8 @@ class PropertyPanel final : public QWidget {
   explicit PropertyPanel(QWidget* parent = nullptr);
 
   // 展示实体：非空则重建编辑器；空则显示 fallback_note 占位提示。
-  void show_entity(const Entity* entity, const Document* document, const QString& fallback_note);
+  // document 非 const：材质编辑器选图时需往文档里 add_texture。
+  void show_entity(const Entity* entity, Document* document, const QString& fallback_note);
 
  signals:
   // 用户提交了一个参数修改（spinbox valueChanged，keyboard tracking 已关）。
@@ -36,9 +37,9 @@ class PropertyPanel final : public QWidget {
   // 参数在实体语义下的显示名（墙：厚度/长度/高度；盒子：宽/深/高；圆柱：半径/高）。
   static QString param_label(EntityKind entity_kind, FeatureKind feature_kind,
                              const QString& param_name);
-  // 追加材质编辑区（下拉 / 颜色 / roughness / metallic）到 column。
+  // 追加材质编辑区（下拉 / 颜色 / roughness / metallic / albedo 贴图）到 column。
   void add_material_editor(QWidget* parent, QVBoxLayout* column, std::uint64_t entity_id,
-                           const Entity* entity, const Document* document);
+                           const Entity* entity, Document* document);
 
   QVBoxLayout* root_ = nullptr;
   QWidget* content_ = nullptr;  // 每次刷新整块重建，避免 removeRow 语义踩坑。

@@ -100,6 +100,8 @@ BRep（TopoDS_Shape，精确几何，缓存）
 
 M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Scene::recompute_world()` 全量重算）。剩余项：
 
+**渲染场景图的实现哲学（已定 = VSG 式）**：渲染侧的「场景图」采用**节点 + 访问者（Visitor）**组织（OpenInventor → OSG → VSG 一脉），但**渲染状态用现代化挂法**——命令图（`StateGroup` + `StateCommands`，对应 Vulkan 命令录制），而非 OSG 的 `StateSet` 隐式继承。关键边界：渲染场景图是**面向绘制的投影**（draw-oriented：drawable + transform + material + 可见性），**不是语义树的复制**——语义树（`Scene`）仍是层级的唯一真相源，渲染侧由它**增量同步**（脏标记）而来。详见 [SCENE-GRAPH.md](SCENE-GRAPH.md)。
+
 1. **实例化（大模型性能的命门）。** IFC 里 IfcWallType / IfcMappedItem 大量复用同一几何。场景图必须支持「一个几何被 N 个节点引用 + 每节点独立 transform / 材质 override」。渲染侧才能 instanced draw 或按 mesh 合批。
 2. **语义实体 vs 几何节点分离。** 一个 IFC 元素可能对应多个几何（IfcDoor = 门板 + 门框 + 把手），多个元素也可能共享一个几何。语义节点和几何节点分表，靠关系边连。
 3. **增量同步。** 语义侧改一个 transform，不该触发整棵渲染图重建。脏标记 + 增量上传。**参数化编辑会放大这一点**：改一个特征参数，要精准重算「受影响的几何 + 受影响的渲染」，而不是全场景推倒重来。
@@ -182,6 +184,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 - **编辑目标 = 参数化编辑**（FreeCAD 方向），不是纯查看、也不是直接编辑。→ 决定了「特征树第一等公民」的架构。
 - **IFC 写回 = 必做**（编辑后要交付），不再可选。
 - **单 app + 共享内核，MCAD/BIM 不拆两个软件**：域差异用工作台分层，MCAD 编辑做深、BIM 编辑做浅（只编辑 IFC 参数，不做完整 BIM 建模）。详见 [DECISION-MCAD-BIM.md](DECISION-MCAD-BIM.md)。
+- **渲染场景图 = VSG 式（节点 + 访问者 + 命令图状态）**：渲染侧场景图用「节点 + 访问者」组织、渲染状态用命令图（`StateGroup`/`StateCommands`）挂载；它是语义树的「绘制投影」而非复制，语义树仍是层级唯一真相源，靠脏标记增量同步。详见 [SCENE-GRAPH.md](SCENE-GRAPH.md)。
 
 **待拍板：**
 

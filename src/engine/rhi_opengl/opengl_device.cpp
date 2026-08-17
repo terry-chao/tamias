@@ -42,6 +42,23 @@ class OpenGLBuffer final : public Buffer {
   GLenum target_ = GL_ARRAY_BUFFER;
 };
 
+class OpenGLTexture final : public Texture {
+ public:
+  OpenGLTexture(OpenGLDevice* device, TextureDesc desc, GLuint texture)
+      : device_(device), desc_(desc), texture_(texture) {}
+  ~OpenGLTexture() override;
+
+  [[nodiscard]] const TextureDesc& desc() const override { return desc_; }
+  [[nodiscard]] GLuint handle() const { return texture_; }
+
+  Result<void> write(std::uint64_t offset, std::span<const std::byte> data) override;
+
+ private:
+  OpenGLDevice* device_ = nullptr;
+  TextureDesc desc_{};
+  GLuint texture_ = 0;
+};
+
 class OpenGLShaderModule final : public ShaderModule {
  public:
   explicit OpenGLShaderModule(GLuint shader) : shader_(shader) {}
@@ -132,6 +149,7 @@ class OpenGLCommandList final : public CommandList {
   void set_vertex_buffer(Buffer& buffer, std::uint64_t offset = 0) override;
   void set_index_buffer(Buffer& buffer, std::uint64_t offset = 0) override;
   void set_push_constants(std::span<const std::byte> data) override;
+  void set_texture(Texture& texture, std::uint32_t slot = 0) override;
   void draw_indexed(const DrawIndexedDesc& desc) override;
   void set_viewport(float x, float y, float w, float h, float min_depth = 0.f,
                     float max_depth = 1.f) override;
@@ -164,8 +182,17 @@ class OpenGLDevice final : public RHIDevice {
   }
 
   Result<std::unique_ptr<Buffer>> create_buffer(const BufferDesc& desc) override;
-  Result<std::unique_ptr<Texture>> create_texture(const TextureDesc&) override {
-    return Err("create_texture not used yet");
+  Result<std::unique_ptr<Texture>> create_texture(const TextureDesc& desc) override {
+    if (auto r = make_current_dummy(); !r) {
+      return Err(r.error());
+    }
+    GLuint texture = 0;
+    gl::GenTextures(1, &texture);
+    release_current();
+    if (texture == 0) {
+      return Err("glGenTextures failed");
+    }
+    return std::make_unique<OpenGLTexture>(this, desc, texture);
   }
   Result<std::unique_ptr<ShaderModule>> create_shader_module(const ShaderModuleDesc& desc) override;
   Result<std::unique_ptr<PipelineState>> create_pipeline(const PipelineDesc& desc) override;
@@ -250,6 +277,46 @@ Result<void> OpenGLBuffer::write(std::uint64_t offset, std::span<const std::byte
   gl::BindBuffer(target_, buffer_);
   gl::BufferSubData(target_, static_cast<GLintptr>(offset), static_cast<GLsizeiptr>(data.size()),
                     data.data());
+  device_->release_current();
+  return {};
+}
+
+OpenGLTexture::~OpenGLTexture() {
+  if (!texture_ || !device_) {
+    return;
+  }
+  if (device_->make_current_dummy()) {
+    gl::DeleteTextures(1, &texture_);
+    device_->release_current();
+  }
+  texture_ = 0;
+}
+
+Result<void> OpenGLTexture::write(std::uint64_t offset, std::span<const std::byte> data) {
+  if (offset != 0) {
+    return Err("OpenGL texture write offset must be 0");
+  }
+  if (!device_) {
+    return Err("OpenGL texture has no device");
+  }
+  const std::size_t expected = static_cast<std::size_t>(desc_.width) * desc_.height * 4;
+  if (data.size() < expected) {
+    return Err("OpenGL texture write data too small");
+  }
+  if (auto r = device_->make_current_dummy(); !r) {
+    return Err(r.error());
+  }
+  gl::BindTexture(GL_TEXTURE_2D, texture_);
+  // albedo 用 sRGB（采样时硬件转线性）；UNORM 留给二期 normal 图（无 sRGB 转换）。
+  const GLint internal = desc_.format == TextureDesc::Format::R8G8B8A8_UNORM
+                             ? static_cast<GLint>(GL_RGBA8)
+                             : static_cast<GLint>(GL_SRGB8_ALPHA8);
+  gl::TexImage2D(GL_TEXTURE_2D, 0, internal, static_cast<GLsizei>(desc_.width),
+                 static_cast<GLsizei>(desc_.height), 0, GL_RGBA, GL_UNSIGNED_BYTE, data.data());
+  gl::TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  gl::TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  gl::TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  gl::TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
   device_->release_current();
   return {};
 }
@@ -798,6 +865,11 @@ void OpenGLCommandList::set_push_constants(std::span<const std::byte> data) {
   gl::BindBuffer(GL_UNIFORM_BUFFER, device_->push_ubo());
   gl::BufferSubData(GL_UNIFORM_BUFFER, 0, static_cast<GLsizeiptr>(data.size()), data.data());
   gl::BindBufferBase(GL_UNIFORM_BUFFER, kPushConstantBinding, device_->push_ubo());
+}
+
+void OpenGLCommandList::set_texture(Texture& texture, std::uint32_t slot) {
+  gl::ActiveTexture(GL_TEXTURE0 + slot);
+  gl::BindTexture(GL_TEXTURE_2D, static_cast<OpenGLTexture&>(texture).handle());
 }
 
 void OpenGLCommandList::set_viewport(float x, float y, float w, float h, float, float) {

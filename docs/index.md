@@ -10,6 +10,7 @@
 
 - [路线图](ROADMAP.md) —— 定位、架构决策与里程碑
 - [特征树求值器与 OCCT](FEATURE-TREE-EVALUATOR.md) —— 参数化内核的数据流
+- [场景图深度分析](SCENE-GRAPH.md) —— OCCT 场景图 vs 语义树 + 展平渲染
 - [MCAD/BIM 决策](DECISION-MCAD-BIM.md)
 - [MCAD 管线](MCAD-PIPELINE.md)
 

@@ -3,6 +3,7 @@
 #include "engine/rhi/device.h"
 #include "engine/graphics/mesh.h"
 #include "engine/math/camera.h"
+#include "engine/render/material.h"
 #include "engine/render/render_types.h"
 
 #include <atomic>
@@ -24,6 +25,10 @@ struct GpuMesh {
   std::unique_ptr<Buffer> index_buffer;
   std::uint32_t index_count = 0;
   Aabb bounds{};
+};
+
+struct GpuTexture {
+  std::unique_ptr<Texture> texture;
 };
 
 struct FrameSubmission {
@@ -70,6 +75,8 @@ class RenderThread {
   // Upload mesh on the render thread and map it from a semantic asset id; returns
   // the assigned GPU mesh id. The semantic side refers to geometry by asset id.
   Result<std::uint64_t> upload_mesh(std::uint64_t asset_id, MeshCpu mesh);
+  // 上传纹理资产（幂等：已缓存则直接返回已有 GPU 纹理 id）。
+  Result<std::uint64_t> upload_texture(std::uint64_t asset_id, TextureAsset asset);
   void submit_frame(std::uint64_t channel_id, FrameSubmission frame);
   void resize_surface(std::uint64_t channel_id, NativeWindowHandle window, std::uint32_t w,
                       std::uint32_t h);
@@ -119,8 +126,13 @@ class RenderThread {
   GpuMesh preview_line_mesh_;
   std::unordered_map<std::uint64_t, GpuMesh> meshes_;
   std::unordered_map<std::uint64_t, std::uint64_t> asset_to_gpu_;  // asset id -> gpu mesh id
+  std::unordered_map<std::uint64_t, GpuTexture> textures_;
+  std::unordered_map<std::uint64_t, std::uint64_t> texture_asset_to_gpu_;  // asset id -> gpu texture id
+  std::unique_ptr<Texture> default_texture_;  // 1x1 白纹理，无贴图物体兜底
+  bool logged_texture_diag_ = false;  // 只打一次贴图诊断日志
   std::unordered_map<std::uint64_t, ChannelState> channels_;
   std::uint64_t next_mesh_id_ = 1;
+  std::uint64_t next_texture_id_ = 1;
   std::uint64_t next_channel_id_ = 1;
 
   std::mutex mutex_;

@@ -28,7 +28,6 @@ class MainWindow final : public QMainWindow {
   void open_file();
   void save_file();
   void save_file_as();
-  void new_demo_document();
   void frame_all();
   void close_tab(int index);
   void open_recent_path(const QString& path);

@@ -349,6 +349,22 @@ TEST(Entity, CreateGeom) {
   EXPECT_TRUE(mesh->bounds.valid());
 }
 
+TEST(Entity, ParametricGeometryHasNormals) {
+  BoxEntity box({0.f, 0.f, 0.f});
+  auto box_mesh = box.createGeom();
+  ASSERT_TRUE(box_mesh) << box_mesh.error();
+  for (const auto& v : box_mesh->vertices) {
+    EXPECT_GT(length(v.normal), 0.9f);
+  }
+
+  WallEntity wall({0.f, 0.f, 0.f}, {0.f, 0.f, 5.f}, 0.2, 3.0);
+  auto wall_mesh = wall.createGeom();
+  ASSERT_TRUE(wall_mesh) << wall_mesh.error();
+  for (const auto& v : wall_mesh->vertices) {
+    EXPECT_GT(length(v.normal), 0.9f);
+  }
+}
+
 TEST(CommandSystem, DispatchCreateWallUndoRedo) {
   CommandRegistry registry;
   register_commands(registry);
