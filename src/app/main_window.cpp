@@ -441,7 +441,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
   // ===== TEMP DEBUG: auto-create a concrete box to diagnose black texture =====
   {
-    auto doc = std::make_shared<Document>("DbgConcrete");
+    auto doc = std::make_shared<Document>(tr("Untitled").toStdString());
     BoxEntity box(Vec3{0.0f, 0.0f, 0.0f});
     auto geom = box.createGeom();
     if (geom) {
@@ -617,7 +617,7 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
 }
 
 void MainWindow::new_document() {
-  auto document = std::make_shared<Document>("Untitled");
+  auto document = std::make_shared<Document>(tr("Untitled").toStdString());
   document->add_import_mesh("cube", make_demo_cube(), Mat4::identity(), {0.75f, 0.78f, 0.82f});
   add_document_tab(document);
 }

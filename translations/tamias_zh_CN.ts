@@ -228,6 +228,10 @@
         <translation>新建</translation>
     </message>
     <message>
+        <source>Untitled</source>
+        <translation>未命名</translation>
+    </message>
+    <message>
         <location filename="../src/app/main_window.cpp" line="92"/>
         <source>New document with a cube</source>
         <translation>新建含立方体的文档</translation>

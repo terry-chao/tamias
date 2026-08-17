@@ -52,9 +52,12 @@ int main(int argc, char* argv[]) {
     (*device)->wait_idle();
   }
 
-  tamias::MainWindow window;
-  window.show();
-  const int code = app.exec();
+  int code = 0;
+  {
+    tamias::MainWindow window;
+    window.show();
+    code = app.exec();
+  }
   tamias::RenderThreadPool::instance().shutdown();
   tamias::shutdown_logging();
   return code;
