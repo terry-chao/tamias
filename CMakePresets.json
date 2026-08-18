@@ -20,15 +20,18 @@
         "strategy": "external"
       },
       "binaryDir": "${sourceDir}/build",
+      "toolchainFile": "$penv{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "environment": { "VSLANG": "1033" },
       "cacheVariables": {
-        "CMAKE_PREFIX_PATH": "C:/Qt/6.11.1/msvc2022_64",
+        "TAMIAS_QT_PREFIX": "C:/Qt/6.11.1/msvc2022_64",
         "CMAKE_C_COMPILER": "cl.exe",
         "CMAKE_CXX_COMPILER": "cl.exe",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_MAKE_PROGRAM": "C:/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe",
         "TAMIAS_ENABLE_OPENGL_BACKEND": "ON",
-        "TAMIAS_USE_FETCHCONTENT": "ON"
+        "TAMIAS_USE_FETCHCONTENT": "ON",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VCPKG_MANIFEST_MODE": "ON"
       }
     },
     {

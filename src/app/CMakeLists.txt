@@ -81,18 +81,7 @@ add_custom_command(TARGET tamias POST_BUILD
   COMMENT "Copying shaders and sample assets next to tamias"
 )
 
-if(WIN32)
-  # Copy toolkit + 3rdparty DLLs beside the exe so F5 / Explorer launch works
-  # without requiring OCCT on PATH.
-  add_custom_command(TARGET tamias POST_BUILD
-    COMMAND ${CMAKE_COMMAND}
-      -DDEST_DIR=$<TARGET_FILE_DIR:tamias>
-      -DOCCT_BIN_DIR=$<IF:$<CONFIG:Debug>,${TAMIAS_OCCT_BIN_DIR_DEBUG},${TAMIAS_OCCT_BIN_DIR}>
-      -DOCCT_3RDPARTY_ROOT=${TAMIAS_OCCT_3RDPARTY_ROOT}
-      -P ${CMAKE_SOURCE_DIR}/cmake/TamiasCopyOcctRuntime.cmake
-    COMMENT "Copying OCCT runtime DLLs next to tamias"
-  )
-endif()
+tamias_copy_runtime_dlls(tamias)
 
 if(WIN32)
   include(${CMAKE_SOURCE_DIR}/cmake/TamiasDeployQt.cmake)

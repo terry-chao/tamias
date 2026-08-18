@@ -12,6 +12,7 @@ CTestTestfile.cmake
 _deps
 CMakeUserPresets.json
 build/
+vcpkg_installed/
 .vs/
 out/
 *.user

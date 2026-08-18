@@ -23,13 +23,4 @@ gtest_discover_tests(tamias_tests
   DISCOVERY_MODE PRE_TEST
   PROPERTIES ENVIRONMENT_MODIFICATION "${_tamias_test_env_mod}"
 )
-if(WIN32)
-  add_custom_command(TARGET tamias_tests POST_BUILD
-    COMMAND ${CMAKE_COMMAND}
-      -DDEST_DIR=$<TARGET_FILE_DIR:tamias_tests>
-      -DOCCT_BIN_DIR=$<IF:$<CONFIG:Debug>,${TAMIAS_OCCT_BIN_DIR_DEBUG},${TAMIAS_OCCT_BIN_DIR}>
-      -DOCCT_3RDPARTY_ROOT=${TAMIAS_OCCT_3RDPARTY_ROOT}
-      -P ${CMAKE_SOURCE_DIR}/cmake/TamiasCopyOcctRuntime.cmake
-    COMMENT "Copying OCCT runtime DLLs next to tamias_tests"
-  )
-endif()
+tamias_copy_runtime_dlls(tamias_tests)

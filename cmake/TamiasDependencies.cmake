@@ -1,5 +1,18 @@
 # Resolve Qt, Vulkan, and local/third-party headers.
 
+# System Qt on Windows. Do not put Qt on CMAKE_PREFIX_PATH in presets —
+# that cache overwrite hides vcpkg's OpenCASCADE.
+set(TAMIAS_QT_PREFIX "" CACHE PATH "Optional Qt prefix (Windows system Qt).")
+if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+  list(PREPEND CMAKE_PREFIX_PATH "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}")
+endif()
+if(TAMIAS_QT_PREFIX)
+  list(PREPEND CMAKE_PREFIX_PATH "${TAMIAS_QT_PREFIX}")
+endif()
+# Leftover official-layout cache from OCCT_ROOT must not win over vcpkg.
+unset(OpenCASCADE_DIR CACHE)
+unset(opencascade_DIR CACHE)
+
 find_package(Vulkan REQUIRED)
 find_package(Qt6 REQUIRED COMPONENTS Widgets Gui Svg LinguistTools)
 
@@ -51,80 +64,66 @@ endif()
 find_program(TAMIAS_DXC NAMES dxc
   HINTS "$ENV{VULKAN_SDK}/Bin" "$ENV{VULKAN_SDK}/bin")
 
-# --- OCCT (required, via OCCT_ROOT) ---
-if(NOT DEFINED ENV{OCCT_ROOT} OR "$ENV{OCCT_ROOT}" STREQUAL "")
-  message(FATAL_ERROR "OCCT is required. Set environment variable OCCT_ROOT to an Open CASCADE install.")
+# --- OCCT (required, via vcpkg opencascade) ---
+find_package(OpenCASCADE CONFIG QUIET)
+if(NOT OpenCASCADE_FOUND)
+  find_package(opencascade CONFIG QUIET)
 endif()
-
-set(_tamias_occt_root "$ENV{OCCT_ROOT}")
-file(TO_CMAKE_PATH "${_tamias_occt_root}" _tamias_occt_root)
-set(TAMIAS_OCCT_ROOT "${_tamias_occt_root}")
-set(OpenCASCADE_DIR "${_tamias_occt_root}/cmake" CACHE PATH "OpenCASCADE cmake dir" FORCE)
-find_package(OpenCASCADE CONFIG REQUIRED)
-set(TAMIAS_OCCT_INCLUDE_DIR "${OpenCASCADE_INCLUDE_DIR}")
-if(WIN32)
-  set(TAMIAS_OCCT_LIBRARY_DIR "${_tamias_occt_root}/win64/vc14/lib")
-  set(TAMIAS_OCCT_LIBRARY_DIR_DEBUG "${_tamias_occt_root}/win64/vc14/libd")
-  set(TAMIAS_OCCT_BIN_DIR "${_tamias_occt_root}/win64/vc14/bin")
-  set(TAMIAS_OCCT_BIN_DIR_DEBUG "${_tamias_occt_root}/win64/vc14/bind")
-else()
-  set(TAMIAS_OCCT_LIBRARY_DIR "${OpenCASCADE_LIBRARY_DIR}")
-  set(TAMIAS_OCCT_BIN_DIR "${OpenCASCADE_BINARY_DIR}")
+if(NOT OpenCASCADE_FOUND AND NOT opencascade_FOUND)
+  message(FATAL_ERROR
+    "OpenCASCADE not found in the vcpkg install prefix.\n"
+    "  VCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR}\n"
+    "  VCPKG_TARGET_TRIPLET=${VCPKG_TARGET_TRIPLET}\n"
+    "  CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}\n"
+    "If this build directory predates the vcpkg OCCT switch, delete it and "
+    "reconfigure so vcpkg can install opencascade from vcpkg.json.")
 endif()
 
 # STEP/IGES toolkits pull XCAF/Visualization transitively on OCCT 7.9.
-set(_tamias_occt_libs
+set(TAMIAS_OCCT_LIBRARIES
   TKernel TKMath TKG2d TKG3d TKGeomBase TKBRep
   TKGeomAlgo TKTopAlgo TKPrim TKFillet TKBO TKBool TKMesh TKShHealing TKHLR
   TKService TKV3d
   TKCDF TKLCAF TKCAF TKVCAF TKXCAF
   TKDE TKXSBase TKDESTEP TKDEIGES)
-set(TAMIAS_OCCT_LIBRARIES "")
-foreach(_lib IN LISTS _tamias_occt_libs)
-  if(WIN32 AND EXISTS "${TAMIAS_OCCT_LIBRARY_DIR_DEBUG}/${_lib}.lib")
-    list(APPEND TAMIAS_OCCT_LIBRARIES
-      optimized "${TAMIAS_OCCT_LIBRARY_DIR}/${_lib}.lib"
-      debug "${TAMIAS_OCCT_LIBRARY_DIR_DEBUG}/${_lib}.lib")
-  else()
-    list(APPEND TAMIAS_OCCT_LIBRARIES "${_lib}")
+foreach(_lib IN LISTS TAMIAS_OCCT_LIBRARIES)
+  if(NOT TARGET ${_lib})
+    message(FATAL_ERROR "OpenCASCADE toolkit missing: ${_lib}")
   endif()
 endforeach()
-if(NOT WIN32)
-  link_directories("${TAMIAS_OCCT_LIBRARY_DIR}")
+
+if(OpenCASCADE_INCLUDE_DIR)
+  set(TAMIAS_OCCT_INCLUDE_DIR "${OpenCASCADE_INCLUDE_DIR}")
+elseif(opencascade_INCLUDE_DIR)
+  set(TAMIAS_OCCT_INCLUDE_DIR "${opencascade_INCLUDE_DIR}")
+else()
+  set(TAMIAS_OCCT_INCLUDE_DIR "")
+endif()
+if(NOT TAMIAS_OCCT_INCLUDE_DIR AND TARGET TKernel)
+  get_target_property(_tamias_occt_incs TKernel INTERFACE_INCLUDE_DIRECTORIES)
+  if(_tamias_occt_incs)
+    list(GET _tamias_occt_incs 0 TAMIAS_OCCT_INCLUDE_DIR)
+  endif()
 endif()
 
-# Sibling 3rdparty tree used by official OCCT Windows packages.
-set(_tamias_occt_3rdparty "${_tamias_occt_root}/../3rdparty-vc14-64")
-file(TO_CMAKE_PATH "${_tamias_occt_3rdparty}" _tamias_occt_3rdparty)
-if(EXISTS "${_tamias_occt_3rdparty}")
-  set(TAMIAS_OCCT_3RDPARTY_ROOT "${_tamias_occt_3rdparty}")
+if(DEFINED OpenCASCADE_INSTALL_PREFIX AND NOT OpenCASCADE_INSTALL_PREFIX STREQUAL "")
+  set(TAMIAS_OCCT_ROOT "${OpenCASCADE_INSTALL_PREFIX}")
+elseif(DEFINED OpenCASCADE_DIR)
+  get_filename_component(TAMIAS_OCCT_ROOT "${OpenCASCADE_DIR}/../../.." ABSOLUTE)
 else()
-  set(TAMIAS_OCCT_3RDPARTY_ROOT "")
+  set(TAMIAS_OCCT_ROOT "(vcpkg)")
 endif()
+
+# ctest PRE_TEST discovery needs OCCT/freetype on PATH even before POST_BUILD copy.
 set(TAMIAS_OCCT_RUNTIME_PATH "")
-if(WIN32)
+if(WIN32 AND DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
   list(APPEND TAMIAS_OCCT_RUNTIME_PATH
-    "${TAMIAS_OCCT_BIN_DIR_DEBUG}" "${TAMIAS_OCCT_BIN_DIR}")
-else()
-  list(APPEND TAMIAS_OCCT_RUNTIME_PATH "${TAMIAS_OCCT_BIN_DIR}")
+    "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/bin"
+    "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
+elseif(DEFINED OpenCASCADE_BINARY_DIR)
+  list(APPEND TAMIAS_OCCT_RUNTIME_PATH "${OpenCASCADE_BINARY_DIR}")
 endif()
-if(EXISTS "${_tamias_occt_3rdparty}")
-  file(GLOB _tamias_occt_3rd_bins
-    "${_tamias_occt_3rdparty}/*/bin"
-    "${_tamias_occt_3rdparty}/*/bind"
-    "${_tamias_occt_3rdparty}/*/bin/win64"
-    "${_tamias_occt_3rdparty}/*/debug/bin")
-  list(APPEND TAMIAS_OCCT_RUNTIME_PATH ${_tamias_occt_3rd_bins})
-  message(STATUS "OCCT 3rdparty: ${_tamias_occt_3rdparty}")
-endif()
-# Semicolon-separated PATH prefix for VS debugger / ctest / launch.
-set(TAMIAS_OCCT_RUNTIME_PATH_STRING "")
-foreach(_p IN LISTS TAMIAS_OCCT_RUNTIME_PATH)
-  if(TAMIAS_OCCT_RUNTIME_PATH_STRING STREQUAL "")
-    set(TAMIAS_OCCT_RUNTIME_PATH_STRING "${_p}")
-  else()
-    set(TAMIAS_OCCT_RUNTIME_PATH_STRING "${TAMIAS_OCCT_RUNTIME_PATH_STRING};${_p}")
-  endif()
-endforeach()
 
-message(STATUS "OCCT found: ${_tamias_occt_root}")
+include("${CMAKE_CURRENT_LIST_DIR}/TamiasCopyOcctRuntime.cmake")
+
+message(STATUS "OCCT found: ${TAMIAS_OCCT_ROOT}")

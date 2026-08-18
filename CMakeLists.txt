@@ -27,6 +27,16 @@ option(TAMIAS_ENABLE_OPENGL_BACKEND "Build the OpenGL RHI backend." ON)
 option(TAMIAS_BUILD_TESTS "Build unit tests." ON)
 option(TAMIAS_USE_FETCHCONTENT "Fetch third-party libs with FetchContent when not found." ON)
 
+# CMAKE_TOOLCHAIN_FILE in the cache does not mean the toolchain ran.
+# An old build/ created without vcpkg will not load a newly added toolchain.
+if(NOT DEFINED Z_VCPKG_ROOT_DIR AND NOT DEFINED VCPKG_INSTALLED_DIR)
+  message(FATAL_ERROR
+    "vcpkg toolchain did not load. Delete the build directory and configure "
+    "again with `cmake --preset msvc` or `cmake --preset linux` "
+    "(VCPKG_ROOT must be set). Adding CMAKE_TOOLCHAIN_FILE to an existing "
+    "cache is not enough.")
+endif()
+
 include(CTest)
 include(FetchContent)
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/TamiasShaders.cmake")
