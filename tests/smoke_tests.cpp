@@ -332,7 +332,6 @@ TEST(RenderConfig, OpenGlDoesNotShare) {
   EXPECT_TRUE(v0.shares_execution_thread_with(v1));
 }
 
-#if defined(TAMIAS_HAS_OCCT)
 TEST(Occt, TessellateBox) {
   auto mesh = tessellate_occt_box_for_tests();
   ASSERT_TRUE(mesh.has_value()) << mesh.error();
@@ -555,4 +554,3 @@ TEST(CommandSystem, BooleanUndoRedo) {
   system.redo();
   EXPECT_EQ(doc.entities().size(), 1u);
 }
-#endif

@@ -136,7 +136,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   connect(frame_all_action, &QAction::triggered, this, &MainWindow::frame_all);
   addAction(frame_all_action);
 
-#if defined(TAMIAS_HAS_OCCT)
   create_group_ = new QActionGroup(this);
   create_group_->setExclusive(true);
 
@@ -215,9 +214,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
           [this] { set_create_tool(ToolMode::Window); });
   create_group_->addAction(window_action_);
   addAction(window_action_);
-#endif
 
-#if defined(TAMIAS_HAS_OCCT)
   fillet_action_ = new QAction(tr("Fillet"), this);
   fillet_action_->setToolTip(tr("Fillet the selected entity's first edge"));
   connect(fillet_action_, &QAction::triggered, this, [this] {
@@ -235,7 +232,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     }
   });
   addAction(chamfer_action_);
-#endif
 
   auto* settings_action =
       new QAction(style()->standardIcon(QStyle::SP_FileDialogDetailedView), tr("Settings"), this);
@@ -338,7 +334,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     }
   });
 
-#if defined(TAMIAS_HAS_OCCT)
   auto* create_menu = menuBar()->addMenu(tr("&Create"));
   create_menu->addAction(wall_action_);
   create_menu->addAction(box_action_);
@@ -352,7 +347,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   auto* modify_menu = menuBar()->addMenu(tr("&Modify"));
   modify_menu->addAction(fillet_action_);
   modify_menu->addAction(chamfer_action_);
-#endif
 
   auto* tools_menu = menuBar()->addMenu(tr("&Tools"));
   tools_menu->addAction(settings_action);
@@ -371,7 +365,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   toolbar->addAction(undo_action);
   toolbar->addAction(redo_action);
   toolbar->addSeparator();
-#if defined(TAMIAS_HAS_OCCT)
   auto* create_button = new QToolButton(toolbar);
   create_button->setText(tr("Create"));
   create_button->setToolTip(tr("Create a parametric component"));
@@ -403,7 +396,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   modify_toolbar_menu->addAction(chamfer_action_);
   modify_button->setMenu(modify_toolbar_menu);
   toolbar->addWidget(modify_button);
-#endif
 
   auto* toolbar_spacer = new QWidget(toolbar);
   toolbar_spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
@@ -464,7 +456,6 @@ void MainWindow::set_create_tool(ToolMode mode) {
 }
 
 void MainWindow::sync_create_tool_actions(ToolMode mode) {
-#if defined(TAMIAS_HAS_OCCT)
   if (!create_group_) {
     return;
   }
@@ -484,9 +475,6 @@ void MainWindow::sync_create_tool_actions(ToolMode mode) {
     }
   }
   create_group_->setExclusive(was_exclusive);
-#else
-  (void)mode;
-#endif
 }
 
 void MainWindow::show_home() {
@@ -598,11 +586,7 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
   // fills the top-left corner of the window.
   auto* vp = new DocumentViewport(document, thread, nullptr);
   connect(vp, &DocumentViewport::tool_mode_changed, this, [this](ToolMode mode) {
-#if defined(TAMIAS_HAS_OCCT)
     sync_create_tool_actions(mode);
-#else
-    (void)mode;
-#endif
   });
   connect(vp, &DocumentViewport::selection_changed, this, &MainWindow::refresh_property_panel);
   connect(vp, &DocumentViewport::document_changed, this, &MainWindow::refresh_property_panel);
@@ -671,7 +655,6 @@ bool MainWindow::open_path(const QString& path) {
 
   Result<MeshCpu> mesh = Err("no loader");
   if (occt_supports_extension(file)) {
-#if defined(TAMIAS_HAS_OCCT)
     auto* ops = ShapeOpsRegistry::instance().find("occt");
     if (!ops) {
       QMessageBox::critical(this, tr("Open"), tr("OCCT ShapeOps is not registered."));
@@ -683,12 +666,6 @@ bool MainWindow::open_path(const QString& path) {
       return false;
     }
     mesh = (*shape)->tessellate(0.1);
-#else
-    QMessageBox::critical(
-        this, tr("Open"),
-        tr("This build was compiled without OCCT. Set OCCT_ROOT and rebuild."));
-    return false;
-#endif
   } else {
     mesh = load_mesh_file(file);
   }
@@ -715,20 +692,13 @@ bool MainWindow::open_path(const QString& path) {
 }
 
 void MainWindow::open_file() {
-  QString filters =
-      tr("All Supported (*.tdoc *.gltf *.glb *.obj);;"
-         "Tamias (*.tdoc);;"
-         "Meshes (*.gltf *.glb *.obj);;"
-         "glTF (*.gltf *.glb);;OBJ (*.obj)");
-#if defined(TAMIAS_HAS_OCCT)
-  filters =
+  const QString filters =
       tr("All Supported (*.tdoc *.gltf *.glb *.obj *.step *.stp *.iges *.igs *.brep);;"
          "Tamias (*.tdoc);;"
          "Meshes (*.gltf *.glb *.obj);;"
          "CAD (*.step *.stp *.iges *.igs *.brep);;"
          "glTF (*.gltf *.glb);;OBJ (*.obj);;"
          "STEP (*.step *.stp);;IGES (*.iges *.igs);;BREP (*.brep)");
-#endif
   const QString path = QFileDialog::getOpenFileName(this, tr("Open"), QString(), filters);
   if (path.isEmpty()) {
     return;

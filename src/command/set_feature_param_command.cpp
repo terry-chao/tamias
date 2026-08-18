@@ -30,7 +30,6 @@ Result<void> SetFeatureParamCommand::execute() {
 }
 
 Result<void> SetFeatureParamCommand::apply(double value) {
-#if defined(TAMIAS_HAS_OCCT)
   Entity* entity = document_->entity(entity_id_);
   if (entity == nullptr) {
     return Err("SetFeatureParamCommand: entity not found");
@@ -49,10 +48,6 @@ Result<void> SetFeatureParamCommand::apply(double value) {
   document_->recompute_scene();
   document_->mark_dirty();
   return {};
-#else
-  (void)value;
-  return Err("SetFeatureParamCommand requires OCCT");
-#endif
 }
 
 void SetFeatureParamCommand::undo() { (void)apply(old_value_); }

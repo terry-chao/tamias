@@ -1,7 +1,5 @@
 #include "occt_shape_ops.h"
 
-#if defined(TAMIAS_HAS_OCCT)
-
 #include "engine/core/log.h"
 
 #include <BRep_Builder.hxx>
@@ -324,5 +322,3 @@ Result<MeshCpu> tessellate_occt_box_for_tests() {
 }
 
 }  // namespace tamias
-
-#endif  // TAMIAS_HAS_OCCT

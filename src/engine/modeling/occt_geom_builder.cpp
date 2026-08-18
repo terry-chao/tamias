@@ -1,7 +1,5 @@
 #include "occt_geom_builder.h"
 
-#if defined(TAMIAS_HAS_OCCT)
-
 #include "engine/modeling/occt_feature.h"
 
 namespace tamias {
@@ -24,5 +22,3 @@ IGeometryBuilder& geometry_builder() {
 }
 
 }  // namespace tamias
-
-#endif  // TAMIAS_HAS_OCCT

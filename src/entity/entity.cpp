@@ -52,12 +52,7 @@ std::unique_ptr<Entity> Entity::clone() const {
 }
 
 Result<MeshCpu> Entity::createGeom(double deflection) const {
-#if defined(TAMIAS_HAS_OCCT)
   return geometry_builder().build(model, deflection);
-#else
-  (void)deflection;
-  return Err("Entity::createGeom requires OCCT");
-#endif
 }
 
 }  // namespace tamias

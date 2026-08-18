@@ -25,7 +25,6 @@ Result<void> BooleanCommand::execute() {
 }
 
 Result<void> BooleanCommand::apply(bool combined) {
-#if defined(TAMIAS_HAS_OCCT)
   Entity* a = document_->entity(a_id_);
   if (a == nullptr) {
     return Err("BooleanCommand: entity A not found");
@@ -61,10 +60,6 @@ Result<void> BooleanCommand::apply(bool combined) {
   document_->recompute_scene();
   document_->mark_dirty();
   return {};
-#else
-  (void)combined;
-  return Err("BooleanCommand requires OCCT");
-#endif
 }
 
 void BooleanCommand::undo() { (void)apply(false); }

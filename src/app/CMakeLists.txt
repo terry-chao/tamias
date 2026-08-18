@@ -63,10 +63,6 @@ if(TARGET tamias::rhi_opengl)
   target_compile_definitions(tamias PRIVATE TAMIAS_HAS_RHI_OPENGL=1)
 endif()
 
-if(TAMIAS_HAS_OCCT)
-  target_compile_definitions(tamias PRIVATE TAMIAS_HAS_OCCT=1)
-endif()
-
 tamias_compile_hlsl(tamias mesh.vert.hlsl vs_6_0 mesh.vert)
 tamias_compile_hlsl(tamias mesh.frag.hlsl ps_6_0 mesh.frag)
 tamias_compile_hlsl(tamias sky.vert.hlsl vs_6_0 sky.vert)
@@ -85,7 +81,7 @@ add_custom_command(TARGET tamias POST_BUILD
   COMMENT "Copying shaders and sample assets next to tamias"
 )
 
-if(TAMIAS_HAS_OCCT AND WIN32)
+if(WIN32)
   # Copy toolkit + 3rdparty DLLs beside the exe so F5 / Explorer launch works
   # without requiring OCCT on PATH.
   add_custom_command(TARGET tamias POST_BUILD

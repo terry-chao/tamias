@@ -28,9 +28,7 @@ int main(int argc, char* argv[]) {
   tamias::init_logging(tamias::LogLevel::Info);
   tamias::register_linked_rhi_backends();
   tamias::register_commands(tamias::command_registry());
-#if defined(TAMIAS_HAS_OCCT)
   tamias::register_occt_shape_ops();
-#endif
 
   tamias::AppSettings::instance().load();
   if (!tamias::apply_ui_language(tamias::AppSettings::instance().ui_language())) {

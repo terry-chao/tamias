@@ -12,7 +12,6 @@ AddFeatureCommand::AddFeatureCommand(Document& document, std::uint64_t entity_id
       params_(std::move(params)) {}
 
 Result<void> AddFeatureCommand::apply(bool add) {
-#if defined(TAMIAS_HAS_OCCT)
   Entity* entity = document_->entity(entity_id_);
   if (entity == nullptr) {
     return Err("AddFeatureCommand: entity not found");
@@ -43,10 +42,6 @@ Result<void> AddFeatureCommand::apply(bool add) {
   document_->recompute_scene();
   document_->mark_dirty();
   return {};
-#else
-  (void)add;
-  return Err("AddFeatureCommand requires OCCT");
-#endif
 }
 
 Result<void> AddFeatureCommand::execute() { return apply(true); }

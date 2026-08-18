@@ -51,88 +51,80 @@ endif()
 find_program(TAMIAS_DXC NAMES dxc
   HINTS "$ENV{VULKAN_SDK}/Bin" "$ENV{VULKAN_SDK}/bin")
 
-# --- OCCT (optional, via OCCT_ROOT) ---
-set(TAMIAS_HAS_OCCT OFF)
-set(TAMIAS_OCCT_INCLUDE_DIR "")
-set(TAMIAS_OCCT_LIBRARY_DIR "")
-set(TAMIAS_OCCT_BIN_DIR "")
-set(TAMIAS_OCCT_LIBRARIES "")
-
-if(TAMIAS_ENABLE_OCCT)
-  if(DEFINED ENV{OCCT_ROOT} AND NOT "$ENV{OCCT_ROOT}" STREQUAL "")
-    set(_tamias_occt_root "$ENV{OCCT_ROOT}")
-    file(TO_CMAKE_PATH "${_tamias_occt_root}" _tamias_occt_root)
-    set(OpenCASCADE_DIR "${_tamias_occt_root}/cmake" CACHE PATH "OpenCASCADE cmake dir" FORCE)
-    find_package(OpenCASCADE CONFIG REQUIRED)
-    set(TAMIAS_OCCT_INCLUDE_DIR "${OpenCASCADE_INCLUDE_DIR}")
-    if(WIN32)
-      set(TAMIAS_OCCT_LIBRARY_DIR "${_tamias_occt_root}/win64/vc14/lib")
-      set(TAMIAS_OCCT_LIBRARY_DIR_DEBUG "${_tamias_occt_root}/win64/vc14/libd")
-      set(TAMIAS_OCCT_BIN_DIR "${_tamias_occt_root}/win64/vc14/bin")
-      set(TAMIAS_OCCT_BIN_DIR_DEBUG "${_tamias_occt_root}/win64/vc14/bind")
-    else()
-      set(TAMIAS_OCCT_LIBRARY_DIR "${OpenCASCADE_LIBRARY_DIR}")
-      set(TAMIAS_OCCT_BIN_DIR "${OpenCASCADE_BINARY_DIR}")
-    endif()
-
-    # STEP/IGES toolkits pull XCAF/Visualization transitively on OCCT 7.9.
-    set(_tamias_occt_libs
-      TKernel TKMath TKG2d TKG3d TKGeomBase TKBRep
-      TKGeomAlgo TKTopAlgo TKPrim TKFillet TKBO TKBool TKMesh TKShHealing TKHLR
-      TKService TKV3d
-      TKCDF TKLCAF TKCAF TKVCAF TKXCAF
-      TKDE TKXSBase TKDESTEP TKDEIGES)
-    set(TAMIAS_OCCT_LIBRARIES "")
-    foreach(_lib IN LISTS _tamias_occt_libs)
-      if(WIN32 AND EXISTS "${TAMIAS_OCCT_LIBRARY_DIR_DEBUG}/${_lib}.lib")
-        list(APPEND TAMIAS_OCCT_LIBRARIES
-          optimized "${TAMIAS_OCCT_LIBRARY_DIR}/${_lib}.lib"
-          debug "${TAMIAS_OCCT_LIBRARY_DIR_DEBUG}/${_lib}.lib")
-      else()
-        list(APPEND TAMIAS_OCCT_LIBRARIES "${_lib}")
-      endif()
-    endforeach()
-    if(NOT WIN32)
-      link_directories("${TAMIAS_OCCT_LIBRARY_DIR}")
-    endif()
-
-    # Sibling 3rdparty tree used by official OCCT Windows packages.
-    set(_tamias_occt_3rdparty "${_tamias_occt_root}/../3rdparty-vc14-64")
-    file(TO_CMAKE_PATH "${_tamias_occt_3rdparty}" _tamias_occt_3rdparty)
-    if(EXISTS "${_tamias_occt_3rdparty}")
-      set(TAMIAS_OCCT_3RDPARTY_ROOT "${_tamias_occt_3rdparty}")
-    else()
-      set(TAMIAS_OCCT_3RDPARTY_ROOT "")
-    endif()
-    set(TAMIAS_OCCT_RUNTIME_PATH "")
-    if(WIN32)
-      list(APPEND TAMIAS_OCCT_RUNTIME_PATH
-        "${TAMIAS_OCCT_BIN_DIR_DEBUG}" "${TAMIAS_OCCT_BIN_DIR}")
-    else()
-      list(APPEND TAMIAS_OCCT_RUNTIME_PATH "${TAMIAS_OCCT_BIN_DIR}")
-    endif()
-    if(EXISTS "${_tamias_occt_3rdparty}")
-      file(GLOB _tamias_occt_3rd_bins
-        "${_tamias_occt_3rdparty}/*/bin"
-        "${_tamias_occt_3rdparty}/*/bind"
-        "${_tamias_occt_3rdparty}/*/bin/win64"
-        "${_tamias_occt_3rdparty}/*/debug/bin")
-      list(APPEND TAMIAS_OCCT_RUNTIME_PATH ${_tamias_occt_3rd_bins})
-      message(STATUS "OCCT 3rdparty: ${_tamias_occt_3rdparty}")
-    endif()
-    # Semicolon-separated PATH prefix for VS debugger / ctest / launch.
-    set(TAMIAS_OCCT_RUNTIME_PATH_STRING "")
-    foreach(_p IN LISTS TAMIAS_OCCT_RUNTIME_PATH)
-      if(TAMIAS_OCCT_RUNTIME_PATH_STRING STREQUAL "")
-        set(TAMIAS_OCCT_RUNTIME_PATH_STRING "${_p}")
-      else()
-        set(TAMIAS_OCCT_RUNTIME_PATH_STRING "${TAMIAS_OCCT_RUNTIME_PATH_STRING};${_p}")
-      endif()
-    endforeach()
-
-    set(TAMIAS_HAS_OCCT ON)
-    message(STATUS "OCCT found: ${_tamias_occt_root}")
-  else()
-    message(STATUS "OCCT disabled: set environment variable OCCT_ROOT to enable")
-  endif()
+# --- OCCT (required, via OCCT_ROOT) ---
+if(NOT DEFINED ENV{OCCT_ROOT} OR "$ENV{OCCT_ROOT}" STREQUAL "")
+  message(FATAL_ERROR "OCCT is required. Set environment variable OCCT_ROOT to an Open CASCADE install.")
 endif()
+
+set(_tamias_occt_root "$ENV{OCCT_ROOT}")
+file(TO_CMAKE_PATH "${_tamias_occt_root}" _tamias_occt_root)
+set(TAMIAS_OCCT_ROOT "${_tamias_occt_root}")
+set(OpenCASCADE_DIR "${_tamias_occt_root}/cmake" CACHE PATH "OpenCASCADE cmake dir" FORCE)
+find_package(OpenCASCADE CONFIG REQUIRED)
+set(TAMIAS_OCCT_INCLUDE_DIR "${OpenCASCADE_INCLUDE_DIR}")
+if(WIN32)
+  set(TAMIAS_OCCT_LIBRARY_DIR "${_tamias_occt_root}/win64/vc14/lib")
+  set(TAMIAS_OCCT_LIBRARY_DIR_DEBUG "${_tamias_occt_root}/win64/vc14/libd")
+  set(TAMIAS_OCCT_BIN_DIR "${_tamias_occt_root}/win64/vc14/bin")
+  set(TAMIAS_OCCT_BIN_DIR_DEBUG "${_tamias_occt_root}/win64/vc14/bind")
+else()
+  set(TAMIAS_OCCT_LIBRARY_DIR "${OpenCASCADE_LIBRARY_DIR}")
+  set(TAMIAS_OCCT_BIN_DIR "${OpenCASCADE_BINARY_DIR}")
+endif()
+
+# STEP/IGES toolkits pull XCAF/Visualization transitively on OCCT 7.9.
+set(_tamias_occt_libs
+  TKernel TKMath TKG2d TKG3d TKGeomBase TKBRep
+  TKGeomAlgo TKTopAlgo TKPrim TKFillet TKBO TKBool TKMesh TKShHealing TKHLR
+  TKService TKV3d
+  TKCDF TKLCAF TKCAF TKVCAF TKXCAF
+  TKDE TKXSBase TKDESTEP TKDEIGES)
+set(TAMIAS_OCCT_LIBRARIES "")
+foreach(_lib IN LISTS _tamias_occt_libs)
+  if(WIN32 AND EXISTS "${TAMIAS_OCCT_LIBRARY_DIR_DEBUG}/${_lib}.lib")
+    list(APPEND TAMIAS_OCCT_LIBRARIES
+      optimized "${TAMIAS_OCCT_LIBRARY_DIR}/${_lib}.lib"
+      debug "${TAMIAS_OCCT_LIBRARY_DIR_DEBUG}/${_lib}.lib")
+  else()
+    list(APPEND TAMIAS_OCCT_LIBRARIES "${_lib}")
+  endif()
+endforeach()
+if(NOT WIN32)
+  link_directories("${TAMIAS_OCCT_LIBRARY_DIR}")
+endif()
+
+# Sibling 3rdparty tree used by official OCCT Windows packages.
+set(_tamias_occt_3rdparty "${_tamias_occt_root}/../3rdparty-vc14-64")
+file(TO_CMAKE_PATH "${_tamias_occt_3rdparty}" _tamias_occt_3rdparty)
+if(EXISTS "${_tamias_occt_3rdparty}")
+  set(TAMIAS_OCCT_3RDPARTY_ROOT "${_tamias_occt_3rdparty}")
+else()
+  set(TAMIAS_OCCT_3RDPARTY_ROOT "")
+endif()
+set(TAMIAS_OCCT_RUNTIME_PATH "")
+if(WIN32)
+  list(APPEND TAMIAS_OCCT_RUNTIME_PATH
+    "${TAMIAS_OCCT_BIN_DIR_DEBUG}" "${TAMIAS_OCCT_BIN_DIR}")
+else()
+  list(APPEND TAMIAS_OCCT_RUNTIME_PATH "${TAMIAS_OCCT_BIN_DIR}")
+endif()
+if(EXISTS "${_tamias_occt_3rdparty}")
+  file(GLOB _tamias_occt_3rd_bins
+    "${_tamias_occt_3rdparty}/*/bin"
+    "${_tamias_occt_3rdparty}/*/bind"
+    "${_tamias_occt_3rdparty}/*/bin/win64"
+    "${_tamias_occt_3rdparty}/*/debug/bin")
+  list(APPEND TAMIAS_OCCT_RUNTIME_PATH ${_tamias_occt_3rd_bins})
+  message(STATUS "OCCT 3rdparty: ${_tamias_occt_3rdparty}")
+endif()
+# Semicolon-separated PATH prefix for VS debugger / ctest / launch.
+set(TAMIAS_OCCT_RUNTIME_PATH_STRING "")
+foreach(_p IN LISTS TAMIAS_OCCT_RUNTIME_PATH)
+  if(TAMIAS_OCCT_RUNTIME_PATH_STRING STREQUAL "")
+    set(TAMIAS_OCCT_RUNTIME_PATH_STRING "${_p}")
+  else()
+    set(TAMIAS_OCCT_RUNTIME_PATH_STRING "${TAMIAS_OCCT_RUNTIME_PATH_STRING};${_p}")
+  endif()
+endforeach()
+
+message(STATUS "OCCT found: ${_tamias_occt_root}")

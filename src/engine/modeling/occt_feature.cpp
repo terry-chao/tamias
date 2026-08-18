@@ -1,7 +1,5 @@
 #include "occt_feature.h"
 
-#if defined(TAMIAS_HAS_OCCT)
-
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
@@ -285,5 +283,3 @@ Result<MeshCpu> evaluate_feature_model(const FeatureModel& model, double linear_
 }
 
 }  // namespace tamias
-
-#endif  // TAMIAS_HAS_OCCT
