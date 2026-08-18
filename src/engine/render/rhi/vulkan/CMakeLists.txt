@@ -1,6 +1,6 @@
 add_library(tamias_rhi_vulkan STATIC vulkan_device.cpp)
 add_library(tamias::rhi_vulkan ALIAS tamias_rhi_vulkan)
-target_include_directories(tamias_rhi_vulkan PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../..)
+target_include_directories(tamias_rhi_vulkan PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tamias_rhi_vulkan
   PUBLIC
     tamias::rhi

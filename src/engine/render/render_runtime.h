@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/rhi/device.h"
+#include "engine/render/rhi/device.h"
 #include "engine/graphics/mesh.h"
 #include "engine/math/camera.h"
 #include "engine/render/material.h"

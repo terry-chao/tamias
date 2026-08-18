@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/rhi/device.h"
+#include "engine/render/rhi/device.h"
 
 namespace tamias {
 

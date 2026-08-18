@@ -5,7 +5,7 @@
 #include "engine/modeling/feature.h"
 
 #if defined(TAMIAS_HAS_RHI_OPENGL)
-#include "engine/rhi_opengl/opengl_backend.h"
+#include "engine/render/rhi/opengl/opengl_backend.h"
 #endif
 
 #include <QCoreApplication>

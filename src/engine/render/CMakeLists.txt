@@ -1,6 +1,8 @@
+add_subdirectory(rhi)
+
 add_library(tamias_render STATIC render_runtime.cpp)
 add_library(tamias::render ALIAS tamias_render)
-target_include_directories(tamias_render PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../..)
+target_include_directories(tamias_render PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_compile_definitions(tamias_render PRIVATE
   TAMIAS_SHADER_DIR="${TAMIAS_SHADER_OUTPUT_DIR}"
   TAMIAS_SHADER_SOURCE_DIR="${TAMIAS_SHADER_SOURCE_DIR}"
