@@ -1,6 +1,6 @@
 # 几何边界（IShapeOps）
 
-> 路线图分层里最下面：**内核插件口**。上面的造型、场景、BIM 业务、app **不出现** `TopoDS_Shape`。OCCT 和将来的 IfcOpenShell 都从这里接进去，**不要为 IFC 另开一条几何通道**。IFC 的空间结构（楼层等）进 [BIM 业务层](BIM.md)，几何仍只走本口。
+> 造型里的**内核插件口**。特征树、场景、BIM 业务、app **不出现** `TopoDS_Shape`。OCCT 和将来的 IfcOpenShell 都从这里接进去，**不要为 IFC 另开一条几何通道**。IFC 的空间结构（楼层等）进 [BIM 业务层](BIM.md)，几何仍只走本口。站点导航在 [造型](modeling/index.md) 下面。
 
 现在怎么造型（点工具 → 配方 → 出网）见 [特征树求值器](FEATURE-TREE-EVALUATOR.md) 第 1 节。本文只讲「口在哪、谁实现、IFC 怎么坐上来」。
 
@@ -41,15 +41,17 @@ app / document / 特征树（纯数据）
 
 ---
 
-## 和「造型」怎么分
+## 造型里面的两截
 
-| | 造型（modeling） | 几何边界（本层） |
+文档导航里几何边界属于造型；代码上仍要分开，免得 `TopoDS_Shape` 漏到特征树和 UI。
+
+| | 特征树 / 求值配方 | 几何边界（本页） |
 |---|---|---|
-| 记什么 | 特征树：kind / params / 依赖 | 内核怎么把配方或文件变成 BRep |
+| 记什么 | kind / params / 依赖 | 内核怎么把配方或文件变成 BRep |
 | 依赖 OCCT？ | **否**（`FeatureModel` 零 OCCT 类型） | **是**（唯一允许碰 `TopoDS_Shape` 的地方） |
 | 换厨师 | 配方不用改 | 换 `IShapeOps` / `IGeometryBuilder` 的实现 |
 
-求值器是两层的接缝：造型交出配方，边界里的 OCCT 实现去执行。细节仍看 [特征树与求值器](FEATURE-TREE-EVALUATOR.md)。
+求值器是两截的接缝：配方交出去，边界里的 OCCT 实现去执行。细节仍看 [特征树与求值器](FEATURE-TREE-EVALUATOR.md)。
 
 ---
 
@@ -70,9 +72,9 @@ IfcOpenShell **不是**和 OCCT 并列的第二个几何内核。它是：
 - `IfcParse`：IFC 语义（空间结构、Pset、GUID、类型/实例）
 - `IfcGeom`：几何，**内部仍用 OCCT**
 
-所以 IFC 导入应当：语义进场景图，几何仍经 OCCT 变成 BRep / 三角网（能映射成特征树的更好）。**不要**再写一条「IFC → 三角网」绕过本层。
+所以 IFC 导入应当：语义进语义树，几何仍经 OCCT 变成 BRep / 三角网（能映射成特征树的更好）。**不要**再写一条「IFC → 三角网」绕过本层。
 
-现状缺口（[路线图](ROADMAP.md)）：`IShapeOps` 现在只吐 `MeshCpu`，扛不住 IFC 语义，也扛不住「导入成特征树」。需要专用导入器，产出「语义图 + 特征树/网格 + 材质」，几何仍走 OCCT。
+现状缺口（[路线图](ROADMAP.md)）：`IShapeOps` 现在只吐 `MeshCpu`，扛不住 IFC 语义，也扛不住「导入成特征树」。需要专用导入器，产出「语义树 + 特征树/网格 + 材质」，几何仍走 OCCT。
 
 ---
 
