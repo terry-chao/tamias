@@ -25,7 +25,7 @@ markdown_extensions:
   - toc:
       permalink: true
 
-# 导航按路线图分层（见 ROADMAP §2）；BIM 业务夹在客户端与场景图之间
+# 导航按路线图分层（见 ROADMAP §2）；BIM 夹在客户端与场景图之间
 nav:
   - 首页: index.md
   - 总览:
@@ -35,7 +35,7 @@ nav:
   - 客户端:
       - app/index.md
       - Qt 壳: APP.md
-  - BIM 业务:
+  - BIM:
       - bim/index.md
       - BIM 业务层: BIM.md
   - 场景图:
