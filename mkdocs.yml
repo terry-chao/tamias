@@ -10,7 +10,8 @@ theme:
   language: zh
   features:
     - navigation.tabs
-    - navigation.sections
+    - navigation.tabs.sticky
+    - navigation.indexes
     - search.suggest
     - search.highlight
   palette:
@@ -39,17 +40,23 @@ markdown_extensions:
 nav:
   - 首页: index.md
   - 总览:
+      - overview/index.md
       - 路线图: ROADMAP.md
       - MCAD 与 BIM: DECISION-MCAD-BIM.md
   - 客户端:
+      - app/index.md
       - Qt 壳: APP.md
   - 语义场景:
+      - scene/index.md
       - 场景图: SCENE-GRAPH.md
   - 造型:
+      - modeling/index.md
       - 特征树求值器: FEATURE-TREE-EVALUATOR.md
       - MCAD 管线: MCAD-PIPELINE.md
   - 渲染:
+      - render/index.md
       - 管线与 RHI: RENDERING.md
       - 视锥剔除: FRUSTUM-CULLING.md
   - 几何边界:
+      - kernel/index.md
       - IShapeOps 与 OCCT: ISHAPE-OPS.md
