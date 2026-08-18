@@ -38,6 +38,8 @@ markdown_extensions:
 nav:
   - 首页: index.md
   - 路线图: ROADMAP.md
+  - 渲染管线: RENDERING.md
   - 特征树求值器: FEATURE-TREE-EVALUATOR.md
+  - 场景图: SCENE-GRAPH.md
   - MCAD/BIM 决策: DECISION-MCAD-BIM.md
   - MCAD 管线: MCAD-PIPELINE.md
