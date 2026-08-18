@@ -10,7 +10,7 @@
 |---|---|
 | 「场景图」是什么？ | 一个**渲染侧**的概念：用父子树组织「要画的东西」，实现变换继承、组织管理、层级剔除。**它不是语义概念。** |
 | OCCT 的场景图是什么？ | 一个「够自己显示用」的**最小留存式场景图**（`Graphic3d_Structure`），只服务「显示 + 拾取」，语义/空间剔除/实例化它全不做。 |
-| Tamias 有没有场景图？ | **没有。** 你只有「语义树（`Scene`）+ 展平渲染（`render_items()`）」。语义树管数据，渲染侧只拿平铺的 `SceneDrawItem`。 |
+| Tamias 有没有场景图？ | **没有。** 你只有「BIM 业务层 + 语义树（`Scene`）+ 展平渲染（`render_items()`）」。建筑规则在 BIM 层，树在 `Scene`，渲染侧只拿平铺的 `SceneDrawItem`。 |
 | 它们对应关系？ | OCCT 场景图 ↔ Tamias 的**渲染侧**（`SceneDrawItem` 列表）；Tamias 语义树 ↔ OCCT 的 **OCAF 文档树**（数据层）。两者靠「展平」桥接。 |
 | BIM 身份改变了什么？ | 没有推翻上面的架构；只是渲染侧要补的东西变多（实例化、空间剔除、LOD、剖切、按楼层可见性），而这些 **OCCT 场景图一个都没给**——所以自研渲染是对的。 |
 
@@ -22,7 +22,7 @@
 
 | 词 | 属于哪一侧 | 是什么 |
 |---|---|---|
-| **语义树 / 对象树**（semantic tree） | 数据侧 | 表达「墙属于几楼」这类**语义关系**。Tamias 的 `Scene` 就是。 |
+| **语义树 / 对象树**（semantic tree） | 数据侧 | 通用父子树（`parent` / 变换）。Tamias 的 `Scene` 就是。建筑含义（楼层、轴网）在 [BIM 业务层](BIM.md)。 |
 | **场景图**（scene graph） | 渲染侧 | 表达「要画的东西怎么组织、怎么变换、谁盖谁」的**显示层级**。OCCT 的 `Graphic3d_Structure` 就是。 |
 | **展平列表**（flattened draw list） | 渲染侧输入 | 语义树烘掉层级后、只剩「网格 + 全局矩阵」的平铺结果。Tamias 的 `SceneDrawItem` 就是。 |
 
@@ -104,7 +104,9 @@ struct SceneNode {
 };
 ```
 
-这就是你的 **BIM 语义树**——「墙属于楼层、窗属于墙」的层级，将来就是「建筑→楼层→族→实例」。它**不碰任何 GPU/渲染资源**（注释明说：几何只引用 `mesh_asset_id`，渲染资源在 render 侧）。
+这就是你的 **语义树**——通用的「谁是谁的孩子 + 变换继承」。它**不碰任何 GPU/渲染资源**（注释明说：几何只引用 `mesh_asset_id`，渲染资源在 render 侧）。
+
+「墙属于楼层、窗属于墙」这类**建筑规则不在这一层解释**。`parent` 只是链接；谁该写成楼层、当前标高是哪一个，由 [BIM 业务层](BIM.md) 决定后调用 `set_parent`。现状没有楼层系统，新建墙 `parent = 0`（挂在根上）。将来的「建筑→楼层→族→实例」是 BIM 层写出来的树形，不是 `SceneNode` 上的新字段。
 
 ### 3.2 局部→全局：`recompute_world()`
 
@@ -118,7 +120,7 @@ n->world_transform = parent_world * n->local_transform;  // 自顶向下累积
 - **自底向上**算全局包围盒：子包围盒并入父；
 - 有防环保护（`set_parent` 拒绝把节点设成自己的后代）。
 
-这正是「墙的全局坐标 = 楼层变换 × 墙局部变换」的落地。**变换继承这件事，你的语义树承担了，不是场景图。**
+这正是「墙的全局坐标 = 楼层变换 × 墙局部变换」的落地。**变换继承由语义树承担**；**楼层这个身份由 BIM 业务层承担**。语义树不知道「父节点是楼层」，只知道「有一个父、世界矩阵要乘上去」。
 
 ### 3.3 展平渲染：`render_items()` → `SceneDrawItem`
 
@@ -192,7 +194,7 @@ Tamias 渲染 (render_runtime)     OCCT 渲染 (V3d_Viewer + OpenGl 驱动)
 
 ## 5. 关键洞察
 
-1. **场景图是渲染概念，语义树是数据概念，别混。** 混了会把「墙属于楼层」这种语义塞进渲染结构，导致两份真相、还拖垮海量构件的遍历。
+1. **场景图是渲染概念，语义树是数据概念，别混。** 混了会把「墙属于楼层」这种语义塞进渲染结构，导致两份真相、还拖垮海量构件的遍历。建筑规则也不该写进 `SceneNode` 字段，见 [BIM 业务层](BIM.md)。
 
 2. **OCCT 的场景图是「够显示用的最小实现」。** 它服务自己的「显示 + 拾取」，语义/空间/实例化全不做。所以「用 OCCT 场景图来管 BIM 层级」是错的方向。
 
@@ -209,7 +211,7 @@ Tamias 渲染 (render_runtime)     OCCT 渲染 (V3d_Viewer + OpenGl 驱动)
 | **highlight / selection** | 点中墙、高亮整层，交互刚需 | `SceneDrawItem.selected` 字段已留位，渲染侧未消费 |
 | **z-layer 抽象** | 轴网/标高/标注/剖切框这些 overlay，别再布尔硬编码 | `FrameSubmission` 里 `show_axes/show_grid/show_preview_line` + 单独 pipeline 是当前笨办法 |
 | **空间索引 + 实例化** | BIM 规模（几万构件）的剔除与合批 | 视锥一期已落地，见 [视锥剔除](FRUSTUM-CULLING.md)；合批 / BVH 视锥仍缺。加速结构不是场景图 |
-| **按楼层/类别可见性** | 「只看结构柱」「关掉 MEP」 | 语义树驱动，渲染侧只收可见性标志 |
+| **按楼层/类别可见性** | 「只看结构柱」「关掉 MEP」 | [BIM 业务层](BIM.md) 查出 id，渲染侧只收可见性标志 |
 
 **最重要的提醒**：最后两项（空间索引、实例化）补的是**渲染侧加速结构（八叉树/BVH + 实例表）**，不是「把语义树搬进渲染」。语义树永远留在 `Scene` / Document，渲染永远只拿展平结果。
 
@@ -219,6 +221,7 @@ Tamias 渲染 (render_runtime)     OCCT 渲染 (V3d_Viewer + OpenGl 驱动)
 
 ## 附录：涉及文件
 
+- [BIM.md](BIM.md) —— 楼层 / 轴网 / 宿主；语义树只记账
 - [scene.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/scene.h) / [scene.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/scene.cpp) —— 语义树 + 局部→全局变换累积
 - [document.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.h) / [document.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.cpp) —— 展平 `render_items()`
 - [视锥剔除](FRUSTUM-CULLING.md) —— 展平时丢掉屏外叶子；二期语义树剪枝；三期复用拾取 BVH

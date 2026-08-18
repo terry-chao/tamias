@@ -24,7 +24,7 @@
 
 | 格式 | 角色 | 谁负责 |
 |---|---|---|
-| `.tdoc` | **内部工作文档**：语义场景图 + **特征树（参数化几何）** + 材质 + 视图/会话状态 | 现状：自有 `src/io`（`binary_archive` 整文件）；**后期改为 LevelDB** |
+| `.tdoc` | **内部工作文档**：语义树 + **特征树（参数化几何）** + 材质 + 视图/会话状态 | 现状：自有 `src/io`（`binary_archive` 整文件）；**后期改为 LevelDB** |
 | `.ifc` | **导入源 / 导出出口**（建筑交换格式） | IfcOpenShell（读 + 写） |
 | `.step/.iges/.brep` | 导入/导出（MCAD，BRep） | OCCT |
 | `.obj/.glb` | 导入/导出（通用 mesh） | 自有 loader |
@@ -38,12 +38,14 @@
 
 ---
 
-## 2. 五块技术的真实关系
+## 2. 几块技术的真实关系
 
 ```
 ┌────────────── Qt 客户端 (app) ──────────────┐
 │  属性面板 / 大纲树 / 建模工具 / 命令 / 撤销   │
-├────────────── 语义场景图 (document/scene) ────┤
+├────────────── BIM 业务层 (bim) ★ ────────────┤
+│  楼层 · 轴网 · 墙梁板柱宿主 · 当前标高 · 空间结构 │
+├────────────── 场景图 (document/scene) ────────┤
 │  层级 · IFC 属性 · 材质引用 · 变换 · 脏标记    │
 ├────────────── 几何层 (modeling) ─────────────┤
 │  特征树（参数化配方）· 求值器 → BRep · 三角网缓存 │
@@ -62,7 +64,8 @@
 | 层 | 文档 |
 |---|---|
 | Qt 客户端 | [APP.md](APP.md) |
-| 语义场景图 | [SCENE-GRAPH.md](SCENE-GRAPH.md) |
+| BIM 业务层 | [BIM.md](BIM.md) |
+| 场景图 | [总述](scene/index.md)、[语义树](SCENE-GRAPH.md) |
 | 几何层（造型） | [FEATURE-TREE-EVALUATOR.md](FEATURE-TREE-EVALUATOR.md)、[MCAD-PIPELINE.md](MCAD-PIPELINE.md) |
 | 渲染（含 RHI） | [RENDERING.md](RENDERING.md)、[NDC.md](NDC.md)、[OPENGL.md](OPENGL.md)、[FRUSTUM-CULLING.md](FRUSTUM-CULLING.md) |
 | 几何边界（IShapeOps） | [ISHAPE-OPS.md](ISHAPE-OPS.md) |
@@ -71,17 +74,19 @@
 
 1. **IfcOpenShell 不是和 OCCT 并列的，它坐在 OCCT 上面。** IfcOpenShell = `IfcParse`（IFC schema/对象模型/语义）+ `IfcGeom`（几何，依赖 OCCT + Boost）。所以 `IShapeOps` 边界是统一的——OCCT 直接喂 MCAD，IfcOpenShell 把 IFC 转成「语义图 + 几何」喂进来。**不要为 IFC 另开一条几何通道。**
 
-2. **IFC 和 STEP 的本质区别是语义。** STEP 是纯几何（BRep），IFC 有完整的建筑语义：空间结构、类型/实例、属性集（Pset）、材质、GUID、分类。这决定了场景图不能是扁平结构（M6 已解决）。
+2. **IFC 和 STEP 的本质区别是语义。** STEP 是纯几何（BRep），IFC 有完整的建筑语义：空间结构、类型/实例、属性集（Pset）、材质、GUID、分类。这决定了场景图不能是扁平结构（M6 已解决）。空间结构（楼层、轴网、宿主）进 [BIM 业务层](BIM.md)；`Scene` 只记 `parent`，不解释「这是几楼」。
 
 ---
 
 ## 3. 核心架构决策
 
-### 决策一：语义场景图 与 渲染场景图 分离 ✅（M6 已落地）
+### 决策一：语义树 与 渲染场景图 分离 ✅（M6 已落地）
 
-用稳定 ID 关联，不要让一个结构同时干两件事。当前 [scene.h](../src/scene/scene.h) 的 `SceneNode` 已是树（parent/children + local/world transform + 缓存 world bounds），`gpu_mesh_id` 已从语义侧移除、迁到渲染侧（[render_runtime.h](../src/engine/render/render_runtime.h) 的 `asset_to_gpu_`）。
+用稳定 ID 关联，不要让一个结构同时干两件事。当前 [scene.h](../src/engine/document/scene.h) 的 `SceneNode` 已是树（parent/children + local/world transform + 缓存 world bounds），`gpu_mesh_id` 已从语义侧移除、迁到渲染侧（[render_runtime.h](../src/engine/render/render_runtime.h) 的 `asset_to_gpu_`）。
 
-| | 语义场景图（document 侧） | 渲染场景图（render 侧） |
+「墙属于几楼」这类**建筑规则不写在 `SceneNode` 上**。语义树只记 `parent`；楼层、轴网、当前标高、宿主由 [BIM 业务层](BIM.md) 决定后写入。现状还没有楼层系统，构件入树 `parent = 0`。
+
+| | 语义树（document 侧） | 渲染场景图（render 侧） |
 |---|---|---|
 | 持有 | IFC GUID / Pset / 层级 / 材质引用 / 变换 | GPU mesh 引用 / batch / BVH / draw list |
 | 负责 | 撤销、序列化、大纲树、属性面板、语义查询 | 合批、LOD、裁剪、instancing、绘制 |
@@ -101,7 +106,7 @@ BRep（TopoDS_Shape，精确几何，缓存）
 ```
 
 - 改参数 → 特征树重算 → 新 BRep → 新三角网 → 渲染更新。BRep 和三角网**都能重建，所以都是缓存**。
-- 语义场景图引用「特征树」作为几何资产（替代现在直接引用 `MeshAsset` 三角网的关系）。
+- 语义树引用「特征树」作为几何资产（替代现在直接引用 `MeshAsset` 三角网的关系）。
 
 ---
 
@@ -159,7 +164,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 
 1. **IfcOpenShell 集成（容易翻车）。** `IfcGeom` 针对特定 OCCT 版本编译。现在用 OCCT 7.9.x，**必须让 IfcOpenShell 用同一份 OCCT**，否则同进程两个 OCCT 符号冲突。
 2. **IFC 几何导入对齐特征树。** 有了参数化内核后，IFC 的声明式几何（IfcExtrudedAreaSolid 等）**天然可以映射成特征树的节点**（轮廓 + 拉伸），而不是只导入三角网。这是「IFC 编辑」的关键——只有导成特征树，才能改 IFC 墙的厚度参数。代价比「只读导入三角网」大。
-3. **语义导入要过 IfcParse。** `IShapeOps` 现在只返回 `MeshCpu`，扛不住 IFC 语义，也扛不住特征树。需要一个 IFC 专用导入器，产出 `(语义场景图 + 特征树/网格 + 材质)`。
+3. **语义导入要过 IfcParse。** `IShapeOps` 现在只返回 `MeshCpu`，扛不住 IFC 语义，也扛不住特征树。需要一个 IFC 专用导入器，产出 `(语义树 + 特征树/网格 + 材质)`。
 
 ---
 
@@ -179,7 +184,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 | 里程碑 | 内容 |
 |---|---|
 | **材质/纹理** | RHI 真 texture/UBO/sampler，双后端，glTF PBR 基础（编辑预览也需要它） |
-| **IFC 导入** | IfcOpenShell 接入 → 语义场景图 + 特征树/网格 + 材质映射（对齐 P 线） |
+| **IFC 导入** | IfcOpenShell 接入 → 语义树 + 特征树/网格 + 材质映射（对齐 P 线） |
 | **大模型渲染** | 视锥剔除 + 按 mesh/材质合批/instancing + 不透明/透明排序 + 渐进加载 |
 | **截面/分类着色/选择** | 截面裁剪 + Appearance Profiler + 轮廓/多选 |
 | **属性面板/大纲树/测量** | 编辑的交互配套 |
@@ -206,7 +211,8 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 
 - **编辑目标 = 参数化编辑**（FreeCAD 方向），不是纯查看、也不是直接编辑。→ 决定了「特征树第一等公民」的架构。
 - **IFC 写回 = 必做**（编辑后要交付），不再可选。
-- **单 app + 共享内核，MCAD/BIM 不拆两个软件**：域差异用工作台分层，MCAD 编辑做深、BIM 编辑做浅（只编辑 IFC 参数，不做完整 BIM 建模）。详见 [DECISION-MCAD-BIM.md](DECISION-MCAD-BIM.md)。
+- **单 app + 共享内核，MCAD/BIM 不拆两个软件**：域差异用工作台 + **BIM 业务层**分层，MCAD 编辑做深、BIM 编辑做中浅（楼层/轴网/宿主在范围内；不做完整 Revit 级建模）。详见 [DECISION-MCAD-BIM.md](DECISION-MCAD-BIM.md)、[BIM.md](BIM.md)。
+- **BIM 业务层独立于语义树**：`Scene` 是域无关容器（`parent` / 变换）；墙梁板柱的归属、轴网、当前标高不进 `SceneNode` 字段。现状无楼层系统。详见 [BIM.md](BIM.md)。
 - **渲染场景图 = VSG 式（节点 + 访问者 + 命令图状态）**：渲染侧场景图用「节点 + 访问者」组织、渲染状态用命令图（`StateGroup`/`StateCommands`）挂载；它是语义树的「绘制投影」而非复制，语义树仍是层级唯一真相源，靠脏标记增量同步。详见 [SCENE-GRAPH.md](SCENE-GRAPH.md)。
 - **`.tdoc` 后期用 LevelDB 改造**：现在仍是自研 `binary_archive` 整文件（不是 LevelDB）。后期把存储引擎换成 LevelDB，以支撑增量读写和大模型局部加载；扩展名可以不变。
 

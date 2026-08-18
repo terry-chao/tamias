@@ -50,7 +50,7 @@ CAD 内核里的精确实体是 [BRep](FEATURE-TREE-EVALUATOR.md)（曲面方程
 
 ## 2. 从「场景」到「要画的清单」
 
-语义树 `Scene` 管「墙属于楼层」。渲染不要这棵树，只要叶子。
+语义树 `Scene` 管父子和变换；「墙属于哪一层」由 [BIM 业务层](BIM.md) 写入 `parent`。渲染不要这棵树，只要叶子。
 
 [document.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.cpp) 的 `Document::render_items()` 做展平：
 

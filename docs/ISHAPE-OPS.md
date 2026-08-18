@@ -1,6 +1,6 @@
 # 几何边界（IShapeOps）
 
-> 路线图五层里最下面那一层：**内核插件口**。上面的造型、场景、app **不出现** `TopoDS_Shape`。OCCT 和将来的 IfcOpenShell 都从这里接进去，**不要为 IFC 另开一条几何通道**。
+> 路线图分层里最下面：**内核插件口**。上面的造型、场景、BIM 业务、app **不出现** `TopoDS_Shape`。OCCT 和将来的 IfcOpenShell 都从这里接进去，**不要为 IFC 另开一条几何通道**。IFC 的空间结构（楼层等）进 [BIM 业务层](BIM.md)，几何仍只走本口。
 
 现在怎么造型（点工具 → 配方 → 出网）见 [特征树求值器](FEATURE-TREE-EVALUATOR.md) 第 1 节。本文只讲「口在哪、谁实现、IFC 怎么坐上来」。
 

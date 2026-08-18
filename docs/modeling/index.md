@@ -9,6 +9,7 @@
   → createGeom → IGeometryBuilder → evaluate_feature_model
     → BRep → tessellate → MeshCpu
       → Document::add_entity → 场景节点 + 渲染
+        （BIM 构件将来经 BimModel 再挂楼层，见 BIM 业务层）
 ```
 
 改参数只改配方，整棵树重算。打开 STEP 不走这条路，没有特征树。

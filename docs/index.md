@@ -6,7 +6,7 @@
 - **OCCT** 提供 BRep 几何内核
 - **特征树 + 求值器** 做参数化编辑：改参数 → 重算 → 渲染
 
-文档按 [路线图](ROADMAP.md) 里的五层排，不再平铺。
+文档按 [路线图](ROADMAP.md) 里的分层排，不再平铺。
 
 ---
 
@@ -14,7 +14,8 @@
 
 ```
 ┌────────────── Qt 客户端 (app) ──────────────┐
-├────────────── 语义场景图 (document/scene) ────┤
+├────────────── BIM 业务层 (bim) ──────────────┤
+├────────────── 场景图 (document/scene) ────────┤
 ├────────────── 几何层 (modeling) ─────────────┤
 ├────────────── 渲染 (engine/render) ───────────┤
 ├────────────── 几何边界 (IShapeOps) ──────────┤
@@ -25,7 +26,8 @@
 | 层 | 管什么 | 读这些 |
 |---|---|---|
 | **客户端** | 窗口、视口、属性面板、命令入口 | [Qt 壳](APP.md) |
-| **语义场景** | 谁属于谁、变换、包围盒、展平 draw list | [场景图](SCENE-GRAPH.md) |
+| **BIM 业务** | 楼层、轴网、墙梁板柱宿主、当前标高 | [BIM 业务层](BIM.md) |
+| **场景图** | 语义树、变换、包围盒、展平 draw list | [总述](scene/index.md)、[语义树](SCENE-GRAPH.md) |
 | **造型** | 特征树（配方）、求值流程、MCAD 深路径 | [特征树求值器](FEATURE-TREE-EVALUATOR.md)（含当前端到端流程）、[MCAD 管线](MCAD-PIPELINE.md) |
 | **渲染** | 一帧怎么画、Vulkan/OpenGL、屏外不画 | [管线与 RHI](RENDERING.md)、[视锥、NDC 与屏幕](NDC.md)、[OpenGL 后端](OPENGL.md)、[视锥剔除](FRUSTUM-CULLING.md) |
 | **几何边界** | 内核插件口：读 STEP、执行 OCCT；IFC 将来也走这里 | [IShapeOps 与 OCCT](ISHAPE-OPS.md) |

@@ -1,8 +1,8 @@
 # Qt 客户端（app）
 
-> 路线图五层里最上面那一层：**窗口、视口、面板、工具**。几何真相不在这里，app 只发命令、打包一帧、显示结果。
+> 路线图分层里最上面：**窗口、视口、面板、工具**。几何真相不在这里，app 只发命令、打包一帧、显示结果。墙梁板柱的**归属 / 楼层 / 轴网**也不在这里，见 [BIM 业务层](BIM.md)。
 
-代码在 [`src/app/`](https://github.com/terry-chao/tamias/tree/main/src/app)。命令与实体紧贴这一层，但不属于 Qt：[`src/command/`](https://github.com/terry-chao/tamias/tree/main/src/command)、[`src/entity/`](https://github.com/terry-chao/tamias/tree/main/src/entity)。
+代码在 [`src/app/`](https://github.com/terry-chao/tamias/tree/main/src/app)。命令与实体紧贴这一层，但不属于 Qt：[`src/command/`](https://github.com/terry-chao/tamias/tree/main/src/command)、[`src/entity/`](https://github.com/terry-chao/tamias/tree/main/src/entity)。BIM 命令落地后应调 `src/bim`，而不是在窗口里写宿主规则。
 
 ---
 
@@ -22,10 +22,12 @@
 
 ```
 属性面板改参数
-  → Command（src/command）改 Document
-    → modeling 重算 → 新网格
-      → DocumentViewport upload + render_items()
-        → 渲染线程画一帧
+  → Command（src/command）
+    → BIM 构件：BimModel（楼层 / 宿主）→ Document
+    → MCAD 实体：直接 Document
+      → modeling 重算 → 新网格
+        → DocumentViewport upload + render_items()
+          → 渲染线程画一帧
 ```
 
 视口怎么喊「画一帧」见 [渲染管线](RENDERING.md) 第 3 节。
@@ -36,4 +38,4 @@
 
 **有：** 打开 `.tdoc` / 导入网格、转相机、点选、挤出等特征的属性编辑、墙工具预览线、线框/着色/真实模式。
 
-**还没有（路线图支撑线）：** 大纲树、测量、工作台切换、完整建模草图 UI。这些会继续长在 app 里，内核仍走 command → document → modeling。
+**还没有（路线图支撑线）：** 大纲树、测量、工作台切换、完整建模草图 UI、楼层/轴网 UI。壳继续长在 app 里；BIM 规则走 [BIM 业务层](BIM.md)，内核仍是 command →（bim）→ document → modeling。

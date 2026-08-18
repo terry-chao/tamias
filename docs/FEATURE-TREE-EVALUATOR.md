@@ -30,9 +30,11 @@
             → 逐步得到 TopoDS_Shape
             → tessellate → MeshCpu（Z-up 转到 Y-up）
       → Document::add_entity(实体, 网格)
-        → MeshAsset + SceneNode（同一 id）
+        → MeshAsset + SceneNode（同一 id，今日 parent=0）
           → 视口 upload_mesh，下一帧 render_items 画出来
 ```
+
+BIM 构件（墙梁板柱）几何仍走这条路；**挂到哪一层**将来由 [BIM 业务层](BIM.md) 在 `add_entity` 之后 `set_parent`，不在造型里猜。
 
 [`Document`](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.cpp) **自己不做造型**，只收已经求好的实体和网格。
 
