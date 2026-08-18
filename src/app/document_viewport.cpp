@@ -475,7 +475,8 @@ void DocumentViewport::submit_current_frame() {
   frame.proj = camera_.proj_matrix(aspect);
   frame.eye_position = camera_.eye_position();
   frame.mode = mode_;
-  frame.items = document_->render_items();
+  const Frustum frustum = Frustum::from_view_proj(frame.proj * frame.view);
+  frame.items = document_->render_items(&frustum);
   frame.show_preview_line = (tool_mode_ == ToolMode::Wall) && command_system_.drag_started();
   if (frame.show_preview_line) {
     frame.preview_start = command_system_.drag_start();

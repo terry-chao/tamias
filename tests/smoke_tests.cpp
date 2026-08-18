@@ -46,6 +46,15 @@ std::uint64_t add_wall_entity(Document& doc, Vec3 start, Vec3 end) {
   return id;
 }
 
+bool contains_mesh(const std::vector<SceneDrawItem>& items, std::uint64_t mesh_asset_id) {
+  for (const auto& item : items) {
+    if (item.mesh_asset_id == mesh_asset_id) {
+      return true;
+    }
+  }
+  return false;
+}
+
 }  // namespace
 
 TEST(Math, AabbExpand) {
@@ -54,6 +63,36 @@ TEST(Math, AabbExpand) {
   box.expand({-1, 0, 4});
   EXPECT_FLOAT_EQ(box.min.x, -1.f);
   EXPECT_FLOAT_EQ(box.max.z, 4.f);
+}
+
+TEST(Math, FrustumCullsAabb) {
+  // Eye at +Z looking at origin (OpenGL camera space, −Z forward).
+  const Mat4 view = look_at({0.f, 0.f, 8.f}, {0.f, 0.f, 0.f}, {0.f, 1.f, 0.f});
+  const Mat4 proj = perspective(0.8f, 1.f, 0.05f, 500.f);
+  const Frustum frustum = Frustum::from_view_proj(proj * view);
+
+  Aabb in_front{};
+  in_front.expand({-1.f, -1.f, -1.f});
+  in_front.expand({1.f, 1.f, 1.f});
+  EXPECT_TRUE(frustum.intersects(in_front));
+
+  Aabb behind{};
+  behind.expand({-1.f, -1.f, 40.f});
+  behind.expand({1.f, 1.f, 42.f});
+  EXPECT_FALSE(frustum.intersects(behind));
+
+  Aabb beside{};
+  beside.expand({99.f, -1.f, -1.f});
+  beside.expand({101.f, 1.f, 1.f});
+  EXPECT_FALSE(frustum.intersects(beside));
+
+  // Straddles the left/right edge of the pyramid → keep (conservative).
+  Aabb grazing{};
+  grazing.expand({2.5f, -1.f, -1.f});
+  grazing.expand({4.5f, 1.f, 1.f});
+  EXPECT_TRUE(frustum.intersects(grazing));
+
+  EXPECT_TRUE(frustum.intersects(Aabb{}));
 }
 
 TEST(MeshIo, DemoCubeHasTriangles) {
@@ -218,6 +257,51 @@ TEST(Document, RenderItemsAndSelection) {
   EXPECT_TRUE(found_selected);
   ASSERT_NE(doc.selected_entity(), nullptr);
   EXPECT_EQ(doc.selected_entity()->id, first_id);
+}
+
+TEST(Document, RenderItemsFrustumCullsOffscreen) {
+  Document doc("frustum");
+  const std::uint64_t front =
+      doc.add_import_mesh("front", make_demo_cube(), Mat4::identity(), {1.f, 1.f, 1.f});
+  const std::uint64_t behind =
+      doc.add_import_mesh("behind", make_demo_cube(), translate({0.f, 0.f, 40.f}), {1.f, 1.f, 1.f});
+  const std::uint64_t beside =
+      doc.add_import_mesh("beside", make_demo_cube(), translate({80.f, 0.f, 0.f}), {1.f, 1.f, 1.f});
+
+  const auto all = doc.render_items();
+  ASSERT_EQ(all.size(), 3u);
+  EXPECT_TRUE(contains_mesh(all, front));
+  EXPECT_TRUE(contains_mesh(all, behind));
+  EXPECT_TRUE(contains_mesh(all, beside));
+
+  const Mat4 view = look_at({0.f, 0.f, 8.f}, {0.f, 0.f, 0.f}, {0.f, 1.f, 0.f});
+  const Mat4 proj = perspective(0.8f, 1.f, 0.05f, 500.f);
+  const Frustum frustum = Frustum::from_view_proj(proj * view);
+  const auto visible = doc.render_items(&frustum);
+  ASSERT_EQ(visible.size(), 1u);
+  EXPECT_TRUE(contains_mesh(visible, front));
+  EXPECT_FALSE(contains_mesh(visible, behind));
+  EXPECT_FALSE(contains_mesh(visible, beside));
+
+  EXPECT_EQ(doc.render_items(nullptr).size(), 3u);
+}
+
+TEST(Document, RenderItemsKeepsInvalidBounds) {
+  Document doc("invalid-bounds");
+  MeshAsset asset{};
+  asset.cpu = make_demo_cube();
+  auto& stored = doc.add_mesh(std::move(asset));
+  SceneNode node{};
+  node.name = "unbounded";
+  node.mesh_asset_id = stored.id;
+  const std::uint64_t id = doc.scene().add_node(std::move(node)).id;
+
+  const Mat4 view = look_at({0.f, 0.f, 8.f}, {0.f, 0.f, 0.f}, {0.f, 1.f, 0.f});
+  const Mat4 proj = perspective(0.8f, 1.f, 0.05f, 500.f);
+  const Frustum frustum = Frustum::from_view_proj(proj * view);
+  const auto items = doc.render_items(&frustum);
+  ASSERT_EQ(items.size(), 1u);
+  EXPECT_EQ(items[0].node_id, id);
 }
 
 TEST(Document, DefaultMaterialsHaveAlbedoTextures) {

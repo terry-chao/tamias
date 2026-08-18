@@ -174,12 +174,15 @@ void Document::insert_entity(std::unique_ptr<Entity> entity, MeshAsset mesh) {
   mark_dirty();
 }
 
-std::vector<SceneDrawItem> Document::render_items() const {
+std::vector<SceneDrawItem> Document::render_items(const Frustum* frustum) const {
   std::vector<SceneDrawItem> items;
   items.reserve(scene_.nodes().size());
   for (const auto& node : scene_.nodes()) {
     if (node.mesh_asset_id == 0) {
       continue;  // grouping / empty nodes carry no geometry
+    }
+    if (frustum != nullptr && !frustum->intersects(node.world_bounds)) {
+      continue;
     }
     SceneDrawItem item{};
     item.node_id = node.id;

@@ -164,6 +164,72 @@ inline Aabb transform_aabb(const Aabb& box, const Mat4& m) {
   return out;
 }
 
+// World-space plane: n·p + d >= 0 is the inside half-space.
+struct Plane {
+  Vec3 n{};
+  float d = 0.f;
+};
+
+// Camera frustum as six world-space planes (left, right, bottom, top, near, far).
+// Extract from `proj * view` only — do not multiply clip-space correction
+// (that matrix flips GPU NDC, not the world-space pyramid).
+struct Frustum {
+  Plane planes[6]{};
+
+  static Frustum from_view_proj(const Mat4& view_proj);
+
+  // Conservative: true if the box may be visible. Invalid boxes are kept
+  // (never cull what we cannot bound).
+  [[nodiscard]] bool intersects(const Aabb& box) const;
+};
+
+inline Frustum Frustum::from_view_proj(const Mat4& vp) {
+  const auto make_plane = [](float a, float b, float c, float d) {
+    Plane p{{a, b, c}, d};
+    const float len = length(p.n);
+    if (len > 1e-8f) {
+      const float inv = 1.f / len;
+      p.n = p.n * inv;
+      p.d *= inv;
+    }
+    return p;
+  };
+
+  // Clip = vp * P. perspective() maps NDC z to [0, 1], xy to [-1, 1]:
+  //   left/right/bottom/top: ±clip.w; near: clip.z >= 0; far: clip.z <= clip.w.
+  const float r0[4] = {vp(0, 0), vp(0, 1), vp(0, 2), vp(0, 3)};
+  const float r1[4] = {vp(1, 0), vp(1, 1), vp(1, 2), vp(1, 3)};
+  const float r2[4] = {vp(2, 0), vp(2, 1), vp(2, 2), vp(2, 3)};
+  const float r3[4] = {vp(3, 0), vp(3, 1), vp(3, 2), vp(3, 3)};
+
+  Frustum f;
+  f.planes[0] = make_plane(r3[0] + r0[0], r3[1] + r0[1], r3[2] + r0[2], r3[3] + r0[3]);
+  f.planes[1] = make_plane(r3[0] - r0[0], r3[1] - r0[1], r3[2] - r0[2], r3[3] - r0[3]);
+  f.planes[2] = make_plane(r3[0] + r1[0], r3[1] + r1[1], r3[2] + r1[2], r3[3] + r1[3]);
+  f.planes[3] = make_plane(r3[0] - r1[0], r3[1] - r1[1], r3[2] - r1[2], r3[3] - r1[3]);
+  f.planes[4] = make_plane(r2[0], r2[1], r2[2], r2[3]);
+  f.planes[5] = make_plane(r3[0] - r2[0], r3[1] - r2[1], r3[2] - r2[2], r3[3] - r2[3]);
+  return f;
+}
+
+inline bool Frustum::intersects(const Aabb& box) const {
+  if (!box.valid()) {
+    return true;
+  }
+  constexpr float kEps = 1e-3f;
+  for (const Plane& plane : planes) {
+    // p-vertex: AABB corner farthest in the +normal direction (inside).
+    // If even that corner is outside, the whole box is outside.
+    const Vec3 p{plane.n.x >= 0.f ? box.max.x : box.min.x,
+                 plane.n.y >= 0.f ? box.max.y : box.min.y,
+                 plane.n.z >= 0.f ? box.max.z : box.min.z};
+    if (dot(plane.n, p) + plane.d < -kEps) {
+      return false;
+    }
+  }
+  return true;
+}
+
 struct Ray {
   Vec3 origin;
   Vec3 direction;

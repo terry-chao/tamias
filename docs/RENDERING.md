@@ -1,6 +1,6 @@
 # Tamias 渲染是怎么实现的
 
-> 从「屏幕上那张图从哪来」讲到 Tamias 现在真正怎么画。所有结论对应当前代码。几何从哪来见 [特征树求值器](FEATURE-TREE-EVALUATOR.md)；语义树和展平见 [场景图](SCENE-GRAPH.md)；三角怎么进视锥、NDC、深度缓冲见 [视锥、NDC 与屏幕](NDC.md)；屏外不画见 [视锥剔除](FRUSTUM-CULLING.md)（方案，尚未实现）。OpenGL 怎么绑缓冲、画三角、绑贴图见 [OpenGL 后端](OPENGL.md)。
+> 从「屏幕上那张图从哪来」讲到 Tamias 现在真正怎么画。所有结论对应当前代码。几何从哪来见 [特征树求值器](FEATURE-TREE-EVALUATOR.md)；语义树和展平见 [场景图](SCENE-GRAPH.md)；三角怎么进视锥、NDC、深度缓冲见 [视锥、NDC 与屏幕](NDC.md)；屏外不发 draw 见 [视锥剔除](FRUSTUM-CULLING.md)（一期已落地）。OpenGL 怎么绑缓冲、画三角、绑贴图见 [OpenGL 后端](OPENGL.md)。
 
 ---
 
@@ -56,11 +56,12 @@ CAD 内核里的精确实体是 [BRep](FEATURE-TREE-EVALUATOR.md)（曲面方程
 
 1. 遍历每个 `SceneNode`。
 2. 没有网格的分组节点跳过。
-3. 带上已经算好的**世界变换**（父链乘过了，不是局部坐标）。
-4. 若节点对应实体且有材质，填上 `base_color` / 粗糙度 / 金属度 / 贴图 id。
-5. 带上 `selected`。
+3. 若传入视锥且世界包围盒完全在外，跳过。
+4. 带上已经算好的**世界变换**（父链乘过了，不是局部坐标）。
+5. 若节点对应实体且有材质，填上 `base_color` / 粗糙度 / 金属度 / 贴图 id。
+6. 带上 `selected`。
 
-产出一列 `SceneDrawItem`（[render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_types.h)）。到这里，「楼层」信息已经烤没了，只剩「这块网格放在这个世界矩阵上，用这个颜色画」。**现在不按镜头筛选**；视锥剔除一期就加在这次扫描里，见 [视锥剔除](FRUSTUM-CULLING.md)。
+产出一列 `SceneDrawItem`（[render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_types.h)）。到这里，「楼层」信息已经烤没了，只剩「这块网格放在这个世界矩阵上，用这个颜色画」。视口传入视锥时，世界包围盒完全在镜头外的叶子不会进清单，见 [视锥剔除](FRUSTUM-CULLING.md)。
 
 ---
 
@@ -76,7 +77,7 @@ CAD 内核里的精确实体是 [BRep](FEATURE-TREE-EVALUATOR.md)（曲面方程
    - 窗口、宽高
    - 相机的 view / proj、眼睛位置
    - 显示模式（线框 / 着色 / 真实）
-   - `document_->render_items()` 那份清单
+   - `document_->render_items(&frustum)` 那份清单（屏外叶子已丢掉）
    - 要不要画坐标轴、拖墙时的预览线
 4. `channel_->submit(frame)`：只覆盖「最新一帧」，渲染线程来不及画的中间帧会丢掉（游戏里常见的 mailbox）。
 
@@ -176,7 +177,7 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 1. 清屏
 2. 天空      全屏大三角，上蓝下亮，不写深度
 3. 地面网格  一块跟着相机 XZ 平移的大四边形，线是 shader 算的，不是真建了几千条线
-4. 模型      清单里每一项一次 draw_indexed（没有合批；视锥剔除方案见 [视锥剔除](FRUSTUM-CULLING.md)，尚未落地）
+4. 模型      清单里每一项一次 draw_indexed（没有合批；屏外叶子已在展平时丢掉，见 [视锥剔除](FRUSTUM-CULLING.md)）
 5. 世界坐标轴  X 红 Y 绿 Z 蓝，不测深度
 6. 预览线    拖墙时起点→光标
 7. 把这张图画到窗口（swap / present）
@@ -189,7 +190,7 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 3. 填 push constants：`mvp = clip × proj × view × 物体世界矩阵`。
 4. `draw_indexed`。
 
-**现在没有：** 视锥剔除、按材质合批、GPU instancing、透明排序。一万个构件 = 一万次 draw。大模型会先卡在这里，不卡在「三角太多」本身。
+**现在没有：** 按材质合批、GPU instancing、透明排序。屏外叶子一期已经不进清单；一万个仍在画面里的构件仍是一万次 draw。大模型会先卡在合批，不卡在「三角太多」本身。
 
 ---
 
@@ -252,13 +253,13 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 
 这些在 [路线图](ROADMAP.md) 里，**不是漏画**，是还没做：
 
-- 视锥剔除 / 合批 / instancing（大 BIM 的性能命门；剔除分三期，见 [视锥剔除](FRUSTUM-CULLING.md)）
+- 合批 / instancing（大 BIM 的下一道性能命门；视锥一期已落地，二期/三期见 [视锥剔除](FRUSTUM-CULLING.md)）
 - 截面剖切、透明排序、Hidden Line
 - 阴影、AO、完整 IBL
 - 渲染侧场景图（VSG 式节点 + 命令图）——现在每帧展平
 - 多选轮廓、按类型分类着色
 
-拾取 BVH 已经有了，但只给鼠标点选用，**没有**拿来做绘制剔除（三期才复用）。
+拾取 BVH 已经有了，但只给鼠标点选用，**没有**拿来做绘制剔除（三期才复用）。一期剔除走的是每个叶子的 `world_bounds`。
 
 ---
 

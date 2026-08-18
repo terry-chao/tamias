@@ -220,7 +220,8 @@ class Document {
   }
 
   // ===== 渲染快照（app 不再遍历 SceneNode）=====
-  [[nodiscard]] std::vector<SceneDrawItem> render_items() const;
+  // 传入 frustum 时丢掉世界包围盒完全在视锥外的叶子；nullptr 保持全量清单。
+  [[nodiscard]] std::vector<SceneDrawItem> render_items(const Frustum* frustum = nullptr) const;
 
   // ===== 导入网格（无实体，如 STEP/OBJ/glTF）=====
   std::uint64_t add_import_mesh(std::string name, MeshCpu mesh, Mat4 transform, Vec3 color);

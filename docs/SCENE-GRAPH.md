@@ -127,6 +127,7 @@ n->world_transform = parent_world * n->local_transform;  // 自顶向下累积
 ```cpp
 for (const auto& node : scene_.nodes()) {
   if (node.mesh_asset_id == 0) continue;   // 分组节点不产出几何
+  if (frustum && !frustum->intersects(node.world_bounds)) continue;
   SceneDrawItem item{};
   item.transform = node.world_transform;    // ← 已经烘好的全局矩阵
   item.selected  = node.selected;           // ← 选中态也带下去了
@@ -147,7 +148,7 @@ struct SceneDrawItem {
 };
 ```
 
-**关键**：`render_items()` 输出的是**平铺列表**——遍历语义树、跳过纯分组节点、把每个有几何的节点烘成一个「网格 + 全局矩阵 + 材质 + 选中态」的叶子。渲染侧拿到它时**已经不知道「墙的爸爸是楼层」**，只知道「这个网格要放在这个世界位置」。
+**关键**：`render_items()` 输出的是**平铺列表**——遍历语义树、跳过纯分组节点和（可选）屏外叶子、把每个有几何的节点烘成一个「网格 + 全局矩阵 + 材质 + 选中态」的叶子。渲染侧拿到它时**已经不知道「墙的爸爸是楼层」**，只知道「这个网格要放在这个世界位置」。
 
 ### 3.4 渲染侧：留存 GPU 网格 + 每帧展平提交（半留存）
 
@@ -207,7 +208,7 @@ Tamias 渲染 (render_runtime)     OCCT 渲染 (V3d_Viewer + OpenGl 驱动)
 |---|---|---|
 | **highlight / selection** | 点中墙、高亮整层，交互刚需 | `SceneDrawItem.selected` 字段已留位，渲染侧未消费 |
 | **z-layer 抽象** | 轴网/标高/标注/剖切框这些 overlay，别再布尔硬编码 | `FrameSubmission` 里 `show_axes/show_grid/show_preview_line` + 单独 pipeline 是当前笨办法 |
-| **空间索引 + 实例化** | BIM 规模（几万构件）的剔除与合批 | 视锥剔除方案见 [视锥剔除](FRUSTUM-CULLING.md)；这是语义树之外的**独立加速结构**，不是场景图 |
+| **空间索引 + 实例化** | BIM 规模（几万构件）的剔除与合批 | 视锥一期已落地，见 [视锥剔除](FRUSTUM-CULLING.md)；合批 / BVH 视锥仍缺。加速结构不是场景图 |
 | **按楼层/类别可见性** | 「只看结构柱」「关掉 MEP」 | 语义树驱动，渲染侧只收可见性标志 |
 
 **最重要的提醒**：最后两项（空间索引、实例化）补的是**渲染侧加速结构（八叉树/BVH + 实例表）**，不是「把语义树搬进渲染」。语义树永远留在 `Scene` / Document，渲染永远只拿展平结果。
