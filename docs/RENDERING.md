@@ -1,6 +1,6 @@
 # Tamias 渲染是怎么实现的
 
-> 从「屏幕上那张图从哪来」讲到 Tamias 现在真正怎么画。所有结论对应当前代码。几何从哪来见 [特征树求值器](FEATURE-TREE-EVALUATOR.md)；语义树和展平见 [场景图](SCENE-GRAPH.md)。
+> 从「屏幕上那张图从哪来」讲到 Tamias 现在真正怎么画。所有结论对应当前代码。几何从哪来见 [特征树求值器](FEATURE-TREE-EVALUATOR.md)；语义树和展平见 [场景图](SCENE-GRAPH.md)；屏外不画见 [视锥剔除](FRUSTUM-CULLING.md)（方案，尚未实现）。
 
 ---
 
@@ -58,7 +58,7 @@ CAD 内核里的精确实体是 [BRep](FEATURE-TREE-EVALUATOR.md)（曲面方程
 4. 若节点对应实体且有材质，填上 `base_color` / 粗糙度 / 金属度 / 贴图 id。
 5. 带上 `selected`。
 
-产出一列 `SceneDrawItem`（[render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_types.h)）。到这里，「楼层」信息已经烤没了，只剩「这块网格放在这个世界矩阵上，用这个颜色画」。
+产出一列 `SceneDrawItem`（[render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_types.h)）。到这里，「楼层」信息已经烤没了，只剩「这块网格放在这个世界矩阵上，用这个颜色画」。**现在不按镜头筛选**；视锥剔除一期就加在这次扫描里，见 [视锥剔除](FRUSTUM-CULLING.md)。
 
 ---
 
@@ -174,7 +174,7 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 1. 清屏
 2. 天空      全屏大三角，上蓝下亮，不写深度
 3. 地面网格  一块跟着相机 XZ 平移的大四边形，线是 shader 算的，不是真建了几千条线
-4. 模型      清单里每一项一次 draw_indexed（没有合批、没有视锥剔除）
+4. 模型      清单里每一项一次 draw_indexed（没有合批；视锥剔除方案见 [视锥剔除](FRUSTUM-CULLING.md)，尚未落地）
 5. 世界坐标轴  X 红 Y 绿 Z 蓝，不测深度
 6. 预览线    拖墙时起点→光标
 7. 把这张图画到窗口（swap / present）
@@ -250,13 +250,13 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 
 这些在 [路线图](ROADMAP.md) 里，**不是漏画**，是还没做：
 
-- 视锥剔除 / 合批 / instancing（大 BIM 的性能命门）
+- 视锥剔除 / 合批 / instancing（大 BIM 的性能命门；剔除分三期，见 [视锥剔除](FRUSTUM-CULLING.md)）
 - 截面剖切、透明排序、Hidden Line
 - 阴影、AO、完整 IBL
 - 渲染侧场景图（VSG 式节点 + 命令图）——现在每帧展平
 - 多选轮廓、按类型分类着色
 
-拾取 BVH 已经有了，但只给鼠标点选用，**没有**拿来做绘制剔除。
+拾取 BVH 已经有了，但只给鼠标点选用，**没有**拿来做绘制剔除（三期才复用）。
 
 ---
 
@@ -289,7 +289,7 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 | 文件 | 角色 |
 |---|---|
 | [document_viewport.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/document_viewport.cpp) | 相机、提交帧、上传网格、点选 |
-| [document.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.cpp) `render_items()` | 语义树 → 平铺清单 |
+| [document.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.cpp) `render_items()` | 语义树 → 平铺清单（视锥筛选见 [视锥剔除](FRUSTUM-CULLING.md)） |
 | [render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_types.h) | `SceneDrawItem` / `RenderMode` |
 | [render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.cpp) | 线程、上传、一帧绘制顺序 |
 | [rhi/device.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/device.h) | GPU 抽象 |

@@ -116,7 +116,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 | 能力 | 现状 |
 |---|---|
 | 遍历 | ✅ 语义侧展平成 `render_items`，渲染侧平铺 `for` 循环提交 |
-| 视锥剔除 | ❌ 每个 item 无论是否在视野内，都发一次 `draw_indexed` |
+| 视锥剔除 | ❌ 每个 item 无论是否在视野内，都发一次 `draw_indexed`（方案：[视锥剔除](FRUSTUM-CULLING.md)） |
 | 合批 / GPU instancing | ❌ 每 item 一次 draw，没有按 mesh / 材质分桶 |
 | 排序 | ❌ 按列表顺序画，没有不透明 / 透明排序 |
 
@@ -124,7 +124,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 
 > 注：没剔除不是“画不出来”——GPU 的顶点裁剪会丢掉屏外三角形；但 draw call 已经付了。大 BIM 里 10 万个 item = 10 万次 draw，哪怕 9 万在屏外，CPU 还是发了 10 万次。这就是“无剔除”的代价，也是 draw call 爆炸的直接来源。
 
-1. **大模型可扩展性（第一优先级）。** IFC 动辄 10 万+ 元素、千万级三角。核心指标是 **draw call 数**——绝不能每元素一个 draw。手段：按材质分桶合批、GPU instancing、视锥裁剪 + 空间索引、渐进/流式加载 + LOD。
+1. **大模型可扩展性（第一优先级）。** IFC 动辄 10 万+ 元素、千万级三角。核心指标是 **draw call 数**——绝不能每元素一个 draw。手段：按材质分桶合批、GPU instancing、[视锥剔除](FRUSTUM-CULLING.md) + 空间索引、渐进/流式加载 + LOD。
 2. **材质系统。** 现在材质就是一个 push constant 里的 `color[4]`。需要真正的 Material 抽象：PBR metallic-roughness + base color + 纹理 + 透明度，语义对齐 glTF。这要求 RHI 补上真东西——[device.h](../src/engine/render/rhi/device.h) 里 `create_texture` 还是占位，只有 push constant 没有 descriptor set / UBO / sampler。
 3. **截面裁剪（BIM 刚需）。** clip plane 传 shader 逐像素 discard，或 stencil 双面裁剪 + cap 面填充。双后端 RHI 两套管线语义要对齐。
 4. **透明度。** 玻璃/幕墙。不透明先画、透明按深度排序、per-material blend 状态。
