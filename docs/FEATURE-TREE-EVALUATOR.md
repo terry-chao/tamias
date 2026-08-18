@@ -12,9 +12,108 @@
 - 求值器把配方翻译成 OCCT 能懂的 `TopoDS_Shape` 操作。
 - 算出来的 BRep（精确几何）和三角网都是**缓存**，改了参数就把配方重走一遍，缓存重新生成。
 
+现在没有草图约束求解器。盒子、墙、柱都是「矩形/圆 + 拉伸」写死在实体构造函数里。将来的 sketch → 挤出 → 倒角见 [MCAD 管线](MCAD-PIPELINE.md)。
+
 ---
 
-## 1. 三层结构
+## 1. 现在具体怎么造型（端到端）
+
+一条固定闭环：**先写配方，再让 OCCT 按配方做出三角网，再挂进文档去画。**
+
+```
+点工具 / 拖墙
+  → Command 记下位置
+    → 构造 Entity：往 FeatureModel 里写特征（配方）
+      → Entity::createGeom()
+        → IGeometryBuilder.build()          ← 几何边界
+          → evaluate_feature_model()        ← OCCT 求值
+            → 逐步得到 TopoDS_Shape
+            → tessellate → MeshCpu（Z-up 转到 Y-up）
+      → Document::add_entity(实体, 网格)
+        → MeshAsset + SceneNode（同一 id）
+          → 视口 upload_mesh，下一帧 render_items 画出来
+```
+
+[`Document`](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.cpp) **自己不做造型**，只收已经求好的实体和网格。
+
+### 1.1 点一下：先有配方，还没有实体形状
+
+以盒子为例。工具武装后点地面，[`CreatePrimitiveCommand`](https://github.com/terry-chao/tamias/blob/main/src/command/create_primitive_command.cpp) 用点击位置构造 `BoxEntity`。构造函数只写特征树，不调 OCCT：
+
+```cpp
+// box_entity.cpp
+auto& profile = model.add_feature(FeatureKind::RectProfile, {},
+                                  {{"width", 1.0}, {"height", 1.0}});
+model.add_feature(FeatureKind::Extrude, {profile.id}, {{"depth", 1.0}});
+local_transform = translate(position);
+```
+
+内存里是：
+
+```
+特征1  RectProfile   inputs=[]     width=1, height=1
+特征2  Extrude       inputs=[1]    depth=1
+放置    local_transform = 点到的位置
+```
+
+墙同理：两点算出长度、中点、朝向，配方仍是 `RectProfile(厚×长) + Extrude(高)`，变换是平移到中点再绕 Y 转（[wall_entity.cpp](https://github.com/terry-chao/tamias/blob/main/src/entity/wall_entity.cpp)）。柱、板、门、窗都是这一套，只是默认尺寸不同。
+
+### 1.2 createGeom：配方交给几何边界
+
+[`Entity::createGeom`](https://github.com/terry-chao/tamias/blob/main/src/entity/entity.cpp) 只做一件事：
+
+```cpp
+return geometry_builder().build(model, deflection);
+```
+
+`geometry_builder()` 是全局的 `OcctGeometryBuilder`，里面就是 `evaluate_feature_model(model, 0.05)`。`0.05` 是离散精度。实体层仍然看不到 `TopoDS_Shape`。口在哪见 [几何边界](ISHAPE-OPS.md)。
+
+### 1.3 求值器：按顺序把每一步做成 BRep
+
+细节见下面第 4 节。盒子走两步：矩形面 → 沿 Z 拉伸 → 实心盒子。只对**输出特征**（没被别人引用的那个）tessellate，BRep 算完就丢，不存进文档。
+
+### 1.4 进文档：网格和场景节点绑在一起
+
+`createGeom` 成功后：`document_->add_entity(盒子实体, 三角网)`。
+
+1. 三角网放进 `MeshAsset`
+2. 建 `SceneNode`：名字、`mesh_asset_id`、局部变换
+3. **实体 id = 场景节点 id**，再 `recompute_world()` 算世界矩阵和包围盒
+
+下一帧视口 `upload_mesh`，`render_items()` 带上世界矩阵去画。渲染不知道这是盒子。上屏见 [渲染管线](RENDERING.md)。
+
+### 1.5 改参数：只改配方，整棵树重算
+
+属性面板改 `depth` → [`SetFeatureParamCommand`](https://github.com/terry-chao/tamias/blob/main/src/command/set_feature_param_command.cpp)：
+
+```
+entity->model.set_param(feature_id, "depth", 2.0)   // 只改配方
+geometry_builder().build(entity->model)             // 全量再求值
+asset->cpu = 新三角网                               // 同一 mesh id 换内容
+recompute_scene()
+```
+
+视口发现网格脏了就重新 upload。屏幕上的盒子变高，id 没变。
+
+加圆角：[`AddFeatureCommand`](https://github.com/terry-chao/tamias/blob/main/src/command/add_feature_command.cpp) 在当前输出特征后面再挂一个 `Fillet`，再 `build` 一次。布尔则是把另一棵特征树 `append` 进来再加 `Boolean` 节点。
+
+### 1.6 两条入口不要混
+
+| 入口 | 走哪 | 有没有特征树 |
+|---|---|---|
+| 点盒子 / 拖墙 / 改参数 | 上面这条：配方 → OCCT 求值 | 有，能再改 |
+| 打开 STEP | `IShapeOps.read_file` → tessellate | **没有**，只是一坨三角，改不了「原来的拉伸深度」 |
+
+### 1.7 现在刻意没做的
+
+- 真正的草图 + 约束（现在是写死的矩形/圆）
+- 增量求值（每次从第一个特征算到最后）
+- 稳的拓扑命名（圆角仍是「第 0 条边」）
+- 导入 STEP 反建成特征树
+
+---
+
+## 2. 三层结构
 
 | 层 | 文件 | 职责 | 跟 OCCT 的关系 |
 |---|---|---|---|
@@ -26,7 +125,7 @@
 
 ---
 
-## 2. 特征树长什么样
+## 3. 特征树长什么样
 
 一个特征（`feature.h` 里的 `Feature`）：
 
@@ -52,7 +151,7 @@ struct Feature {
 
 ---
 
-## 3. 求值器怎么工作
+## 4. 求值器怎么工作
 
 入口是 [occt_feature.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt_feature.cpp) 的 `evaluate_feature_model(model, deflection)`，流程：
 
@@ -87,7 +186,7 @@ struct Feature {
 
 ---
 
-## 4. 从 BRep 到三角网（tessellate）
+## 5. 从 BRep 到三角网（tessellate）
 
 OCCT 算出来的 `TopoDS_Shape` 是**精确的 BRep**（参数化曲面 + 拓扑边/面），但渲染器要的是**三角网**。转换在 `tessellate_shape`：
 
@@ -100,7 +199,7 @@ OCCT 算出来的 `TopoDS_Shape` 是**精确的 BRep**（参数化曲面 + 拓�
 
 ---
 
-## 5. 坐标系转换（容易踩的坑）
+## 6. 坐标系转换（容易踩的坑）
 
 OCCT 是 **Z-up**（Z 朝上），Tamias 视口是 **Y-up**（glTF/Blender 惯例，Y 朝上）。所以 tessellate 完最后一步把每个顶点绕 X 转 -90°：
 
@@ -112,25 +211,13 @@ OCCT 是 **Z-up**（Z 朝上），Tamias 视口是 **Y-up**（glTF/Blender 惯�
 
 ---
 
-## 6. 「改参数 → 重算」闭环
+## 7. 「改参数 → 重算」闭环
 
-以改一个盒子的 `depth` 为例（[set_feature_param_command.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/set_feature_param_command.cpp)）：
-
-```
-set_param(feature_id, "depth", 2.0)
-   ↓ 改的是配方（FeatureModel 里的 params）
-geometry_builder().build(model)   ← 重新走一遍求值器
-   ↓ RectProfile 重算 → Extrude 重算 → 新 TopoDS_Shape → 新三角网
-asset->cpu = 新三角网
-   ↓
-GPU 上传新网格 → 屏幕更新
-```
-
-整个闭环里，**用户改的始终是「配方」里的一个参数**，OCCT 只是被重新调用一遍去「重做菜」。三角网上屏之后的路径见 [渲染管线](RENDERING.md)。
+端到端见上文 [第 1.5 节](#1-现在具体怎么造型端到端)。要点只有一句：用户改的始终是配方里的一个数，OCCT 被重新调用一遍去「重做菜」，同一 `mesh_asset_id` 换掉 `MeshCpu`。三角网上屏见 [渲染管线](RENDERING.md)。
 
 ---
 
-## 7. 三个关键设计点 / 坑
+## 8. 三个关键设计点 / 坑
 
 1. **拓扑命名（P3，还没做）**：`Fillet`/`Chamfer` 引用的是「第 N 条边」的**序号**（`nth_edge`）。改上游参数后 BRep 重算、边的编号会变，第 N 条边可能不再是原来那条 → 圆角倒错边。ROADMAP 里的「索引法 → 几何法」就是解决这个。现在是「索引法」，脆。
 

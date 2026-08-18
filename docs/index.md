@@ -26,7 +26,7 @@
 |---|---|---|
 | **客户端** | 窗口、视口、属性面板、命令入口 | [Qt 壳](APP.md) |
 | **语义场景** | 谁属于谁、变换、包围盒、展平 draw list | [场景图](SCENE-GRAPH.md) |
-| **造型** | 特征树（配方）、求值流程、MCAD 深路径 | [特征树求值器](FEATURE-TREE-EVALUATOR.md)、[MCAD 管线](MCAD-PIPELINE.md) |
+| **造型** | 特征树（配方）、求值流程、MCAD 深路径 | [特征树求值器](FEATURE-TREE-EVALUATOR.md)（含当前端到端流程）、[MCAD 管线](MCAD-PIPELINE.md) |
 | **渲染** | 一帧怎么画、Vulkan/OpenGL、屏外不画 | [管线与 RHI](RENDERING.md)、[视锥剔除](FRUSTUM-CULLING.md) |
 | **几何边界** | 内核插件口：读 STEP、执行 OCCT；IFC 将来也走这里 | [IShapeOps 与 OCCT](ISHAPE-OPS.md) |
 
