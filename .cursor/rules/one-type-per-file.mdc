@@ -1,0 +1,47 @@
+---
+description: 一类一文件：公开类型不要塞进汇总头文件
+alwaysApply: true
+---
+
+# 一类一文件
+
+新增或拆分 `class` / `struct` / `enum class` 时，**每个公开类型独占一个头文件**（实现放同名 `.cpp`，若需要）。按类型名找文件，不要把无关类型堆进 `math.h` 这类厨房水槽文件。
+
+## 文件命名
+
+- 文件名用 **snake_case**，与类型对应：`Vec3` → `vec3.h`，`Ray` → `ray.h`，`BoxEntity` → `box_entity.h`
+- 目录按模块放（如 `src/engine/math/`、`src/entity/`），不要为了省事塞进已有大头文件
+
+## 要这样做
+
+```
+src/engine/math/vec2.h    // struct Vec2
+src/engine/math/vec3.h    // struct Vec3 + 仅属于 Vec3 的运算（dot/cross/length）
+src/engine/math/mat4.h    // struct Mat4
+src/engine/math/ray.h     // struct Ray
+src/engine/math/aabb.h    // struct Aabb
+```
+
+- 该类型的成员、同名运算符、紧耦合的自由函数（如 `dot(Vec3, Vec3)`）放在**该类型的文件**里
+- 允许一个只做转发的聚合头（如 `math.h` 里全是 `#include "vec3.h"`），**不要在聚合头里再定义类型**
+
+## 不要这样做
+
+```cpp
+// ❌ math.h 里一股脑定义 Vec2 / Vec3 / Mat4 / Aabb / Plane / Frustum / Ray
+struct Vec2 { ... };
+struct Vec3 { ... };
+struct Ray { ... };
+```
+
+```cpp
+// ❌ 在无关文件里顺手塞一个公开类型
+// view_cube_widget.h
+struct Vec3f { ... };
+```
+
+## 例外（仅这些）
+
+- **嵌套私有类型**：只被一个类使用的 `private` nested struct / enum，可留在该类文件内
+- **第三方 / 生成代码**：不要为对齐这条规则去改 `3rdparty/` 或 autogen
+- **已有厨房水槽文件**：改到它时顺手拆出你正在动的那个类型；不要在同一次改动里无关地大规模搬家
