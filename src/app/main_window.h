@@ -19,6 +19,7 @@ class QComboBox;
 namespace tamias {
 
 class PropertyPanel;
+class HandleInspector;
 
 class MainWindow final : public QMainWindow {
   Q_OBJECT
@@ -38,6 +39,7 @@ class MainWindow final : public QMainWindow {
   void show_documents();
   void activate_open_document(int index);
   void refresh_property_panel();
+  void refresh_handle_inspector();
 
  private:
   void add_document_tab(std::shared_ptr<Document> document,
@@ -80,6 +82,7 @@ class MainWindow final : public QMainWindow {
   QActionGroup* create_group_ = nullptr;
   QComboBox* render_mode_combo_ = nullptr;
   PropertyPanel* property_panel_ = nullptr;
+  HandleInspector* handle_inspector_ = nullptr;
 };
 
 }  // namespace tamias

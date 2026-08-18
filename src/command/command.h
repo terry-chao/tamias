@@ -3,6 +3,8 @@
 #include "engine/core/result.h"
 #include "engine/math/math.h"
 
+#include <cstdint>
+
 namespace tamias {
 
 // 可逆编辑命令的基类。
@@ -20,6 +22,11 @@ class Command {
   virtual Result<bool> on_point(Vec3 point) {
     (void)point;
     return Err("Command is not interactive");
+  }
+  // 带拾取的交互点（窗/门点在墙上时把宿主 id 带过来）。默认忽略拾取。
+  virtual Result<bool> on_pick(Vec3 point, std::uint64_t picked_entity_id) {
+    (void)picked_entity_id;
+    return on_point(point);
   }
   // 交互式命令的「起点」（供视口画预览线）。默认无起点。
   virtual bool has_start() const { return false; }

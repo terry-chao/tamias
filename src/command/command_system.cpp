@@ -37,11 +37,11 @@ Result<void> CommandSystem::dispatch(Document& doc, const std::string& name,
   return {};
 }
 
-Result<bool> CommandSystem::feed_point(Vec3 point) {
+Result<bool> CommandSystem::feed_point(Vec3 point, std::uint64_t picked_entity_id) {
   if (!pending_) {
     return Err("CommandSystem: no pending command");
   }
-  auto done = pending_->on_point(point);
+  auto done = pending_->on_pick(point, picked_entity_id);
   if (!done) {
     return Err(done.error());
   }

@@ -68,6 +68,41 @@ inline Vec3 operator*(const Mat4& m, Vec3 v) {
           m(2, 0) * v.x + m(2, 1) * v.y + m(2, 2) * v.z + m(2, 3)};
 }
 
+// Inverse of an affine transform (last row 0,0,0,1). Rotation+translation is enough
+// for wall/window placement; non-invertible linear parts return identity.
+inline Mat4 invert_affine(const Mat4& m) {
+  const float a00 = m(0, 0);
+  const float a01 = m(0, 1);
+  const float a02 = m(0, 2);
+  const float a10 = m(1, 0);
+  const float a11 = m(1, 1);
+  const float a12 = m(1, 2);
+  const float a20 = m(2, 0);
+  const float a21 = m(2, 1);
+  const float a22 = m(2, 2);
+  const float det = a00 * (a11 * a22 - a12 * a21) - a01 * (a10 * a22 - a12 * a20) +
+                    a02 * (a10 * a21 - a11 * a20);
+  Mat4 r = Mat4::identity();
+  if (std::fabs(det) < 1e-12f) {
+    return r;
+  }
+  const float inv = 1.f / det;
+  r(0, 0) = (a11 * a22 - a12 * a21) * inv;
+  r(0, 1) = (a02 * a21 - a01 * a22) * inv;
+  r(0, 2) = (a01 * a12 - a02 * a11) * inv;
+  r(1, 0) = (a12 * a20 - a10 * a22) * inv;
+  r(1, 1) = (a00 * a22 - a02 * a20) * inv;
+  r(1, 2) = (a02 * a10 - a00 * a12) * inv;
+  r(2, 0) = (a10 * a21 - a11 * a20) * inv;
+  r(2, 1) = (a01 * a20 - a00 * a21) * inv;
+  r(2, 2) = (a00 * a11 - a01 * a10) * inv;
+  const Vec3 t{m(0, 3), m(1, 3), m(2, 3)};
+  r(0, 3) = -(r(0, 0) * t.x + r(0, 1) * t.y + r(0, 2) * t.z);
+  r(1, 3) = -(r(1, 0) * t.x + r(1, 1) * t.y + r(1, 2) * t.z);
+  r(2, 3) = -(r(2, 0) * t.x + r(2, 1) * t.y + r(2, 2) * t.z);
+  return r;
+}
+
 inline Mat4 translate(Vec3 t) {
   Mat4 r = Mat4::identity();
   r(0, 3) = t.x;

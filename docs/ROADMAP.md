@@ -34,7 +34,7 @@
 - 编辑永远发生在内部 `Document` 上；IFC / STEP 只是「进/出」的端口。
 - 因为要**编辑**，`.tdoc` 存的不再只是三角网，而是**特征树（参数 + 依赖）**——三角网和 BRep 都是可从特征树重算的**缓存**。
 - `.tdoc` 是自包含的：打开 IFC 翻译进内部结构后，原 IFC 文件即可丢弃。
-- **现状不是 LevelDB。** 当前 `.tdoc` 是 `TMAS` magic + chunk（META / MESH / SCEN / VIEW / FEAT / MATL / TEXT）的整文件二进制，打开/保存都全量读写。后期要把容器改成 **LevelDB 键值库**（增量读写、大模型局部加载/更新），扩展名仍可以是 `.tdoc`。
+- **现状不是 LevelDB。** 当前 `.tdoc` 是 `TMAS` magic + chunk（META / MESH / SCEN / VIEW / FEAT / MATL / TEXT / RELA）的整文件二进制，打开/保存都全量读写。后期要把容器改成 **LevelDB 键值库**（增量读写、大模型局部加载/更新），扩展名仍可以是 `.tdoc`。
 
 ---
 

@@ -1,3 +1,5 @@
+#include "bim/host_geometry.h"
+#include "bim/host_update.h"
 #include "command/command_system.h"
 #include "command/history.h"
 #include "engine/io/binary_archive.h"
@@ -638,3 +640,108 @@ TEST(CommandSystem, BooleanUndoRedo) {
   system.redo();
   EXPECT_EQ(doc.entities().size(), 1u);
 }
+
+TEST(Bim, HostPlacementAlignAndValidity) {
+  WallEntity wall({0.f, 0.f, 0.f}, {0.f, 0.f, 5.f}, 0.2, 3.0);
+  WindowEntity window({0.f, 0.9f, 2.5f}, 1.2, 1.2, 0.08);
+  const WallSize size = wall_size(wall);
+  EXPECT_NEAR(size.length, 5.0, 1e-6);
+  EXPECT_NEAR(size.height, 3.0, 1e-6);
+
+  HostPlacement placement = placement_from_world(wall, window, {0.f, 1.5f, 2.5f});
+  align_placement(placement, size, opening_size(window));
+  EXPECT_TRUE(placement_is_valid(placement, size, opening_size(window)));
+  EXPECT_NEAR(placement.along, 0.5, 0.05);
+
+  HostPlacement overflow{};
+  overflow.along = 0.05;
+  overflow.sill = 2.5;
+  align_placement(overflow, size, opening_size(window));
+  EXPECT_GE(overflow.along, 1.2 * 0.5 / 5.0 - 1e-6);
+  EXPECT_LE(overflow.sill + 1.2, 3.0 + 1e-6);
+  EXPECT_TRUE(placement_is_valid(overflow, size, opening_size(window)));
+}
+
+TEST(Bim, WallChangeNotifiesHostedWindow) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+  Document doc("host");
+
+  ASSERT_TRUE(system.dispatch(doc, "create_wall", {{"thickness", 0.2}, {"height", 3.0}}));
+  ASSERT_TRUE(system.feed_point({0.f, 0.f, 0.f}));
+  ASSERT_TRUE(system.feed_point({0.f, 0.f, 5.f}));
+  ASSERT_EQ(doc.entities().size(), 1u);
+  const std::uint64_t wall_id = doc.entities().begin()->first;
+
+  ASSERT_TRUE(system.dispatch(doc, "create_window", {}));
+  ASSERT_TRUE(system.feed_point({0.f, 1.5f, 2.5f}, wall_id));
+  ASSERT_EQ(doc.entities().size(), 2u);
+
+  const Relation* rel = nullptr;
+  std::uint64_t window_id = 0;
+  for (const auto& [id, entity] : doc.entities()) {
+    if (entity->kind() == EntityKind::Window) {
+      window_id = id;
+      rel = doc.bim().host_of(id);
+    }
+  }
+  ASSERT_NE(rel, nullptr);
+  EXPECT_EQ(rel->to, wall_id);
+  EXPECT_EQ(rel->from, window_id);
+  EXPECT_TRUE(rel->valid);
+
+  Entity* wall = doc.entity(wall_id);
+  ASSERT_NE(wall, nullptr);
+  const std::uint64_t profile_id = wall->model.features().front().id;
+  ASSERT_TRUE(system.dispatch(doc, "set_param",
+                              {{"entity_id", static_cast<std::int64_t>(wall_id)},
+                               {"feature_id", static_cast<std::int64_t>(profile_id)},
+                               {"param_name", std::string("width")},
+                               {"value", 0.4}}));
+
+  const Relation* after_rel = doc.bim().host_of(window_id);
+  ASSERT_NE(after_rel, nullptr);
+  EXPECT_TRUE(after_rel->valid);
+  EXPECT_NEAR(opening_size(*doc.entity(window_id)).thickness, 0.4, 1e-6);
+}
+
+TEST(Bim, RelationRoundTrip) {
+  Document doc("rel");
+  const std::uint64_t wall_id = add_wall_entity(doc, {0.f, 0.f, 0.f}, {0.f, 0.f, 5.f});
+  auto window = std::make_unique<WindowEntity>(Vec3{0.f, 0.9f, 2.5f});
+  MeshAsset mesh{};
+  mesh.name = window->name;
+  mesh.cpu = make_demo_cube();
+  auto& stored = doc.add_mesh(std::move(mesh));
+  window->mesh_asset_id = stored.id;
+  SceneNode node{};
+  node.name = window->name;
+  node.mesh_asset_id = window->mesh_asset_id;
+  SceneNode& stored_node = doc.scene().add_node(std::move(node));
+  window->id = stored_node.id;
+  const std::uint64_t window_id = window->id;
+  doc.insert_entity(std::move(window));
+
+  Relation rel{};
+  rel.kind = RelationKind::HostedOn;
+  rel.from = window_id;
+  rel.to = wall_id;
+  rel.placement.along = 0.42;
+  rel.placement.sill = 0.9;
+  rel.valid = true;
+  const std::uint64_t rel_id = doc.bim().add(rel).id;
+
+  auto bytes = serialize_document(doc);
+  ASSERT_TRUE(bytes) << bytes.error();
+  auto restored = deserialize_document(*bytes);
+  ASSERT_TRUE(restored) << restored.error();
+  const Relation* loaded = restored->bim().host_of(window_id);
+  ASSERT_NE(loaded, nullptr);
+  EXPECT_EQ(loaded->id, rel_id);
+  EXPECT_EQ(loaded->to, wall_id);
+  EXPECT_NEAR(loaded->placement.along, 0.42, 1e-9);
+  EXPECT_NEAR(loaded->placement.sill, 0.9, 1e-9);
+  EXPECT_TRUE(loaded->valid);
+}
+

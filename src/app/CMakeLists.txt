@@ -12,6 +12,7 @@ add_executable(tamias
   i18n.cpp
   settings_dialog.cpp
   document_viewport.cpp
+  handle_inspector.cpp
   property_panel.cpp
   view_cube_widget.cpp
   rhi_backends.cpp

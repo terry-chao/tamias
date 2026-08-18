@@ -4,7 +4,7 @@
 
 namespace tamias {
 
-// 门：先按独立门扇建模；墙开洞关系后续接入 Boolean/洞口系统。
+// 门：点在墙上时写入 HostedOn 关联，随墙重造型；开洞布尔后续接入。
 class DoorEntity final : public FamilyEntity {
  public:
   DoorEntity() : FamilyEntity(EntityKind::Door, "Single-Flush Door") {}

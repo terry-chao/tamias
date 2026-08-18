@@ -1,5 +1,6 @@
 #include "create_primitive_command.h"
 
+#include "bim/host_update.h"
 #include "entity/box_entity.h"
 #include "entity/column_entity.h"
 #include "entity/cylinder_entity.h"
@@ -12,8 +13,11 @@ namespace tamias {
 CreatePrimitiveCommand::CreatePrimitiveCommand(Document& document, PrimitiveKind kind)
     : document_(&document), kind_(kind) {}
 
-Result<bool> CreatePrimitiveCommand::on_point(Vec3 point) {
+Result<bool> CreatePrimitiveCommand::on_point(Vec3 point) { return on_pick(point, 0); }
+
+Result<bool> CreatePrimitiveCommand::on_pick(Vec3 point, std::uint64_t picked_entity_id) {
   position_ = point;
+  host_id_ = picked_entity_id;
   return true;  // 单点，齐了
 }
 
@@ -84,6 +88,15 @@ Result<void> CreatePrimitiveCommand::execute() {
   if (added == nullptr) {
     return Err("CreatePrimitiveCommand: add primitive failed");
   }
+
+  if ((kind_ == PrimitiveKind::Window || kind_ == PrimitiveKind::Door) && host_id_ != 0) {
+    if (auto r = bind_opening_to_host(*document_, added->id, host_id_, position_); r) {
+      if (const Relation* rel = document_->bim().host_of(added->id)) {
+        relation_ = *rel;
+      }
+    }
+  }
+
   entity_ = added->clone();
   if (const MeshAsset* mesh = document_->mesh(added->mesh_asset_id)) {
     mesh_ = *mesh;
@@ -100,6 +113,10 @@ void CreatePrimitiveCommand::undo() {
 void CreatePrimitiveCommand::redo() {
   if (entity_) {
     document_->insert_entity(entity_->clone(), mesh_);
+  }
+  if (relation_) {
+    document_->bim().insert(*relation_);
+    (void)notify_entity_changed(*document_, relation_->to);
   }
 }
 

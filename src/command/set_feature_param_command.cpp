@@ -1,5 +1,6 @@
 #include "set_feature_param_command.h"
 
+#include "bim/host_update.h"
 #include "engine/modeling/feature.h"
 #include "engine/modeling/occt_geom_builder.h"
 
@@ -47,6 +48,9 @@ Result<void> SetFeatureParamCommand::apply(double value) {
   asset->cpu = std::move(*mesh);
   document_->recompute_scene();
   document_->mark_dirty();
+  if (auto r = notify_entity_changed(*document_, entity_id_); !r) {
+    return r;
+  }
   return {};
 }
 

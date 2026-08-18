@@ -3,6 +3,9 @@ add_library(tamias_document STATIC
   document.cpp
   document_io.cpp
   picking.cpp
+  ${CMAKE_SOURCE_DIR}/src/bim/bim_model.cpp
+  ${CMAKE_SOURCE_DIR}/src/bim/host_geometry.cpp
+  ${CMAKE_SOURCE_DIR}/src/bim/host_update.cpp
 )
 add_library(tamias::document ALIAS tamias_document)
 target_include_directories(tamias_document PUBLIC ${CMAKE_SOURCE_DIR}/src)

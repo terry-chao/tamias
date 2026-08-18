@@ -150,6 +150,7 @@ void Document::remove_entity(std::uint64_t id) {
     return;
   }
   const std::uint64_t mesh_id = it->second->mesh_asset_id;
+  bim_.remove_involving(id);
   entities_.erase(it);
   scene_.remove_node(id);
   remove_mesh(mesh_id);

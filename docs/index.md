@@ -26,7 +26,7 @@
 | 层 | 管什么 | 读这些 |
 |---|---|---|
 | **客户端** | 窗口、视口、属性面板、命令入口 | [Qt 壳](APP.md) |
-| **BIM** | 楼层、轴网、墙梁板柱宿主、当前标高 | [BIM 业务层](BIM.md) |
+| **BIM** | 楼层、轴网、墙梁板柱宿主、关联关系、当前标高 | [BIM 业务层](BIM.md) |
 | **场景图** | 语义树、变换、包围盒、展平 draw list | [总述](scene/index.md)、[语义树](SCENE-GRAPH.md) |
 | **造型** | 特征树、求值、MCAD 深路径；内核插件口 | [特征树求值器](FEATURE-TREE-EVALUATOR.md)、[MCAD 管线](MCAD-PIPELINE.md)、[几何边界](ISHAPE-OPS.md) |
 | **渲染** | 一帧怎么画、Vulkan/OpenGL、屏外不画 | [管线与 RHI](RENDERING.md)、[视锥、NDC 与屏幕](NDC.md)、[OpenGL 后端](OPENGL.md)、[wgpu 接入](WGPU.md)、[视锥剔除](FRUSTUM-CULLING.md) |

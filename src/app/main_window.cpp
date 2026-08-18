@@ -8,6 +8,7 @@
 #include "mesh_thumbnail.h"
 #include "engine/modeling/occt_shape_ops.h"
 #include "engine/modeling/shape_ops.h"
+#include "handle_inspector.h"
 #include "property_panel.h"
 #include "settings_dialog.h"
 
@@ -84,6 +85,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   connect(tabs_, &QTabWidget::currentChanged, this, [this](int) {
     sync_render_mode_actions();
     refresh_property_panel();
+    refresh_handle_inspector();
   });
   connect(home_, &HomePage::openRequested, this, &MainWindow::open_file);
   connect(home_, &HomePage::fileActivated, this, &MainWindow::open_recent_path);
@@ -201,7 +203,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   door_action_ = new QAction(tr("Door"), this);
   door_action_->setCheckable(true);
   door_action_->setProperty("toolMode", static_cast<int>(ToolMode::Door));
-  door_action_->setToolTip(tr("Create a door: click to place"));
+  door_action_->setToolTip(tr("Create a door: click a wall to host it"));
   connect(door_action_, &QAction::triggered, this, [this] { set_create_tool(ToolMode::Door); });
   create_group_->addAction(door_action_);
   addAction(door_action_);
@@ -209,7 +211,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   window_action_ = new QAction(tr("Window"), this);
   window_action_->setCheckable(true);
   window_action_->setProperty("toolMode", static_cast<int>(ToolMode::Window));
-  window_action_->setToolTip(tr("Create a window: click to place"));
+  window_action_->setToolTip(tr("Create a window: click a wall to host it"));
   connect(window_action_, &QAction::triggered, this,
           [this] { set_create_tool(ToolMode::Window); });
   create_group_->addAction(window_action_);
@@ -413,6 +415,20 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   addDockWidget(Qt::RightDockWidgetArea, property_dock);
   // View 菜单里加一个开关，属性面板关闭后还能重新打开。
   view_menu->addAction(property_dock->toggleViewAction());
+
+  handle_inspector_ = new HandleInspector(this);
+  auto* handle_dock = new QDockWidget(tr("Handle Inspector"), this);
+  handle_dock->setObjectName(QStringLiteral("handleInspectorDock"));
+  handle_dock->setWidget(handle_inspector_);
+  handle_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+  addDockWidget(Qt::RightDockWidgetArea, handle_dock);
+  handle_dock->hide();
+  auto* handle_toggle = handle_dock->toggleViewAction();
+  handle_toggle->setShortcut(QKeySequence(tr("Ctrl+D")));
+  handle_toggle->setToolTip(tr("Inspect the selected component's document handle"));
+  view_menu->addAction(handle_toggle);
+  addAction(handle_toggle);
+
   connect(property_panel_, &PropertyPanel::param_edited, this,
           [this](std::uint64_t entity_id, std::uint64_t feature_id, const QString& param_name,
                  double value) {
@@ -427,6 +443,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             }
           });
   refresh_property_panel();
+  refresh_handle_inspector();
 
   statusBar()->showMessage(tr("Ready — Open a model or try the demo"));
   show_home();
@@ -590,6 +607,8 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
   });
   connect(vp, &DocumentViewport::selection_changed, this, &MainWindow::refresh_property_panel);
   connect(vp, &DocumentViewport::document_changed, this, &MainWindow::refresh_property_panel);
+  connect(vp, &DocumentViewport::selection_changed, this, &MainWindow::refresh_handle_inspector);
+  connect(vp, &DocumentViewport::document_changed, this, &MainWindow::refresh_handle_inspector);
   const int index = tabs_->addTab(vp, QString::fromStdString(document->name()));
   tabs_->setCurrentIndex(index);
   show_documents();
@@ -910,6 +929,20 @@ void MainWindow::refresh_property_panel() {
   }
   property_panel_->show_entity(
       nullptr, nullptr, tr("No selection\nClick an object to select it, or use a create tool"));
+}
+
+void MainWindow::refresh_handle_inspector() {
+  if (handle_inspector_ == nullptr) {
+    return;
+  }
+  DocumentViewport* vp = current_viewport();
+  if (vp == nullptr) {
+    handle_inspector_->show_selection(nullptr, 0);
+    return;
+  }
+  Document& doc = vp->document();
+  const SceneNode* node = doc.scene().selected_node();
+  handle_inspector_->show_selection(&doc, node ? node->id : 0);
 }
 
 void MainWindow::frame_all() {

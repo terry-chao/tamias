@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bim/bim_model.h"
 #include "engine/document/mesh_asset.h"
 #include "engine/document/scene.h"
 #include "entity/entity.h"
@@ -32,6 +33,9 @@ class Document {
 
   [[nodiscard]] Scene& scene() { return scene_; }
   [[nodiscard]] const Scene& scene() const { return scene_; }
+
+  [[nodiscard]] BimModel& bim() { return bim_; }
+  [[nodiscard]] const BimModel& bim() const { return bim_; }
 
   MeshAsset& add_mesh(MeshAsset asset) {
     asset.id = next_mesh_id_++;
@@ -141,6 +145,7 @@ class Document {
     scene_.clear();
     meshes_.clear();
     entities_.clear();
+    bim_.clear();
     next_mesh_id_ = 1;
   }
 
@@ -263,6 +268,7 @@ class Document {
   std::string name_;
   std::filesystem::path path_;
   Scene scene_;
+  BimModel bim_;
   std::unordered_map<std::uint64_t, MeshAsset> meshes_;
   std::unordered_map<std::uint64_t, std::unique_ptr<Entity>> entities_;
   std::unordered_map<std::uint64_t, Material> materials_;

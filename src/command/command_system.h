@@ -46,7 +46,7 @@ class CommandSystem {
   [[nodiscard]] Result<void> dispatch(Document& doc, const std::string& name,
                                       const CommandArgs& args);
   // 给 pending 命令喂一个交互点；返回 true 表示命令已完成。
-  [[nodiscard]] Result<bool> feed_point(Vec3 point);
+  [[nodiscard]] Result<bool> feed_point(Vec3 point, std::uint64_t picked_entity_id = 0);
   void cancel();  // 取消 pending
 
   [[nodiscard]] bool has_pending() const { return pending_ != nullptr; }

@@ -513,8 +513,25 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
   press_mouse_ = event->pos();
   if (event->button() == Qt::LeftButton) {
     if (tool_mode_ != ToolMode::None) {
-      const Vec3 ground = cursor_ground_position(event->pos());
-      auto r = command_system_.feed_point(ground);  // 喂交互点给 pending 命令
+      Vec3 point = cursor_ground_position(event->pos());
+      std::uint64_t picked = 0;
+      if (tool_mode_ == ToolMode::Window || tool_mode_ == ToolMode::Door) {
+        const auto dpr = devicePixelRatioF();
+        const float aspect = static_cast<float>((std::max)(1, width())) /
+                             static_cast<float>((std::max)(1, height()));
+        const Ray ray =
+            camera_ray(camera_, aspect, static_cast<float>(event->pos().x() * dpr),
+                       static_cast<float>(event->pos().y() * dpr),
+                       static_cast<float>(width() * dpr), static_cast<float>(height() * dpr));
+        if (auto hit = bvh_.closest_hit(ray, *document_)) {
+          if (const Entity* host = document_->entity(hit->node_id);
+              host != nullptr && host->kind() == EntityKind::Wall) {
+            picked = host->id;
+            point = ray.origin + ray.direction * hit->t;
+          }
+        }
+      }
+      auto r = command_system_.feed_point(point, picked);  // 喂交互点给 pending 命令
       if (!r) {
         log_error(r.error());
         return;

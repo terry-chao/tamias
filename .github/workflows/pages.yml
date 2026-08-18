@@ -3,8 +3,6 @@ name: deploy-docs
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - "assets/readme/**"
   workflow_dispatch:
 
 permissions:

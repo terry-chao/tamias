@@ -13,7 +13,8 @@ namespace tamias {
 namespace {
 
 constexpr char kMagic[4] = {'T', 'M', 'A', 'S'};
-constexpr std::uint32_t kFormatVersion = 5;
+constexpr std::uint32_t kFormatVersion = 6;
+constexpr std::uint32_t kMinFormatVersion = 5;
 
 constexpr std::uint32_t fourcc(char a, char b, char c, char d) {
   return static_cast<std::uint32_t>(static_cast<std::uint8_t>(a)) |
@@ -29,6 +30,7 @@ constexpr std::uint32_t kChunkView = fourcc('V', 'I', 'E', 'W');
 constexpr std::uint32_t kChunkFeat = fourcc('F', 'E', 'A', 'T');
 constexpr std::uint32_t kChunkMatl = fourcc('M', 'A', 'T', 'L');
 constexpr std::uint32_t kChunkTex = fourcc('T', 'E', 'X', 'T');
+constexpr std::uint32_t kChunkRela = fourcc('R', 'E', 'L', 'A');
 
 Result<void> write_vec2(BinaryWriter& w, const Vec2& v) {
   if (auto r = w.write_f32(v.x); !r) {
@@ -472,6 +474,75 @@ Result<void> read_entity(BinaryReader& r, std::unique_ptr<Entity>& out) {
   return {};
 }
 
+Result<void> write_relation(BinaryWriter& w, const Relation& rel) {
+  if (auto r = w.write_u64(rel.id); !r) {
+    return r;
+  }
+  if (auto r = w.write_u8(static_cast<std::uint8_t>(rel.kind)); !r) {
+    return r;
+  }
+  if (auto r = w.write_u64(rel.from); !r) {
+    return r;
+  }
+  if (auto r = w.write_u64(rel.to); !r) {
+    return r;
+  }
+  if (auto r = w.write_f64(rel.placement.along); !r) {
+    return r;
+  }
+  if (auto r = w.write_f64(rel.placement.sill); !r) {
+    return r;
+  }
+  if (auto r = w.write_f64(rel.placement.offset); !r) {
+    return r;
+  }
+  return w.write_bool(rel.valid);
+}
+
+Result<void> read_relation(BinaryReader& r, Relation& rel) {
+  auto id = r.read_u64();
+  if (!id) {
+    return Err(id.error());
+  }
+  rel.id = *id;
+  auto kind = r.read_u8();
+  if (!kind) {
+    return Err(kind.error());
+  }
+  rel.kind = static_cast<RelationKind>(*kind);
+  auto from = r.read_u64();
+  if (!from) {
+    return Err(from.error());
+  }
+  rel.from = *from;
+  auto to = r.read_u64();
+  if (!to) {
+    return Err(to.error());
+  }
+  rel.to = *to;
+  auto along = r.read_f64();
+  if (!along) {
+    return Err(along.error());
+  }
+  rel.placement.along = *along;
+  auto sill = r.read_f64();
+  if (!sill) {
+    return Err(sill.error());
+  }
+  rel.placement.sill = *sill;
+  auto offset = r.read_f64();
+  if (!offset) {
+    return Err(offset.error());
+  }
+  rel.placement.offset = *offset;
+  auto valid = r.read_bool();
+  if (!valid) {
+    return Err(valid.error());
+  }
+  rel.valid = *valid;
+  return {};
+}
+
 Result<void> write_scene_node(BinaryWriter& w, const SceneNode& node) {
   if (auto r = w.write_u64(node.id); !r) {
     return r;
@@ -672,6 +743,28 @@ Result<void> write_document_body(BinaryWriter& w, const Document& document) {
       return r;
     }
   }
+
+  if (auto r = w.write_u64(document.bim().next_id()); !r) {
+    return r;
+  }
+  if (auto r = w.write_u64(static_cast<std::uint64_t>(document.bim().relations().size())); !r) {
+    return r;
+  }
+  std::vector<std::uint64_t> relation_ids;
+  relation_ids.reserve(document.bim().relations().size());
+  for (const auto& rel : document.bim().relations()) {
+    relation_ids.push_back(rel.id);
+  }
+  std::sort(relation_ids.begin(), relation_ids.end());
+  for (std::uint64_t id : relation_ids) {
+    const Relation* rel = document.bim().find(id);
+    if (rel == nullptr) {
+      continue;
+    }
+    if (auto r = write_relation(w, *rel); !r) {
+      return r;
+    }
+  }
   return {};
 }
 
@@ -757,6 +850,25 @@ Result<Document> read_document_body(BinaryReader& r) {
       return Err(res.error());
     }
     document.insert_texture(std::move(texture));
+  }
+
+  if (r.remaining() > 0) {
+    auto next_rel = r.read_u64();
+    if (!next_rel) {
+      return Err(next_rel.error());
+    }
+    auto rel_count = r.read_u64();
+    if (!rel_count) {
+      return Err(rel_count.error());
+    }
+    for (std::uint64_t i = 0; i < *rel_count; ++i) {
+      Relation rel{};
+      if (auto res = read_relation(r, rel); !res) {
+        return Err(res.error());
+      }
+      document.bim().insert(std::move(rel));
+    }
+    document.bim().set_next_id(*next_rel);
   }
 
   document.set_next_mesh_id(*next_mesh);
@@ -897,6 +1009,29 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
     }
   }
 
+  BinaryWriter rela_w;
+  if (auto r = rela_w.write_u64(document.bim().next_id()); !r) {
+    return r;
+  }
+  std::vector<std::uint64_t> relation_ids;
+  relation_ids.reserve(document.bim().relations().size());
+  for (const auto& rel : document.bim().relations()) {
+    relation_ids.push_back(rel.id);
+  }
+  std::sort(relation_ids.begin(), relation_ids.end());
+  if (auto r = rela_w.write_u64(static_cast<std::uint64_t>(relation_ids.size())); !r) {
+    return r;
+  }
+  for (std::uint64_t id : relation_ids) {
+    const Relation* rel = document.bim().find(id);
+    if (rel == nullptr) {
+      continue;
+    }
+    if (auto r = write_relation(rela_w, *rel); !r) {
+      return r;
+    }
+  }
+
   BinaryWriter view_w;
   if (auto r = write_viewport(view_w, viewport); !r) {
     return r;
@@ -909,7 +1044,7 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
   if (auto r = file.write_u32(kFormatVersion); !r) {
     return r;
   }
-  if (auto r = file.write_u32(7); !r) {  // chunk_count
+  if (auto r = file.write_u32(8); !r) {  // chunk_count
     return r;
   }
   if (auto r = append_chunk(file, kChunkMeta, meta_w.data()); !r) {
@@ -928,6 +1063,9 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
     return r;
   }
   if (auto r = append_chunk(file, kChunkTex, tex_w.data()); !r) {
+    return r;
+  }
+  if (auto r = append_chunk(file, kChunkRela, rela_w.data()); !r) {
     return r;
   }
   if (auto r = append_chunk(file, kChunkView, view_w.data()); !r) {
@@ -975,7 +1113,7 @@ Result<LoadedDocument> load_document(const std::filesystem::path& path) {
   if (!version) {
     return Err(version.error());
   }
-  if (*version != kFormatVersion) {
+  if (*version < kMinFormatVersion || *version > kFormatVersion) {
     return Err("Unsupported Tamias document version: " + std::to_string(*version));
   }
   auto chunk_count = reader.read_u32();
@@ -993,6 +1131,8 @@ Result<LoadedDocument> load_document(const std::filesystem::path& path) {
   std::vector<std::unique_ptr<Entity>> entities;
   std::vector<Material> materials;
   std::vector<TextureAsset> textures;
+  std::vector<Relation> relations;
+  std::uint64_t next_relation_id = 1;
   ViewportState viewport{};
   bool has_meta = false;
   bool has_mesh = false;
@@ -1118,6 +1258,25 @@ Result<LoadedDocument> load_document(const std::filesystem::path& path) {
         }
         textures.push_back(std::move(tex));
       }
+    } else if (*id == kChunkRela) {
+      auto next_rel = chunk_r.read_u64();
+      if (!next_rel) {
+        return Err(next_rel.error());
+      }
+      next_relation_id = *next_rel;
+      auto count = chunk_r.read_u64();
+      if (!count) {
+        return Err(count.error());
+      }
+      relations.clear();
+      relations.reserve(static_cast<std::size_t>(*count));
+      for (std::uint64_t n = 0; n < *count; ++n) {
+        Relation rel{};
+        if (auto res = read_relation(chunk_r, rel); !res) {
+          return Err(res.error());
+        }
+        relations.push_back(std::move(rel));
+      }
     } else if (*id == kChunkView) {
       if (auto res = read_viewport(chunk_r, viewport); !res) {
         return Err(res.error());
@@ -1150,6 +1309,10 @@ Result<LoadedDocument> load_document(const std::filesystem::path& path) {
   for (auto& tex : textures) {
     loaded.document.insert_texture(std::move(tex));
   }
+  for (auto& rel : relations) {
+    loaded.document.bim().insert(std::move(rel));
+  }
+  loaded.document.bim().set_next_id(next_relation_id);
   loaded.document.set_next_mesh_id(next_mesh_id);
   loaded.document.scene().set_next_id(next_node_id);
   loaded.document.set_next_material_id(next_material_id);
