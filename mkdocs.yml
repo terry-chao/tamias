@@ -35,12 +35,21 @@ markdown_extensions:
   - pymdownx.highlight
   - pymdownx.superfences
 
+# 导航按路线图五层分（见 ROADMAP §2）
 nav:
   - 首页: index.md
-  - 路线图: ROADMAP.md
-  - 渲染管线: RENDERING.md
-  - 视锥剔除: FRUSTUM-CULLING.md
-  - 特征树求值器: FEATURE-TREE-EVALUATOR.md
-  - 场景图: SCENE-GRAPH.md
-  - MCAD/BIM 决策: DECISION-MCAD-BIM.md
-  - MCAD 管线: MCAD-PIPELINE.md
+  - 总览:
+      - 路线图: ROADMAP.md
+      - MCAD 与 BIM: DECISION-MCAD-BIM.md
+  - 客户端:
+      - Qt 壳: APP.md
+  - 语义场景:
+      - 场景图: SCENE-GRAPH.md
+  - 造型:
+      - 特征树求值器: FEATURE-TREE-EVALUATOR.md
+      - MCAD 管线: MCAD-PIPELINE.md
+  - 渲染:
+      - 管线与 RHI: RENDERING.md
+      - 视锥剔除: FRUSTUM-CULLING.md
+  - 几何边界:
+      - IShapeOps 与 OCCT: ISHAPE-OPS.md

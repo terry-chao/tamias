@@ -56,6 +56,16 @@
 └───────────────────────────────────────────────┘
 ```
 
+各层对应文档（站点导航按此分组）：
+
+| 层 | 文档 |
+|---|---|
+| Qt 客户端 | [APP.md](APP.md) |
+| 语义场景图 | [SCENE-GRAPH.md](SCENE-GRAPH.md) |
+| 几何层（造型） | [FEATURE-TREE-EVALUATOR.md](FEATURE-TREE-EVALUATOR.md)、[MCAD-PIPELINE.md](MCAD-PIPELINE.md) |
+| 渲染（含 RHI） | [RENDERING.md](RENDERING.md)、[FRUSTUM-CULLING.md](FRUSTUM-CULLING.md) |
+| 几何边界（IShapeOps） | [ISHAPE-OPS.md](ISHAPE-OPS.md) |
+
 两个最容易误解的点：
 
 1. **IfcOpenShell 不是和 OCCT 并列的，它坐在 OCCT 上面。** IfcOpenShell = `IfcParse`（IFC schema/对象模型/语义）+ `IfcGeom`（几何，依赖 OCCT + Boost）。所以 `IShapeOps` 边界是统一的——OCCT 直接喂 MCAD，IfcOpenShell 把 IFC 转成「语义图 + 几何」喂进来。**不要为 IFC 另开一条几何通道。**
