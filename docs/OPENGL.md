@@ -91,7 +91,7 @@ draw_indexed(index_count)
 
 Push constants 在 GL 侧是一块 UBO：`glBufferSubData` + `glBindBufferBase(0)`。Shader 仍当 push constant 用，两边布局对齐。
 
-Clip：CPU 的 `perspective` 按 Vulkan 的 Z∈[0,1] 算。OpenGL 要 NDC Z∈[-1,1]，所以乘 `clip_space_correction_matrix()`（把 Z 从 [0,1] 拉成 [-1,1]）。Vulkan 那份校正是翻 Y；两套校正不同，世界空间视锥是一样的。
+Clip：CPU 的 `perspective` 按 Vulkan 的 Z∈[0,1] 算。OpenGL 要 NDC Z∈[-1,1]，所以乘 `clip_space_correction_matrix()`（把 Z 从 [0,1] 拉成 [-1,1]）。Vulkan 那份校正是翻 Y；两套校正不同，世界空间视锥是一样的。NDC 是立方体、xy 上屏、z 进深度，见 [视锥、NDC 与屏幕](NDC.md)。
 
 ---
 

@@ -1,6 +1,6 @@
 # Tamias 渲染是怎么实现的
 
-> 从「屏幕上那张图从哪来」讲到 Tamias 现在真正怎么画。所有结论对应当前代码。几何从哪来见 [特征树求值器](FEATURE-TREE-EVALUATOR.md)；语义树和展平见 [场景图](SCENE-GRAPH.md)；屏外不画见 [视锥剔除](FRUSTUM-CULLING.md)（方案，尚未实现）。OpenGL 怎么绑缓冲、画三角、绑贴图见 [OpenGL 后端](OPENGL.md)。
+> 从「屏幕上那张图从哪来」讲到 Tamias 现在真正怎么画。所有结论对应当前代码。几何从哪来见 [特征树求值器](FEATURE-TREE-EVALUATOR.md)；语义树和展平见 [场景图](SCENE-GRAPH.md)；三角怎么进视锥、NDC、深度缓冲见 [视锥、NDC 与屏幕](NDC.md)；屏外不画见 [视锥剔除](FRUSTUM-CULLING.md)（方案，尚未实现）。OpenGL 怎么绑缓冲、画三角、绑贴图见 [OpenGL 后端](OPENGL.md)。
 
 ---
 
@@ -11,6 +11,8 @@
 所以整套渲染干的事只有一句：
 
 **把三维里的三角积木，经过相机投影，涂上颜色，写进窗口的每一帧。**
+
+投影不是把盒子摊成一张纸：视锥是金字塔，NDC 是压成的立方体；xy 上屏，z 进深度缓冲。展开见 [视锥、NDC 与屏幕](NDC.md)。
 
 Tamias 把这件事拆成五段，互不越界：
 
