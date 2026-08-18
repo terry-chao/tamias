@@ -1,0 +1,14 @@
+.navbar-brand {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  height: 50px;
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+
+.navbar-brand img {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+}

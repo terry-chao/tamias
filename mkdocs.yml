@@ -6,35 +6,24 @@ repo_name: terry-chao/tamias
 edit_uri: edit/main/docs/
 
 theme:
-  name: material
-  language: zh
-  features:
-    - navigation.tabs
-    - navigation.tabs.sticky
-    - navigation.indexes
-    - search.suggest
-    - search.highlight
-  palette:
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: 切换深色模式
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: 切换浅色模式
+  name: cinder
+  custom_dir: overrides
+  colorscheme: github
+  highlightjs: true
+  hljs_languages:
+    - yaml
+    - cpp
+    - cmake
+    - bash
+
+extra_css:
+  - css/brand.css
 
 markdown_extensions:
   - admonition
   - tables
-  - pymdownx.highlight
-  - pymdownx.superfences
+  - toc:
+      permalink: true
 
 # 导航按路线图五层分（见 ROADMAP §2）
 nav:
