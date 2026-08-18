@@ -9,12 +9,12 @@ Prerequisites:
 - Visual Studio 2022/2026 with C++ desktop workload
 - [Qt 6](https://www.qt.io/) (tested: 6.11.1 `msvc2022_64`)
 - [Vulkan SDK](https://vulkan.lunarg.com/)
-- [vcpkg](https://vcpkg.io/) with `VCPKG_ROOT` set (Open CASCADE comes from `vcpkg.json`, pinned to 7.9.3)
+- [vcpkg](https://vcpkg.io/) at `C:\dev\vcpkg` (`VCPKG_ROOT`; Open CASCADE comes from `vcpkg.json`, pinned to 7.9.3). Do **not** use the copy bundled with Visual Studio.
 - CMake 3.24+
 
 ```powershell
 $env:VULKAN_SDK = 'C:\VulkanSDK\<version>'
-$env:VCPKG_ROOT = 'C:\path\to\vcpkg'
+$env:VCPKG_ROOT = 'C:\dev\vcpkg'
 $env:Path = "$env:VULKAN_SDK\Bin;C:\Qt\6.11.1\msvc2022_64\bin;$env:Path"
 
 # Edit CMakePresets.json TAMIAS_QT_PREFIX if your Qt path differs.
@@ -50,7 +50,16 @@ Use the `linux` preset with vcpkg (`linux-desktop` feature) or install Qt6/Vulka
 
 ### OCCT (required, via vcpkg)
 
-Do **not** set `OCCT_ROOT`. The `msvc` / `linux` presets load the vcpkg toolchain; `vcpkg.json` pins `opencascade` to 7.9.3 so IfcOpenShell can later link the same build.
+Do **not** set `OCCT_ROOT`. The `msvc` / `linux` presets load the vcpkg toolchain; `vcpkg.json` pins `opencascade` to 7.9.3 so IfcGeom can later link the same build.
+
+IfcOpenShell **IfcParse** is fetched at configure time (tag `v0.8.0`) and compiled as a static lib. It does not link OCCT. Dump a spatial tree:
+
+```powershell
+cmake --build --preset debug --parallel --target tamias_ifc_dump
+& .\build\bin\Debug\tamias_ifc_dump.exe .\assets\samples\spatial-tree.ifc
+```
+
+Opening a `.ifc` in the app shows the same tree. Geometry import (IfcGeom) is not wired yet.
 
 On Windows, POST_BUILD copies Qt runtime (`windeployqt`) and OCCT / freetype DLLs into `build/bin/<Config>/` next to `tamias.exe`, so double-click / F5 works without Qt or OCCT on `PATH`.
 
@@ -68,3 +77,4 @@ On Windows, POST_BUILD copies Qt runtime (`windeployqt`) and OCCT / freetype DLL
 - GLB (minimal built-in loader)
 - ASCII `.gltf` not yet supported — convert to `.glb` or `.obj`
 - STEP / IGES / BREP via OCCT
+- IFC spatial structure via IfcOpenShell IfcParse (geometry not imported yet)

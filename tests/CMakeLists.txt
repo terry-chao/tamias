@@ -1,4 +1,4 @@
-add_executable(tamias_tests smoke_tests.cpp)
+add_executable(tamias_tests smoke_tests.cpp ifc_spatial_tree_tests.cpp)
 target_link_libraries(tamias_tests
   PRIVATE
     tamias::io
@@ -6,8 +6,10 @@ target_link_libraries(tamias_tests
     tamias::command
     tamias::modeling
     tamias::render
+    tamias::ifc
     GTest::gtest_main
 )
+target_compile_definitions(tamias_tests PRIVATE TAMIAS_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 include(GoogleTest)
 
 # PRE_TEST avoids build-time discovery failing when OCCT DLLs are not on PATH.

@@ -157,7 +157,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 
 ### 其他重点难点（非渲染/非建模，但会卡你）
 
-1. **IfcOpenShell 集成（容易翻车）。** `IfcGeom` 针对特定 OCCT 版本编译。现在用 OCCT 7.9.x，**必须让 IfcOpenShell 用同一份 OCCT**，否则同进程两个 OCCT 符号冲突。
+1. **IfcOpenShell 集成。** `IfcParse` 已接入（读 `.ifc` → 打印空间结构树）。`IfcGeom` 仍针对特定 OCCT 版本编译，以后上几何时**必须和 Tamias 共用同一份 OCCT 7.9.3**，否则同进程两个 OCCT 符号冲突。
 2. **IFC 几何导入对齐特征树。** 有了参数化内核后，IFC 的声明式几何（IfcExtrudedAreaSolid 等）**天然可以映射成特征树的节点**（轮廓 + 拉伸），而不是只导入三角网。这是「IFC 编辑」的关键——只有导成特征树，才能改 IFC 墙的厚度参数。代价比「只读导入三角网」大。
 3. **语义导入要过 IfcParse。** `IShapeOps` 现在只返回 `MeshCpu`，扛不住 IFC 语义，也扛不住特征树。需要一个 IFC 专用导入器，产出 `(语义树 + 特征树/网格 + 材质)`。
 
@@ -179,7 +179,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 | 里程碑 | 内容 |
 |---|---|
 | **材质/纹理** | RHI 真 texture/UBO/sampler，双后端，glTF PBR 基础（编辑预览也需要它） |
-| **IFC 导入** | IfcOpenShell 接入 → 语义树 + 特征树/网格 + 材质映射（对齐 P 线） |
+| **IFC 导入** | IfcParse 空间树已通。下一步：语义树 + 特征树/网格 + 材质映射（对齐 P 线）；几何走 IfcGeom + 同一份 OCCT 7.9.3 |
 | **大模型渲染** | 视锥剔除 + 按 mesh/材质合批/instancing + 不透明/透明排序 + 渐进加载 |
 | **截面/分类着色/选择** | 截面裁剪 + Appearance Profiler + 轮廓/多选 |
 | **属性面板/大纲树/测量** | 编辑的交互配套 |
@@ -196,7 +196,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 2. 让 `Shape`（[shape_ops.h](../src/modeling/shape_ops.h)）从「read_file + tessellate」升级为「持有特征树 + evaluate() → TopoDS_Shape + tessellate()」。
 3. 做一个极简入口：改参数 → 重算 → 上传新三角网 → 渲染更新，先跑通闭环，再谈 UI 和拓扑命名。
 
-并行：确认 IfcOpenShell 与 OCCT 版本匹配，跑通最小 demo（解析一个 IFC → 打印空间结构树）。
+并行：IfcParse 最小 demo 已通（`tamias_ifc_dump` / 打开 `.ifc` 打印空间结构树）。完整导入仍走支撑线。
 
 ---
 
@@ -210,6 +210,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 - **BIM 业务层独立于语义树**：`Scene` 是域无关容器（`parent` / 变换）；墙梁板柱的归属、轴网、当前标高不进 `SceneNode` 字段。现状无楼层系统。详见 [BIM.md](BIM.md)。
 - **渲染场景图 = VSG 式（节点 + 访问者 + 命令图状态）**：渲染侧场景图用「节点 + 访问者」组织、渲染状态用命令图（`StateGroup`/`StateCommands`）挂载；它是语义树的「绘制投影」而非复制，语义树仍是层级唯一真相源，靠脏标记增量同步。详见 [SCENE-GRAPH.md](SCENE-GRAPH.md)。
 - **`.tdoc` 后期用 LevelDB 改造**：现在仍是自研 `binary_archive` 整文件（不是 LevelDB）。后期把存储引擎换成 LevelDB，以支撑增量读写和大模型局部加载；扩展名可以不变。
+- **OCCT 钉 7.9.3**：和 IfcOpenShell 共用同一份内核。IfcParse 不链 OCCT；以后 IfcGeom 必须链这份 7.9.3，不要另装一套。
 
 **待拍板：**
 

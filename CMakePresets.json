@@ -20,8 +20,12 @@
         "strategy": "external"
       },
       "binaryDir": "${sourceDir}/build",
-      "toolchainFile": "$penv{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-      "environment": { "VSLANG": "1033" },
+      "toolchainFile": "C:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake",
+      "environment": {
+        "VSLANG": "1033",
+        "VCPKG_ROOT": "C:/dev/vcpkg",
+        "VCPKG_INSTALLATION_ROOT": "C:/dev/vcpkg"
+      },
       "cacheVariables": {
         "TAMIAS_QT_PREFIX": "C:/Qt/6.11.1/msvc2022_64",
         "CMAKE_C_COMPILER": "cl.exe",

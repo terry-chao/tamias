@@ -8,7 +8,9 @@
   "cmake.saveBeforeBuild": true,
   "cmake.outputLogEncoding": "gbk",
   "cmake.environment": {
-    "VSLANG": "1033"
+    "VSLANG": "1033",
+    "VCPKG_ROOT": "C:\\dev\\vcpkg",
+    "VCPKG_INSTALLATION_ROOT": "C:\\dev\\vcpkg"
   },
   "cmake.debugConfig": {
     "preLaunchTask": "Tamias: 编译"

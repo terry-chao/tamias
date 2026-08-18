@@ -1,6 +1,7 @@
 #include "main_window.h"
 
 #include "app_settings.h"
+#include "bim/ifc_spatial_tree.h"
 #include "engine/core/log.h"
 #include "engine/document/document_io.h"
 #include "entity/box_entity.h"
@@ -10,56 +11,62 @@
 #include "engine/modeling/shape_ops.h"
 #include "handle_inspector.h"
 #include "property_panel.h"
+#include "ribbon_bar.h"
+#include "ribbon_group.h"
+#include "ribbon_page.h"
 #include "settings_dialog.h"
 
 #include <QAction>
 #include <QActionGroup>
-#include <QComboBox>
 #include <QCoreApplication>
 #include <QDialog>
+#include <QDialogButtonBox>
 #include <QDir>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFontDatabase>
 #include <QIcon>
 #include <QImage>
 #include <QKeySequence>
-#include <QMenu>
-#include <QMenuBar>
 #include <QMessageBox>
 #include <QPainter>
 #include <QPixmap>
+#include <QPlainTextEdit>
 #include <QSignalBlocker>
 #include <QSize>
-#include <QSizePolicy>
 #include <QStatusBar>
-#include <QStyle>
-#include <QToolBar>
-#include <QToolButton>
 #include <QVector>
+#include <QVBoxLayout>
 #include <QWidget>
 
 namespace tamias {
 namespace {
 
-QIcon themed_mask_icon(const QString& resource, const QColor& color, int extent = 16) {
+QIcon themed_mask_icon(const QString& resource, const QColor& color) {
   const QIcon source(resource);
   QIcon result;
-  for (int scale = 1; scale <= 2; ++scale) {
-    const int px = extent * scale;
-    QPixmap canvas(px, px);
-    canvas.setDevicePixelRatio(scale);
-    canvas.fill(Qt::transparent);
-    {
-      QPainter painter(&canvas);
-      painter.setRenderHint(QPainter::Antialiasing, true);
-      source.paint(&painter, QRect(0, 0, extent, extent));
-      painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
-      painter.fillRect(QRect(0, 0, extent, extent), color);
+  for (int extent : {16, 32}) {
+    for (int scale = 1; scale <= 2; ++scale) {
+      const int px = extent * scale;
+      QPixmap canvas(px, px);
+      canvas.setDevicePixelRatio(scale);
+      canvas.fill(Qt::transparent);
+      {
+        QPainter painter(&canvas);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        source.paint(&painter, QRect(0, 0, extent, extent));
+        painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+        painter.fillRect(QRect(0, 0, extent, extent), color);
+      }
+      result.addPixmap(canvas);
     }
-    result.addPixmap(canvas);
   }
   return result;
+}
+
+QIcon ribbon_icon(const QString& resource) {
+  return themed_mask_icon(resource, QColor(47, 125, 222));
 }
 
 }  // namespace
@@ -97,42 +104,36 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   connect(home_, &HomePage::openDocumentActivated, this, &MainWindow::activate_open_document);
   connect(home_, &HomePage::settingsRequested, this, &MainWindow::open_settings);
 
-  auto* new_action = new QAction(
-      themed_mask_icon(QStringLiteral(":/icons/new.svg"),
-                       palette().color(QPalette::WindowText)),
-      tr("New"), this);
+  auto* new_action = new QAction(ribbon_icon(QStringLiteral(":/icons/new.svg")),
+                                 tr("New"), this);
   new_action->setShortcut(QKeySequence::New);
   new_action->setToolTip(tr("New document with a cube"));
   connect(new_action, &QAction::triggered, this, &MainWindow::new_document);
   addAction(new_action);
 
-  auto* open_action = new QAction(style()->standardIcon(QStyle::SP_DialogOpenButton),
-                                  tr("Open File"), this);
+  auto* open_action = new QAction(ribbon_icon(QStringLiteral(":/icons/open.svg")),
+                                  tr("Open"), this);
   open_action->setShortcut(QKeySequence::Open);
   open_action->setToolTip(tr("Open a model file"));
   connect(open_action, &QAction::triggered, this, &MainWindow::open_file);
   addAction(open_action);
 
-  auto* save_action = new QAction(style()->standardIcon(QStyle::SP_DialogSaveButton),
+  auto* save_action = new QAction(ribbon_icon(QStringLiteral(":/icons/save.svg")),
                                   tr("Save"), this);
   save_action->setShortcut(QKeySequence::Save);
   save_action->setToolTip(tr("Save the document"));
   connect(save_action, &QAction::triggered, this, &MainWindow::save_file);
   addAction(save_action);
 
-  auto* save_as_action = new QAction(
-      themed_mask_icon(QStringLiteral(":/icons/save_as.svg"),
-                       palette().color(QPalette::WindowText)),
-      tr("Save As…"), this);
+  auto* save_as_action = new QAction(ribbon_icon(QStringLiteral(":/icons/save_as.svg")),
+                                    tr("Save As"), this);
   save_as_action->setShortcut(QKeySequence::SaveAs);
   save_as_action->setToolTip(tr("Save the document to a new file"));
   connect(save_as_action, &QAction::triggered, this, &MainWindow::save_file_as);
   addAction(save_as_action);
 
-  auto* frame_all_action = new QAction(
-      themed_mask_icon(QStringLiteral(":/icons/frame_all.svg"),
-                       palette().color(QPalette::WindowText)),
-      tr("&Frame All"), this);
+  auto* frame_all_action = new QAction(ribbon_icon(QStringLiteral(":/icons/frame_all.svg")),
+                                      tr("Fit All"), this);
   frame_all_action->setShortcut(QKeySequence(tr("F")));
   frame_all_action->setToolTip(tr("Frame all geometry in the view"));
   connect(frame_all_action, &QAction::triggered, this, &MainWindow::frame_all);
@@ -141,10 +142,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   create_group_ = new QActionGroup(this);
   create_group_->setExclusive(true);
 
-  wall_action_ = new QAction(
-      themed_mask_icon(QStringLiteral(":/icons/wall.svg"),
-                       palette().color(QPalette::WindowText)),
-      tr("Wall"), this);
+  wall_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/wall.svg")),
+                            tr("Wall"), this);
   wall_action_->setCheckable(true);
   wall_action_->setProperty("toolMode", static_cast<int>(ToolMode::Wall));
   wall_action_->setToolTip(tr("Create a wall: click start, then click end"));
@@ -152,10 +151,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   create_group_->addAction(wall_action_);
   addAction(wall_action_);
 
-  box_action_ = new QAction(
-      themed_mask_icon(QStringLiteral(":/icons/box.svg"),
-                       palette().color(QPalette::WindowText)),
-      tr("Box"), this);
+  box_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/box.svg")),
+                           tr("Box"), this);
   box_action_->setCheckable(true);
   box_action_->setProperty("toolMode", static_cast<int>(ToolMode::Box));
   box_action_->setToolTip(tr("Create a box: click to place"));
@@ -163,10 +160,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   create_group_->addAction(box_action_);
   addAction(box_action_);
 
-  cylinder_action_ = new QAction(
-      themed_mask_icon(QStringLiteral(":/icons/cylinder.svg"),
-                       palette().color(QPalette::WindowText)),
-      tr("Cylinder"), this);
+  cylinder_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/cylinder.svg")),
+                                tr("Cylinder"), this);
   cylinder_action_->setCheckable(true);
   cylinder_action_->setProperty("toolMode", static_cast<int>(ToolMode::Cylinder));
   cylinder_action_->setToolTip(tr("Create a cylinder: click to place"));
@@ -175,7 +170,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   create_group_->addAction(cylinder_action_);
   addAction(cylinder_action_);
 
-  beam_action_ = new QAction(tr("Beam"), this);
+  beam_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/beam.svg")),
+                            tr("Beam"), this);
   beam_action_->setCheckable(true);
   beam_action_->setProperty("toolMode", static_cast<int>(ToolMode::Beam));
   beam_action_->setToolTip(tr("Create a beam: click start, then click end"));
@@ -183,7 +179,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   create_group_->addAction(beam_action_);
   addAction(beam_action_);
 
-  column_action_ = new QAction(tr("Column"), this);
+  column_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/column.svg")),
+                              tr("Column"), this);
   column_action_->setCheckable(true);
   column_action_->setProperty("toolMode", static_cast<int>(ToolMode::Column));
   column_action_->setToolTip(tr("Create a column: click to place"));
@@ -192,7 +189,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   create_group_->addAction(column_action_);
   addAction(column_action_);
 
-  slab_action_ = new QAction(tr("Slab"), this);
+  slab_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/slab.svg")),
+                            tr("Slab"), this);
   slab_action_->setCheckable(true);
   slab_action_->setProperty("toolMode", static_cast<int>(ToolMode::Slab));
   slab_action_->setToolTip(tr("Create a slab: click to place"));
@@ -200,7 +198,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   create_group_->addAction(slab_action_);
   addAction(slab_action_);
 
-  door_action_ = new QAction(tr("Door"), this);
+  door_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/door.svg")),
+                            tr("Door"), this);
   door_action_->setCheckable(true);
   door_action_->setProperty("toolMode", static_cast<int>(ToolMode::Door));
   door_action_->setToolTip(tr("Create a door: click a wall to host it"));
@@ -208,7 +207,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   create_group_->addAction(door_action_);
   addAction(door_action_);
 
-  window_action_ = new QAction(tr("Window"), this);
+  window_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/window.svg")),
+                              tr("Window"), this);
   window_action_->setCheckable(true);
   window_action_->setProperty("toolMode", static_cast<int>(ToolMode::Window));
   window_action_->setToolTip(tr("Create a window: click a wall to host it"));
@@ -217,7 +217,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   create_group_->addAction(window_action_);
   addAction(window_action_);
 
-  fillet_action_ = new QAction(tr("Fillet"), this);
+  fillet_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/fillet.svg")),
+                              tr("Fillet"), this);
   fillet_action_->setToolTip(tr("Fillet the selected entity's first edge"));
   connect(fillet_action_, &QAction::triggered, this, [this] {
     if (auto* vp = current_viewport()) {
@@ -226,7 +227,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   });
   addAction(fillet_action_);
 
-  chamfer_action_ = new QAction(tr("Chamfer"), this);
+  chamfer_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/chamfer.svg")),
+                               tr("Chamfer"), this);
   chamfer_action_->setToolTip(tr("Chamfer the selected entity's first edge"));
   connect(chamfer_action_, &QAction::triggered, this, [this] {
     if (auto* vp = current_viewport()) {
@@ -235,20 +237,21 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   });
   addAction(chamfer_action_);
 
-  auto* settings_action =
-      new QAction(style()->standardIcon(QStyle::SP_FileDialogDetailedView), tr("Settings"), this);
+  auto* settings_action = new QAction(ribbon_icon(QStringLiteral(":/icons/settings.svg")),
+                                     tr("Settings"), this);
   settings_action->setShortcut(QKeySequence(tr("Ctrl+,")));
   settings_action->setToolTip(tr("Open settings"));
   connect(settings_action, &QAction::triggered, this, &MainWindow::open_settings);
   addAction(settings_action);
 
-  auto* home_action = new QAction(tr("&Home"), this);
+  auto* home_action = new QAction(ribbon_icon(QStringLiteral(":/icons/home.svg")),
+                                 tr("Welcome"), this);
   home_action->setToolTip(tr("Back to the welcome page"));
   connect(home_action, &QAction::triggered, this, &MainWindow::show_home);
   addAction(home_action);
 
-  auto* undo_action =
-      new QAction(style()->standardIcon(QStyle::SP_ArrowBack), tr("&Undo"), this);
+  auto* undo_action = new QAction(ribbon_icon(QStringLiteral(":/icons/undo.svg")),
+                                 tr("Undo"), this);
   undo_action->setShortcut(QKeySequence::Undo);
   connect(undo_action, &QAction::triggered, this, [this] {
     if (auto* vp = current_viewport()) {
@@ -257,8 +260,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   });
   addAction(undo_action);
 
-  auto* redo_action =
-      new QAction(style()->standardIcon(QStyle::SP_ArrowForward), tr("&Redo"), this);
+  auto* redo_action = new QAction(ribbon_icon(QStringLiteral(":/icons/redo.svg")),
+                                 tr("Redo"), this);
   redo_action->setShortcut(QKeySequence::Redo);
   connect(redo_action, &QAction::triggered, this, [this] {
     if (auto* vp = current_viewport()) {
@@ -270,31 +273,13 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   auto* exit_action = new QAction(tr("E&xit"), this);
   exit_action->setShortcut(QKeySequence::Quit);
   connect(exit_action, &QAction::triggered, this, &QWidget::close);
+  addAction(exit_action);
 
-  // ===== 菜单栏 =====
-  auto* file_menu = menuBar()->addMenu(tr("&File"));
-  file_menu->addAction(new_action);
-  file_menu->addAction(open_action);
-  file_menu->addSeparator();
-  file_menu->addAction(save_action);
-  file_menu->addAction(save_as_action);
-  file_menu->addSeparator();
-  file_menu->addAction(exit_action);
-
-  auto* edit_menu = menuBar()->addMenu(tr("&Edit"));
-  edit_menu->addAction(undo_action);
-  edit_menu->addAction(redo_action);
-
-  auto* view_menu = menuBar()->addMenu(tr("&View"));
-  view_menu->addAction(home_action);
-  view_menu->addAction(frame_all_action);
-  view_menu->addSeparator();
-
-  auto* display_menu = view_menu->addMenu(tr("&Display Mode"));
   auto* display_group = new QActionGroup(this);
   display_group->setExclusive(true);
 
-  wireframe_action_ = display_menu->addAction(tr("&Wireframe"));
+  wireframe_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/wireframe.svg")),
+                                 tr("Wireframe"), this);
   wireframe_action_->setCheckable(true);
   wireframe_action_->setShortcut(QKeySequence(tr("Ctrl+1")));
   wireframe_action_->setToolTip(tr("Line drawing — edges only"));
@@ -304,7 +289,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   });
   addAction(wireframe_action_);
 
-  shaded_action_ = display_menu->addAction(tr("&Shaded"));
+  shaded_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/shaded.svg")),
+                              tr("Shaded"), this);
   shaded_action_->setCheckable(true);
   shaded_action_->setChecked(true);
   shaded_action_->setShortcut(QKeySequence(tr("Ctrl+2")));
@@ -315,7 +301,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   });
   addAction(shaded_action_);
 
-  realistic_action_ = display_menu->addAction(tr("&Realistic"));
+  realistic_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/realistic.svg")),
+                                 tr("Realistic"), this);
   realistic_action_->setCheckable(true);
   realistic_action_->setShortcut(QKeySequence(tr("Ctrl+3")));
   realistic_action_->setToolTip(tr("Lit display with specular highlights"));
@@ -325,87 +312,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   });
   addAction(realistic_action_);
 
-  render_mode_combo_ = new QComboBox(this);
-  render_mode_combo_->addItem(tr("Wireframe"), static_cast<int>(RenderMode::Wireframe));
-  render_mode_combo_->addItem(tr("Shaded"), static_cast<int>(RenderMode::Shaded));
-  render_mode_combo_->addItem(tr("Realistic"), static_cast<int>(RenderMode::Realistic));
-  render_mode_combo_->setToolTip(tr("Render mode"));
-  connect(render_mode_combo_, &QComboBox::currentIndexChanged, this, [this](int index) {
-    if (index >= 0) {
-      set_render_mode(static_cast<RenderMode>(render_mode_combo_->itemData(index).toInt()));
-    }
-  });
-
-  auto* create_menu = menuBar()->addMenu(tr("&Create"));
-  create_menu->addAction(wall_action_);
-  create_menu->addAction(box_action_);
-  create_menu->addAction(cylinder_action_);
-  create_menu->addAction(beam_action_);
-  create_menu->addAction(column_action_);
-  create_menu->addAction(slab_action_);
-  create_menu->addAction(door_action_);
-  create_menu->addAction(window_action_);
-
-  auto* modify_menu = menuBar()->addMenu(tr("&Modify"));
-  modify_menu->addAction(fillet_action_);
-  modify_menu->addAction(chamfer_action_);
-
-  auto* tools_menu = menuBar()->addMenu(tr("&Tools"));
-  tools_menu->addAction(settings_action);
-
-  auto* toolbar = addToolBar(tr("Main"));
-  toolbar->setObjectName(QStringLiteral("mainToolbar"));
-  toolbar->setMovable(false);
-  toolbar->setFloatable(false);
-  toolbar->setIconSize(QSize(20, 20));
-  toolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);
-  toolbar->addAction(new_action);
-  toolbar->addAction(open_action);
-  toolbar->addAction(save_action);
-  toolbar->addAction(save_as_action);
-  toolbar->addSeparator();
-  toolbar->addAction(undo_action);
-  toolbar->addAction(redo_action);
-  toolbar->addSeparator();
-  auto* create_button = new QToolButton(toolbar);
-  create_button->setText(tr("Create"));
-  create_button->setToolTip(tr("Create a parametric component"));
-  create_button->setAutoRaise(true);
-  create_button->setPopupMode(QToolButton::InstantPopup);
-  create_button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-  auto* create_toolbar_menu = new QMenu(create_button);
-  auto* basic_menu = create_toolbar_menu->addMenu(tr("Primitives"));
-  basic_menu->addAction(box_action_);
-  basic_menu->addAction(cylinder_action_);
-  auto* building_menu = create_toolbar_menu->addMenu(tr("Building Components"));
-  building_menu->addAction(wall_action_);
-  building_menu->addAction(beam_action_);
-  building_menu->addAction(column_action_);
-  building_menu->addAction(slab_action_);
-  building_menu->addAction(door_action_);
-  building_menu->addAction(window_action_);
-  create_button->setMenu(create_toolbar_menu);
-  toolbar->addWidget(create_button);
-
-  auto* modify_button = new QToolButton(toolbar);
-  modify_button->setText(tr("Modify"));
-  modify_button->setToolTip(tr("Modify the selected entity"));
-  modify_button->setAutoRaise(true);
-  modify_button->setPopupMode(QToolButton::InstantPopup);
-  modify_button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-  auto* modify_toolbar_menu = new QMenu(modify_button);
-  modify_toolbar_menu->addAction(fillet_action_);
-  modify_toolbar_menu->addAction(chamfer_action_);
-  modify_button->setMenu(modify_toolbar_menu);
-  toolbar->addWidget(modify_button);
-
-  auto* toolbar_spacer = new QWidget(toolbar);
-  toolbar_spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-  toolbar->addWidget(toolbar_spacer);
-  toolbar->addAction(frame_all_action);
-  toolbar->addSeparator();
-  toolbar->addWidget(render_mode_combo_);
-
   // 右侧属性面板：展示/编辑选中实体的参数。
   property_panel_ = new PropertyPanel(this);
   auto* property_dock = new QDockWidget(tr("Properties"), this);
@@ -413,8 +319,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   property_dock->setWidget(property_panel_);
   property_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
   addDockWidget(Qt::RightDockWidgetArea, property_dock);
-  // View 菜单里加一个开关，属性面板关闭后还能重新打开。
-  view_menu->addAction(property_dock->toggleViewAction());
+  QAction* property_toggle = property_dock->toggleViewAction();
+  property_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/properties.svg")));
+  addAction(property_toggle);
 
   handle_inspector_ = new HandleInspector(this);
   auto* handle_dock = new QDockWidget(tr("Handle Inspector"), this);
@@ -424,10 +331,59 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   addDockWidget(Qt::RightDockWidgetArea, handle_dock);
   handle_dock->hide();
   auto* handle_toggle = handle_dock->toggleViewAction();
+  handle_toggle->setText(tr("Inspector"));
+  handle_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/inspector.svg")));
   handle_toggle->setShortcut(QKeySequence(tr("Ctrl+D")));
   handle_toggle->setToolTip(tr("Inspect the selected component's document handle"));
-  view_menu->addAction(handle_toggle);
   addAction(handle_toggle);
+
+  auto* ribbon = new RibbonBar(this);
+  ribbon->add_quick_action(undo_action);
+  ribbon->add_quick_action(redo_action);
+
+  RibbonPage* home_page = ribbon->add_page(tr("Home"));
+  RibbonGroup* file_group = home_page->add_group(tr("File"));
+  file_group->add_action(new_action);
+  file_group->add_action(open_action);
+  file_group->add_action(save_action);
+  file_group->add_action(save_as_action);
+
+  RibbonGroup* primitives_group = home_page->add_group(tr("Primitives"));
+  primitives_group->add_action(box_action_);
+  primitives_group->add_action(cylinder_action_);
+
+  RibbonGroup* building_group = home_page->add_group(tr("Building"));
+  building_group->add_action(wall_action_);
+  building_group->add_action(beam_action_);
+  building_group->add_action(column_action_);
+  building_group->add_action(slab_action_);
+  building_group->add_action(door_action_);
+  building_group->add_action(window_action_);
+
+  RibbonGroup* modify_group = home_page->add_group(tr("Modify"));
+  modify_group->add_action(fillet_action_);
+  modify_group->add_action(chamfer_action_);
+
+  RibbonGroup* navigation_group = home_page->add_group(tr("Navigation"));
+  navigation_group->add_action(frame_all_action);
+
+  RibbonGroup* setting_group = home_page->add_group(tr("Settings"));
+  setting_group->add_action(settings_action);
+
+  RibbonPage* view_page = ribbon->add_page(tr("View"));
+  RibbonGroup* display_ribbon = view_page->add_group(tr("Display"));
+  display_ribbon->add_action(wireframe_action_);
+  display_ribbon->add_action(shaded_action_);
+  display_ribbon->add_action(realistic_action_);
+
+  RibbonGroup* panels_group = view_page->add_group(tr("Panels"));
+  panels_group->add_action(property_toggle);
+  panels_group->add_action(handle_toggle);
+
+  RibbonGroup* workspace_group = view_page->add_group(tr("Workspace"));
+  workspace_group->add_action(home_action);
+
+  setMenuWidget(ribbon);
 
   connect(property_panel_, &PropertyPanel::param_edited, this,
           [this](std::uint64_t entity_id, std::uint64_t feature_id, const QString& param_name,
@@ -672,6 +628,30 @@ bool MainWindow::open_path(const QString& path) {
     return true;
   }
 
+  if (info.suffix().compare(QStringLiteral("ifc"), Qt::CaseInsensitive) == 0) {
+    auto tree = format_ifc_spatial_tree(file);
+    if (!tree) {
+      QMessageBox::critical(this, tr("Open"), QString::fromStdString(tree.error()));
+      return false;
+    }
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("IFC spatial structure"));
+    dlg.resize(640, 480);
+    auto* layout = new QVBoxLayout(&dlg);
+    auto* edit = new QPlainTextEdit(&dlg);
+    edit->setReadOnly(true);
+    edit->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    edit->setPlainText(QString::fromStdString(*tree));
+    layout->addWidget(edit);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok, &dlg);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    layout->addWidget(buttons);
+    dlg.exec();
+    statusBar()->showMessage(
+        tr("Parsed %1 (geometry import not yet)").arg(info.absoluteFilePath()), 5000);
+    return true;
+  }
+
   Result<MeshCpu> mesh = Err("no loader");
   if (occt_supports_extension(file)) {
     auto* ops = ShapeOpsRegistry::instance().find("occt");
@@ -712,10 +692,11 @@ bool MainWindow::open_path(const QString& path) {
 
 void MainWindow::open_file() {
   const QString filters =
-      tr("All Supported (*.tdoc *.gltf *.glb *.obj *.step *.stp *.iges *.igs *.brep);;"
+      tr("All Supported (*.tdoc *.gltf *.glb *.obj *.step *.stp *.iges *.igs *.brep *.ifc);;"
          "Tamias (*.tdoc);;"
          "Meshes (*.gltf *.glb *.obj);;"
          "CAD (*.step *.stp *.iges *.igs *.brep);;"
+         "IFC (*.ifc);;"
          "glTF (*.gltf *.glb);;OBJ (*.obj);;"
          "STEP (*.step *.stp);;IGES (*.iges *.igs);;BREP (*.brep)");
   const QString path = QFileDialog::getOpenFileName(this, tr("Open"), QString(), filters);
@@ -972,13 +953,6 @@ void MainWindow::sync_render_mode_actions() {
   wireframe_action_->setChecked(mode == RenderMode::Wireframe);
   shaded_action_->setChecked(mode == RenderMode::Shaded);
   realistic_action_->setChecked(mode == RenderMode::Realistic);
-  if (render_mode_combo_) {
-    const QSignalBlocker bc(render_mode_combo_);
-    const int idx = render_mode_combo_->findData(static_cast<int>(mode));
-    if (idx >= 0) {
-      render_mode_combo_->setCurrentIndex(idx);
-    }
-  }
 }
 
 void MainWindow::close_tab(int index) {

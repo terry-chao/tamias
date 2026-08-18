@@ -125,5 +125,6 @@ elseif(DEFINED OpenCASCADE_BINARY_DIR)
 endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/TamiasCopyOcctRuntime.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/TamiasIfcOpenShell.cmake")
 
 message(STATUS "OCCT found: ${TAMIAS_OCCT_ROOT}")

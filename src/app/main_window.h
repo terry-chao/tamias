@@ -14,7 +14,6 @@
 
 class QAction;
 class QActionGroup;
-class QComboBox;
 
 namespace tamias {
 
@@ -80,7 +79,6 @@ class MainWindow final : public QMainWindow {
   QAction* fillet_action_ = nullptr;
   QAction* chamfer_action_ = nullptr;
   QActionGroup* create_group_ = nullptr;
-  QComboBox* render_mode_combo_ = nullptr;
   PropertyPanel* property_panel_ = nullptr;
   HandleInspector* handle_inspector_ = nullptr;
 };

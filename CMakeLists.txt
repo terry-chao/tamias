@@ -33,8 +33,13 @@ if(NOT DEFINED Z_VCPKG_ROOT_DIR AND NOT DEFINED VCPKG_INSTALLED_DIR)
   message(FATAL_ERROR
     "vcpkg toolchain did not load. Delete the build directory and configure "
     "again with `cmake --preset msvc` or `cmake --preset linux` "
-    "(VCPKG_ROOT must be set). Adding CMAKE_TOOLCHAIN_FILE to an existing "
-    "cache is not enough.")
+    "(Windows: use C:/dev/vcpkg, not the Visual Studio bundled vcpkg). "
+    "Adding CMAKE_TOOLCHAIN_FILE to an existing cache is not enough.")
+endif()
+if(WIN32 AND DEFINED Z_VCPKG_ROOT_DIR AND Z_VCPKG_ROOT_DIR MATCHES "Microsoft Visual Studio")
+  message(FATAL_ERROR
+    "Do not use the Visual Studio bundled vcpkg. Point VCPKG_ROOT at C:/dev/vcpkg "
+    "(got ${Z_VCPKG_ROOT_DIR}).")
 endif()
 
 include(CTest)
@@ -44,6 +49,7 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/TamiasDependencies.cmake")
 
 add_subdirectory(src/engine)
 add_subdirectory(src/entity)
+add_subdirectory(src/bim)
 add_subdirectory(src/command)
 add_subdirectory(src/app)
 
@@ -54,3 +60,4 @@ endif()
 message(STATUS "Tamias Vulkan backend: ${TAMIAS_ENABLE_VULKAN_BACKEND}")
 message(STATUS "Tamias OpenGL backend: ${TAMIAS_ENABLE_OPENGL_BACKEND}")
 message(STATUS "Tamias OCCT: ${TAMIAS_OCCT_ROOT}")
+message(STATUS "Tamias IfcOpenShell: IfcParse schemas=${TAMIAS_IFC_SCHEMAS}")

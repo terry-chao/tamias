@@ -65,12 +65,12 @@ app / document / 特征树（纯数据）
 
 ---
 
-## IfcOpenShell 怎么上来（还没做）
+## IfcOpenShell 怎么上来
 
 IfcOpenShell **不是**和 OCCT 并列的第二个几何内核。它是：
 
-- `IfcParse`：IFC 语义（空间结构、Pset、GUID、类型/实例）
-- `IfcGeom`：几何，**内部仍用 OCCT**
+- `IfcParse`：IFC 语义（空间结构、Pset、GUID、类型/实例）——**已接入**，读 `.ifc` 可打印空间结构树（`tamias_ifc_dump` / 打开文件）
+- `IfcGeom`：几何，**内部仍用 OCCT 7.9.3**——还没接
 
 所以 IFC 导入应当：语义进语义树，几何仍经 OCCT 变成 BRep / 三角网（能映射成特征树的更好）。**不要**再写一条「IFC → 三角网」绕过本层。
 
@@ -80,7 +80,7 @@ IfcOpenShell **不是**和 OCCT 并列的第二个几何内核。它是：
 
 ## 现在刻意没做的
 
-- IfcOpenShell 接入
+- IfcGeom / 把 IFC 几何送进文档
 - `Shape` 升级为「持有特征树 + evaluate()」（路线图第 8 节仍写着）
 - 第二套几何内核（Truck 等）；接口预留了，没有第二实现
 

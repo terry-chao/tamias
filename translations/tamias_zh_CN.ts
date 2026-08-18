@@ -581,6 +581,85 @@ Click an object to select it, or use a create tool</source>
         <source>&amp;Modify</source>
         <translation>修改(&amp;M)</translation>
     </message>
+    <message>
+        <source>Open</source>
+        <translation>打开</translation>
+    </message>
+    <message>
+        <source>Fit All</source>
+        <translation>全部显示</translation>
+    </message>
+    <message>
+        <source>Welcome</source>
+        <translation>欢迎页</translation>
+    </message>
+    <message>
+        <source>Undo</source>
+        <translation>撤销</translation>
+    </message>
+    <message>
+        <source>Redo</source>
+        <translation>重做</translation>
+    </message>
+    <message>
+        <source>Wireframe</source>
+        <translation>线框</translation>
+    </message>
+    <message>
+        <source>Shaded</source>
+        <translation>着色</translation>
+    </message>
+    <message>
+        <source>Realistic</source>
+        <translation>真实感</translation>
+    </message>
+    <message>
+        <source>Home</source>
+        <translation>开始</translation>
+    </message>
+    <message>
+        <source>View</source>
+        <translation>视图</translation>
+    </message>
+    <message>
+        <source>File</source>
+        <translation>文件</translation>
+    </message>
+    <message>
+        <source>Building</source>
+        <translation>建筑</translation>
+    </message>
+    <message>
+        <source>Navigation</source>
+        <translation>导航</translation>
+    </message>
+    <message>
+        <source>Display</source>
+        <translation>显示</translation>
+    </message>
+    <message>
+        <source>Panels</source>
+        <translation>面板</translation>
+    </message>
+    <message>
+        <source>Workspace</source>
+        <translation>工作区</translation>
+    </message>
+    <message>
+        <source>Inspector</source>
+        <translation>检查器</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::RibbonBar</name>
+    <message>
+        <source>Collapse the ribbon</source>
+        <translation>折叠功能区</translation>
+    </message>
+    <message>
+        <source>Expand the ribbon</source>
+        <translation>展开功能区</translation>
+    </message>
 </context>
 <context>
     <name>tamias::SettingsDialog</name>

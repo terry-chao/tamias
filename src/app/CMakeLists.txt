@@ -5,6 +5,9 @@ set(CMAKE_AUTOUIC ON)
 add_executable(tamias
   main.cpp
   main_window.cpp
+  ribbon_bar.cpp
+  ribbon_page.cpp
+  ribbon_group.cpp
   home_page.cpp
   recent_files.cpp
   mesh_thumbnail.cpp
@@ -49,6 +52,7 @@ target_link_libraries(tamias
     tamias::io
     tamias::modeling
     tamias::command
+    tamias::ifc
     Qt6::Widgets
     Qt6::Gui
     Qt6::Svg
