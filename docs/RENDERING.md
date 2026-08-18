@@ -1,6 +1,6 @@
 # Tamias 渲染是怎么实现的
 
-> 从「屏幕上那张图从哪来」讲到 Tamias 现在真正怎么画。所有结论对应当前代码。几何从哪来见 [特征树求值器](FEATURE-TREE-EVALUATOR.md)；语义树和展平见 [场景图](SCENE-GRAPH.md)；屏外不画见 [视锥剔除](FRUSTUM-CULLING.md)（方案，尚未实现）。
+> 从「屏幕上那张图从哪来」讲到 Tamias 现在真正怎么画。所有结论对应当前代码。几何从哪来见 [特征树求值器](FEATURE-TREE-EVALUATOR.md)；语义树和展平见 [场景图](SCENE-GRAPH.md)；屏外不画见 [视锥剔除](FRUSTUM-CULLING.md)（方案，尚未实现）。OpenGL 怎么绑缓冲、画三角、绑贴图见 [OpenGL 后端](OPENGL.md)。
 
 ---
 
@@ -134,7 +134,7 @@ src/engine/render/rhi/
 - `clip_space_correction_matrix()`：Vulkan 的 NDC 是 Y 向下、Z 从 0 到 1；数学仍按 OpenGL 习惯算，最后乘这个校正矩阵。
 - Shader 各编一份：`*.spv`（Vulkan）和 `*.gl.spv`（OpenGL）。
 
-可以把它想成：导演只说「画这个网格」，翻译官分别说俄语（Vulkan）和英语（OpenGL）。
+可以把它想成：导演只说「画这个网格」，翻译官分别说俄语（Vulkan）和英语（OpenGL）。OpenGL 怎么绑窗口、VBO、贴图、发 draw，见 [OpenGL 后端](OPENGL.md)。
 
 ---
 
@@ -293,6 +293,6 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 | [render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_types.h) | `SceneDrawItem` / `RenderMode` |
 | [render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.cpp) | 线程、上传、一帧绘制顺序 |
 | [rhi/device.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/device.h) | GPU 抽象 |
-| [rhi/vulkan](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/vulkan/vulkan_device.cpp) / [rhi/opengl](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/opengl/opengl_device.cpp) | 两种实现 |
+| [rhi/vulkan](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/vulkan/vulkan_device.cpp) / [rhi/opengl](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/opengl/opengl_device.cpp) | 两种实现；OpenGL 细节见 [OpenGL 后端](OPENGL.md) |
 | [mesh.frag.hlsl](https://github.com/terry-chao/tamias/blob/main/shaders/mesh.frag.hlsl) | 线框 / 着色 / 真实怎么涂色 |
 | [rhi_backends.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/rhi_backends.cpp) | 启动时登记后端 |
