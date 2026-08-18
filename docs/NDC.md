@@ -68,6 +68,7 @@ GPU 侧还要乘 `clip_space_correction_matrix()`（[device.h](https://github.co
 
 - **Vulkan**：翻 NDC 的 Y（Vulkan 的 NDC Y 向下），Z 保持 \[0, 1\]
 - **OpenGL**：把 Z 从 \[0, 1\] 拉成 \[-1, 1\]
+- **wgpu**（方案）：与 Vulkan 相同，翻 Y。见 [wgpu 接入](WGPU.md) 第 3 节。
 
 世界空间里的视锥金字塔没变，变的只是 GPU 约定的 NDC 盒子。从世界坐标提六张视锥平面时，用 `proj * view`，**不要**乘 clip 校正。详见 [视锥剔除](FRUSTUM-CULLING.md)、[OpenGL 后端](OPENGL.md) 第 3 节。
 

@@ -15,7 +15,7 @@
 | 三维视口、相机、点选、提交帧 | `document_viewport` |
 | ViewCube | `view_cube_widget` |
 | 属性面板（改特征参数） | `property_panel` |
-| 设置（含选 Vulkan / OpenGL） | `app_settings` / `settings_dialog` |
+| 设置（含选 Vulkan / OpenGL；wgpu 见方案） | `app_settings` / `settings_dialog` |
 | 登记 RHI 后端 | `rhi_backends.cpp` |
 
 和下面几层的接缝：

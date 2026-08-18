@@ -45,12 +45,11 @@ nav:
       - modeling/index.md
       - 特征树求值器: FEATURE-TREE-EVALUATOR.md
       - MCAD 管线: MCAD-PIPELINE.md
+      - 几何边界: ISHAPE-OPS.md
   - 渲染:
       - render/index.md
       - 管线与 RHI: RENDERING.md
       - 视锥、NDC 与屏幕: NDC.md
       - OpenGL 后端: OPENGL.md
+      - wgpu 接入: WGPU.md
       - 视锥剔除: FRUSTUM-CULLING.md
-  - 几何边界:
-      - kernel/index.md
-      - IShapeOps 与 OCCT: ISHAPE-OPS.md

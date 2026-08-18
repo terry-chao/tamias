@@ -47,15 +47,11 @@
 │  楼层 · 轴网 · 墙梁板柱宿主 · 当前标高 · 空间结构 │
 ├────────────── 场景图 (document/scene) ────────┤
 │  层级 · IFC 属性 · 材质引用 · 变换 · 脏标记    │
-├────────────── 几何层 (modeling) ─────────────┤
-│  特征树（参数化配方）· 求值器 → BRep · 三角网缓存 │
+├────────────── 造型 (modeling) ───────────────┤
+│  特征树（配方）· 求值器 → BRep · 三角网缓存     │
+│  几何边界 (IShapeOps)：OCCT · IfcOpenShell     │
 ├────────────── 渲染 (engine/render) ───────────┤
 │  draw list · RHI（Vulkan 主 / OpenGL 副）     │
-├────────────── 几何边界 (IShapeOps) ──────────┤
-│  ┌──────────────┐   ┌──────────────────────┐ │
-│  │ OCCT (STEP/   │   │ IfcOpenShell (IFC)    │ │
-│  │  IGES/BREP)   │   │  └─ 内部用同一 OCCT ──┘ │
-│  └──────────────┘   └──────────────────────┘ │
 └───────────────────────────────────────────────┘
 ```
 
@@ -66,9 +62,8 @@
 | Qt 客户端 | [APP.md](APP.md) |
 | BIM 业务层 | [BIM.md](BIM.md) |
 | 场景图 | [总述](scene/index.md)、[语义树](SCENE-GRAPH.md) |
-| 几何层（造型） | [FEATURE-TREE-EVALUATOR.md](FEATURE-TREE-EVALUATOR.md)、[MCAD-PIPELINE.md](MCAD-PIPELINE.md) |
-| 渲染（含 RHI） | [RENDERING.md](RENDERING.md)、[NDC.md](NDC.md)、[OPENGL.md](OPENGL.md)、[FRUSTUM-CULLING.md](FRUSTUM-CULLING.md) |
-| 几何边界（IShapeOps） | [ISHAPE-OPS.md](ISHAPE-OPS.md) |
+| 造型 | [FEATURE-TREE-EVALUATOR.md](FEATURE-TREE-EVALUATOR.md)、[MCAD-PIPELINE.md](MCAD-PIPELINE.md)、[ISHAPE-OPS.md](ISHAPE-OPS.md)（几何边界） |
+| 渲染（含 RHI） | [RENDERING.md](RENDERING.md)、[NDC.md](NDC.md)、[OPENGL.md](OPENGL.md)、[WGPU.md](WGPU.md)（第三后端方案）、[FRUSTUM-CULLING.md](FRUSTUM-CULLING.md) |
 
 两个最容易误解的点：
 
@@ -146,7 +141,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 4. **透明度。** 玻璃/幕墙。不透明先画、透明按深度排序、per-material blend 状态。
 5. **选择/高亮/分类着色。** 现在是单 `selected` 单色高亮。升级：多选、轮廓高亮、按 IFC 类型/系统/专业分类着色（Appearance Profiler）。
 6. **显示模式补全。** realistic 接 PBR + 光照 + 阴影 + AO；补 Hidden Line（隐藏线）模式。
-7. **双后端对齐。** Vulkan 和 OpenGL 两套管线行为一致是持续成本点——材质 UBO 布局、纹理格式、clip 语义、instancing。shader 是 HLSL→SPIR-V，GL 端要走 SPIR-V 或另编 GLSL。
+7. **双后端对齐。** Vulkan 和 OpenGL 两套管线行为一致是持续成本点——材质 UBO 布局、纹理格式、clip 语义、instancing。shader 是 HLSL→SPIR-V，GL 端要走 SPIR-V 或另编 GLSL。第三后端 [wgpu](WGPU.md) 按同一套 RHI 动词接入，**不**把 bind group / WGSL 抬到抽象层；代码未落地。
 
 ---
 
