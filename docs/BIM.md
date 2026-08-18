@@ -83,60 +83,11 @@ BIM 业务层就是 [MCAD 与 BIM](DECISION-MCAD-BIM.md) 里说的那层**域分
 
 ## 4. 关联关系（已实现）
 
-墙和窗是关联的：墙动了（改厚度 / 长度 / 高度），通过关系找到对应的窗，通知窗重新造型；造型之后对齐，再做合法性检查，然后结束。
+墙和窗是关联的：墙动了，通过关系找到窗，通知它重造型，再对齐、做合法性检查，然后结束。关系进 `.tdoc`。
 
-### 4.1 数据
+**专页：** [关联关系](bim/relations.md)（数据、更新管线、`RELA` chunk）。
 
-```
-Relation
-  id          关系自己的句柄（.tdoc 里存）
-  kind        目前只有 HostedOn
-  from        从属构件（窗、门）
-  to          宿主构件（墙）
-  placement   along / sill / offset（开口在墙上的参数化位置）
-  valid       对齐之后是否仍完全落在墙内
-```
-
-`BimModel` 持有这张表，作为 `Document` 的侧面。删实体时 `remove_involving` 清掉相关关系。
-
-参数化位置（墙局部）：
-
-| 字段 | 含义 |
-|---|---|
-| `along` | 沿墙长，0 = 起点，1 = 终点 |
-| `sill` | 距墙底的高度（门固定为 0） |
-| `offset` | 沿墙厚，0 = 墙中心 |
-
-墙的局部坐标：X = 厚，Y = 高，Z = 长（与 `WallEntity` 特征树经 Z-up→Y-up 后一致）。开口再绕 Y 转 −90°，让窗宽贴墙长。
-
-### 4.2 更新管线
-
-```
-墙参数改了（SetFeatureParamCommand）
-  → notify_entity_changed(wall)
-      → 按 to == wall 查出 HostedOn 的窗/门
-      → 通知每个开口：
-          1. 重新造型：开口厚度跟上墙厚，createGeom 重算网格
-          2. 对齐：along / sill 夹进墙的可用范围
-          3. 合法性检查：开口是否仍完全落在墙长、墙高内
-      → 结束（不在这里做墙连接裁剪、开洞布尔）
-```
-
-代码：[`host_update.cpp`](https://github.com/terry-chao/tamias/blob/main/src/bim/host_update.cpp)、[`host_geometry.cpp`](https://github.com/terry-chao/tamias/blob/main/src/bim/host_geometry.cpp)。
-
-放置窗/门时：视口射线点中墙 → `bind_opening_to_host` → 写入关系并立刻走同一套管线。点在空地上则不建关系，开口保持独立放置。
-
-### 4.3 进 .tdoc
-
-`.tdoc` 格式版本 **6**。新增 chunk `RELA`：
-
-```
-next_relation_id : u64
-count            : u64
-[ id, kind, from, to, along, sill, offset, valid ] × count
-```
-
-版本 5 的文件仍能打开（没有 `RELA` 就是空表）。内存快照（undo 用的 `serialize_document`）同样带上关系表。
+放置窗/门时点在墙上会写入 `HostedOn`；改墙参数走 `notify_entity_changed`。详情不在这里重复。
 
 ---
 
