@@ -41,6 +41,8 @@ class MainWindow final : public QMainWindow {
   void refresh_handle_inspector();
 
  private:
+  void showEvent(QShowEvent* event) override;
+
   void add_document_tab(std::shared_ptr<Document> document,
                         const ViewportState* viewport = nullptr);
   Result<void> populate_document_meshes(Document& document, RenderThread& thread);
@@ -87,6 +89,7 @@ class MainWindow final : public QMainWindow {
   QActionGroup* create_group_ = nullptr;
   PropertyPanel* property_panel_ = nullptr;
   HandleInspector* handle_inspector_ = nullptr;
+  bool placed_on_primary_ = false;
 };
 
 }  // namespace tamias

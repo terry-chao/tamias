@@ -19,6 +19,10 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QCoreApplication>
+#include <QGuiApplication>
+#include <QScreen>
+#include <QShowEvent>
+#include <QStyle>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
@@ -69,12 +73,26 @@ QIcon ribbon_icon(const QString& resource) {
   return themed_mask_icon(resource, QColor(47, 125, 222));
 }
 
+void center_on_primary_screen(QWidget* widget) {
+  QScreen* screen = QGuiApplication::primaryScreen();
+  if (screen == nullptr || widget == nullptr) {
+    return;
+  }
+  const QRect avail = screen->availableGeometry();
+  const QSize size(qMin(widget->width(), avail.width()), qMin(widget->height(), avail.height()));
+  if (size != widget->size()) {
+    widget->resize(size);
+  }
+  widget->setGeometry(QStyle::alignedRect(Qt::LeftToRight, Qt::AlignCenter, size, avail));
+}
+
 }  // namespace
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   setWindowTitle("Tamias");
   setWindowIcon(QIcon(QStringLiteral(":/branding/logo.png")));
   resize(1600, 1000);
+  center_on_primary_screen(this);
 
   recent_.load();
   AppSettings::instance().load();
@@ -483,6 +501,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     }
     add_document_tab(doc);
   }
+}
+
+void MainWindow::showEvent(QShowEvent* event) {
+  QMainWindow::showEvent(event);
+  if (placed_on_primary_) {
+    return;
+  }
+  center_on_primary_screen(this);
+  placed_on_primary_ = true;
 }
 
 void MainWindow::set_create_tool(ToolMode mode) {
