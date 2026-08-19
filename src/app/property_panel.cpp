@@ -41,6 +41,18 @@ QString PropertyPanel::entity_label(EntityKind kind) {
       return tr("Door");
     case EntityKind::Window:
       return tr("Window");
+    case EntityKind::Line:
+      return tr("Line");
+    case EntityKind::Polyline:
+      return tr("Polyline");
+    case EntityKind::Circle:
+      return tr("Circle");
+    case EntityKind::Arc:
+      return tr("Arc");
+    case EntityKind::Bezier:
+      return tr("Bezier");
+    case EntityKind::Rectangle:
+      return tr("Rectangle");
   }
   return tr("Entity");
 }
@@ -154,6 +166,17 @@ QString PropertyPanel::param_label(EntityKind entity_kind, FeatureKind feature_k
         return tr("Height");
       }
       break;
+    case EntityKind::Circle:
+      if (feature_kind == FeatureKind::CircleWire && is("radius")) {
+        return tr("Radius");
+      }
+      break;
+    case EntityKind::Line:
+    case EntityKind::Polyline:
+    case EntityKind::Arc:
+    case EntityKind::Bezier:
+    case EntityKind::Rectangle:
+      break;
   }
   return param_name;  // 未知组合：回退原始参数名
 }
@@ -235,6 +258,9 @@ void PropertyPanel::show_entity(const Entity* entity, Document* document,
 
     const std::uint64_t fid = feature.id;
     for (const auto& key : keys) {
+      if (is_sketch_feature(feature.kind) && key != "radius") {
+        continue;
+      }
       auto* spin = new QDoubleSpinBox(content_);
       spin->setRange(-1.0e6, 1.0e6);
       spin->setDecimals(3);

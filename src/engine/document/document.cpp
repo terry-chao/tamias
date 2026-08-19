@@ -62,8 +62,8 @@ void Document::seed_default_materials() {
       add_texture(make_material_texture([](std::uint32_t x, std::uint32_t y) {
         const float coarse = material_hash(x >> 3, y >> 3);
         const float fine = material_hash(x, y);
-        const float v = 0.58f + 0.10f * coarse + 0.06f * fine;
-        return Vec3{v, v, v};
+        const float v = 0.46f + 0.20f * coarse + 0.10f * fine;
+        return Vec3{v * 1.10f, v * 1.00f, v * 0.86f};
       })).id;
 
   const std::uint64_t steel_tex_id =
@@ -114,8 +114,8 @@ void Document::seed_default_materials() {
     m.albedo_texture_id = albedo;
     add_material(std::move(m));
   };
-  seed("Default", {0.75f, 0.78f, 0.82f}, 0.9f, 0.0f, default_tex_id);
-  seed("Concrete", {0.62f, 0.62f, 0.60f}, 0.9f, 0.0f, concrete_tex_id);
+  seed("Default", {0.78f, 0.81f, 0.86f}, 0.9f, 0.0f, default_tex_id);
+  seed("Concrete", {0.72f, 0.66f, 0.56f}, 0.92f, 0.0f, concrete_tex_id);
   seed("Steel", {0.55f, 0.57f, 0.62f}, 0.4f, 0.9f, steel_tex_id);
   seed("Glass", {0.80f, 0.88f, 0.90f}, 0.1f, 0.0f, glass_tex_id);
   seed("Wood", {0.55f, 0.40f, 0.26f}, 0.7f, 0.0f, wood_tex_id);
@@ -139,6 +139,27 @@ Entity* Document::add_entity(std::unique_ptr<Entity> entity, MeshCpu mesh) {
 
   Entity* raw = entity.get();
   entities_[entity->id] = std::move(entity);
+  if (raw->material_id == 0) {
+    const char* preset = nullptr;
+    switch (raw->kind()) {
+      case EntityKind::Wall:
+      case EntityKind::Beam:
+      case EntityKind::Column:
+      case EntityKind::Slab:
+        preset = "Concrete";
+        break;
+      default:
+        break;
+    }
+    if (preset != nullptr) {
+      for (const auto& [id, mat] : materials_) {
+        if (mat.name == preset) {
+          raw->material_id = id;
+          break;
+        }
+      }
+    }
+  }
   recompute_scene();
   mark_dirty();
   return raw;
@@ -191,14 +212,18 @@ std::vector<SceneDrawItem> Document::render_items(const Frustum* frustum) const 
     item.transform = node.world_transform;
     item.color = node.color;
     item.selected = node.selected;
-    // 实体带材质：解析 material_id → base_color/rough/metallic/纹理 id；否则回退节点色（导入网格）。
-    if (const Entity* e = entity(node.id); e != nullptr && e->material_id != 0) {
-      if (const Material* m = material(e->material_id)) {
-        item.color = m->base_color;
-        item.roughness = m->roughness;
-        item.metallic = m->metallic;
-        item.albedo_texture_id = m->albedo_texture_id;
-        item.normal_texture_id = m->normal_texture_id;
+    if (const Entity* e = entity(node.id); e != nullptr) {
+      if (e->material_id != 0) {
+        if (const Material* m = material(e->material_id)) {
+          item.color = m->base_color;
+          item.roughness = m->roughness;
+          item.metallic = m->metallic;
+          item.albedo_texture_id = m->albedo_texture_id;
+          item.normal_texture_id = m->normal_texture_id;
+        }
+      } else if (e->is_sketch_entity()) {
+        // 草图用青色，与混凝土灰、选中蓝分开。
+        item.color = {0.18f, 0.80f, 0.98f};
       }
     }
     items.push_back(item);

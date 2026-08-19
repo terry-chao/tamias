@@ -5,13 +5,20 @@
 #include "engine/io/binary_archive.h"
 #include "engine/document/document_io.h"
 #include "entity/beam_entity.h"
+#include "entity/bezier_entity.h"
 #include "entity/box_entity.h"
+#include "entity/circle_entity.h"
 #include "entity/column_entity.h"
 #include "entity/door_entity.h"
 #include "entity/family_entity.h"
+#include "entity/line_entity.h"
+#include "entity/polyline_entity.h"
+#include "entity/rectangle_entity.h"
+#include "entity/sketch_entity.h"
 #include "entity/slab_entity.h"
 #include "entity/wall_entity.h"
 #include "entity/window_entity.h"
+#include "engine/modeling/curve_geom.h"
 #include "engine/io/mesh_io.h"
 #include "engine/math/math.h"
 #include "engine/document/picking.h"
@@ -456,6 +463,46 @@ TEST(Entity, CreateGeom) {
   EXPECT_FALSE(dynamic_cast<const FamilyEntity*>(&box) != nullptr);
 }
 
+TEST(SketchEntity, CreateGeomAndNotFamily) {
+  LineEntity line({0.f, 0.f, 0.f}, {2.f, 0.f, 0.f});
+  auto line_mesh = line.createGeom();
+  ASSERT_TRUE(line_mesh) << line_mesh.error();
+  EXPECT_FALSE(line_mesh->indices.empty());
+  EXPECT_TRUE(line.is_sketch_entity());
+  EXPECT_FALSE(line.is_family_entity());
+
+  CircleEntity circle({0.f, 0.f, 0.f}, 1.0);
+  auto circle_mesh = circle.createGeom();
+  ASSERT_TRUE(circle_mesh) << circle_mesh.error();
+  EXPECT_FALSE(circle_mesh->indices.empty());
+  EXPECT_TRUE(circle.is_sketch_entity());
+
+  PolylineEntity poly({{0.f, 0.f, 0.f}, {1.f, 0.f, 0.f}, {1.f, 0.f, 1.f}});
+  auto poly_mesh = poly.createGeom();
+  ASSERT_TRUE(poly_mesh) << poly_mesh.error();
+
+  RectangleEntity rect({0.f, 0.f, 0.f}, {2.f, 0.f, 1.f});
+  auto rect_mesh = rect.createGeom();
+  ASSERT_TRUE(rect_mesh) << rect_mesh.error();
+
+  BezierEntity bezier({0.f, 0.f, 0.f}, {0.f, 0.f, 1.f}, {2.f, 0.f, 1.f}, {2.f, 0.f, 0.f});
+  auto bezier_mesh = bezier.createGeom();
+  ASSERT_TRUE(bezier_mesh) << bezier_mesh.error();
+}
+
+TEST(CurveGeom, ArcPassesThroughMidPoint) {
+  const Vec3 start{1.f, 0.f, 0.f};
+  const Vec3 through{0.f, 0.f, 1.f};
+  const Vec3 end{-1.f, 0.f, 0.f};
+  const auto pts = sample_arc_3pt(start, through, end, 48);
+  ASSERT_GE(pts.size(), 3u);
+  float best = 1e9f;
+  for (const Vec3& p : pts) {
+    best = std::min(best, length(p - through));
+  }
+  EXPECT_LT(best, 0.05f);
+}
+
 TEST(Entity, ParametricGeometryHasNormals) {
   BoxEntity box({0.f, 0.f, 0.f});
   auto box_mesh = box.createGeom();
@@ -523,6 +570,41 @@ TEST(CommandSystem, DispatchCreateWallUndoRedo) {
   system.redo();
   EXPECT_EQ(doc.entities().size(), 1u);
   EXPECT_EQ(doc.meshes().size(), 1u);
+}
+
+TEST(CommandSystem, CreateCircleTwoClicks) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document doc("sketch-circle");
+  ASSERT_TRUE(system.dispatch(doc, "create_circle", {}));
+  auto p1 = system.feed_point({0.f, 0.f, 0.f});
+  ASSERT_TRUE(p1) << p1.error();
+  EXPECT_FALSE(*p1);
+  auto p2 = system.feed_point({1.f, 0.f, 0.f});
+  ASSERT_TRUE(p2) << p2.error();
+  EXPECT_TRUE(*p2);
+  ASSERT_EQ(doc.entities().size(), 1u);
+  EXPECT_EQ(doc.entities().begin()->second->kind(), EntityKind::Circle);
+}
+
+TEST(CommandSystem, CreatePolylineConfirm) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document doc("sketch-poly");
+  ASSERT_TRUE(system.dispatch(doc, "create_polyline", {}));
+  ASSERT_TRUE(system.feed_point({0.f, 0.f, 0.f}));
+  ASSERT_TRUE(system.feed_point({1.f, 0.f, 0.f}));
+  ASSERT_TRUE(system.feed_point({1.f, 0.f, 1.f}));
+  EXPECT_EQ(doc.entities().size(), 0u);
+  auto done = system.confirm();
+  ASSERT_TRUE(done) << done.error();
+  EXPECT_TRUE(*done);
+  ASSERT_EQ(doc.entities().size(), 1u);
+  EXPECT_EQ(doc.entities().begin()->second->kind(), EntityKind::Polyline);
 }
 
 TEST(FeatureModel, FilletIncreasesFaces) {

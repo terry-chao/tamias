@@ -1,0 +1,40 @@
+#pragma once
+
+#include "engine/core/result.h"
+#include "engine/graphics/mesh.h"
+#include "engine/math/math.h"
+#include "engine/modeling/feature.h"
+
+#include <unordered_map>
+#include <vector>
+
+namespace tamias {
+
+constexpr float kSketchTubeRadius = 0.02f;
+
+[[nodiscard]] std::unordered_map<std::string, double> line_feature_params(Vec3 a, Vec3 b);
+[[nodiscard]] std::unordered_map<std::string, double> polyline_feature_params(
+    const std::vector<Vec3>& points);
+[[nodiscard]] std::unordered_map<std::string, double> circle_wire_params(Vec3 center,
+                                                                         double radius);
+[[nodiscard]] std::unordered_map<std::string, double> arc_feature_params(Vec3 start, Vec3 through,
+                                                                         Vec3 end);
+[[nodiscard]] std::unordered_map<std::string, double> bezier_feature_params(Vec3 p0, Vec3 p1,
+                                                                            Vec3 p2, Vec3 p3);
+[[nodiscard]] std::unordered_map<std::string, double> rect_wire_params(Vec3 a, Vec3 b);
+
+[[nodiscard]] std::vector<Vec3> sample_line(Vec3 a, Vec3 b);
+[[nodiscard]] std::vector<Vec3> sample_polyline(const std::vector<Vec3>& points);
+[[nodiscard]] std::vector<Vec3> sample_circle_xz(Vec3 center, float radius, int segments = 64);
+[[nodiscard]] std::vector<Vec3> sample_arc_3pt(Vec3 start, Vec3 through, Vec3 end,
+                                               int segments = 48);
+[[nodiscard]] std::vector<Vec3> sample_cubic_bezier(Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3,
+                                                    int segments = 32);
+[[nodiscard]] std::vector<Vec3> sample_rect_xz(Vec3 a, Vec3 b);
+
+[[nodiscard]] std::vector<Vec3> sample_sketch_feature(const FeatureModel& model, const Feature& f);
+[[nodiscard]] MeshCpu make_polyline_tube(const std::vector<Vec3>& points, float radius,
+                                         int sides = 8);
+[[nodiscard]] Result<MeshCpu> mesh_from_sketch_feature(const FeatureModel& model, const Feature& f);
+
+}  // namespace tamias

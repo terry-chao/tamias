@@ -217,6 +217,64 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   create_group_->addAction(window_action_);
   addAction(window_action_);
 
+  line_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/line.svg")),
+                            tr("Line"), this);
+  line_action_->setCheckable(true);
+  line_action_->setProperty("toolMode", static_cast<int>(ToolMode::Line));
+  line_action_->setToolTip(tr("Create a line: click start, then click end"));
+  connect(line_action_, &QAction::triggered, this, [this] { set_create_tool(ToolMode::Line); });
+  create_group_->addAction(line_action_);
+  addAction(line_action_);
+
+  polyline_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/polyline.svg")),
+                                tr("Polyline"), this);
+  polyline_action_->setCheckable(true);
+  polyline_action_->setProperty("toolMode", static_cast<int>(ToolMode::Polyline));
+  polyline_action_->setToolTip(tr("Create a polyline: click points, Enter or double-click to finish"));
+  connect(polyline_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::Polyline); });
+  create_group_->addAction(polyline_action_);
+  addAction(polyline_action_);
+
+  rectangle_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/rectangle.svg")),
+                                 tr("Rectangle"), this);
+  rectangle_action_->setCheckable(true);
+  rectangle_action_->setProperty("toolMode", static_cast<int>(ToolMode::Rectangle));
+  rectangle_action_->setToolTip(tr("Create a rectangle: click two opposite corners"));
+  connect(rectangle_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::Rectangle); });
+  create_group_->addAction(rectangle_action_);
+  addAction(rectangle_action_);
+
+  circle_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/circle.svg")),
+                              tr("Circle"), this);
+  circle_action_->setCheckable(true);
+  circle_action_->setProperty("toolMode", static_cast<int>(ToolMode::Circle));
+  circle_action_->setToolTip(tr("Create a circle: click center, then click radius"));
+  connect(circle_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::Circle); });
+  create_group_->addAction(circle_action_);
+  addAction(circle_action_);
+
+  arc_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/arc.svg")),
+                           tr("Arc"), this);
+  arc_action_->setCheckable(true);
+  arc_action_->setProperty("toolMode", static_cast<int>(ToolMode::Arc));
+  arc_action_->setToolTip(tr("Create an arc: click start, through, then end"));
+  connect(arc_action_, &QAction::triggered, this, [this] { set_create_tool(ToolMode::Arc); });
+  create_group_->addAction(arc_action_);
+  addAction(arc_action_);
+
+  bezier_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/bezier.svg")),
+                              tr("Bezier"), this);
+  bezier_action_->setCheckable(true);
+  bezier_action_->setProperty("toolMode", static_cast<int>(ToolMode::Bezier));
+  bezier_action_->setToolTip(tr("Create a cubic Bezier: click four control points"));
+  connect(bezier_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::Bezier); });
+  create_group_->addAction(bezier_action_);
+  addAction(bezier_action_);
+
   fillet_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/fillet.svg")),
                               tr("Fillet"), this);
   fillet_action_->setToolTip(tr("Fillet the selected entity's first edge"));
@@ -347,6 +405,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   file_group->add_action(open_action);
   file_group->add_action(save_action);
   file_group->add_action(save_as_action);
+
+  RibbonGroup* draw_group = home_page->add_group(tr("Draw"));
+  draw_group->add_action(line_action_);
+  draw_group->add_action(polyline_action_);
+  draw_group->add_action(rectangle_action_);
+  draw_group->add_action(circle_action_);
+  draw_group->add_action(arc_action_);
+  draw_group->add_action(bezier_action_);
 
   RibbonGroup* primitives_group = home_page->add_group(tr("Primitives"));
   primitives_group->add_action(box_action_);

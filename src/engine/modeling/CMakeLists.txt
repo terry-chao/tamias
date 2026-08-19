@@ -3,6 +3,7 @@ add_library(tamias_modeling STATIC
   occt_shape_ops.cpp
   occt_feature.cpp
   occt_geom_builder.cpp
+  curve_geom.cpp
 )
 add_library(tamias::modeling ALIAS tamias_modeling)
 target_include_directories(tamias_modeling PUBLIC

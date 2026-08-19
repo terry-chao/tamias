@@ -57,6 +57,26 @@ Result<bool> CommandSystem::feed_point(Vec3 point, std::uint64_t picked_entity_i
   return false;  // 还没完
 }
 
+Result<bool> CommandSystem::confirm() {
+  if (!pending_) {
+    return Err("CommandSystem: no pending command");
+  }
+  auto done = pending_->on_confirm();
+  if (!done) {
+    return Err(done.error());
+  }
+  if (*done) {
+    if (auto r = pending_->execute(); !r) {
+      pending_.reset();
+      return Err(r.error());
+    }
+    stack_.push_executed(std::move(pending_));
+    pending_.reset();
+    return true;
+  }
+  return false;
+}
+
 void CommandSystem::cancel() { pending_.reset(); }
 
 void CommandSystem::undo() { stack_.undo(); }

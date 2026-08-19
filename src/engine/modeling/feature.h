@@ -16,7 +16,27 @@ enum class FeatureKind : std::uint8_t {
   Boolean = 3,      // 布尔运算，inputs[0..1] = 两个 shape，params{ operation }
   Fillet = 4,       // 倒圆角，inputs[0] = shape，params{ radius, edge }
   Chamfer = 5,      // 倒斜角，inputs[0] = shape，params{ distance, edge }
+  Line = 6,         // 直线，params{ ax,ay,az, bx,by,bz }
+  Polyline = 7,     // 折线，params{ n, p0x,p0y,p0z, ... }
+  CircleWire = 8,   // 圆曲线（非轮廓面），params{ cx,cy,cz, radius }
+  Arc = 9,          // 三点圆弧 start/through/end，params{ ax..cz }
+  Bezier = 10,      // 三次贝塞尔，params{ p0x..p3z }
+  RectWire = 11,    // 轴对齐矩形轮廓，params{ ax,ay,az, bx,by,bz }
 };
+
+inline bool is_sketch_feature(FeatureKind kind) {
+  switch (kind) {
+    case FeatureKind::Line:
+    case FeatureKind::Polyline:
+    case FeatureKind::CircleWire:
+    case FeatureKind::Arc:
+    case FeatureKind::Bezier:
+    case FeatureKind::RectWire:
+      return true;
+    default:
+      return false;
+  }
+}
 
 // 布尔运算类型（存成 Boolean 特征的 operation 参数）。
 enum class BooleanOp : std::uint8_t { Fuse = 0, Common = 1, Cut = 2 };

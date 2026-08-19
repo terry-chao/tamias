@@ -1,6 +1,6 @@
 #include "mesh.hlsli"
 
-// 无限地面网格：主次网格 + 世界轴 + fwidth 抗锯齿，随距离淡出到地平线色。
+// 深色 CAD 地面网格：暗填充上叠浅色线，主次网格 + 世界轴 + 距离淡出。
 float4 main(VsOutput input) : SV_Target0 {
   float2 coord = input.world_pos.xz;
   float2 deriv = fwidth(coord);
@@ -23,13 +23,20 @@ float4 main(VsOutput input) : SV_Target0 {
   float near_fade = smoothstep(0.0, 2.0, dist);
   fade *= near_fade;
 
-  float3 minor_color = float3(0.54, 0.56, 0.60);
-  float3 major_color = float3(0.34, 0.36, 0.42);
-  float3 horizon = float3(0.86, 0.88, 0.92);
+  float3 fill = float3(0.22, 0.24, 0.28);         // 与天空地平线同色
+  float3 minor_color = float3(0.38, 0.41, 0.46);  // 暗底上的浅次线
+  float3 major_color = float3(0.50, 0.54, 0.60);
 
-  float3 color = horizon;
-  color = lerp(color, minor_color, saturate(minor_strength * 0.55));
-  color = lerp(color, major_color, saturate(major_strength * 0.85));
-  color = lerp(horizon, color, fade);
+  float3 color = fill;
+  color = lerp(color, minor_color, saturate(minor_strength * 0.50));
+  color = lerp(color, major_color, saturate(major_strength * 0.75));
+
+  // 世界轴：X 红、Z 蓝，比主网格略亮，便于定向。
+  float axis_x = 1.0 - saturate(abs(coord.y) / max(deriv.y, 1e-5));
+  float axis_z = 1.0 - saturate(abs(coord.x) / max(deriv.x, 1e-5));
+  color = lerp(color, float3(0.78, 0.28, 0.28), saturate(axis_x));
+  color = lerp(color, float3(0.28, 0.52, 0.88), saturate(axis_z));
+
+  color = lerp(fill, color, fade);
   return float4(color, 1.0);
 }

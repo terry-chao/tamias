@@ -1,5 +1,7 @@
 #include "occt_feature.h"
 
+#include "engine/modeling/curve_geom.h"
+
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
@@ -158,6 +160,11 @@ Result<MeshCpu> tessellate_shape(const TopoDS_Shape& shape, double deflection) {
 // 求值实现：不捕获异常，由外层 evaluate_feature_model 统一转成 Result 错误。
 static Result<MeshCpu> evaluate_feature_model_impl(const FeatureModel& model,
                                                   double linear_deflection) {
+  const Feature* out = model.output_feature();
+  if (out != nullptr && is_sketch_feature(out->kind)) {
+    return mesh_from_sketch_feature(model, *out);
+  }
+
   std::unordered_map<std::uint64_t, TopoDS_Shape> shapes;
   for (const auto& f : model.features()) {
     TopoDS_Shape s;
@@ -261,7 +268,6 @@ static Result<MeshCpu> evaluate_feature_model_impl(const FeatureModel& model,
     shapes[f.id] = s;
   }
 
-  const Feature* out = model.output_feature();
   if (out == nullptr) {
     return Err("feature model has no features");
   }

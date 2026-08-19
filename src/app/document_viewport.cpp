@@ -75,7 +75,7 @@ DocumentViewport::DocumentViewport(std::shared_ptr<Document> document,
   // Match Vulkan clear so any uncovered edge never flashes pure black.
   setAutoFillBackground(true);
   QPalette pal = palette();
-  pal.setColor(QPalette::Window, QColor(31, 33, 38));
+  pal.setColor(QPalette::Window, QColor(36, 46, 61));
   setPalette(pal);
 
   // Vulkan draws into a native child surface; this parent stays a normal Qt
@@ -477,11 +477,8 @@ void DocumentViewport::submit_current_frame() {
   frame.mode = mode_;
   const Frustum frustum = Frustum::from_view_proj(frame.proj * frame.view);
   frame.items = document_->render_items(&frustum);
-  frame.show_preview_line = (tool_mode_ == ToolMode::Wall) && command_system_.drag_started();
-  if (frame.show_preview_line) {
-    frame.preview_start = command_system_.drag_start();
-    frame.preview_end = cursor_ground_position(last_mouse_);
-  }
+  const Vec3 cursor = has_cursor_ ? cursor_ground_position(last_mouse_) : Vec3{};
+  frame.preview_polyline = command_system_.preview_polyline(cursor);
   channel_->submit(std::move(frame));
 }
 
@@ -532,14 +529,8 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
         }
       }
       auto r = command_system_.feed_point(point, picked);  // 喂交互点给 pending 命令
-      if (!r) {
-        log_error(r.error());
+      if (finish_pending_if_done(r)) {
         return;
-      }
-      if (*r) {  // 命令完成（墙=第二点，box/cylinder=第一点）
-        set_tool(ToolMode::None);
-        resync_all_meshes();
-        rebuild_bvh();
       }
       request_redraw();
       return;
@@ -594,6 +585,15 @@ void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
   }
 }
 
+void DocumentViewport::mouseDoubleClickEvent(QMouseEvent* event) {
+  if (event->button() != Qt::LeftButton || !command_system_.accepts_confirm()) {
+    QWidget::mouseDoubleClickEvent(event);
+    return;
+  }
+  last_mouse_ = event->pos();
+  finish_pending_if_done(command_system_.confirm());
+}
+
 void DocumentViewport::wheelEvent(QWheelEvent* event) {
   stop_view_animation();
   const float steps = event->angleDelta().y() / 120.f;
@@ -602,12 +602,16 @@ void DocumentViewport::wheelEvent(QWheelEvent* event) {
   last_mouse_ = pos;
   has_cursor_ = true;
 
-  // Zoom toward the cursor: dolly, then shift the orbit target so the world
-  // point under the mouse stays fixed in screen space.
-  const Vec3 focus = cursor_world_position(pos);
-  const Vec3 old_target = camera_.target();
-  camera_.dolly(factor);
-  camera_.set_target(focus + (old_target - focus) * factor);
+  if (AppSettings::instance().zoom_to_mouse_position()) {
+    // Zoom toward the cursor: sample the world point first, dolly, then shift
+    // the orbit target so that point stays fixed in screen space.
+    const Vec3 focus = cursor_world_position(pos);
+    const Vec3 old_target = camera_.target();
+    camera_.dolly(factor);
+    camera_.set_target(focus + (old_target - focus) * factor);
+  } else {
+    camera_.dolly(factor);
+  }
   request_redraw();
 }
 
@@ -615,6 +619,12 @@ void DocumentViewport::keyPressEvent(QKeyEvent* event) {
   switch (event->key()) {
     case Qt::Key_Escape:
       cancel_tool();
+      break;
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+      if (command_system_.accepts_confirm()) {
+        finish_pending_if_done(command_system_.confirm());
+      }
       break;
     case Qt::Key_BracketLeft:   // '[' 减参数
       adjust_selected_param(-0.05);
@@ -678,13 +688,53 @@ void DocumentViewport::dispatch_tool_command(ToolMode mode) {
     if (auto r = command_system_.dispatch(*document_, "create_window", {}); !r) {
       log_error(r.error());
     }
+  } else if (mode == ToolMode::Line) {
+    if (auto r = command_system_.dispatch(*document_, "create_line", {}); !r) {
+      log_error(r.error());
+    }
+  } else if (mode == ToolMode::Polyline) {
+    if (auto r = command_system_.dispatch(*document_, "create_polyline", {}); !r) {
+      log_error(r.error());
+    }
+  } else if (mode == ToolMode::Circle) {
+    if (auto r = command_system_.dispatch(*document_, "create_circle", {}); !r) {
+      log_error(r.error());
+    }
+  } else if (mode == ToolMode::Arc) {
+    if (auto r = command_system_.dispatch(*document_, "create_arc", {}); !r) {
+      log_error(r.error());
+    }
+  } else if (mode == ToolMode::Bezier) {
+    if (auto r = command_system_.dispatch(*document_, "create_bezier", {}); !r) {
+      log_error(r.error());
+    }
+  } else if (mode == ToolMode::Rectangle) {
+    if (auto r = command_system_.dispatch(*document_, "create_rectangle", {}); !r) {
+      log_error(r.error());
+    }
   }
 }
 
+bool DocumentViewport::finish_pending_if_done(const Result<bool>& done) {
+  if (!done) {
+    log_error(done.error());
+    return true;
+  }
+  if (*done) {
+    set_tool(ToolMode::None);
+    resync_all_meshes();
+    rebuild_bvh();
+    request_redraw();
+    emit document_changed();
+    return true;
+  }
+  return false;
+}
+
 void DocumentViewport::cancel_tool() {
-  if (tool_mode_ == ToolMode::Wall && command_system_.drag_started()) {
+  if (tool_mode_ != ToolMode::None && command_system_.drag_started()) {
     command_system_.cancel();
-    dispatch_tool_command(ToolMode::Wall);  // 取消当前放置，仍留在墙工具
+    dispatch_tool_command(tool_mode_);  // 取消当前放置，仍留在工具
     request_redraw();
   } else if (tool_mode_ != ToolMode::None) {
     set_tool(ToolMode::None);  // 退出工具
@@ -707,7 +757,7 @@ void DocumentViewport::adjust_selected_param(double delta) {
       current = entity->model.param(f.id, "width", 0.0);
       break;
     }
-    if (f.kind == FeatureKind::CircleProfile) {
+    if (f.kind == FeatureKind::CircleProfile || f.kind == FeatureKind::CircleWire) {
       feature_id = f.id;
       param_name = "radius";
       current = entity->model.param(f.id, "radius", 0.0);

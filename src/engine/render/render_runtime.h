@@ -41,10 +41,8 @@ struct FrameSubmission {
   RenderMode mode = RenderMode::Shaded;
   std::vector<SceneDrawItem> items;
   bool show_axes = true;  // 世界坐标轴（X红/Y绿/Z蓝）
-  bool show_preview_line = false;
-  Vec3 preview_start{};
-  Vec3 preview_end{};
-  float clear_color[4] = {0.12f, 0.13f, 0.15f, 1.f};
+  std::vector<Vec3> preview_polyline;
+  float clear_color[4] = {0.14f, 0.18f, 0.24f, 1.f};
 };
 
 // Shared execution config: Vulkan views with matching validation can share a device/thread.

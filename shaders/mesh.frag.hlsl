@@ -40,10 +40,10 @@ float3 shaded_realistic(float3 n, float3 l, float3 v, float3 base, float rough, 
   // 镜面反射（Cook-Torrance）：方向光积分里 NdotL 与 BRDF 分母约掉，只剩 4*NdotV。
   float3 specular = (D * G * F) / max(4.0 * ndotv, 1e-4);
 
-  // 半球环境光（Y-up：朝上=天空，朝下=地面），替代没有 IBL 时的环境项。
+  // 半球环境光（Y-up：朝上=天空，朝下=地面），与深色工作室天空对齐。
   float hemi = saturate(0.5 * n.y + 0.5);
-  float3 sky = float3(0.34, 0.38, 0.44);
-  float3 ground = float3(0.13, 0.14, 0.15);
+  float3 sky = float3(0.22, 0.26, 0.32);
+  float3 ground = float3(0.10, 0.11, 0.12);
   float3 env = lerp(ground, sky, hemi);
 
   // 环境漫反射（非金属）+ 环境镜面反射（金属靠它显色，rough 越高越模糊越暗）。
@@ -64,11 +64,11 @@ float4 main(VsOutput input) : SV_Target0 {
     return float4(input.color, 1.0);
   }
 
-  // Wireframe: flat dark edges, no lighting (mode == 0) — 深色在浅色天空下更清晰。
+  // Wireframe: 未选中浅灰线，选中钴蓝（与草图青、混凝土灰分开）。
   if (input.mode < 0.5) {
-    float3 wire = float3(0.15, 0.17, 0.20);
+    float3 wire = float3(0.82, 0.86, 0.92);
     if (input.selected > 0.5) {
-      wire = float3(1.0, 0.55, 0.10);
+      wire = float3(0.35, 0.72, 1.0);
     }
     return float4(wire, 1.0);
   }
@@ -106,7 +106,9 @@ float4 main(VsOutput input) : SV_Target0 {
   }
 
   if (input.selected > 0.5) {
-    lit = lerp(lit, float3(1.0, 0.75, 0.2), 0.45);
+    // 钴蓝高光：保留材质本体色，不再用黄色盖掉混凝土。
+    lit = lerp(lit, float3(0.28, 0.62, 1.0), 0.22);
+    lit += float3(0.03, 0.07, 0.14);
   }
   return float4(lit, 1.0);
 }

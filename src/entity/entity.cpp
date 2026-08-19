@@ -1,11 +1,17 @@
 #include "entity/entity.h"
 
+#include "entity/arc_entity.h"
+#include "entity/bezier_entity.h"
 #include "entity/box_entity.h"
 #include "entity/beam_entity.h"
+#include "entity/circle_entity.h"
 #include "entity/column_entity.h"
 #include "entity/cylinder_entity.h"
 #include "entity/door_entity.h"
 #include "entity/family_entity.h"
+#include "entity/line_entity.h"
+#include "entity/polyline_entity.h"
+#include "entity/rectangle_entity.h"
 #include "entity/slab_entity.h"
 #include "entity/wall_entity.h"
 #include "entity/window_entity.h"
@@ -29,6 +35,18 @@ std::unique_ptr<Entity> make_entity(EntityKind kind) {
       return std::make_unique<DoorEntity>();
     case EntityKind::Window:
       return std::make_unique<WindowEntity>();
+    case EntityKind::Line:
+      return std::make_unique<LineEntity>();
+    case EntityKind::Polyline:
+      return std::make_unique<PolylineEntity>();
+    case EntityKind::Circle:
+      return std::make_unique<CircleEntity>();
+    case EntityKind::Arc:
+      return std::make_unique<ArcEntity>();
+    case EntityKind::Bezier:
+      return std::make_unique<BezierEntity>();
+    case EntityKind::Rectangle:
+      return std::make_unique<RectangleEntity>();
     case EntityKind::Wall:
     default:
       return std::make_unique<WallEntity>();

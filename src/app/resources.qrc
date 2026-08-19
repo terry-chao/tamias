@@ -19,6 +19,12 @@
     <file alias="slab.svg">../../assets/icons/slab.svg</file>
     <file alias="door.svg">../../assets/icons/door.svg</file>
     <file alias="window.svg">../../assets/icons/window.svg</file>
+    <file alias="line.svg">../../assets/icons/line.svg</file>
+    <file alias="polyline.svg">../../assets/icons/polyline.svg</file>
+    <file alias="circle.svg">../../assets/icons/circle.svg</file>
+    <file alias="arc.svg">../../assets/icons/arc.svg</file>
+    <file alias="bezier.svg">../../assets/icons/bezier.svg</file>
+    <file alias="rectangle.svg">../../assets/icons/rectangle.svg</file>
     <file alias="fillet.svg">../../assets/icons/fillet.svg</file>
     <file alias="chamfer.svg">../../assets/icons/chamfer.svg</file>
     <file alias="settings.svg">../../assets/icons/settings.svg</file>

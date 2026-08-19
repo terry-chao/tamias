@@ -33,6 +33,18 @@ const char* kind_name(EntityKind kind) {
       return "Door";
     case EntityKind::Window:
       return "Window";
+    case EntityKind::Line:
+      return "Line";
+    case EntityKind::Polyline:
+      return "Polyline";
+    case EntityKind::Circle:
+      return "Circle";
+    case EntityKind::Arc:
+      return "Arc";
+    case EntityKind::Bezier:
+      return "Bezier";
+    case EntityKind::Rectangle:
+      return "Rectangle";
   }
   return "Entity";
 }

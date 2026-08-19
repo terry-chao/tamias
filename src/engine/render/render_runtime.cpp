@@ -99,14 +99,14 @@ MeshCpu make_grid_quad(float extent = 2000.f) {
   return mesh;
 }
 
-// 预览线（单元线：原点 → +Z，黄色；用变换映射到起点→终点）。
+// 预览线（单元线：原点 → +Z，青色；用变换映射到起点→终点）。
 MeshCpu make_preview_line_mesh() {
   MeshCpu mesh;
-  const Vec3 yellow{1.f, 0.85f, 0.3f};
+  const Vec3 cyan{0.18f, 0.82f, 1.f};
   Vertex a{};
   a.position = {0.f, 0.f, 0.f};
   a.normal = {0.f, 1.f, 0.f};
-  a.color = yellow;
+  a.color = cyan;
   Vertex b = a;
   b.position = {0.f, 0.f, 1.f};
   mesh.vertices.push_back(a);
@@ -758,25 +758,31 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
     draw_lines(*line_pipeline_, axes_mesh_);
   }
 
-  // 预览线（放置墙体时：起点 → 光标，深度测试关）。
-  if (frame.show_preview_line && line_pipeline_ && preview_line_mesh_.index_buffer) {
-    const Vec3 d = frame.preview_end - frame.preview_start;
-    const float length = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
-    const float yaw = std::atan2(d.x, d.z);
-    const Mat4 model =
-        translate(frame.preview_start) * rotate_y(yaw) * scale({1.f, 1.f, length});
-    PushConstants pc{};
-    pc.mvp = view_proj * model;
-    pc.model = model;
-    pc.eye_pos_mode[3] = 3.f;  // mode 3 = 无光照线条
+  // 预览折线（建墙 / 草图：已确定的点 + 光标，深度测试关）。
+  if (frame.preview_polyline.size() >= 2 && line_pipeline_ && preview_line_mesh_.index_buffer) {
     channel.command_list->set_pipeline(*line_pipeline_);
     channel.command_list->set_texture(*default_texture_, 0);
-    channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
     channel.command_list->set_vertex_buffer(*preview_line_mesh_.vertex_buffer);
     channel.command_list->set_index_buffer(*preview_line_mesh_.index_buffer);
-    DrawIndexedDesc pd{};
-    pd.index_count = preview_line_mesh_.index_count;
-    channel.command_list->draw_indexed(pd);
+    for (std::size_t i = 0; i + 1 < frame.preview_polyline.size(); ++i) {
+      const Vec3 start = frame.preview_polyline[i];
+      const Vec3 end = frame.preview_polyline[i + 1];
+      const Vec3 d = end - start;
+      const float seg_len = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+      if (seg_len < 1e-6f) {
+        continue;
+      }
+      const float yaw = std::atan2(d.x, d.z);
+      const Mat4 model = translate(start) * rotate_y(yaw) * scale({1.f, 1.f, seg_len});
+      PushConstants pc{};
+      pc.mvp = view_proj * model;
+      pc.model = model;
+      pc.eye_pos_mode[3] = 3.f;  // mode 3 = 无光照线条
+      channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
+      DrawIndexedDesc pd{};
+      pd.index_count = preview_line_mesh_.index_count;
+      channel.command_list->draw_indexed(pd);
+    }
   }
 
   channel.command_list->end_render_pass();

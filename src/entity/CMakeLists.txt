@@ -8,6 +8,12 @@ add_library(tamias_entity STATIC
   slab_entity.cpp
   door_entity.cpp
   window_entity.cpp
+  line_entity.cpp
+  polyline_entity.cpp
+  circle_entity.cpp
+  arc_entity.cpp
+  bezier_entity.cpp
+  rectangle_entity.cpp
 )
 add_library(tamias::entity ALIAS tamias_entity)
 target_include_directories(tamias_entity PUBLIC ${CMAKE_SOURCE_DIR}/src)

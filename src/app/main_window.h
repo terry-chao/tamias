@@ -76,6 +76,12 @@ class MainWindow final : public QMainWindow {
   QAction* slab_action_ = nullptr;
   QAction* door_action_ = nullptr;
   QAction* window_action_ = nullptr;
+  QAction* line_action_ = nullptr;
+  QAction* polyline_action_ = nullptr;
+  QAction* circle_action_ = nullptr;
+  QAction* arc_action_ = nullptr;
+  QAction* bezier_action_ = nullptr;
+  QAction* rectangle_action_ = nullptr;
   QAction* fillet_action_ = nullptr;
   QAction* chamfer_action_ = nullptr;
   QActionGroup* create_group_ = nullptr;

@@ -21,7 +21,23 @@
 namespace tamias {
 
 // 当前激活的创建工具。
-enum class ToolMode { None, Wall, Box, Cylinder, Beam, Column, Slab, Door, Window };
+enum class ToolMode {
+  None,
+  Wall,
+  Box,
+  Cylinder,
+  Beam,
+  Column,
+  Slab,
+  Door,
+  Window,
+  Line,
+  Polyline,
+  Circle,
+  Arc,
+  Bezier,
+  Rectangle
+};
 
 class DocumentViewport final : public QWidget {
   Q_OBJECT
@@ -64,6 +80,7 @@ class DocumentViewport final : public QWidget {
   void mousePressEvent(QMouseEvent* event) override;
   void mouseMoveEvent(QMouseEvent* event) override;
   void mouseReleaseEvent(QMouseEvent* event) override;
+  void mouseDoubleClickEvent(QMouseEvent* event) override;
   void wheelEvent(QWheelEvent* event) override;
   void keyPressEvent(QKeyEvent* event) override;
 
@@ -92,6 +109,7 @@ class DocumentViewport final : public QWidget {
   void resync_all_meshes();
   void resync_textures();
   void cancel_tool();
+  [[nodiscard]] bool finish_pending_if_done(const Result<bool>& done);
 
   std::shared_ptr<Document> document_;
   std::shared_ptr<RenderThread> render_thread_;

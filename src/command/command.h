@@ -4,6 +4,7 @@
 #include "engine/math/math.h"
 
 #include <cstdint>
+#include <vector>
 
 namespace tamias {
 
@@ -31,6 +32,16 @@ class Command {
   // 交互式命令的「起点」（供视口画预览线）。默认无起点。
   virtual bool has_start() const { return false; }
   virtual Vec3 start() const { return {}; }
+  // 预览折线（已确定的点 + 当前光标）。默认：若有起点则画起点→光标。
+  virtual std::vector<Vec3> preview_polyline(Vec3 cursor) const {
+    if (!has_start()) {
+      return {};
+    }
+    return {start(), cursor};
+  }
+  // 折线等：Enter / 双击结束。返回 true 表示输入齐了（可 execute）。
+  virtual bool accepts_confirm() const { return false; }
+  virtual Result<bool> on_confirm() { return false; }
 };
 
 }  // namespace tamias

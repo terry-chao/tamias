@@ -20,6 +20,12 @@ enum class EntityKind : std::uint8_t {
   Slab = 5,
   Door = 6,
   Window = 7,
+  Line = 8,
+  Polyline = 9,
+  Circle = 10,
+  Arc = 11,
+  Bezier = 12,
+  Rectangle = 13,
 };
 
 // 领域实体基类：参数化对象，持有特征树（造型配方）+ 放置 + 网格引用。
@@ -31,6 +37,7 @@ class Entity {
 
   [[nodiscard]] EntityKind kind() const { return kind_; }
   [[nodiscard]] virtual bool is_family_entity() const { return false; }
+  [[nodiscard]] virtual bool is_sketch_entity() const { return false; }
   [[nodiscard]] std::unique_ptr<Entity> clone() const;
   // 造型：委托 createGeom 抽象（IGeometryBuilder），生成几何。
   [[nodiscard]] Result<MeshCpu> createGeom(double deflection = 0.05) const;

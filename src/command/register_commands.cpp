@@ -4,6 +4,7 @@
 #include "command/boolean_command.h"
 #include "command/create_beam_command.h"
 #include "command/create_primitive_command.h"
+#include "command/create_sketch_command.h"
 #include "command/create_wall_command.h"
 #include "command/set_feature_param_command.h"
 #include "command/set_material_command.h"
@@ -73,6 +74,31 @@ void register_commands(CommandRegistry& registry) {
   registry.register_command("create_window", [](Document& doc, const CommandArgs& args) {
     (void)args;
     return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Window);
+  });
+
+  registry.register_command("create_line", [](Document& doc, const CommandArgs& args) {
+    (void)args;
+    return std::make_unique<CreateSketchCommand>(doc, SketchKind::Line);
+  });
+  registry.register_command("create_polyline", [](Document& doc, const CommandArgs& args) {
+    (void)args;
+    return std::make_unique<CreateSketchCommand>(doc, SketchKind::Polyline);
+  });
+  registry.register_command("create_circle", [](Document& doc, const CommandArgs& args) {
+    (void)args;
+    return std::make_unique<CreateSketchCommand>(doc, SketchKind::Circle);
+  });
+  registry.register_command("create_arc", [](Document& doc, const CommandArgs& args) {
+    (void)args;
+    return std::make_unique<CreateSketchCommand>(doc, SketchKind::Arc);
+  });
+  registry.register_command("create_bezier", [](Document& doc, const CommandArgs& args) {
+    (void)args;
+    return std::make_unique<CreateSketchCommand>(doc, SketchKind::Bezier);
+  });
+  registry.register_command("create_rectangle", [](Document& doc, const CommandArgs& args) {
+    (void)args;
+    return std::make_unique<CreateSketchCommand>(doc, SketchKind::Rectangle);
   });
 
   registry.register_command("set_param", [](Document& doc, const CommandArgs& args) {
