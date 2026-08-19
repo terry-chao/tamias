@@ -85,6 +85,8 @@ void AppSettings::load() {
       settings.value(QStringLiteral("ui/language"), default_ui_language()).toString());
   ui_color_scheme_ = color_scheme_from_key(
       settings.value(QStringLiteral("ui/color_scheme"), QStringLiteral("system")).toString());
+  zoom_to_mouse_position_ =
+      settings.value(QStringLiteral("viewport/zoom_to_mouse_position"), true).toBool();
 }
 
 void AppSettings::save() const {
@@ -92,6 +94,7 @@ void AppSettings::save() const {
   settings.setValue(QStringLiteral("render/backend"), backend_to_key(graphics_backend_));
   settings.setValue(QStringLiteral("ui/language"), ui_language_);
   settings.setValue(QStringLiteral("ui/color_scheme"), color_scheme_to_key(ui_color_scheme_));
+  settings.setValue(QStringLiteral("viewport/zoom_to_mouse_position"), zoom_to_mouse_position_);
 }
 
 void AppSettings::set_graphics_backend(GraphicsBackend backend) {
@@ -104,6 +107,10 @@ void AppSettings::set_ui_language(const QString& language) {
 
 void AppSettings::set_ui_color_scheme(UiColorScheme scheme) {
   ui_color_scheme_ = scheme;
+}
+
+void AppSettings::set_zoom_to_mouse_position(bool enabled) {
+  zoom_to_mouse_position_ = enabled;
 }
 
 RenderDeviceConfig AppSettings::render_device_config() const {

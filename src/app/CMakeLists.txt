@@ -14,6 +14,7 @@ add_executable(tamias
   app_settings.cpp
   i18n.cpp
   settings_dialog.cpp
+  settings_section.cpp
   document_viewport.cpp
   handle_inspector.cpp
   property_panel.cpp

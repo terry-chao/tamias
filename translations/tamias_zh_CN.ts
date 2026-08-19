@@ -191,6 +191,10 @@
         <translation>创建参数化构件</translation>
     </message>
     <message>
+        <source>Draw</source>
+        <translation>绘制</translation>
+    </message>
+    <message>
         <source>Primitives</source>
         <translation>基本体</translation>
     </message>
@@ -315,6 +319,54 @@
     <message>
         <source>Create a window: click to place</source>
         <translation>创建窗：点击放置</translation>
+    </message>
+    <message>
+        <source>Line</source>
+        <translation>直线</translation>
+    </message>
+    <message>
+        <source>Create a line: click start, then click end</source>
+        <translation>创建直线：点击起点，再点击终点</translation>
+    </message>
+    <message>
+        <source>Polyline</source>
+        <translation>折线</translation>
+    </message>
+    <message>
+        <source>Create a polyline: click points, Enter or double-click to finish</source>
+        <translation>创建折线：连续点击，回车或双击结束</translation>
+    </message>
+    <message>
+        <source>Rectangle</source>
+        <translation>矩形</translation>
+    </message>
+    <message>
+        <source>Create a rectangle: click two opposite corners</source>
+        <translation>创建矩形：点击两个对角点</translation>
+    </message>
+    <message>
+        <source>Circle</source>
+        <translation>圆</translation>
+    </message>
+    <message>
+        <source>Create a circle: click center, then click radius</source>
+        <translation>创建圆：点击圆心，再点击半径</translation>
+    </message>
+    <message>
+        <source>Arc</source>
+        <translation>圆弧</translation>
+    </message>
+    <message>
+        <source>Create an arc: click start, through, then end</source>
+        <translation>创建圆弧：点击起点、经过点，再点击终点</translation>
+    </message>
+    <message>
+        <source>Bezier</source>
+        <translation>贝塞尔</translation>
+    </message>
+    <message>
+        <source>Create a cubic Bezier: click four control points</source>
+        <translation>创建三次贝塞尔：依次点击四个控制点</translation>
     </message>
     <message>
         <location filename="../src/app/main_window.cpp" line="169"/>
@@ -664,58 +716,84 @@ Click an object to select it, or use a create tool</source>
 <context>
     <name>tamias::SettingsDialog</name>
     <message>
-        <location filename="../src/app/settings_dialog.cpp" line="15"/>
-        <source>Settings</source>
-        <translation>设置</translation>
+        <source>Preferences</source>
+        <translation>偏好设置</translation>
     </message>
     <message>
-        <location filename="../src/app/settings_dialog.cpp" line="35"/>
-        <source>Language:</source>
-        <translation>语言：</translation>
+        <source>Translation</source>
+        <translation>翻译</translation>
+    </message>
+    <message>
+        <source>Language</source>
+        <translation>语言</translation>
     </message>
     <message>
         <location filename="../src/app/i18n.cpp" line="82"/>
-        <location filename="../src/app/settings_dialog.cpp" line="38"/>
         <source>System</source>
         <translation>跟随系统</translation>
     </message>
     <message>
-        <location filename="../src/app/settings_dialog.cpp" line="39"/>
+        <comment>settings category</comment>
+        <source>System</source>
+        <translation>系统</translation>
+    </message>
+    <message>
         <source>Light</source>
         <translation>浅色</translation>
     </message>
     <message>
-        <location filename="../src/app/settings_dialog.cpp" line="40"/>
         <source>Dark</source>
         <translation>深色</translation>
     </message>
     <message>
-        <location filename="../src/app/settings_dialog.cpp" line="44"/>
-        <source>Appearance:</source>
-        <translation>外观：</translation>
+        <source>Color</source>
+        <translation>颜色</translation>
     </message>
     <message>
-        <location filename="../src/app/settings_dialog.cpp" line="47"/>
+        <source>Appearance</source>
+        <translation>外观</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>缩放</translation>
+    </message>
+    <message>
+        <source>Zoom to Mouse Position</source>
+        <translation>缩放到鼠标位置</translation>
+    </message>
+    <message>
+        <source>Graphics</source>
+        <translation>图形</translation>
+    </message>
+    <message>
+        <source>Render backend</source>
+        <translation>渲染后端</translation>
+    </message>
+    <message>
         <source>Vulkan</source>
         <translation>Vulkan</translation>
     </message>
     <message>
-        <location filename="../src/app/settings_dialog.cpp" line="48"/>
         <source>OpenGL</source>
         <translation>OpenGL</translation>
     </message>
     <message>
-        <location filename="../src/app/settings_dialog.cpp" line="53"/>
-        <source>Render backend:</source>
-        <translation>渲染后端：</translation>
+        <source>Interface</source>
+        <translation>界面</translation>
     </message>
     <message>
-        <location filename="../src/app/settings_dialog.cpp" line="78"/>
+        <source>Themes</source>
+        <translation>主题</translation>
+    </message>
+    <message>
+        <source>Navigation</source>
+        <translation>视图导航</translation>
+    </message>
+    <message>
         <source>OpenGL uses an isolated render thread per document (never shared). Backend changes take effect after restarting Tamias.</source>
         <translation>OpenGL 为每个文档使用独立渲染线程（不共享）。后端更改将在重启 Tamias 后生效。</translation>
     </message>
     <message>
-        <location filename="../src/app/settings_dialog.cpp" line="82"/>
         <source>Vulkan documents with the same settings share one render thread. Backend changes take effect after restarting Tamias.</source>
         <translation>相同设置的 Vulkan 文档共享一个渲染线程。后端更改将在重启 Tamias 后生效。</translation>
     </message>
@@ -807,6 +885,30 @@ Click an object to select it, or use a create tool</source>
     <message>
         <source>Window</source>
         <translation>窗</translation>
+    </message>
+    <message>
+        <source>Line</source>
+        <translation>直线</translation>
+    </message>
+    <message>
+        <source>Polyline</source>
+        <translation>折线</translation>
+    </message>
+    <message>
+        <source>Circle</source>
+        <translation>圆</translation>
+    </message>
+    <message>
+        <source>Arc</source>
+        <translation>圆弧</translation>
+    </message>
+    <message>
+        <source>Bezier</source>
+        <translation>贝塞尔</translation>
+    </message>
+    <message>
+        <source>Rectangle</source>
+        <translation>矩形</translation>
     </message>
     <message>
         <source>Entity</source>

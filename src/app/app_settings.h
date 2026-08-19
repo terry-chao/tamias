@@ -25,6 +25,9 @@ class AppSettings {
   [[nodiscard]] UiColorScheme ui_color_scheme() const { return ui_color_scheme_; }
   void set_ui_color_scheme(UiColorScheme scheme);
 
+  [[nodiscard]] bool zoom_to_mouse_position() const { return zoom_to_mouse_position_; }
+  void set_zoom_to_mouse_position(bool enabled);
+
   [[nodiscard]] RenderDeviceConfig render_device_config() const;
 
  private:
@@ -33,6 +36,7 @@ class AppSettings {
   GraphicsBackend graphics_backend_ = GraphicsBackend::Vulkan;
   QString ui_language_ = QStringLiteral("system");
   UiColorScheme ui_color_scheme_ = UiColorScheme::System;
+  bool zoom_to_mouse_position_ = true;
 };
 
 void apply_ui_color_scheme(UiColorScheme scheme);
