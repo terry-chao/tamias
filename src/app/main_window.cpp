@@ -489,7 +489,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   refresh_property_panel();
   refresh_handle_inspector();
 
-  statusBar()->showMessage(tr("Ready — Open a model or try the demo"));
+  statusBar()->showMessage(tr("Ready — Open a model"));
   show_home();
 
   // ===== TEMP DEBUG: auto-create a concrete box to diagnose black texture =====

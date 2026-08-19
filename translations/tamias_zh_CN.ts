@@ -525,8 +525,8 @@
     </message>
     <message>
         <location filename="../src/app/main_window.cpp" line="297"/>
-        <source>Ready — Open a model or try the demo</source>
-        <translation>就绪 — 打开模型或试用演示</translation>
+        <source>Ready — Open a model</source>
+        <translation>就绪 — 打开模型</translation>
     </message>
     <message>
         <location filename="../src/app/main_window.cpp" line="386"/>
