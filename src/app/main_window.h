@@ -14,6 +14,7 @@
 
 class QAction;
 class QActionGroup;
+class QCloseEvent;
 
 namespace tamias {
 
@@ -27,8 +28,8 @@ class MainWindow final : public QMainWindow {
 
  private slots:
   void open_file();
-  void save_file();
-  void save_file_as();
+  bool save_file();
+  bool save_file_as();
   void frame_all();
   void close_tab(int index);
   void open_recent_path(const QString& path);
@@ -42,7 +43,12 @@ class MainWindow final : public QMainWindow {
 
  private:
   void showEvent(QShowEvent* event) override;
+  void closeEvent(QCloseEvent* event) override;
 
+  // Returns false if the user cancelled (or save failed) and the document
+  // must stay open.
+  bool confirm_close_document(DocumentViewport* vp);
+  void activate_viewport(DocumentViewport* vp);
   void add_document_tab(std::shared_ptr<Document> document,
                         const ViewportState* viewport = nullptr);
   Result<void> populate_document_meshes(Document& document, RenderThread& thread);

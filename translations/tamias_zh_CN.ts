@@ -127,6 +127,26 @@
         <translation>保存</translation>
     </message>
     <message>
+        <location filename="../src/app/main_window.cpp"/>
+        <source>Unsaved changes</source>
+        <translation>未保存的更改</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp"/>
+        <source>Do you want to save changes to "%1"?</source>
+        <translation>是否保存对“%1”的更改？</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp"/>
+        <source>Don't Save</source>
+        <translation>不保存</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp"/>
+        <source>Cancel</source>
+        <translation>取消</translation>
+    </message>
+    <message>
         <location filename="../src/app/main_window.cpp" line="113"/>
         <source>Save As…</source>
         <translation>另存为…</translation>

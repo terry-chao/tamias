@@ -18,6 +18,7 @@
 
 #include <QAction>
 #include <QActionGroup>
+#include <QCloseEvent>
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QScreen>
@@ -33,8 +34,10 @@
 #include <QIcon>
 #include <QImage>
 #include <QKeySequence>
+#include <QAbstractButton>
 #include <QMessageBox>
 #include <QPainter>
+#include <QPushButton>
 #include <QPixmap>
 #include <QPlainTextEdit>
 #include <QSignalBlocker>
@@ -910,28 +913,27 @@ void MainWindow::notify_save_success(const QString& path) {
   QMessageBox::information(this, tr("Save"), tr("Saved successfully:\n%1").arg(path));
 }
 
-void MainWindow::save_file() {
+bool MainWindow::save_file() {
   auto* vp = current_viewport();
   if (!vp) {
     QMessageBox::information(this, tr("Save"), tr("Open a document first."));
-    return;
+    return false;
   }
 
   // Save always writes the whole scene as .tdoc. Imported .obj/.step paths are
   // not overwritten — prompt Save As so the project file is created explicitly.
   const auto& doc_path = vp->document().path();
   if (!doc_path.empty() && is_tdoc_path(QString::fromStdString(doc_path.string()))) {
-    write_tdoc_document(QString::fromStdString(doc_path.string()));
-    return;
+    return write_tdoc_document(QString::fromStdString(doc_path.string()));
   }
-  save_file_as();
+  return save_file_as();
 }
 
-void MainWindow::save_file_as() {
+bool MainWindow::save_file_as() {
   auto* vp = current_viewport();
   if (!vp) {
     QMessageBox::information(this, tr("Save"), tr("Open a document first."));
-    return;
+    return false;
   }
 
   QString suggested;
@@ -953,14 +955,13 @@ void MainWindow::save_file_as() {
       this, tr("Save As"), suggested,
       tr("Tamias Document (*.tdoc);;OBJ Mesh Export (*.obj)"));
   if (path.isEmpty()) {
-    return;
+    return false;
   }
   if (is_obj_path(path) ||
       (!is_tdoc_path(path) && path.endsWith(QStringLiteral(".obj"), Qt::CaseInsensitive))) {
-    write_selected_mesh(path);
-    return;
+    return write_selected_mesh(path);
   }
-  write_tdoc_document(path);
+  return write_tdoc_document(path);
 }
 
 void MainWindow::open_recent_path(const QString& path) { open_path(path); }
@@ -1049,7 +1050,68 @@ void MainWindow::sync_render_mode_actions() {
   realistic_action_->setChecked(mode == RenderMode::Realistic);
 }
 
+void MainWindow::activate_viewport(DocumentViewport* vp) {
+  if (vp == nullptr) {
+    return;
+  }
+  const int index = tabs_->indexOf(vp);
+  if (index < 0) {
+    return;
+  }
+  tabs_->setCurrentIndex(index);
+  show_documents();
+}
+
+bool MainWindow::confirm_close_document(DocumentViewport* vp) {
+  if (vp == nullptr || !vp->document().dirty()) {
+    return true;
+  }
+
+  const QString name = QString::fromStdString(vp->document().name());
+  QMessageBox box(this);
+  box.setIcon(QMessageBox::Warning);
+  box.setWindowTitle(tr("Unsaved changes"));
+  box.setText(tr("Do you want to save changes to \"%1\"?").arg(name));
+  QAbstractButton* save_btn = box.addButton(tr("Save"), QMessageBox::AcceptRole);
+  QAbstractButton* discard_btn =
+      box.addButton(tr("Don't Save"), QMessageBox::DestructiveRole);
+  QAbstractButton* cancel_btn = box.addButton(tr("Cancel"), QMessageBox::RejectRole);
+  box.setDefaultButton(qobject_cast<QPushButton*>(save_btn));
+  box.setEscapeButton(cancel_btn);
+  box.exec();
+
+  if (box.clickedButton() == save_btn) {
+    activate_viewport(vp);
+    if (!save_file()) {
+      return false;
+    }
+    // OBJ export does not clear dirty; keep the tab open so the project
+    // is not silently discarded after an incomplete save.
+    return !vp->document().dirty();
+  }
+  if (box.clickedButton() == discard_btn) {
+    return true;
+  }
+  return false;
+}
+
+void MainWindow::closeEvent(QCloseEvent* event) {
+  for (int i = 0; i < tabs_->count(); ++i) {
+    auto* vp = qobject_cast<DocumentViewport*>(tabs_->widget(i));
+    if (!confirm_close_document(vp)) {
+      event->ignore();
+      return;
+    }
+  }
+  QMainWindow::closeEvent(event);
+}
+
 void MainWindow::close_tab(int index) {
+  if (auto* vp = qobject_cast<DocumentViewport*>(tabs_->widget(index))) {
+    if (!confirm_close_document(vp)) {
+      return;
+    }
+  }
   if (auto* w = tabs_->widget(index)) {
     tabs_->removeTab(index);
     delete w;
