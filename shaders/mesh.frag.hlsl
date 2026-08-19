@@ -59,9 +59,13 @@ float3 shaded_realistic(float3 n, float3 l, float3 v, float3 base, float rough, 
 }
 
 float4 main(VsOutput input) : SV_Target0 {
-  // 无光照彩色线条（坐标轴/overlay），mode == 3。
+  // 无光照彩色线条（坐标轴/草图/overlay），mode == 3。
   if (input.mode > 2.5) {
-    return float4(input.color, 1.0);
+    float3 c = input.color * pc.color.rgb;
+    if (input.selected > 0.5) {
+      c = float3(0.35, 0.72, 1.0);
+    }
+    return float4(c, 1.0);
   }
 
   // Wireframe: 未选中浅灰线，选中钴蓝（与草图青、混凝土灰分开）。

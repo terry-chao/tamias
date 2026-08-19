@@ -6,6 +6,7 @@
 #include "command/create_primitive_command.h"
 #include "command/create_sketch_command.h"
 #include "command/create_wall_command.h"
+#include "command/delete_entity_command.h"
 #include "command/set_feature_param_command.h"
 #include "command/set_material_command.h"
 
@@ -129,6 +130,11 @@ void register_commands(CommandRegistry& registry) {
         doc, static_cast<std::uint64_t>(arg_int(args, "a", 0)),
         static_cast<std::uint64_t>(arg_int(args, "b", 0)),
         static_cast<BooleanOp>(arg_int(args, "operation", 0)));
+  });
+
+  registry.register_command("delete_entity", [](Document& doc, const CommandArgs& args) {
+    return std::make_unique<DeleteEntityCommand>(
+        doc, static_cast<std::uint64_t>(arg_int(args, "entity_id", 0)));
   });
 
   registry.register_command("set_material", [](Document& doc, const CommandArgs& args) {

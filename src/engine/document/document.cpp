@@ -224,7 +224,11 @@ std::vector<SceneDrawItem> Document::render_items(const Frustum* frustum) const 
       } else if (e->is_sketch_entity()) {
         // 草图用青色，与混凝土灰、选中蓝分开。
         item.color = {0.18f, 0.80f, 0.98f};
+        item.lines = true;
       }
+    }
+    if (const MeshAsset* asset = mesh(node.mesh_asset_id); asset != nullptr && asset->cpu.line_list) {
+      item.lines = true;
     }
     items.push_back(item);
   }

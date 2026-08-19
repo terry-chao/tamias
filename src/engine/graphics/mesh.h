@@ -19,6 +19,7 @@ struct MeshCpu {
   std::vector<Vertex> vertices;
   std::vector<std::uint32_t> indices;
   Aabb bounds{};
+  bool line_list = false;  // true：索引按 LineList 成对解释，不是三角面
 };
 
 inline void recompute_bounds(MeshCpu& mesh) {

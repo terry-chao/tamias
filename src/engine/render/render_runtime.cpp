@@ -145,6 +145,7 @@ Result<GpuMesh> create_gpu_mesh(RHIDevice& device, MeshCpu mesh) {
   gpu.index_buffer = std::move(*ibuf);
   gpu.index_count = static_cast<std::uint32_t>(mesh.indices.size());
   gpu.bounds = mesh.bounds;
+  gpu.line_list = mesh.line_list;
   return gpu;
 }
 
@@ -190,6 +191,7 @@ void RenderThread::stop() {
   shaded_pipeline_.reset();
   wire_pipeline_.reset();
   line_pipeline_.reset();
+  entity_line_pipeline_.reset();
   sky_pipeline_.reset();
   grid_pipeline_.reset();
   axes_mesh_ = GpuMesh{};
@@ -281,6 +283,7 @@ Result<std::uint64_t> RenderThread::upload_mesh(std::uint64_t asset_id, MeshCpu 
       gpu.index_buffer = std::move(*ibuf);
       gpu.index_count = static_cast<std::uint32_t>(mesh.indices.size());
       gpu.bounds = mesh.bounds;
+      gpu.line_list = mesh.line_list;
       const auto id = next_mesh_id_++;
       meshes_.emplace(id, std::move(gpu));
       asset_to_gpu_[asset_id] = id;
@@ -366,7 +369,8 @@ void RenderThread::resize_surface(std::uint64_t channel_id, NativeWindowHandle w
 }
 
 Result<void> RenderThread::ensure_pipelines() {
-  if (shaded_pipeline_ && wire_pipeline_ && line_pipeline_ && sky_pipeline_ && grid_pipeline_ &&
+  if (shaded_pipeline_ && wire_pipeline_ && line_pipeline_ && entity_line_pipeline_ &&
+      sky_pipeline_ && grid_pipeline_ &&
       axes_mesh_.index_buffer && sky_mesh_.index_buffer && grid_mesh_.index_buffer &&
       preview_line_mesh_.index_buffer && default_texture_) {
     return {};
@@ -538,6 +542,17 @@ Result<void> RenderThread::ensure_pipelines() {
   }
   line_pipeline_ = std::move(*pl);
 
+  // 草图实体线：LineList + 开深度，看起来是线而不是挤出的小圆柱。
+  PipelineDesc entity_line = shaded;
+  entity_line.topology = PrimitiveTopology::LineList;
+  entity_line.depth_test = true;
+  entity_line.depth_write = true;
+  auto pel = device_->create_pipeline(entity_line);
+  if (!pel) {
+    return Err(pel.error());
+  }
+  entity_line_pipeline_ = std::move(*pel);
+
   // 上传环境网格（天空 / 地面网格 / 坐标轴）。
   auto sky_mesh = create_gpu_mesh(*device_, make_fullscreen_triangle());
   if (!sky_mesh) {
@@ -685,9 +700,6 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
   }
 
   // 模型。
-  channel.command_list->set_pipeline(frame.mode == RenderMode::Wireframe ? *wire_pipeline_
-                                                                         : *shaded_pipeline_);
-  // 0 = wireframe (unlit), 1 = shaded, 2 = realistic
   const float mode_value = frame.mode == RenderMode::Wireframe  ? 0.f
                            : frame.mode == RenderMode::Realistic ? 2.f
                                                                  : 1.f;
@@ -726,6 +738,17 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
     }
     channel.command_list->set_texture(*bound, 0);
 
+    const bool as_lines = item.lines || mesh.line_list;
+    if (as_lines) {
+      if (!entity_line_pipeline_) {
+        continue;
+      }
+      channel.command_list->set_pipeline(*entity_line_pipeline_);
+    } else {
+      channel.command_list->set_pipeline(frame.mode == RenderMode::Wireframe ? *wire_pipeline_
+                                                                             : *shaded_pipeline_);
+    }
+
     PushConstants pc{};
     pc.mvp = view_proj * item.transform;
     pc.model = item.transform;
@@ -744,7 +767,7 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
     pc.eye_pos_mode[0] = frame.eye_position.x;
     pc.eye_pos_mode[1] = frame.eye_position.y;
     pc.eye_pos_mode[2] = frame.eye_position.z;
-    pc.eye_pos_mode[3] = mode_value;
+    pc.eye_pos_mode[3] = as_lines ? 3.f : mode_value;
     channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
     channel.command_list->set_vertex_buffer(*mesh.vertex_buffer);
     channel.command_list->set_index_buffer(*mesh.index_buffer);
@@ -777,6 +800,7 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
       PushConstants pc{};
       pc.mvp = view_proj * model;
       pc.model = model;
+      pc.color[0] = pc.color[1] = pc.color[2] = pc.color[3] = 1.f;
       pc.eye_pos_mode[3] = 3.f;  // mode 3 = 无光照线条
       channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
       DrawIndexedDesc pd{};

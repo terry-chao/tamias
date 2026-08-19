@@ -68,6 +68,8 @@ class DocumentViewport final : public QWidget {
   // 给选中实体追加倒圆角 / 倒斜角特征（走 fillet/chamfer 命令，可撤销）。
   void fillet_selected(double radius = 0.05);
   void chamfer_selected(double distance = 0.05);
+  // 删除当前选中实体（走 delete_entity 命令，可撤销）。
+  void delete_selected();
 
  signals:
   void tool_mode_changed(ToolMode mode);
@@ -103,6 +105,8 @@ class DocumentViewport final : public QWidget {
   void stop_view_animation();
   [[nodiscard]] Vec3 cursor_world_position(const QPoint& pos) const;
   [[nodiscard]] Vec3 cursor_ground_position(const QPoint& pos) const;
+  [[nodiscard]] std::uint64_t pick_node_at(const QPoint& pos) const;
+  void show_entity_context_menu(const QPoint& global_pos);
   void adjust_selected_param(double delta);
   void run_command(const std::string& name, const CommandArgs& args, bool notify = true);
   void dispatch_tool_command(ToolMode mode);

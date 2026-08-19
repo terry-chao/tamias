@@ -4,10 +4,13 @@
 <context>
     <name>tamias::DocumentViewport</name>
     <message>
-        <location filename="../src/app/document_viewport.cpp" line="256"/>
-        <location filename="../src/app/document_viewport.cpp" line="262"/>
+        <location filename="../src/app/document_viewport.cpp"/>
         <source>X %1  Y %2  Z %3</source>
         <translation>X %1  Y %2  Z %3</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>删除</translation>
     </message>
 </context>
 <context>

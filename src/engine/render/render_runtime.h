@@ -25,6 +25,7 @@ struct GpuMesh {
   std::unique_ptr<Buffer> index_buffer;
   std::uint32_t index_count = 0;
   Aabb bounds{};
+  bool line_list = false;
 };
 
 struct GpuTexture {
@@ -112,6 +113,7 @@ class RenderThread {
   std::unique_ptr<PipelineState> shaded_pipeline_;
   std::unique_ptr<PipelineState> wire_pipeline_;
   std::unique_ptr<PipelineState> line_pipeline_;
+  std::unique_ptr<PipelineState> entity_line_pipeline_;
   GpuMesh axes_mesh_;
   std::unique_ptr<ShaderModule> sky_vs_;
   std::unique_ptr<ShaderModule> sky_fs_;

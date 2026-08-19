@@ -8,8 +8,11 @@
 #include "engine/render/rhi/opengl/opengl_backend.h"
 #endif
 
+#include <QAction>
 #include <QCoreApplication>
 #include <QKeyEvent>
+#include <QKeySequence>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QShowEvent>
 #include <QResizeEvent>
@@ -565,23 +568,31 @@ void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
   if (event->button() == Qt::LeftButton) {
     orbiting_ = false;
     if ((event->pos() - press_mouse_).manhattanLength() < 4) {
-      const auto dpr = devicePixelRatioF();
-      const float aspect = static_cast<float>((std::max)(1, width())) /
-                           static_cast<float>((std::max)(1, height()));
-      const Ray ray =
-          camera_ray(camera_, aspect, static_cast<float>(event->pos().x() * dpr),
-                     static_cast<float>(event->pos().y() * dpr),
-                     static_cast<float>(width() * dpr), static_cast<float>(height() * dpr));
       document_->clear_selection();
-      if (auto hit = bvh_.closest_hit(ray, *document_)) {
-        document_->select(hit->node_id);
+      if (const std::uint64_t hit = pick_node_at(event->pos()); hit != 0) {
+        document_->select(hit);
       }
       request_redraw();
       emit selection_changed();
     }
   }
-  if (event->button() == Qt::MiddleButton || event->button() == Qt::RightButton) {
+  if (event->button() == Qt::MiddleButton) {
     panning_ = false;
+  }
+  if (event->button() == Qt::RightButton) {
+    panning_ = false;
+    if (tool_mode_ == ToolMode::None && (event->pos() - press_mouse_).manhattanLength() < 4) {
+      if (const std::uint64_t hit = pick_node_at(event->pos());
+          hit != 0 && document_->entity(hit) != nullptr) {
+        document_->clear_selection();
+        document_->select(hit);
+        request_redraw();
+        emit selection_changed();
+      }
+      if (document_->selected_entity() != nullptr) {
+        show_entity_context_menu(mapToGlobal(event->pos()));
+      }
+    }
   }
 }
 
@@ -619,6 +630,11 @@ void DocumentViewport::keyPressEvent(QKeyEvent* event) {
   switch (event->key()) {
     case Qt::Key_Escape:
       cancel_tool();
+      break;
+    case Qt::Key_Delete:
+      if (tool_mode_ == ToolMode::None) {
+        delete_selected();
+      }
       break;
     case Qt::Key_Return:
     case Qt::Key_Enter:
@@ -840,6 +856,41 @@ void DocumentViewport::chamfer_selected(double distance) {
   run_command("chamfer", {{"entity_id", static_cast<std::int64_t>(e->id)},
                           {"distance", distance},
                           {"edge", static_cast<std::int64_t>(0)}});
+}
+
+void DocumentViewport::delete_selected() {
+  const Entity* e = document_->selected_entity();
+  if (e == nullptr) {
+    return;
+  }
+  run_command("delete_entity", {{"entity_id", static_cast<std::int64_t>(e->id)}});
+  emit selection_changed();
+}
+
+std::uint64_t DocumentViewport::pick_node_at(const QPoint& pos) const {
+  const auto dpr = devicePixelRatioF();
+  const float aspect = static_cast<float>((std::max)(1, width())) /
+                       static_cast<float>((std::max)(1, height()));
+  const Ray ray =
+      camera_ray(camera_, aspect, static_cast<float>(pos.x() * dpr),
+                 static_cast<float>(pos.y() * dpr), static_cast<float>(width() * dpr),
+                 static_cast<float>(height() * dpr));
+  if (auto hit = bvh_.closest_hit(ray, *document_)) {
+    return hit->node_id;
+  }
+  return 0;
+}
+
+void DocumentViewport::show_entity_context_menu(const QPoint& global_pos) {
+  if (document_->selected_entity() == nullptr) {
+    return;
+  }
+  QMenu menu(this);
+  QAction* delete_act = menu.addAction(tr("Delete"));
+  delete_act->setShortcut(QKeySequence::Delete);
+  if (menu.exec(global_pos) == delete_act) {
+    delete_selected();
+  }
 }
 
 void DocumentViewport::resync_all_meshes() {

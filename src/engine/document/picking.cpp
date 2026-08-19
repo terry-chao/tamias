@@ -113,6 +113,25 @@ std::optional<PickHit> Bvh::closest_hit(const Ray& ray, const Document& doc) con
       }
       const Ray local_ray = to_local_ray(ray, sn->world_transform);
       const auto& mesh = asset->cpu;
+      const Entity* entity = doc.entity(sn->id);
+      const bool as_lines = mesh.line_list || (entity != nullptr && entity->is_sketch_entity());
+      if (as_lines) {
+        for (std::uint32_t i = 0; i + 1 < mesh.indices.size(); i += 2) {
+          const auto i0 = mesh.indices[i];
+          const auto i1 = mesh.indices[i + 1];
+          if (i0 >= mesh.vertices.size() || i1 >= mesh.vertices.size()) {
+            continue;
+          }
+          float hit_t = 0.f;
+          if (intersect_segment(local_ray, mesh.vertices[i0].position, mesh.vertices[i1].position,
+                                kSketchPickRadius, hit_t) &&
+              hit_t < best_t) {
+            best_t = hit_t;
+            best = PickHit{sn->id, i / 2, hit_t};
+          }
+        }
+        continue;
+      }
       for (std::uint32_t t = 0; t + 2 < mesh.indices.size(); t += 3) {
         const auto i0 = mesh.indices[t];
         const auto i1 = mesh.indices[t + 1];

@@ -328,4 +328,53 @@ inline bool intersect_triangle(const Ray& ray, Vec3 v0, Vec3 v1, Vec3 v2, float&
   return true;
 }
 
+// 草图折线拾取半径；包围盒也会按同样厚度膨胀，避免轴对齐线段退化。
+constexpr float kSketchPickRadius = 0.03f;
+
+// 射线与线段的粗拾取：最近点距离不超过 radius 则命中，t_out 为射线上的参数。
+inline bool intersect_segment(const Ray& ray, Vec3 a, Vec3 b, float radius, float& t_out) {
+  const Vec3 d1 = ray.direction;
+  const Vec3 d2 = b - a;
+  const Vec3 r = ray.origin - a;
+  const float aa = dot(d1, d1);
+  const float ee = dot(d2, d2);
+  const float bb = dot(d1, d2);
+  const float cc = dot(d1, r);
+  const float ff = dot(d2, r);
+  constexpr float kEps = 1e-6f;
+  if (aa < kEps) {
+    return false;
+  }
+
+  float s = 0.f;
+  float t = 0.f;
+  const float denom = aa * ee - bb * bb;
+  if (ee < kEps) {
+    t = -cc / aa;
+  } else if (denom < kEps) {
+    s = std::clamp(-ff / ee, 0.f, 1.f);
+    t = (s * bb - cc) / aa;
+  } else {
+    t = (bb * ff - cc * ee) / denom;
+    s = (aa * ff - bb * cc) / denom;
+    if (s < 0.f) {
+      s = 0.f;
+      t = -cc / aa;
+    } else if (s > 1.f) {
+      s = 1.f;
+      t = (bb - cc) / aa;
+    }
+  }
+  if (t < kEps) {
+    return false;
+  }
+  const Vec3 p = ray.origin + d1 * t;
+  const Vec3 q = a + d2 * s;
+  if (length(p - q) > radius) {
+    return false;
+  }
+  t_out = t;
+  return true;
+}
+
 }  // namespace tamias

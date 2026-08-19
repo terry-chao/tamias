@@ -74,7 +74,7 @@ QIcon ribbon_icon(const QString& resource) {
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   setWindowTitle("Tamias");
   setWindowIcon(QIcon(QStringLiteral(":/branding/logo.png")));
-  resize(1280, 800);
+  resize(1600, 1000);
 
   recent_.load();
   AppSettings::instance().load();

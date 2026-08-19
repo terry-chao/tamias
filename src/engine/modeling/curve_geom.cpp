@@ -197,65 +197,34 @@ std::vector<Vec3> sample_sketch_feature(const FeatureModel& model, const Feature
   }
 }
 
-MeshCpu make_polyline_tube(const std::vector<Vec3>& points, float radius, int sides) {
+MeshCpu make_polyline_lines(const std::vector<Vec3>& points) {
   MeshCpu mesh;
+  mesh.line_list = true;
   if (points.size() < 2) {
     return mesh;
   }
-  const int n = std::max(3, sides);
-  const float r = std::max(radius, 1e-4f);
 
-  const auto push = [&](Vec3 p, Vec3 normal) {
+  mesh.vertices.reserve(points.size());
+  for (const Vec3& p : points) {
     Vertex v{};
     v.position = p;
-    v.normal = normal;
+    v.normal = {0.f, 1.f, 0.f};
     mesh.vertices.push_back(v);
-    return static_cast<std::uint32_t>(mesh.vertices.size() - 1);
-  };
-
-  for (std::size_t s = 0; s + 1 < points.size(); ++s) {
-    const Vec3 a = points[s];
-    const Vec3 b = points[s + 1];
-    const Vec3 dir = b - a;
-    const float len = length(dir);
-    if (len < 1e-5f) {
+  }
+  mesh.indices.reserve((points.size() - 1) * 2);
+  for (std::size_t i = 0; i + 1 < points.size(); ++i) {
+    if (length(points[i + 1] - points[i]) < 1e-5f) {
       continue;
     }
-    const Vec3 axis = dir * (1.f / len);
-    Vec3 side = cross(axis, {0.f, 1.f, 0.f});
-    if (length(side) < 1e-4f) {
-      side = cross(axis, {1.f, 0.f, 0.f});
-    }
-    side = normalize(side);
-    const Vec3 up = normalize(cross(axis, side));
-
-    std::vector<std::uint32_t> ring_a;
-    std::vector<std::uint32_t> ring_b;
-    ring_a.reserve(static_cast<std::size_t>(n));
-    ring_b.reserve(static_cast<std::size_t>(n));
-    for (int i = 0; i < n; ++i) {
-      const float ang = 2.f * kPi * static_cast<float>(i) / static_cast<float>(n);
-      const Vec3 offset = side * (std::cos(ang) * r) + up * (std::sin(ang) * r);
-      const Vec3 nrm = normalize(offset);
-      ring_a.push_back(push(a + offset, nrm));
-      ring_b.push_back(push(b + offset, nrm));
-    }
-    for (int i = 0; i < n; ++i) {
-      const int j = (i + 1) % n;
-      const std::uint32_t a0 = ring_a[static_cast<std::size_t>(i)];
-      const std::uint32_t a1 = ring_a[static_cast<std::size_t>(j)];
-      const std::uint32_t b0 = ring_b[static_cast<std::size_t>(i)];
-      const std::uint32_t b1 = ring_b[static_cast<std::size_t>(j)];
-      mesh.indices.push_back(a0);
-      mesh.indices.push_back(a1);
-      mesh.indices.push_back(b1);
-      mesh.indices.push_back(a0);
-      mesh.indices.push_back(b1);
-      mesh.indices.push_back(b0);
-    }
+    mesh.indices.push_back(static_cast<std::uint32_t>(i));
+    mesh.indices.push_back(static_cast<std::uint32_t>(i + 1));
   }
-
   recompute_bounds(mesh);
+  if (mesh.bounds.valid()) {
+    const Vec3 pad{kSketchPickRadius, kSketchPickRadius, kSketchPickRadius};
+    mesh.bounds.min = mesh.bounds.min - pad;
+    mesh.bounds.max = mesh.bounds.max + pad;
+  }
   return mesh;
 }
 
@@ -264,17 +233,7 @@ Result<MeshCpu> mesh_from_sketch_feature(const FeatureModel& model, const Featur
   if (pts.size() < 2) {
     return Err("sketch feature produced no curve");
   }
-  float extent = 0.f;
-  Aabb box{};
-  for (const Vec3& p : pts) {
-    box.expand(p);
-  }
-  if (box.valid()) {
-    const Vec3 e = box.extent();
-    extent = std::max(e.x, std::max(e.y, e.z));
-  }
-  const float tube = std::clamp(std::max(extent * 0.012f, 0.008f), 0.008f, kSketchTubeRadius * 2.f);
-  MeshCpu mesh = make_polyline_tube(pts, tube);
+  MeshCpu mesh = make_polyline_lines(pts);
   if (mesh.indices.empty()) {
     return Err("sketch feature produced an empty mesh");
   }

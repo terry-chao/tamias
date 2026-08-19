@@ -20,6 +20,7 @@ struct SceneDrawItem {
   std::uint64_t albedo_texture_id = 0;  // 0 = 无贴图
   std::uint64_t normal_texture_id = 0;
   bool selected = false;
+  bool lines = false;  // 草图折线：用 LineList 画，而不是三角面
 };
 
 }  // namespace tamias

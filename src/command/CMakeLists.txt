@@ -5,6 +5,7 @@ add_library(tamias_command STATIC
   create_beam_command.cpp
   create_primitive_command.cpp
   create_sketch_command.cpp
+  delete_entity_command.cpp
   set_feature_param_command.cpp
   set_material_command.cpp
   command_system.cpp

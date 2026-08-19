@@ -10,8 +10,6 @@
 
 namespace tamias {
 
-constexpr float kSketchTubeRadius = 0.02f;
-
 [[nodiscard]] std::unordered_map<std::string, double> line_feature_params(Vec3 a, Vec3 b);
 [[nodiscard]] std::unordered_map<std::string, double> polyline_feature_params(
     const std::vector<Vec3>& points);
@@ -33,8 +31,7 @@ constexpr float kSketchTubeRadius = 0.02f;
 [[nodiscard]] std::vector<Vec3> sample_rect_xz(Vec3 a, Vec3 b);
 
 [[nodiscard]] std::vector<Vec3> sample_sketch_feature(const FeatureModel& model, const Feature& f);
-[[nodiscard]] MeshCpu make_polyline_tube(const std::vector<Vec3>& points, float radius,
-                                         int sides = 8);
+[[nodiscard]] MeshCpu make_polyline_lines(const std::vector<Vec3>& points);
 [[nodiscard]] Result<MeshCpu> mesh_from_sketch_feature(const FeatureModel& model, const Feature& f);
 
 }  // namespace tamias

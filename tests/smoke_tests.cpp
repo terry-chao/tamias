@@ -409,6 +409,31 @@ TEST(Picking, RayHitsTransformedNode) {
   EXPECT_EQ(hit->node_id, placed.id);
 }
 
+TEST(Picking, RayHitsSketchLine) {
+  Document doc("line");
+  auto entity = std::make_unique<LineEntity>(Vec3{0.f, 0.f, 0.f}, Vec3{2.f, 0.f, 0.f});
+  auto geom = entity->createGeom();
+  ASSERT_TRUE(geom) << geom.error();
+  Entity* added = doc.add_entity(std::move(entity), std::move(*geom));
+  ASSERT_NE(added, nullptr);
+  doc.recompute_scene();
+
+  Bvh bvh;
+  bvh.build(doc);
+  Ray ray{{1.f, 1.f, 0.f}, {0.f, -1.f, 0.f}};
+  auto hit = bvh.closest_hit(ray, doc);
+  ASSERT_TRUE(hit.has_value());
+  EXPECT_EQ(hit->node_id, added->id);
+}
+
+TEST(Math, IntersectSegmentHitsNearbyRay) {
+  Ray ray{{1.f, 1.f, 0.f}, {0.f, -1.f, 0.f}};
+  float t = 0.f;
+  ASSERT_TRUE(intersect_segment(ray, {0.f, 0.f, 0.f}, {2.f, 0.f, 0.f}, 0.03f, t));
+  EXPECT_NEAR(t, 1.f, 1e-4f);
+  EXPECT_FALSE(intersect_segment(ray, {0.f, 0.f, 1.f}, {2.f, 0.f, 1.f}, 0.03f, t));
+}
+
 TEST(Modeling, MeshShapeTessellate) {
   MeshShape shape(make_demo_cube());
   auto mesh = shape.tessellate(0.1);
@@ -467,27 +492,36 @@ TEST(SketchEntity, CreateGeomAndNotFamily) {
   LineEntity line({0.f, 0.f, 0.f}, {2.f, 0.f, 0.f});
   auto line_mesh = line.createGeom();
   ASSERT_TRUE(line_mesh) << line_mesh.error();
-  EXPECT_FALSE(line_mesh->indices.empty());
+  EXPECT_TRUE(line_mesh->line_list);
+  EXPECT_EQ(line_mesh->vertices.size(), 2u);
+  EXPECT_EQ(line_mesh->indices.size(), 2u);
   EXPECT_TRUE(line.is_sketch_entity());
   EXPECT_FALSE(line.is_family_entity());
 
   CircleEntity circle({0.f, 0.f, 0.f}, 1.0);
   auto circle_mesh = circle.createGeom();
   ASSERT_TRUE(circle_mesh) << circle_mesh.error();
+  EXPECT_TRUE(circle_mesh->line_list);
   EXPECT_FALSE(circle_mesh->indices.empty());
   EXPECT_TRUE(circle.is_sketch_entity());
 
   PolylineEntity poly({{0.f, 0.f, 0.f}, {1.f, 0.f, 0.f}, {1.f, 0.f, 1.f}});
   auto poly_mesh = poly.createGeom();
   ASSERT_TRUE(poly_mesh) << poly_mesh.error();
+  EXPECT_TRUE(poly_mesh->line_list);
+  EXPECT_EQ(poly_mesh->vertices.size(), 3u);
+  EXPECT_EQ(poly_mesh->indices.size(), 4u);
 
   RectangleEntity rect({0.f, 0.f, 0.f}, {2.f, 0.f, 1.f});
   auto rect_mesh = rect.createGeom();
   ASSERT_TRUE(rect_mesh) << rect_mesh.error();
+  EXPECT_TRUE(rect_mesh->line_list);
+  EXPECT_EQ(rect_mesh->vertices.size(), 5u);
 
   BezierEntity bezier({0.f, 0.f, 0.f}, {0.f, 0.f, 1.f}, {2.f, 0.f, 1.f}, {2.f, 0.f, 0.f});
   auto bezier_mesh = bezier.createGeom();
   ASSERT_TRUE(bezier_mesh) << bezier_mesh.error();
+  EXPECT_TRUE(bezier_mesh->line_list);
 }
 
 TEST(CurveGeom, ArcPassesThroughMidPoint) {
@@ -721,6 +755,35 @@ TEST(CommandSystem, BooleanUndoRedo) {
   ASSERT_TRUE(system.can_redo());
   system.redo();
   EXPECT_EQ(doc.entities().size(), 1u);
+}
+
+TEST(CommandSystem, DeleteEntityUndoRedo) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+  Document doc("cmd");
+
+  ASSERT_TRUE(system.dispatch(doc, "create_box", {}));
+  ASSERT_TRUE(system.feed_point({0.f, 0.f, 0.f}));
+  ASSERT_EQ(doc.entities().size(), 1u);
+  const std::uint64_t eid = doc.entities().begin()->first;
+
+  auto r = system.dispatch(doc, "delete_entity",
+                           {{"entity_id", static_cast<std::int64_t>(eid)}});
+  ASSERT_TRUE(r) << r.error();
+  EXPECT_EQ(doc.entities().size(), 0u);
+  EXPECT_TRUE(doc.meshes().empty());
+  EXPECT_EQ(doc.selected_entity(), nullptr);
+
+  ASSERT_TRUE(system.can_undo());
+  system.undo();
+  ASSERT_EQ(doc.entities().size(), 1u);
+  EXPECT_NE(doc.entity(eid), nullptr);
+
+  ASSERT_TRUE(system.can_redo());
+  system.redo();
+  EXPECT_EQ(doc.entities().size(), 0u);
+  EXPECT_EQ(doc.entity(eid), nullptr);
 }
 
 TEST(Bim, HostPlacementAlignAndValidity) {
