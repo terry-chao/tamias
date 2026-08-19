@@ -1,0 +1,51 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <!-- UpgradeCode is stable across versions; do not change it. -->
+  <Package Name="Tamias"
+           Manufacturer="Tamias"
+           Version="$(var.ProductVersion)"
+           UpgradeCode="b7e4c1a2-8f35-4d6e-9a10-2c8b5d7e1f43"
+           Language="1033"
+           Scope="perMachine">
+    <SummaryInformation Description="Geometry viewer and parametric editor for MCAD / BIM." />
+
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  Schedule="afterInstallInitialize"
+                  DowngradeErrorMessage="A newer version of Tamias is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="TamiasIco" SourceFile="!(bindpath.Branding)\tamias.ico" />
+    <Property Id="ARPPRODUCTICON" Value="TamiasIco" />
+    <Property Id="ARPHELPLINK" Value="https://terry-chao.github.io/tamias/" />
+    <Property Id="ARPURLINFOABOUT" Value="https://terry-chao.github.io/tamias/" />
+    <Property Id="ARPCOMMENTS" Value="Geome try viewer and parametric editor" />
+
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="Tamias">
+        <Files Include="!(bindpath.Payload)\**">
+          <Exclude Files="!(bindpath.Payload)\**\*.pdb" />
+          <Exclude Files="!(bindpath.Payload)\vc_redist*.exe" />
+        </Files>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut" Guid="c1d8e4f2-6a9b-4c3d-8e1f-0a2b4c6d8e90">
+        <Shortcut Name="Tamias"
+                  Description="Tamias"
+                  Target="[INSTALLFOLDER]tamias.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="TamiasIco" />
+        <RegistryValue Root="HKMU"
+                       Key="Software\Tamias"
+                       Name="StartMenuShortcut"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <WixVariable Id="WixUILicenseRtf" Value="!(bindpath.Packaging)\license.rtf" />
+  </Package>
+</Wix>

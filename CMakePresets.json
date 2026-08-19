@@ -77,6 +77,14 @@
       "environment": { "VSLANG": "1033" }
     },
     {
+      "name": "msi",
+      "displayName": "打包 MSI (Release)",
+      "configurePreset": "msvc",
+      "configuration": "Release",
+      "targets": ["tamias_msi"],
+      "environment": { "VSLANG": "1033" }
+    },
+    {
       "name": "linux-relwithdebinfo",
       "configurePreset": "linux"
     }

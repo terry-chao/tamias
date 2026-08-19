@@ -20,3 +20,4 @@ out/
 *.sdf
 site/
 .cache/
+.wix/

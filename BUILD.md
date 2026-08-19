@@ -47,6 +47,7 @@ Use the `linux` preset with vcpkg (`linux-desktop` feature) or install Qt6/Vulka
 | `TAMIAS_BUILD_TESTS` | ON | gtest targets |
 | `TAMIAS_USE_FETCHCONTENT` | ON | Fetch gtest when not found |
 | `TAMIAS_QT_PREFIX` | (empty) | Windows system Qt prefix; set by the `msvc` preset |
+| `TAMIAS_BUILD_MSI` | ON (Windows) | Add the `tamias_msi` target |
 
 ### OCCT (required, via vcpkg)
 
@@ -62,6 +63,24 @@ cmake --build --preset debug --parallel --target tamias_ifc_dump
 Opening a `.ifc` in the app shows the same tree. Geometry import (IfcGeom) is not wired yet.
 
 On Windows, POST_BUILD copies Qt runtime (`windeployqt`) and OCCT / freetype DLLs into `build/bin/<Config>/` next to `tamias.exe`, so double-click / F5 works without Qt or OCCT on `PATH`.
+
+## Windows MSI
+
+Requires the [.NET SDK](https://dotnet.microsoft.com/download) (for the WiX tool). First-time `tamias_msi` downloads WiX 5 and `WixToolset.UI.wixext`. Use **Release** (not Debug). Load the VS developer environment first:
+
+```powershell
+$env:VULKAN_SDK = 'C:\VulkanSDK\<version>'
+$env:VCPKG_ROOT = 'C:\dev\vcpkg'
+$env:Path = "$env:VULKAN_SDK\Bin;C:\Qt\6.11.1\msvc2022_64\bin;$env:Path"
+
+cmd /c "call `"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat`" && cmake --preset msvc && cmake --build --preset msi --parallel"
+```
+
+In Cursor / VS Code: **Terminal → Run Task… → Tamias: 打包 MSI** (does not switch your daily Debug preset).
+
+Output: `build/package/Tamias-<version>-win64.msi`. It installs to `C:\Program Files\Tamias\`, adds a Start Menu shortcut, and bundles Qt / OCCT / the VC++ runtime next to `tamias.exe`. The machine still needs a GPU driver with Vulkan (or switch the app to OpenGL).
+
+`cmake --install build --config Release --prefix <dir>` stages the same payload without building an MSI.
 
 ## Controls
 

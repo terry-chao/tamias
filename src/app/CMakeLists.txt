@@ -33,6 +33,8 @@ qt_add_translations(tamias
 
 if(WIN32)
   target_sources(tamias PRIVATE app.rc)
+  # Debug keeps a console for stderr logs; packaged Release/RelWithDebInfo do not.
+  set_target_properties(tamias PROPERTIES WIN32_EXECUTABLE $<NOT:$<CONFIG:Debug>>)
 endif()
 
 target_include_directories(tamias PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)

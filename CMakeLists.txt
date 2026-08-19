@@ -57,6 +57,8 @@ if(TAMIAS_BUILD_TESTS AND BUILD_TESTING)
   add_subdirectory(tests)
 endif()
 
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/TamiasPackage.cmake")
+
 message(STATUS "Tamias Vulkan backend: ${TAMIAS_ENABLE_VULKAN_BACKEND}")
 message(STATUS "Tamias OpenGL backend: ${TAMIAS_ENABLE_OPENGL_BACKEND}")
 message(STATUS "Tamias OCCT: ${TAMIAS_OCCT_ROOT}")

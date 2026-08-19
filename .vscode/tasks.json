@@ -20,6 +20,21 @@
       },
       "problemMatcher": [],
       "detail": "调试前编译最新的 tamias 目标"
+    },
+    {
+      "label": "Tamias: 打包 MSI",
+      "type": "cmake",
+      "command": "build",
+      "preset": "msi",
+      "targets": ["tamias_msi"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "showReuseMessage": false
+      },
+      "problemMatcher": [],
+      "detail": "用 Release 编译并生成 build/package/Tamias-*-win64.msi（日常调试请继续用 Debug）"
     }
   ]
 }
