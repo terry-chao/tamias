@@ -166,6 +166,10 @@ target_link_libraries(IfcParse
 )
 if(WIN32)
   target_link_libraries(IfcParse PUBLIC bcrypt)
+  # Official IfcOpenShell cmake defines these globally. FileReader.cpp assigns
+  # IfcUtil::path::from_utf8() to std::wstring, and IfcUtil.cpp only provides the
+  # wide overloads when _UNICODE is set; without it MSVC reports C2440/C2244.
+  target_compile_definitions(IfcParse PUBLIC UNICODE _UNICODE)
 endif()
 if(MSVC)
   target_compile_options(IfcParse PRIVATE /W0 /bigobj /wd4244 /wd4267 /wd4996 /wd4251)

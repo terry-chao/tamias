@@ -23,6 +23,7 @@
       "toolchainFile": "C:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake",
       "environment": {
         "VSLANG": "1033",
+        "PreferredUILang": "en-US",
         "VCPKG_ROOT": "C:/dev/vcpkg",
         "VCPKG_INSTALLATION_ROOT": "C:/dev/vcpkg"
       },
@@ -62,19 +63,19 @@
       "name": "release",
       "configurePreset": "msvc",
       "configuration": "Release",
-      "environment": { "VSLANG": "1033" }
+      "environment": { "VSLANG": "1033", "PreferredUILang": "en-US" }
     },
     {
       "name": "relwithdebinfo",
       "configurePreset": "msvc",
       "configuration": "RelWithDebInfo",
-      "environment": { "VSLANG": "1033" }
+      "environment": { "VSLANG": "1033", "PreferredUILang": "en-US" }
     },
     {
       "name": "debug",
       "configurePreset": "msvc",
       "configuration": "Debug",
-      "environment": { "VSLANG": "1033" }
+      "environment": { "VSLANG": "1033", "PreferredUILang": "en-US" }
     },
     {
       "name": "msi",
@@ -82,7 +83,7 @@
       "configurePreset": "msvc",
       "configuration": "Release",
       "targets": ["tamias_msi"],
-      "environment": { "VSLANG": "1033" }
+      "environment": { "VSLANG": "1033", "PreferredUILang": "en-US" }
     },
     {
       "name": "linux-relwithdebinfo",
