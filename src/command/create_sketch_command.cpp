@@ -22,10 +22,9 @@ int CreateSketchCommand::required_points() const {
   switch (kind_) {
     case SketchKind::Arc:
       return 3;
-    case SketchKind::Bezier:
-      return 4;
     case SketchKind::Polyline:
-      return 0;  // 不定长，靠 confirm
+    case SketchKind::Bezier:
+      return 0;  // 不定长，靠 confirm（右键 / Enter）
     case SketchKind::Line:
     case SketchKind::Circle:
     case SketchKind::Rectangle:
@@ -39,20 +38,45 @@ Result<bool> CreateSketchCommand::on_point(Vec3 point) {
     return false;
   }
   points_.push_back(point);
-  if (kind_ == SketchKind::Polyline) {
+  if (kind_ == SketchKind::Polyline || kind_ == SketchKind::Bezier) {
     return false;
   }
   return static_cast<int>(points_.size()) >= required_points();
 }
 
 Result<bool> CreateSketchCommand::on_confirm() {
-  if (kind_ != SketchKind::Polyline) {
+  if (kind_ != SketchKind::Polyline && kind_ != SketchKind::Bezier) {
     return false;
   }
   if (points_.size() < 2) {
     return false;
   }
   return true;
+}
+
+std::vector<Vec3> CreateSketchCommand::bezier_live_controls(Vec3 cursor) const {
+  if (points_.empty()) {
+    return {};
+  }
+  std::vector<Vec3> pts = points_;
+  if (!nearly_same(pts.back(), cursor)) {
+    pts.push_back(cursor);
+  }
+  return pts;
+}
+
+std::vector<Vec3> CreateSketchCommand::preview_control_polyline(Vec3 cursor) const {
+  if (kind_ != SketchKind::Bezier) {
+    return {};
+  }
+  return bezier_live_controls(cursor);
+}
+
+std::vector<Vec3> CreateSketchCommand::preview_points(Vec3 cursor) const {
+  if (kind_ != SketchKind::Bezier) {
+    return {};
+  }
+  return bezier_live_controls(cursor);
 }
 
 std::vector<Vec3> CreateSketchCommand::preview_polyline(Vec3 cursor) const {
@@ -77,17 +101,13 @@ std::vector<Vec3> CreateSketchCommand::preview_polyline(Vec3 cursor) const {
         return {points_[0], cursor};
       }
       return sample_arc_3pt(points_[0], points_[1], cursor);
-    case SketchKind::Bezier:
-      if (points_.size() == 1) {
-        return {points_[0], cursor};
+    case SketchKind::Bezier: {
+      const std::vector<Vec3> ctrls = bezier_live_controls(cursor);
+      if (ctrls.size() < 2) {
+        return {};
       }
-      if (points_.size() == 2) {
-        return sample_cubic_bezier(points_[0], points_[1], cursor, cursor);
-      }
-      if (points_.size() == 3) {
-        return sample_cubic_bezier(points_[0], points_[1], points_[2], cursor);
-      }
-      return sample_cubic_bezier(points_[0], points_[1], points_[2], points_[3]);
+      return sample_bezier(ctrls);
+    }
     case SketchKind::Polyline: {
       std::vector<Vec3> pts = points_;
       if (!nearly_same(pts.back(), cursor)) {
@@ -129,10 +149,10 @@ Result<std::unique_ptr<Entity>> CreateSketchCommand::make_sketch() const {
       }
       return std::make_unique<ArcEntity>(points_[0], points_[1], points_[2]);
     case SketchKind::Bezier:
-      if (points_.size() < 4) {
-        return Err("Bezier needs four control points");
+      if (points_.size() < 2) {
+        return Err("Bezier needs at least two control points");
       }
-      return std::make_unique<BezierEntity>(points_[0], points_[1], points_[2], points_[3]);
+      return std::make_unique<BezierEntity>(points_);
     case SketchKind::Rectangle:
       if (points_.size() < 2 || nearly_same(points_[0], points_[1])) {
         return Err("Rectangle needs two distinct corners");

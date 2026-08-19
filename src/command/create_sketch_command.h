@@ -19,7 +19,11 @@ class CreateSketchCommand final : public Command {
   [[nodiscard]] bool has_start() const override { return !points_.empty(); }
   [[nodiscard]] Vec3 start() const override { return points_.empty() ? Vec3{} : points_.front(); }
   [[nodiscard]] std::vector<Vec3> preview_polyline(Vec3 cursor) const override;
-  [[nodiscard]] bool accepts_confirm() const override { return kind_ == SketchKind::Polyline; }
+  [[nodiscard]] std::vector<Vec3> preview_control_polyline(Vec3 cursor) const override;
+  [[nodiscard]] std::vector<Vec3> preview_points(Vec3 cursor) const override;
+  [[nodiscard]] bool accepts_confirm() const override {
+    return kind_ == SketchKind::Polyline || kind_ == SketchKind::Bezier;
+  }
   [[nodiscard]] Result<bool> on_confirm() override;
 
   [[nodiscard]] Result<void> execute() override;
@@ -28,6 +32,7 @@ class CreateSketchCommand final : public Command {
 
  private:
   [[nodiscard]] int required_points() const;
+  [[nodiscard]] std::vector<Vec3> bezier_live_controls(Vec3 cursor) const;
   [[nodiscard]] Result<std::unique_ptr<Entity>> make_sketch() const;
 
   Document* document_ = nullptr;

@@ -39,6 +39,16 @@ class Command {
     }
     return {start(), cursor};
   }
+  // 贝塞尔等：控制点连线（控制多边形）。默认不画。
+  virtual std::vector<Vec3> preview_control_polyline(Vec3 cursor) const {
+    (void)cursor;
+    return {};
+  }
+  // 贝塞尔等：控制点标记位置。默认不画。
+  virtual std::vector<Vec3> preview_points(Vec3 cursor) const {
+    (void)cursor;
+    return {};
+  }
   // 折线等：Enter / 双击结束。返回 true 表示输入齐了（可 execute）。
   virtual bool accepts_confirm() const { return false; }
   virtual Result<bool> on_confirm() { return false; }

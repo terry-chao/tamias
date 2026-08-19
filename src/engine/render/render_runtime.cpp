@@ -1,5 +1,6 @@
 #include "render_runtime.h"
 
+#include "engine/core/executable_directory.h"
 #include "engine/core/log.h"
 
 #include <algorithm>
@@ -8,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <future>
+#include <optional>
 #include <span>
 
 namespace tamias {
@@ -30,6 +32,10 @@ Result<std::vector<std::uint32_t>> load_spirv_file(const std::string& path) {
 namespace {
 
 std::filesystem::path resolve_shader_path(const std::filesystem::path& name) {
+  const auto exe_dir = executable_directory() / "shaders" / name;
+  if (std::filesystem::exists(exe_dir)) {
+    return exe_dir;
+  }
   const auto cwd = std::filesystem::current_path() / "shaders" / name;
   if (std::filesystem::exists(cwd)) {
     return cwd;
@@ -99,14 +105,14 @@ MeshCpu make_grid_quad(float extent = 2000.f) {
   return mesh;
 }
 
-// 预览线（单元线：原点 → +Z，青色；用变换映射到起点→终点）。
+// 预览线（单元线：原点 → +Z，白色顶点色；实际颜色由 push constant 决定）。
 MeshCpu make_preview_line_mesh() {
   MeshCpu mesh;
-  const Vec3 cyan{0.18f, 0.82f, 1.f};
+  const Vec3 white{1.f, 1.f, 1.f};
   Vertex a{};
   a.position = {0.f, 0.f, 0.f};
   a.normal = {0.f, 1.f, 0.f};
-  a.color = cyan;
+  a.color = white;
   Vertex b = a;
   b.position = {0.f, 0.f, 1.f};
   mesh.vertices.push_back(a);
@@ -599,8 +605,9 @@ Result<void> RenderThread::ensure_pipelines() {
   return {};
 }
 
-Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
-  if (!channel.latest || channel.width == 0 || channel.height == 0 || !channel.window.valid()) {
+Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
+                                       const FrameSubmission& frame) {
+  if (channel.width == 0 || channel.height == 0 || !channel.window.valid()) {
     return {};
   }
   if (auto r = ensure_pipelines(); !r) {
@@ -638,7 +645,6 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
     channel.needs_recreate = false;
   }
 
-  const FrameSubmission& frame = *channel.latest;
   if (auto r = device_->begin_frame(*channel.swap_chain); !r) {
     channel.needs_recreate = true;
     return r;
@@ -781,31 +787,111 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel) {
     draw_lines(*line_pipeline_, axes_mesh_);
   }
 
-  // 预览折线（建墙 / 草图：已确定的点 + 光标，深度测试关）。
-  if (frame.preview_polyline.size() >= 2 && line_pipeline_ && preview_line_mesh_.index_buffer) {
-    channel.command_list->set_pipeline(*line_pipeline_);
-    channel.command_list->set_texture(*default_texture_, 0);
-    channel.command_list->set_vertex_buffer(*preview_line_mesh_.vertex_buffer);
-    channel.command_list->set_index_buffer(*preview_line_mesh_.index_buffer);
-    for (std::size_t i = 0; i + 1 < frame.preview_polyline.size(); ++i) {
-      const Vec3 start = frame.preview_polyline[i];
-      const Vec3 end = frame.preview_polyline[i + 1];
-      const Vec3 d = end - start;
-      const float seg_len = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
-      if (seg_len < 1e-6f) {
-        continue;
+  // 预览线（建墙 / 草图曲线 / 贝塞尔控制多边形与控制点，深度测试关）。
+  if (line_pipeline_ && preview_line_mesh_.index_buffer) {
+    const bool has_curve = frame.preview_polyline.size() >= 2;
+    const bool has_controls = frame.preview_control_polyline.size() >= 2;
+    const bool has_points = !frame.preview_points.empty();
+    if (has_curve || has_controls || has_points) {
+      channel.command_list->set_pipeline(*line_pipeline_);
+      channel.command_list->set_texture(*default_texture_, 0);
+      channel.command_list->set_vertex_buffer(*preview_line_mesh_.vertex_buffer);
+      channel.command_list->set_index_buffer(*preview_line_mesh_.index_buffer);
+
+      auto draw_segment = [&](Vec3 start, Vec3 end, float r, float g, float b) {
+        const Vec3 d = end - start;
+        const float seg_len = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+        if (seg_len < 1e-6f) {
+          return;
+        }
+        const float yaw = std::atan2(d.x, d.z);
+        const Mat4 model = translate(start) * rotate_y(yaw) * scale({1.f, 1.f, seg_len});
+        PushConstants pc{};
+        pc.mvp = view_proj * model;
+        pc.model = model;
+        pc.color[0] = r;
+        pc.color[1] = g;
+        pc.color[2] = b;
+        pc.color[3] = 1.f;
+        pc.eye_pos_mode[3] = 3.f;  // mode 3 = 无光照线条
+        channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
+        DrawIndexedDesc pd{};
+        pd.index_count = preview_line_mesh_.index_count;
+        channel.command_list->draw_indexed(pd);
+      };
+
+      auto draw_polyline = [&](const std::vector<Vec3>& pts, float r, float g, float b) {
+        for (std::size_t i = 0; i + 1 < pts.size(); ++i) {
+          draw_segment(pts[i], pts[i + 1], r, g, b);
+        }
+      };
+
+      auto draw_dashed_polyline = [&](const std::vector<Vec3>& pts, float r, float g, float b) {
+        constexpr float kDash = 0.10f;
+        constexpr float kGap = 0.06f;
+        for (std::size_t i = 0; i + 1 < pts.size(); ++i) {
+          const Vec3 a = pts[i];
+          const Vec3 bpt = pts[i + 1];
+          const Vec3 d = bpt - a;
+          const float len = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+          if (len < 1e-6f) {
+            continue;
+          }
+          const Vec3 dir = d * (1.f / len);
+          float t = 0.f;
+          while (t < len) {
+            const float t1 = (std::min)(t + kDash, len);
+            draw_segment(a + dir * t, a + dir * t1, r, g, b);
+            t = t1 + kGap;
+          }
+        }
+      };
+
+      auto marker_half = [&](Vec3 p) {
+        const float dist = std::sqrt((p.x - frame.eye_position.x) * (p.x - frame.eye_position.x) +
+                                     (p.y - frame.eye_position.y) * (p.y - frame.eye_position.y) +
+                                     (p.z - frame.eye_position.z) * (p.z - frame.eye_position.z));
+        return std::clamp(dist * 0.010f, 0.035f, 0.22f);
+      };
+
+      auto draw_square = [&](Vec3 p, float half, float r, float g, float b) {
+        const Vec3 a{p.x - half, p.y, p.z - half};
+        const Vec3 bpt{p.x + half, p.y, p.z - half};
+        const Vec3 c{p.x + half, p.y, p.z + half};
+        const Vec3 d{p.x - half, p.y, p.z + half};
+        draw_segment(a, bpt, r, g, b);
+        draw_segment(bpt, c, r, g, b);
+        draw_segment(c, d, r, g, b);
+        draw_segment(d, a, r, g, b);
+      };
+
+      auto draw_diamond = [&](Vec3 p, float half, float r, float g, float b) {
+        const Vec3 n{p.x, p.y, p.z - half};
+        const Vec3 e{p.x + half, p.y, p.z};
+        const Vec3 s{p.x, p.y, p.z + half};
+        const Vec3 w{p.x - half, p.y, p.z};
+        draw_segment(n, e, r, g, b);
+        draw_segment(e, s, r, g, b);
+        draw_segment(s, w, r, g, b);
+        draw_segment(w, n, r, g, b);
+      };
+
+      if (has_controls) {
+        draw_dashed_polyline(frame.preview_control_polyline, 1.00f, 0.78f, 0.28f);
       }
-      const float yaw = std::atan2(d.x, d.z);
-      const Mat4 model = translate(start) * rotate_y(yaw) * scale({1.f, 1.f, seg_len});
-      PushConstants pc{};
-      pc.mvp = view_proj * model;
-      pc.model = model;
-      pc.color[0] = pc.color[1] = pc.color[2] = pc.color[3] = 1.f;
-      pc.eye_pos_mode[3] = 3.f;  // mode 3 = 无光照线条
-      channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
-      DrawIndexedDesc pd{};
-      pd.index_count = preview_line_mesh_.index_count;
-      channel.command_list->draw_indexed(pd);
+      if (has_curve) {
+        draw_polyline(frame.preview_polyline, 0.22f, 0.86f, 1.00f);
+      }
+      for (std::size_t i = 0; i < frame.preview_points.size(); ++i) {
+        const Vec3 p = frame.preview_points[i];
+        const float half = marker_half(p);
+        const bool endpoint = (i == 0 || i + 1 == frame.preview_points.size());
+        if (endpoint) {
+          draw_square(p, half, 1.00f, 0.88f, 0.30f);
+        } else {
+          draw_diamond(p, half * 0.85f, 1.00f, 0.72f, 0.22f);
+        }
+      }
     }
   }
 
@@ -856,17 +942,20 @@ void RenderThread::thread_main() {
     }
     for (auto id : dirty_channels) {
       ChannelState* channel = nullptr;
+      std::optional<FrameSubmission> frame;
       {
         std::scoped_lock lock(mutex_);
         auto it = channels_.find(id);
-        if (it != channels_.end()) {
+        if (it != channels_.end() && it->second.latest) {
           channel = &it->second;
+          // 拷一份再画：submit_frame 会在无锁期间替换 latest，直接引用会 vector 越界。
+          frame = *it->second.latest;
         }
       }
-      if (!channel) {
+      if (!channel || !frame) {
         continue;
       }
-      if (auto r = draw_channel(id, *channel); !r) {
+      if (auto r = draw_channel(id, *channel, *frame); !r) {
         log_warn(r.error());
       }
     }

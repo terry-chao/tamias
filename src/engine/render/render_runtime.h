@@ -43,6 +43,8 @@ struct FrameSubmission {
   std::vector<SceneDrawItem> items;
   bool show_axes = true;  // 世界坐标轴（X红/Y绿/Z蓝）
   std::vector<Vec3> preview_polyline;
+  std::vector<Vec3> preview_control_polyline;  // 贝塞尔控制多边形
+  std::vector<Vec3> preview_points;            // 控制点标记
   float clear_color[4] = {0.14f, 0.18f, 0.24f, 1.f};
 };
 
@@ -104,7 +106,7 @@ class RenderThread {
 
   void thread_main();
   Result<void> ensure_pipelines();
-  Result<void> draw_channel(std::uint64_t id, ChannelState& channel);
+  Result<void> draw_channel(std::uint64_t id, ChannelState& channel, const FrameSubmission& frame);
 
   RenderDeviceConfig config_{};
   std::unique_ptr<RHIDevice> device_;

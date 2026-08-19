@@ -58,6 +58,12 @@ class CommandSystem {
   [[nodiscard]] std::vector<Vec3> preview_polyline(Vec3 cursor) const {
     return pending_ ? pending_->preview_polyline(cursor) : std::vector<Vec3>{};
   }
+  [[nodiscard]] std::vector<Vec3> preview_control_polyline(Vec3 cursor) const {
+    return pending_ ? pending_->preview_control_polyline(cursor) : std::vector<Vec3>{};
+  }
+  [[nodiscard]] std::vector<Vec3> preview_points(Vec3 cursor) const {
+    return pending_ ? pending_->preview_points(cursor) : std::vector<Vec3>{};
+  }
 
   void undo();
   void redo();

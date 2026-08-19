@@ -2,6 +2,7 @@
 
 #include "app_settings.h"
 #include "engine/core/log.h"
+#include "engine/modeling/curve_geom.h"
 #include "engine/modeling/feature.h"
 
 #if defined(TAMIAS_HAS_RHI_OPENGL)
@@ -482,6 +483,24 @@ void DocumentViewport::submit_current_frame() {
   frame.items = document_->render_items(&frustum);
   const Vec3 cursor = has_cursor_ ? cursor_ground_position(last_mouse_) : Vec3{};
   frame.preview_polyline = command_system_.preview_polyline(cursor);
+  frame.preview_control_polyline = command_system_.preview_control_polyline(cursor);
+  frame.preview_points = command_system_.preview_points(cursor);
+  if (frame.preview_control_polyline.empty() && frame.preview_points.empty() && document_) {
+    if (const Entity* entity = document_->selected_entity();
+        entity != nullptr && entity->kind() == EntityKind::Bezier) {
+      if (const Feature* feature = entity->model.output_feature();
+          feature != nullptr && feature->kind == FeatureKind::Bezier) {
+        const std::vector<Vec3> local = bezier_control_points(entity->model, *feature);
+        frame.preview_control_polyline.reserve(local.size());
+        frame.preview_points.reserve(local.size());
+        for (const Vec3& p : local) {
+          const Vec3 world = entity->local_transform * p;
+          frame.preview_control_polyline.push_back(world);
+          frame.preview_points.push_back(world);
+        }
+      }
+    }
+  }
   channel_->submit(std::move(frame));
 }
 
@@ -511,6 +530,7 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
   setFocus();  // 让视口能收到按键（[ ] 改选中对象的参数）
   last_mouse_ = event->pos();
   press_mouse_ = event->pos();
+  has_cursor_ = true;
   if (event->button() == Qt::LeftButton) {
     if (tool_mode_ != ToolMode::None) {
       Vec3 point = cursor_ground_position(event->pos());
@@ -581,6 +601,11 @@ void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
   }
   if (event->button() == Qt::RightButton) {
     panning_ = false;
+    if (command_system_.accepts_confirm() &&
+        (event->pos() - press_mouse_).manhattanLength() < 4) {
+      finish_pending_if_done(command_system_.confirm());
+      return;
+    }
     if (tool_mode_ == ToolMode::None && (event->pos() - press_mouse_).manhattanLength() < 4) {
       if (const std::uint64_t hit = pick_node_at(event->pos());
           hit != 0 && document_->entity(hit) != nullptr) {

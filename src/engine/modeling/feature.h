@@ -20,7 +20,7 @@ enum class FeatureKind : std::uint8_t {
   Polyline = 7,     // 折线，params{ n, p0x,p0y,p0z, ... }
   CircleWire = 8,   // 圆曲线（非轮廓面），params{ cx,cy,cz, radius }
   Arc = 9,          // 三点圆弧 start/through/end，params{ ax..cz }
-  Bezier = 10,      // 三次贝塞尔，params{ p0x..p3z }
+  Bezier = 10,      // 贝塞尔，params{ n, p0x,p0y,p0z, ... }；旧文件可能只有 p0..p3
   RectWire = 11,    // 轴对齐矩形轮廓，params{ ax,ay,az, bx,by,bz }
 };
 

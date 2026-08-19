@@ -368,8 +368,8 @@
         <translation>贝塞尔</translation>
     </message>
     <message>
-        <source>Create a cubic Bezier: click four control points</source>
-        <translation>创建三次贝塞尔：依次点击四个控制点</translation>
+        <source>Create a Bezier: click control points, right-click to finish</source>
+        <translation>创建贝塞尔：左键点击控制点，右键结束</translation>
     </message>
     <message>
         <location filename="../src/app/main_window.cpp" line="169"/>

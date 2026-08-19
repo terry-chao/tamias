@@ -74,13 +74,17 @@ std::unordered_map<std::string, double> arc_feature_params(Vec3 start, Vec3 thro
   return params;
 }
 
-std::unordered_map<std::string, double> bezier_feature_params(Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3) {
+std::unordered_map<std::string, double> bezier_feature_params(const std::vector<Vec3>& points) {
   std::unordered_map<std::string, double> params;
-  put_xyz(params, "p0", p0);
-  put_xyz(params, "p1", p1);
-  put_xyz(params, "p2", p2);
-  put_xyz(params, "p3", p3);
+  params["n"] = static_cast<double>(points.size());
+  for (std::size_t i = 0; i < points.size(); ++i) {
+    put_xyz(params, "p" + std::to_string(i), points[i]);
+  }
   return params;
+}
+
+std::unordered_map<std::string, double> bezier_feature_params(Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3) {
+  return bezier_feature_params(std::vector<Vec3>{p0, p1, p2, p3});
 }
 
 std::unordered_map<std::string, double> rect_wire_params(Vec3 a, Vec3 b) {
@@ -148,20 +152,72 @@ std::vector<Vec3> sample_arc_3pt(Vec3 start, Vec3 through, Vec3 end, int segment
   return pts;
 }
 
-std::vector<Vec3> sample_cubic_bezier(Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3, int segments) {
+std::vector<Vec3> sample_quadratic_bezier(Vec3 p0, Vec3 p1, Vec3 p2, int segments) {
   const int n = std::max(4, segments);
   std::vector<Vec3> pts;
   pts.reserve(static_cast<std::size_t>(n) + 1);
   for (int i = 0; i <= n; ++i) {
     const float t = static_cast<float>(i) / static_cast<float>(n);
     const float u = 1.f - t;
-    const float b0 = u * u * u;
-    const float b1 = 3.f * u * u * t;
-    const float b2 = 3.f * u * t * t;
-    const float b3 = t * t * t;
-    pts.push_back(p0 * b0 + p1 * b1 + p2 * b2 + p3 * b3);
+    const float b0 = u * u;
+    const float b1 = 2.f * u * t;
+    const float b2 = t * t;
+    pts.push_back(p0 * b0 + p1 * b1 + p2 * b2);
   }
   return pts;
+}
+
+std::vector<Vec3> sample_cubic_bezier(Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3, int segments) {
+  return sample_bezier({p0, p1, p2, p3}, segments);
+}
+
+namespace {
+
+Vec3 eval_bezier(const std::vector<Vec3>& ctrls, float t) {
+  if (ctrls.empty()) {
+    return {};
+  }
+  if (ctrls.size() == 1) {
+    return ctrls.front();
+  }
+  std::vector<Vec3> work = ctrls;
+  const float u = 1.f - t;
+  for (std::size_t k = work.size(); k > 1; --k) {
+    for (std::size_t i = 0; i + 1 < k; ++i) {
+      work[i] = work[i] * u + work[i + 1] * t;
+    }
+  }
+  return work.empty() ? Vec3{} : work.front();
+}
+
+}  // namespace
+
+std::vector<Vec3> sample_bezier(const std::vector<Vec3>& controls, int segments) {
+  if (controls.size() < 2) {
+    return controls;
+  }
+  const int n = segments > 0
+                    ? std::max(4, segments)
+                    : std::max(16, static_cast<int>(controls.size() - 1) * 12);
+  std::vector<Vec3> pts;
+  pts.reserve(static_cast<std::size_t>(n) + 1);
+  for (int i = 0; i <= n; ++i) {
+    const float t = static_cast<float>(i) / static_cast<float>(n);
+    pts.push_back(eval_bezier(controls, t));
+  }
+  return pts;
+}
+
+std::vector<Vec3> bezier_control_points(const FeatureModel& model, const Feature& f) {
+  if (f.kind != FeatureKind::Bezier) {
+    return {};
+  }
+  const int n = static_cast<int>(model.param(f.id, "n", 0.0));
+  if (n >= 2) {
+    return polyline_from_params(model, f.id);
+  }
+  return {get_xyz(model, f.id, "p0"), get_xyz(model, f.id, "p1"), get_xyz(model, f.id, "p2"),
+          get_xyz(model, f.id, "p3")};
 }
 
 std::vector<Vec3> sample_rect_xz(Vec3 a, Vec3 b) {
@@ -188,8 +244,7 @@ std::vector<Vec3> sample_sketch_feature(const FeatureModel& model, const Feature
       return sample_arc_3pt(get_xyz(model, f.id, "a"), get_xyz(model, f.id, "b"),
                             get_xyz(model, f.id, "c"));
     case FeatureKind::Bezier:
-      return sample_cubic_bezier(get_xyz(model, f.id, "p0"), get_xyz(model, f.id, "p1"),
-                                 get_xyz(model, f.id, "p2"), get_xyz(model, f.id, "p3"));
+      return sample_bezier(bezier_control_points(model, f));
     case FeatureKind::RectWire:
       return sample_rect_xz(get_xyz(model, f.id, "a"), get_xyz(model, f.id, "b"));
     default:

@@ -287,7 +287,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
                               tr("Bezier"), this);
   bezier_action_->setCheckable(true);
   bezier_action_->setProperty("toolMode", static_cast<int>(ToolMode::Bezier));
-  bezier_action_->setToolTip(tr("Create a cubic Bezier: click four control points"));
+  bezier_action_->setToolTip(
+      tr("Create a Bezier: click control points, right-click to finish"));
   connect(bezier_action_, &QAction::triggered, this,
           [this] { set_create_tool(ToolMode::Bezier); });
   create_group_->addAction(bezier_action_);

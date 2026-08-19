@@ -623,6 +623,92 @@ TEST(CommandSystem, CreateCircleTwoClicks) {
   EXPECT_EQ(doc.entities().begin()->second->kind(), EntityKind::Circle);
 }
 
+TEST(CommandSystem, CreateBezierClicksThenConfirm) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document doc("sketch-bezier");
+  ASSERT_TRUE(system.dispatch(doc, "create_bezier", {}));
+
+  const Vec3 p0{0.f, 0.f, 0.f};
+  const Vec3 p1{0.f, 0.f, 1.f};
+  const Vec3 p2{2.f, 0.f, 1.f};
+  const Vec3 p3{2.f, 0.f, 0.f};
+  const Vec3 p4{3.f, 0.f, 0.5f};
+  const Vec3 cursor{4.f, 0.f, 0.f};
+
+  auto click0 = system.feed_point(p0);
+  ASSERT_TRUE(click0) << click0.error();
+  EXPECT_FALSE(*click0);
+  {
+    const auto controls = system.preview_control_polyline(cursor);
+    ASSERT_EQ(controls.size(), 2u);
+    EXPECT_EQ(system.preview_points(cursor).size(), 2u);
+    EXPECT_GE(system.preview_polyline(cursor).size(), 2u);
+    auto too_soon = system.confirm();
+    ASSERT_TRUE(too_soon) << too_soon.error();
+    EXPECT_FALSE(*too_soon);
+  }
+
+  auto click1 = system.feed_point(p1);
+  ASSERT_TRUE(click1) << click1.error();
+  EXPECT_FALSE(*click1);
+  {
+    const auto controls = system.preview_control_polyline(cursor);
+    ASSERT_EQ(controls.size(), 3u);
+    EXPECT_GE(system.preview_polyline(cursor).size(), 5u);
+  }
+
+  auto click2 = system.feed_point(p2);
+  ASSERT_TRUE(click2) << click2.error();
+  EXPECT_FALSE(*click2);
+
+  auto click3 = system.feed_point(p3);
+  ASSERT_TRUE(click3) << click3.error();
+  EXPECT_FALSE(*click3) << "Bezier must not finish on the fourth left click";
+  EXPECT_EQ(doc.entities().size(), 0u);
+
+  auto click4 = system.feed_point(p4);
+  ASSERT_TRUE(click4) << click4.error();
+  EXPECT_FALSE(*click4);
+  {
+    const auto controls = system.preview_control_polyline(cursor);
+    ASSERT_EQ(controls.size(), 6u);
+    EXPECT_NEAR(controls.back().x, cursor.x, 1e-5f);
+    EXPECT_EQ(system.preview_points(cursor).size(), 6u);
+  }
+
+  auto done = system.confirm();
+  ASSERT_TRUE(done) << done.error();
+  EXPECT_TRUE(*done);
+  ASSERT_EQ(doc.entities().size(), 1u);
+  EXPECT_EQ(doc.entities().begin()->second->kind(), EntityKind::Bezier);
+}
+
+TEST(CurveGeom, BezierControlPointsAndQuadratic) {
+  FeatureModel model;
+  const Vec3 p0{0.f, 0.f, 0.f};
+  const Vec3 p1{0.f, 0.f, 1.f};
+  const Vec3 p2{2.f, 0.f, 1.f};
+  const Vec3 p3{2.f, 0.f, 0.f};
+  const Feature& f = model.add_feature(FeatureKind::Bezier, {}, bezier_feature_params(p0, p1, p2, p3));
+  const auto ctrls = bezier_control_points(model, f);
+  ASSERT_EQ(ctrls.size(), 4u);
+  EXPECT_NEAR(ctrls[0].x, 0.f, 1e-5f);
+  EXPECT_NEAR(ctrls[3].x, 2.f, 1e-5f);
+
+  const auto quad = sample_quadratic_bezier(p0, p1, p2, 16);
+  ASSERT_GE(quad.size(), 5u);
+  EXPECT_NEAR(quad.front().x, p0.x, 1e-5f);
+  EXPECT_NEAR(quad.back().x, p2.x, 1e-5f);
+
+  const auto high = sample_bezier({p0, p1, p2, p3, {3.f, 0.f, -1.f}});
+  ASSERT_GE(high.size(), 16u);
+  EXPECT_NEAR(high.front().x, p0.x, 1e-5f);
+  EXPECT_NEAR(high.back().x, 3.f, 1e-5f);
+}
+
 TEST(CommandSystem, CreatePolylineConfirm) {
   CommandRegistry registry;
   register_commands(registry);
