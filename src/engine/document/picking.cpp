@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <vector>
 
 namespace tamias {
 namespace {
@@ -171,6 +172,75 @@ Ray camera_ray(const TurntableCamera& camera, float aspect, float mouse_x, float
   ray.origin = eye;
   ray.direction = normalize(right * tanx + up * tany + forward);
   return ray;
+}
+
+bool project_world_to_screen(const Mat4& view_proj, Vec3 world, float width, float height,
+                             float& out_x, float& out_y) {
+  const float x = view_proj(0, 0) * world.x + view_proj(0, 1) * world.y +
+                  view_proj(0, 2) * world.z + view_proj(0, 3);
+  const float y = view_proj(1, 0) * world.x + view_proj(1, 1) * world.y +
+                  view_proj(1, 2) * world.z + view_proj(1, 3);
+  const float w = view_proj(3, 0) * world.x + view_proj(3, 1) * world.y +
+                  view_proj(3, 2) * world.z + view_proj(3, 3);
+  if (!(w > 1e-6f)) {
+    return false;
+  }
+  const float ndc_x = x / w;
+  const float ndc_y = y / w;
+  out_x = (ndc_x + 1.f) * 0.5f * width;
+  out_y = (1.f - ndc_y) * 0.5f * height;
+  return true;
+}
+
+std::vector<std::uint64_t> nodes_in_screen_rect(const Document& doc, const Mat4& view_proj,
+                                                float width, float height, float x0, float y0,
+                                                float x1, float y1, bool crossing) {
+  const float rx0 = std::min(x0, x1);
+  const float ry0 = std::min(y0, y1);
+  const float rx1 = std::max(x0, x1);
+  const float ry1 = std::max(y0, y1);
+  std::vector<std::uint64_t> ids;
+  for (const auto& node : doc.scene().nodes()) {
+    if (node.mesh_asset_id == 0 || !node.world_bounds.valid()) {
+      continue;
+    }
+    const Vec3 c[8] = {
+        {node.world_bounds.min.x, node.world_bounds.min.y, node.world_bounds.min.z},
+        {node.world_bounds.max.x, node.world_bounds.min.y, node.world_bounds.min.z},
+        {node.world_bounds.min.x, node.world_bounds.max.y, node.world_bounds.min.z},
+        {node.world_bounds.max.x, node.world_bounds.max.y, node.world_bounds.min.z},
+        {node.world_bounds.min.x, node.world_bounds.min.y, node.world_bounds.max.z},
+        {node.world_bounds.max.x, node.world_bounds.min.y, node.world_bounds.max.z},
+        {node.world_bounds.min.x, node.world_bounds.max.y, node.world_bounds.max.z},
+        {node.world_bounds.max.x, node.world_bounds.max.y, node.world_bounds.max.z},
+    };
+    float sx0 = 1e30f;
+    float sy0 = 1e30f;
+    float sx1 = -1e30f;
+    float sy1 = -1e30f;
+    int projected = 0;
+    for (const Vec3& p : c) {
+      float sx = 0.f;
+      float sy = 0.f;
+      if (!project_world_to_screen(view_proj, p, width, height, sx, sy)) {
+        continue;
+      }
+      ++projected;
+      sx0 = std::min(sx0, sx);
+      sy0 = std::min(sy0, sy);
+      sx1 = std::max(sx1, sx);
+      sy1 = std::max(sy1, sy);
+    }
+    if (projected == 0) {
+      continue;
+    }
+    const bool inside = sx0 >= rx0 && sy0 >= ry0 && sx1 <= rx1 && sy1 <= ry1;
+    const bool overlap = sx1 >= rx0 && sy1 >= ry0 && sx0 <= rx1 && sy0 <= ry1;
+    if (crossing ? overlap : inside) {
+      ids.push_back(node.id);
+    }
+  }
+  return ids;
 }
 
 }  // namespace tamias

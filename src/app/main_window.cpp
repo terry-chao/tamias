@@ -214,7 +214,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
                             tr("Slab"), this);
   slab_action_->setCheckable(true);
   slab_action_->setProperty("toolMode", static_cast<int>(ToolMode::Slab));
-  slab_action_->setToolTip(tr("Create a slab: click to place"));
+  slab_action_->setToolTip(tr("Create a slab: click two opposite corners"));
   connect(slab_action_, &QAction::triggered, this, [this] { set_create_tool(ToolMode::Slab); });
   create_group_->addAction(slab_action_);
   addAction(slab_action_);
@@ -291,7 +291,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   bezier_action_->setCheckable(true);
   bezier_action_->setProperty("toolMode", static_cast<int>(ToolMode::Bezier));
   bezier_action_->setToolTip(
-      tr("Create a Bezier: click control points, right-click to finish"));
+      tr("Create a Bezier: click control points, Enter or double-click to finish"));
   connect(bezier_action_, &QAction::triggered, this,
           [this] { set_create_tool(ToolMode::Bezier); });
   create_group_->addAction(bezier_action_);

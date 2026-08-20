@@ -5,10 +5,12 @@
 #include "command/create_beam_command.h"
 #include "command/create_primitive_command.h"
 #include "command/create_sketch_command.h"
+#include "command/create_slab_command.h"
 #include "command/create_wall_command.h"
 #include "command/delete_entity_command.h"
 #include "command/set_feature_param_command.h"
 #include "command/set_material_command.h"
+#include "bim/wall_size.h"
 
 namespace tamias {
 namespace {
@@ -38,8 +40,9 @@ std::string arg_string(const CommandArgs& args, const std::string& name, std::st
 
 void register_commands(CommandRegistry& registry) {
   registry.register_command("create_wall", [](Document& doc, const CommandArgs& args) {
-    return std::make_unique<CreateWallCommand>(doc, arg_double(args, "thickness", 0.2),
-                                               arg_double(args, "height", 3.0));
+    return std::make_unique<CreateWallCommand>(
+        doc, arg_double(args, "thickness", kDefaultWallThickness),
+        arg_double(args, "height", kDefaultWallHeight));
   });
 
   registry.register_command("create_beam", [](Document& doc, const CommandArgs& args) {
@@ -63,8 +66,9 @@ void register_commands(CommandRegistry& registry) {
   });
 
   registry.register_command("create_slab", [](Document& doc, const CommandArgs& args) {
-    (void)args;
-    return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Slab);
+    return std::make_unique<CreateSlabCommand>(
+        doc, arg_double(args, "thickness", 0.2),
+        arg_double(args, "elevation", kDefaultWallHeight));
   });
 
   registry.register_command("create_door", [](Document& doc, const CommandArgs& args) {

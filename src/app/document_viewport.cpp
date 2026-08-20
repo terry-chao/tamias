@@ -1,7 +1,9 @@
 #include "document_viewport.h"
 
 #include "app_settings.h"
+#include "bim/wall_size.h"
 #include "engine/core/log.h"
+#include "engine/math/grid.h"
 #include "engine/modeling/curve_geom.h"
 #include "engine/modeling/feature.h"
 
@@ -121,6 +123,8 @@ DocumentViewport::DocumentViewport(std::shared_ptr<Document> document,
       "  font-size: 12px;"
       "}"));
 
+  box_select_overlay_ = new BoxSelectOverlay(this);
+
   camera_.frame_aabb(document_->bounds().valid() ? document_->bounds()
                                                  : Aabb{{-1, -1, -1}, {1, 1, 1}});
   rebuild_bvh();
@@ -208,6 +212,9 @@ void DocumentViewport::layout_overlays() {
     coord_label_->move(kMargin, height() - coord_label_->height() - kMargin);
     coord_label_->raise();
   }
+  if (box_select_overlay_ && box_select_overlay_->isVisible()) {
+    box_select_overlay_->raise();
+  }
 }
 
 void DocumentViewport::sync_view_cube() {
@@ -251,7 +258,8 @@ void DocumentViewport::sync_coord_readout() {
                               .arg(target.y, 0, 'f', 3)
                               .arg(target.z, 0, 'f', 3));
   } else {
-    const Vec3 p = cursor_world_position(last_mouse_);
+    const Vec3 p = grid_snap_active() ? cursor_ground_position(last_mouse_)
+                                      : cursor_world_position(last_mouse_);
     coord_label_->setText(tr("X %1  Y %2  Z %3")
                               .arg(p.x, 0, 'f', 3)
                               .arg(p.y, 0, 'f', 3)
@@ -485,6 +493,9 @@ void DocumentViewport::submit_current_frame() {
   frame.preview_polyline = command_system_.preview_polyline(cursor);
   frame.preview_control_polyline = command_system_.preview_control_polyline(cursor);
   frame.preview_points = command_system_.preview_points(cursor);
+  if (grid_snap_active() && has_cursor_ && is_on_grid_xz(cursor)) {
+    frame.snap_point = cursor;
+  }
   if (frame.preview_control_polyline.empty() && frame.preview_points.empty() && document_) {
     if (const Entity* entity = document_->selected_entity();
         entity != nullptr && entity->kind() == EntityKind::Bezier) {
@@ -531,6 +542,7 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
   last_mouse_ = event->pos();
   press_mouse_ = event->pos();
   has_cursor_ = true;
+  press_hit_ = 0;
   if (event->button() == Qt::LeftButton) {
     if (tool_mode_ != ToolMode::None) {
       Vec3 point = cursor_ground_position(event->pos());
@@ -558,9 +570,32 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
       request_redraw();
       return;
     }
+    press_hit_ = pick_node_at(event->pos());
+    const bool shift = (event->modifiers() & Qt::ShiftModifier) != 0;
+    if (press_hit_ != 0) {
+      const SceneNode* node = document_->scene().find(press_hit_);
+      const bool already = node != nullptr && node->selected;
+      if (shift) {
+        if (already) {
+          document_->deselect(press_hit_);
+        } else {
+          document_->select(press_hit_);
+        }
+      } else if (!already) {
+        document_->clear_selection();
+        document_->select(press_hit_);
+      }
+      emit selection_changed();
+      request_redraw();
+    }
+    return;
+  }
+  if (event->button() == Qt::MiddleButton) {
     stop_view_animation();
-    orbiting_ = true;
-  } else if (event->button() == Qt::MiddleButton || event->button() == Qt::RightButton) {
+    mmb_nav_ = true;
+    return;
+  }
+  if (event->button() == Qt::RightButton) {
     stop_view_animation();
     panning_ = true;
   }
@@ -570,43 +605,66 @@ void DocumentViewport::mouseMoveEvent(QMouseEvent* event) {
   const QPoint delta = event->pos() - last_mouse_;
   last_mouse_ = event->pos();
   has_cursor_ = true;
-  if (orbiting_) {
-    camera_.orbit(-delta.x() * 0.01f, delta.y() * 0.01f);
+  if (mmb_nav_ && (event->buttons() & Qt::MiddleButton)) {
+    if (event->modifiers() & Qt::ShiftModifier) {
+      const float scale = camera_.distance() * 0.002f;
+      camera_.pan(-delta.x() * scale, delta.y() * scale);
+    } else {
+      camera_.orbit(-delta.x() * 0.01f, delta.y() * 0.01f);
+    }
     request_redraw();
-  } else if (panning_) {
+    return;
+  }
+  if (panning_) {
     const float scale = camera_.distance() * 0.002f;
     camera_.pan(-delta.x() * scale, delta.y() * scale);
     request_redraw();
-  } else if (command_system_.drag_started()) {
-    request_redraw();  // 更新预览线
-  } else {
-    sync_coord_readout();
+    return;
   }
+  if (tool_mode_ != ToolMode::None) {
+    request_redraw();  // 更新网格捕捉点与预览线
+    return;
+  }
+  if (event->buttons() & Qt::LeftButton) {
+    if (!box_selecting_ && press_hit_ == 0 &&
+        (event->pos() - press_mouse_).manhattanLength() >= 4) {
+      box_selecting_ = true;
+    }
+    if (box_selecting_) {
+      update_box_select_rect(event->pos());
+      return;
+    }
+  }
+  sync_coord_readout();
 }
 
 void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
   if (event->button() == Qt::LeftButton) {
-    orbiting_ = false;
-    if ((event->pos() - press_mouse_).manhattanLength() < 4) {
-      document_->clear_selection();
-      if (const std::uint64_t hit = pick_node_at(event->pos()); hit != 0) {
-        document_->select(hit);
+    if (tool_mode_ == ToolMode::None) {
+      if (box_selecting_) {
+        finish_box_select(event->pos(), (event->modifiers() & Qt::ShiftModifier) != 0);
+      } else if ((event->pos() - press_mouse_).manhattanLength() < 4 && press_hit_ == 0 &&
+                 (event->modifiers() & Qt::ShiftModifier) == 0) {
+        document_->clear_selection();
+        request_redraw();
+        emit selection_changed();
       }
-      request_redraw();
-      emit selection_changed();
+    }
+    box_selecting_ = false;
+    if (box_select_overlay_) {
+      box_select_overlay_->hide_box();
     }
   }
   if (event->button() == Qt::MiddleButton) {
-    panning_ = false;
+    mmb_nav_ = false;
   }
   if (event->button() == Qt::RightButton) {
     panning_ = false;
-    if (command_system_.accepts_confirm() &&
-        (event->pos() - press_mouse_).manhattanLength() < 4) {
-      finish_pending_if_done(command_system_.confirm());
-      return;
-    }
-    if (tool_mode_ == ToolMode::None && (event->pos() - press_mouse_).manhattanLength() < 4) {
+    if ((event->pos() - press_mouse_).manhattanLength() < 4) {
+      if (tool_mode_ != ToolMode::None) {
+        set_tool(ToolMode::None);  // 右键单击退出绘制命令
+        return;
+      }
       if (const std::uint64_t hit = pick_node_at(event->pos());
           hit != 0 && document_->entity(hit) != nullptr) {
         document_->clear_selection();
@@ -695,7 +753,8 @@ void DocumentViewport::set_tool(ToolMode mode) {
 void DocumentViewport::dispatch_tool_command(ToolMode mode) {
   if (mode == ToolMode::Wall) {
     if (auto r = command_system_.dispatch(*document_, "create_wall",
-                                          {{"thickness", 0.2}, {"height", 3.0}});
+                                          {{"thickness", kDefaultWallThickness},
+                                           {"height", kDefaultWallHeight}});
         !r) {
       log_error(r.error());
     }
@@ -718,7 +777,10 @@ void DocumentViewport::dispatch_tool_command(ToolMode mode) {
       log_error(r.error());
     }
   } else if (mode == ToolMode::Slab) {
-    if (auto r = command_system_.dispatch(*document_, "create_slab", {}); !r) {
+    if (auto r = command_system_.dispatch(
+            *document_, "create_slab",
+            {{"thickness", 0.2}, {"elevation", kDefaultWallHeight}});
+        !r) {
       log_error(r.error());
     }
   } else if (mode == ToolMode::Door) {
@@ -759,14 +821,21 @@ void DocumentViewport::dispatch_tool_command(ToolMode mode) {
 bool DocumentViewport::finish_pending_if_done(const Result<bool>& done) {
   if (!done) {
     log_error(done.error());
+    if (tool_mode_ != ToolMode::None) {
+      dispatch_tool_command(tool_mode_);
+    }
+    request_redraw();
     return true;
   }
   if (*done) {
-    set_tool(ToolMode::None);
     resync_all_meshes();
     rebuild_bvh();
-    request_redraw();
     emit document_changed();
+    // 画完一个实体后继续同一绘制命令，直到 Esc / 右键退出。
+    if (tool_mode_ != ToolMode::None) {
+      dispatch_tool_command(tool_mode_);
+    }
+    request_redraw();
     return true;
   }
   return false;
@@ -884,11 +953,16 @@ void DocumentViewport::chamfer_selected(double distance) {
 }
 
 void DocumentViewport::delete_selected() {
-  const Entity* e = document_->selected_entity();
-  if (e == nullptr) {
+  const std::vector<std::uint64_t> ids = document_->selected_ids();
+  if (ids.empty()) {
     return;
   }
-  run_command("delete_entity", {{"entity_id", static_cast<std::int64_t>(e->id)}});
+  for (const std::uint64_t id : ids) {
+    if (document_->entity(id) == nullptr) {
+      continue;
+    }
+    run_command("delete_entity", {{"entity_id", static_cast<std::int64_t>(id)}});
+  }
   emit selection_changed();
 }
 
@@ -970,6 +1044,11 @@ void DocumentViewport::redo() {
   emit document_changed();
 }
 
+bool DocumentViewport::grid_snap_active() const {
+  return tool_mode_ != ToolMode::None && tool_mode_ != ToolMode::Door &&
+         tool_mode_ != ToolMode::Window;
+}
+
 Vec3 DocumentViewport::cursor_ground_position(const QPoint& pos) const {
   const auto dpr = devicePixelRatioF();
   const float aspect = static_cast<float>((std::max)(1, width())) /
@@ -978,14 +1057,76 @@ Vec3 DocumentViewport::cursor_ground_position(const QPoint& pos) const {
       camera_ray(camera_, aspect, static_cast<float>(pos.x() * dpr),
                  static_cast<float>(pos.y() * dpr), static_cast<float>(width() * dpr),
                  static_cast<float>(height() * dpr));
+  Vec3 hit = ray.origin + ray.direction * camera_.distance();
   // 与地面平面 y=0 求交。
   if (std::fabs(ray.direction.y) > 1e-6f) {
     const float t = -ray.origin.y / ray.direction.y;
     if (t > 0.f) {
-      return ray.origin + ray.direction * t;
+      hit = ray.origin + ray.direction * t;
     }
   }
-  return ray.origin + ray.direction * camera_.distance();
+  if (grid_snap_active()) {
+    return snapped_ground_position(pos);
+  }
+  return hit;
+}
+
+Vec3 DocumentViewport::snapped_ground_position(const QPoint& pos) const {
+  const auto dpr = devicePixelRatioF();
+  const float aspect = static_cast<float>((std::max)(1, width())) /
+                       static_cast<float>((std::max)(1, height()));
+  const Ray ray =
+      camera_ray(camera_, aspect, static_cast<float>(pos.x() * dpr),
+                 static_cast<float>(pos.y() * dpr), static_cast<float>(width() * dpr),
+                 static_cast<float>(height() * dpr));
+  Vec3 hit = ray.origin + ray.direction * camera_.distance();
+  if (std::fabs(ray.direction.y) > 1e-6f) {
+    const float t = -ray.origin.y / ray.direction.y;
+    if (t > 0.f) {
+      hit = ray.origin + ray.direction * t;
+    }
+  }
+  const float dist = length(hit - camera_.eye_position());
+  const float radius =
+      grid_snap_world_radius(dist, camera_.fovy(), static_cast<float>((std::max)(1, height())));
+  return snap_to_grid_xz_if_near(hit, radius);
+}
+
+Mat4 DocumentViewport::view_proj() const {
+  const float aspect = static_cast<float>((std::max)(1, width())) /
+                       static_cast<float>((std::max)(1, height()));
+  return camera_.proj_matrix(aspect) * camera_.view_matrix();
+}
+
+void DocumentViewport::update_box_select_rect(const QPoint& pos) {
+  if (box_select_overlay_ == nullptr) {
+    return;
+  }
+  const bool crossing = pos.x() < press_mouse_.x();
+  box_select_overlay_->set_box(QRect(press_mouse_, pos), crossing);
+}
+
+void DocumentViewport::finish_box_select(const QPoint& pos, bool additive) {
+  if (box_select_overlay_ != nullptr) {
+    box_select_overlay_->hide_box();
+  }
+  if ((pos - press_mouse_).manhattanLength() < 4) {
+    return;
+  }
+  const bool crossing = pos.x() < press_mouse_.x();
+  const std::vector<std::uint64_t> ids = nodes_in_screen_rect(
+      *document_, view_proj(), static_cast<float>((std::max)(1, width())),
+      static_cast<float>((std::max)(1, height())), static_cast<float>(press_mouse_.x()),
+      static_cast<float>(press_mouse_.y()), static_cast<float>(pos.x()),
+      static_cast<float>(pos.y()), crossing);
+  if (!additive) {
+    document_->clear_selection();
+  }
+  for (const std::uint64_t id : ids) {
+    document_->select(id);
+  }
+  request_redraw();
+  emit selection_changed();
 }
 
 }  // namespace tamias

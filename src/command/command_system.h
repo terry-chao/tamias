@@ -69,6 +69,7 @@ class CommandSystem {
   void redo();
   [[nodiscard]] bool can_undo() const { return stack_.can_undo(); }
   [[nodiscard]] bool can_redo() const { return stack_.can_redo(); }
+  void push_executed(std::unique_ptr<Command> command) { stack_.push_executed(std::move(command)); }
 
  private:
   const CommandRegistry& registry_;

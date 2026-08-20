@@ -5,12 +5,12 @@ float4 main(VsOutput input) : SV_Target0 {
   float2 coord = input.world_pos.xz;
   float2 deriv = fwidth(coord);
 
-  // 次网格：每 1 个世界单位。
+  // 次网格：每 1 个世界单位（与 engine/math/grid.h kGridMinorSpacing 一致）。
   float2 minor_d = min(frac(coord), 1.0 - frac(coord));
   float2 minor_px = minor_d / max(deriv, 1e-5);
   float minor_strength = 1.0 - saturate(min(minor_px.x, minor_px.y));
 
-  // 主网格：每 5 个世界单位。
+  // 主网格：每 5 个世界单位（与 kGridMajorSpacing 一致）。
   const float major_scale = 5.0;
   float2 major_d = min(frac(coord / major_scale), 1.0 - frac(coord / major_scale));
   float2 major_px = major_d * major_scale / max(deriv, 1e-5);

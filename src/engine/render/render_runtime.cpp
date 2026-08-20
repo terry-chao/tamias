@@ -787,12 +787,13 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     draw_lines(*line_pipeline_, axes_mesh_);
   }
 
-  // 预览线（建墙 / 草图曲线 / 贝塞尔控制多边形与控制点，深度测试关）。
+  // 预览线（建墙 / 草图曲线 / 贝塞尔控制多边形与控制点 / 网格捕捉，深度测试关）。
   if (line_pipeline_ && preview_line_mesh_.index_buffer) {
     const bool has_curve = frame.preview_polyline.size() >= 2;
     const bool has_controls = frame.preview_control_polyline.size() >= 2;
     const bool has_points = !frame.preview_points.empty();
-    if (has_curve || has_controls || has_points) {
+    const bool has_snap = frame.snap_point.has_value();
+    if (has_curve || has_controls || has_points || has_snap) {
       channel.command_list->set_pipeline(*line_pipeline_);
       channel.command_list->set_texture(*default_texture_, 0);
       channel.command_list->set_vertex_buffer(*preview_line_mesh_.vertex_buffer);
@@ -876,6 +877,11 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
         draw_segment(w, n, r, g, b);
       };
 
+      auto draw_cross = [&](Vec3 p, float half, float r, float g, float b) {
+        draw_segment({p.x - half, p.y, p.z}, {p.x + half, p.y, p.z}, r, g, b);
+        draw_segment({p.x, p.y, p.z - half}, {p.x, p.y, p.z + half}, r, g, b);
+      };
+
       if (has_controls) {
         draw_dashed_polyline(frame.preview_control_polyline, 1.00f, 0.78f, 0.28f);
       }
@@ -891,6 +897,10 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
         } else {
           draw_diamond(p, half * 0.85f, 1.00f, 0.72f, 0.22f);
         }
+      }
+      if (has_snap) {
+        const Vec3 p = *frame.snap_point;
+        draw_cross(p, marker_half(p), 0.35f, 0.95f, 0.55f);
       }
     }
   }

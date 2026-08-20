@@ -16,6 +16,7 @@ add_executable(tamias
   settings_dialog.cpp
   settings_section.cpp
   document_viewport.cpp
+  box_select_overlay.cpp
   handle_inspector.cpp
   property_panel.cpp
   view_cube_widget.cpp

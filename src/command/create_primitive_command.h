@@ -9,7 +9,7 @@
 namespace tamias {
 
 // 单点放置的参数化构件。
-enum class PrimitiveKind { Box, Cylinder, Column, Slab, Door, Window };
+enum class PrimitiveKind { Box, Cylinder, Column, Door, Window };
 
 // 创建一个参数化基础几何体（交互式）：dispatch 后武装，点一个位置确定，然后 createGeom 造型。
 class CreatePrimitiveCommand final : public Command {

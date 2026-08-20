@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 namespace tamias {
 
@@ -37,5 +38,14 @@ class Bvh {
 
 Ray camera_ray(const TurntableCamera& camera, float aspect, float mouse_x, float mouse_y,
                float width, float height);
+
+// 世界点投到屏幕像素；在相机后面则失败。
+[[nodiscard]] bool project_world_to_screen(const Mat4& view_proj, Vec3 world, float width,
+                                           float height, float& out_x, float& out_y);
+
+// 框选：window=完全落入矩形，crossing=屏幕包围盒与矩形相交。
+[[nodiscard]] std::vector<std::uint64_t> nodes_in_screen_rect(
+    const Document& doc, const Mat4& view_proj, float width, float height, float x0, float y0,
+    float x1, float y1, bool crossing);
 
 }  // namespace tamias

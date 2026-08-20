@@ -324,8 +324,8 @@
         <translation>板</translation>
     </message>
     <message>
-        <source>Create a slab: click to place</source>
-        <translation>创建板：点击放置</translation>
+        <source>Create a slab: click two opposite corners</source>
+        <translation>创建板：点击两个对角点</translation>
     </message>
     <message>
         <source>Door</source>
@@ -388,8 +388,8 @@
         <translation>贝塞尔</translation>
     </message>
     <message>
-        <source>Create a Bezier: click control points, right-click to finish</source>
-        <translation>创建贝塞尔：左键点击控制点，右键结束</translation>
+        <source>Create a Bezier: click control points, Enter or double-click to finish</source>
+        <translation>创建贝塞尔：点击控制点，Enter 或双击结束</translation>
     </message>
     <message>
         <location filename="../src/app/main_window.cpp" line="169"/>

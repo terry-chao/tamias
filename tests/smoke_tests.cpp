@@ -2,6 +2,7 @@
 #include "bim/host_update.h"
 #include "command/command_system.h"
 #include "command/history.h"
+#include "command/move_entities_command.h"
 #include "engine/io/binary_archive.h"
 #include "engine/document/document_io.h"
 #include "entity/beam_entity.h"
@@ -20,6 +21,7 @@
 #include "entity/window_entity.h"
 #include "engine/modeling/curve_geom.h"
 #include "engine/io/mesh_io.h"
+#include "engine/math/grid.h"
 #include "engine/math/math.h"
 #include "engine/document/picking.h"
 #include "engine/modeling/occt_feature.h"
@@ -65,6 +67,46 @@ bool contains_mesh(const std::vector<SceneDrawItem>& items, std::uint64_t mesh_a
 }
 
 }  // namespace
+
+TEST(Math, SnapToGridXz) {
+  const Vec3 a = snap_to_grid_xz({0.37f, 1.f, 2.61f});
+  EXPECT_FLOAT_EQ(a.x, 0.f);
+  EXPECT_FLOAT_EQ(a.y, 1.f);
+  EXPECT_FLOAT_EQ(a.z, 3.f);
+
+  const Vec3 on_grid = snap_to_grid_xz({2.f, 0.f, -4.f});
+  EXPECT_FLOAT_EQ(on_grid.x, 2.f);
+  EXPECT_FLOAT_EQ(on_grid.z, -4.f);
+
+  const Vec3 neg = snap_to_grid_xz({-1.4f, 0.f, -1.6f});
+  EXPECT_FLOAT_EQ(neg.x, -1.f);
+  EXPECT_FLOAT_EQ(neg.z, -2.f);
+
+  const Vec3 major = snap_to_grid_xz({7.f, 0.f, 13.f}, kGridMajorSpacing);
+  EXPECT_FLOAT_EQ(major.x, 5.f);
+  EXPECT_FLOAT_EQ(major.z, 15.f);
+}
+
+TEST(Math, SnapToGridXzIfNear) {
+  const Vec3 near = snap_to_grid_xz_if_near({0.10f, 1.f, 2.05f}, 0.2f);
+  EXPECT_FLOAT_EQ(near.x, 0.f);
+  EXPECT_FLOAT_EQ(near.y, 1.f);
+  EXPECT_FLOAT_EQ(near.z, 2.f);
+
+  const Vec3 far = snap_to_grid_xz_if_near({0.40f, 0.f, 2.40f}, 0.2f);
+  EXPECT_FLOAT_EQ(far.x, 0.40f);
+  EXPECT_FLOAT_EQ(far.z, 2.40f);
+
+  const Vec3 on_grid = snap_to_grid_xz_if_near({1.f, 0.f, -3.f}, 0.f);
+  EXPECT_FLOAT_EQ(on_grid.x, 1.f);
+  EXPECT_FLOAT_EQ(on_grid.z, -3.f);
+
+  EXPECT_TRUE(is_on_grid_xz({2.f, 0.f, -4.f}));
+  EXPECT_FALSE(is_on_grid_xz({0.40f, 0.f, 2.40f}));
+
+  const float capped = grid_snap_world_radius(200.f, 0.8f, 800.f);
+  EXPECT_FLOAT_EQ(capped, kGridMinorSpacing * kGridSnapRadiusFactor);
+}
 
 TEST(Math, AabbExpand) {
   Aabb box{};
@@ -386,6 +428,19 @@ TEST(Picking, RayHitsCube) {
   ASSERT_TRUE(hit.has_value());
 }
 
+TEST(Picking, ProjectWorldToScreenCenter) {
+  TurntableCamera camera;
+  camera.set_target({});
+  camera.set_distance(8.f);
+  camera.look_front();
+  const Mat4 vp = camera.proj_matrix(1.f) * camera.view_matrix();
+  float sx = 0.f;
+  float sy = 0.f;
+  ASSERT_TRUE(project_world_to_screen(vp, {}, 200.f, 200.f, sx, sy));
+  EXPECT_NEAR(sx, 100.f, 3.f);
+  EXPECT_NEAR(sy, 100.f, 3.f);
+}
+
 TEST(Picking, RayHitsTransformedNode) {
   Document doc("t");
   MeshAsset asset{};
@@ -553,6 +608,19 @@ TEST(Entity, ParametricGeometryHasNormals) {
   }
 }
 
+TEST(Entity, SlabTwoCornersSetsSize) {
+  const SlabEntity slab({-1.f, 0.5f, 2.f}, {3.f, 0.5f, -1.f}, 0.2);
+  ASSERT_EQ(slab.model.features().size(), 2u);
+  EXPECT_EQ(slab.model.features()[0].kind, FeatureKind::RectProfile);
+  EXPECT_DOUBLE_EQ(slab.model.param(slab.model.features()[0].id, "width", 0.0), 4.0);
+  EXPECT_DOUBLE_EQ(slab.model.param(slab.model.features()[0].id, "height", 0.0), 3.0);
+  EXPECT_EQ(slab.model.features()[1].kind, FeatureKind::Extrude);
+  EXPECT_DOUBLE_EQ(slab.model.param(slab.model.features()[1].id, "depth", 0.0), 0.2);
+  EXPECT_FLOAT_EQ(slab.local_transform(0, 3), 1.f);
+  EXPECT_FLOAT_EQ(slab.local_transform(1, 3), 0.5f);
+  EXPECT_FLOAT_EQ(slab.local_transform(2, 3), 0.5f);
+}
+
 TEST(Entity, BuildingComponentsCreateGeom) {
   const BeamEntity beam({0.f, 0.f, 0.f}, {4.f, 0.f, 0.f}, 0.3, 0.5);
   const ColumnEntity column({0.f, 0.f, 0.f}, 0.4, 0.4, 3.0);
@@ -604,6 +672,76 @@ TEST(CommandSystem, DispatchCreateWallUndoRedo) {
   system.redo();
   EXPECT_EQ(doc.entities().size(), 1u);
   EXPECT_EQ(doc.meshes().size(), 1u);
+}
+
+TEST(CommandSystem, DispatchCreateSlabTwoCorners) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document doc("cmd-slab");
+  ASSERT_TRUE(system.dispatch(doc, "create_slab", {{"thickness", 0.2}}));
+  EXPECT_EQ(doc.entities().size(), 0u);
+
+  auto p1 = system.feed_point({0.f, 0.f, 0.f});
+  ASSERT_TRUE(p1) << p1.error();
+  EXPECT_FALSE(*p1);
+  EXPECT_EQ(doc.entities().size(), 0u);
+
+  const Vec3 cursor{4.f, 0.f, 3.f};
+  const auto preview = system.preview_polyline(cursor);
+  EXPECT_GE(preview.size(), 4u);
+  EXPECT_FLOAT_EQ(preview.front().y, static_cast<float>(kDefaultWallHeight));
+
+  auto p2 = system.feed_point(cursor);
+  ASSERT_TRUE(p2) << p2.error();
+  EXPECT_TRUE(*p2);
+  EXPECT_EQ(doc.entities().size(), 1u);
+  const Entity* slab = doc.entities().begin()->second.get();
+  ASSERT_NE(slab, nullptr);
+  EXPECT_EQ(slab->kind(), EntityKind::Slab);
+  EXPECT_FLOAT_EQ(slab->local_transform(1, 3), static_cast<float>(kDefaultWallHeight));
+
+  ASSERT_TRUE(system.can_undo());
+  system.undo();
+  EXPECT_EQ(doc.entities().size(), 0u);
+  ASSERT_TRUE(system.can_redo());
+  system.redo();
+  EXPECT_EQ(doc.entities().size(), 1u);
+}
+
+TEST(CommandSystem, MoveEntitiesUndoRedo) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document doc("move");
+  ASSERT_TRUE(system.dispatch(doc, "create_wall", {{"thickness", 0.2}, {"height", 3.0}}));
+  ASSERT_TRUE(system.feed_point({0.f, 0.f, 0.f}));
+  auto done = system.feed_point({0.f, 0.f, 4.f});
+  ASSERT_TRUE(done) << done.error();
+  ASSERT_TRUE(*done);
+  ASSERT_EQ(doc.entities().size(), 1u);
+
+  Entity* wall = doc.entities().begin()->second.get();
+  ASSERT_NE(wall, nullptr);
+  const Mat4 from = wall->local_transform;
+  const Mat4 to = translate({2.f, 0.f, 0.f}) * from;
+  auto command = std::make_unique<MoveEntitiesCommand>(
+      doc, std::vector<EntityTransform>{{wall->id, from, to}});
+  ASSERT_TRUE(command->execute());
+  system.push_executed(std::move(command));
+  EXPECT_FLOAT_EQ(wall->local_transform(0, 3), from(0, 3) + 2.f);
+
+  system.undo();
+  wall = doc.entities().begin()->second.get();
+  ASSERT_NE(wall, nullptr);
+  EXPECT_FLOAT_EQ(wall->local_transform(0, 3), from(0, 3));
+
+  system.redo();
+  wall = doc.entities().begin()->second.get();
+  ASSERT_NE(wall, nullptr);
+  EXPECT_FLOAT_EQ(wall->local_transform(0, 3), from(0, 3) + 2.f);
 }
 
 TEST(CommandSystem, CreateCircleTwoClicks) {

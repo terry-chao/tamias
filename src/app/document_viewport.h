@@ -7,16 +7,19 @@
 #include "engine/document/document_io.h"
 #include "engine/math/camera.h"
 #include "engine/document/picking.h"
+#include "box_select_overlay.h"
 #include "view_cube_widget.h"
 
 #include <QElapsedTimer>
 #include <QLabel>
+#include <QPoint>
 #include <QTimer>
 #include <QWidget>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_set>
+#include <vector>
 
 namespace tamias {
 
@@ -105,6 +108,8 @@ class DocumentViewport final : public QWidget {
   void stop_view_animation();
   [[nodiscard]] Vec3 cursor_world_position(const QPoint& pos) const;
   [[nodiscard]] Vec3 cursor_ground_position(const QPoint& pos) const;
+  // 绘制实体时吸附到地面网格交点（门/窗贴墙拾取除外）。
+  [[nodiscard]] bool grid_snap_active() const;
   [[nodiscard]] std::uint64_t pick_node_at(const QPoint& pos) const;
   void show_entity_context_menu(const QPoint& global_pos);
   void adjust_selected_param(double delta);
@@ -114,6 +119,10 @@ class DocumentViewport final : public QWidget {
   void resync_textures();
   void cancel_tool();
   [[nodiscard]] bool finish_pending_if_done(const Result<bool>& done);
+  [[nodiscard]] Vec3 snapped_ground_position(const QPoint& pos) const;
+  void update_box_select_rect(const QPoint& pos);
+  void finish_box_select(const QPoint& pos, bool additive);
+  [[nodiscard]] Mat4 view_proj() const;
 
   std::shared_ptr<Document> document_;
   std::shared_ptr<RenderThread> render_thread_;
@@ -137,8 +146,11 @@ class DocumentViewport final : public QWidget {
   float anim_to_pitch_ = 0.f;
   QPoint last_mouse_;
   QPoint press_mouse_;
-  bool orbiting_ = false;
+  std::uint64_t press_hit_ = 0;
   bool panning_ = false;
+  bool mmb_nav_ = false;
+  bool box_selecting_ = false;
+  BoxSelectOverlay* box_select_overlay_ = nullptr;
   bool alive_ = true;
   bool has_cursor_ = false;
   std::unordered_set<std::uint64_t> uploaded_textures_;  // 已上传过的纹理资产 id

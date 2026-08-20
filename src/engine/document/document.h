@@ -206,7 +206,13 @@ class Document {
       node->selected = true;
     }
   }
+  void deselect(std::uint64_t id) {
+    if (SceneNode* node = scene_.find(id)) {
+      node->selected = false;
+    }
+  }
   void clear_selection() { scene_.clear_selection(); }
+  [[nodiscard]] std::vector<std::uint64_t> selected_ids() const { return scene_.selected_ids(); }
   Entity* selected_entity() {
     const SceneNode* node = scene_.selected_node();
     return node ? entity(node->id) : nullptr;

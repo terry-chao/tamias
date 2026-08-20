@@ -85,6 +85,16 @@ class Scene {
     }
   }
 
+  [[nodiscard]] std::vector<std::uint64_t> selected_ids() const {
+    std::vector<std::uint64_t> ids;
+    for (const auto& n : nodes_) {
+      if (n.selected) {
+        ids.push_back(n.id);
+      }
+    }
+    return ids;
+  }
+
   [[nodiscard]] SceneNode* selected_node() {
     for (auto& n : nodes_) {
       if (n.selected) {

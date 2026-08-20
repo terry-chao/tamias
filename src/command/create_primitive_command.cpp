@@ -5,7 +5,6 @@
 #include "entity/column_entity.h"
 #include "entity/cylinder_entity.h"
 #include "entity/door_entity.h"
-#include "entity/slab_entity.h"
 #include "entity/window_entity.h"
 
 namespace tamias {
@@ -51,16 +50,6 @@ Result<void> CreatePrimitiveCommand::execute() {
         return Err(geometry.error());
       }
       added = document_->add_entity(std::make_unique<ColumnEntity>(std::move(column)),
-                                    std::move(*geometry));
-      break;
-    }
-    case PrimitiveKind::Slab: {
-      SlabEntity slab(position_);
-      auto geometry = slab.createGeom();
-      if (!geometry) {
-        return Err(geometry.error());
-      }
-      added = document_->add_entity(std::make_unique<SlabEntity>(std::move(slab)),
                                     std::move(*geometry));
       break;
     }
