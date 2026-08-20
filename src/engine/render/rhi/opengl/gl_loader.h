@@ -132,6 +132,9 @@
 #ifndef GL_LINEAR
 #define GL_LINEAR 0x2601
 #endif
+#ifndef GL_TEXTURE_MAX_ANISOTROPY_EXT
+#define GL_TEXTURE_MAX_ANISOTROPY_EXT 0x84FE
+#endif
 #ifndef GL_REPEAT
 #define GL_REPEAT 0x2901
 #endif

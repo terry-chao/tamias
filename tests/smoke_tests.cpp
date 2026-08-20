@@ -361,7 +361,10 @@ TEST(Document, DefaultMaterialsHaveAlbedoTextures) {
   for (const auto& [id, material] : doc.materials()) {
     (void)id;
     EXPECT_NE(material.albedo_texture_id, 0u);
-    EXPECT_NE(doc.texture(material.albedo_texture_id), nullptr);
+    const TextureAsset* texture = doc.texture(material.albedo_texture_id);
+    ASSERT_NE(texture, nullptr);
+    EXPECT_EQ(texture->width, 512u);
+    EXPECT_EQ(texture->height, 512u);
   }
 }
 

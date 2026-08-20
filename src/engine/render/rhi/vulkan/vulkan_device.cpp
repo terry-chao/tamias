@@ -767,8 +767,11 @@ Result<void> VulkanDevice::create_logical_device() {
     queues.push_back(q);
   }
   const char* extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+  VkPhysicalDeviceFeatures supported{};
+  vkGetPhysicalDeviceFeatures(physical_, &supported);
   VkPhysicalDeviceFeatures features{};
   features.fillModeNonSolid = VK_TRUE;
+  features.samplerAnisotropy = supported.samplerAnisotropy;
   VkDeviceCreateInfo ci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
   ci.queueCreateInfoCount = static_cast<std::uint32_t>(queues.size());
   ci.pQueueCreateInfos = queues.data();
@@ -890,15 +893,24 @@ Result<void> VulkanDevice::create_descriptor_resources() {
     return Err("descriptor pool create failed");
   }
 
+  VkPhysicalDeviceFeatures supported{};
+  vkGetPhysicalDeviceFeatures(physical_, &supported);
+  VkPhysicalDeviceProperties props{};
+  vkGetPhysicalDeviceProperties(physical_, &props);
+
   VkSamplerCreateInfo si{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
   si.magFilter = VK_FILTER_LINEAR;
   si.minFilter = VK_FILTER_LINEAR;
-  si.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+  si.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
   si.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
   si.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
   si.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
   si.minLod = 0.f;
   si.maxLod = VK_LOD_CLAMP_NONE;  // 单 mip 纹理：不 clamp LOD，避免驱动在边界采样出黑
+  if (supported.samplerAnisotropy && props.limits.maxSamplerAnisotropy > 1.f) {
+    si.anisotropyEnable = VK_TRUE;
+    si.maxAnisotropy = (std::min)(8.f, props.limits.maxSamplerAnisotropy);
+  }
   if (vkCreateSampler(device_, &si, nullptr, &default_sampler_) != VK_SUCCESS) {
     return Err("sampler create failed");
   }

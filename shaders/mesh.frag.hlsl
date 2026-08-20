@@ -91,8 +91,10 @@ float4 main(VsOutput input) : SV_Target0 {
   // Triplanar 采样：世界坐标投影到 X/Y/Z 三平面，按法线加权混合。
   // 无需网格 UV，墙/box/圆柱/导入 BRep 全部适用。
   if (pc.material.z > 0.5) {
-    float3 wp = input.world_pos;
+    // 每米约 2 次重复，程序化贴图的细颗粒在墙面上更密。
+    float3 wp = input.world_pos * 2.0;
     float3 blend = abs(n);
+    blend = pow(blend, 4.0);
     blend = blend / max(blend.x + blend.y + blend.z, 1e-6);
     float3 cx = albedo_tex.Sample(albedo_samp, wp.zy).rgb;
     float3 cy = albedo_tex.Sample(albedo_samp, wp.xz).rgb;

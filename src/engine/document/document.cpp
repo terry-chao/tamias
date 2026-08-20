@@ -1,12 +1,13 @@
 #include "engine/document/document.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace tamias {
 
 namespace {
 
-constexpr std::uint32_t kMaterialTextureSize = 256;
+constexpr std::uint32_t kMaterialTextureSize = 512;
 
 std::uint8_t linear_to_srgb_u8(float linear) {
   const float x = std::clamp(linear, 0.f, 1.f);
@@ -20,6 +21,48 @@ float material_hash(std::uint32_t x, std::uint32_t y) {
   n = (n ^ (n >> 13)) * 1274126177u;
   n ^= n >> 16;
   return static_cast<float>(n & 0xFFFFu) / 65535.0f;
+}
+
+int wrap_period(int x, int period) {
+  int r = x % period;
+  if (r < 0) {
+    r += period;
+  }
+  return r;
+}
+
+float value_noise(float x, float y, int period) {
+  const int x0 = static_cast<int>(std::floor(x));
+  const int y0 = static_cast<int>(std::floor(y));
+  const float fx = x - static_cast<float>(x0);
+  const float fy = y - static_cast<float>(y0);
+  const float u = fx * fx * (3.f - 2.f * fx);
+  const float v = fy * fy * (3.f - 2.f * fy);
+  const float n00 = material_hash(static_cast<std::uint32_t>(wrap_period(x0, period)),
+                                  static_cast<std::uint32_t>(wrap_period(y0, period)));
+  const float n10 = material_hash(static_cast<std::uint32_t>(wrap_period(x0 + 1, period)),
+                                  static_cast<std::uint32_t>(wrap_period(y0, period)));
+  const float n01 = material_hash(static_cast<std::uint32_t>(wrap_period(x0, period)),
+                                  static_cast<std::uint32_t>(wrap_period(y0 + 1, period)));
+  const float n11 = material_hash(static_cast<std::uint32_t>(wrap_period(x0 + 1, period)),
+                                  static_cast<std::uint32_t>(wrap_period(y0 + 1, period)));
+  const float nx0 = n00 + (n10 - n00) * u;
+  const float nx1 = n01 + (n11 - n01) * u;
+  return nx0 + (nx1 - nx0) * v;
+}
+
+float fbm_uv(float u, float v, int base_cells, int octaves) {
+  float sum = 0.f;
+  float amp = 1.f;
+  float norm = 0.f;
+  int cells = base_cells;
+  for (int i = 0; i < octaves; ++i) {
+    sum += amp * value_noise(u * static_cast<float>(cells), v * static_cast<float>(cells), cells);
+    norm += amp;
+    amp *= 0.5f;
+    cells *= 2;
+  }
+  return sum / std::max(norm, 1e-6f);
 }
 
 template <typename Fn>
@@ -49,59 +92,71 @@ void Document::seed_default_materials() {
   constexpr float kPi = 3.14159265358979f;
   constexpr float kInvSize = 1.f / static_cast<float>(kMaterialTextureSize);
 
-  // 各预设使用 256×256 程序化贴图；纹理以 sRGB 编码写入，采样时由 GPU 转线性。
+  // 512×512 平滑 FBM，避免 8/16 像素色块；纹理以 sRGB 编码，采样时由 GPU 转线性。
   const std::uint64_t default_tex_id =
       add_texture(make_material_texture([](std::uint32_t x, std::uint32_t y) {
-        const float coarse = material_hash(x >> 4, y >> 4);
-        const float fine = material_hash(x, y);
-        const float v = 0.70f + 0.035f * coarse + 0.025f * fine;
-        return Vec3{v, v, v};
+        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
+        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
+        const float mottling = fbm_uv(u, v, 12, 5);
+        const float grain = material_hash(x, y);
+        const float t = 0.72f + 0.04f * mottling + 0.018f * grain;
+        return Vec3{t, t, t};
       })).id;
 
   const std::uint64_t concrete_tex_id =
       add_texture(make_material_texture([](std::uint32_t x, std::uint32_t y) {
-        const float coarse = material_hash(x >> 3, y >> 3);
-        const float fine = material_hash(x, y);
-        const float v = 0.46f + 0.20f * coarse + 0.10f * fine;
-        return Vec3{v * 1.10f, v * 1.00f, v * 0.86f};
+        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
+        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
+        const float mottling = fbm_uv(u, v, 10, 6);
+        const float aggregate = value_noise(u * 64.f, v * 64.f, 64);
+        const float sand = material_hash(x, y);
+        const float t = 0.58f + 0.10f * mottling + 0.05f * aggregate + 0.035f * sand;
+        return Vec3{t * 1.08f, t * 1.00f, t * 0.90f};
       })).id;
 
   const std::uint64_t steel_tex_id =
       add_texture(make_material_texture([](std::uint32_t x, std::uint32_t y) {
+        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
+        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
         const float grain = material_hash(x, y);
+        const float warp = 0.12f * fbm_uv(u, v, 16, 4);
         const float streak =
-            0.5f +
-            0.5f * std::sin(2.f * kPi * static_cast<float>(x) * 8.f * kInvSize);
-        const float v = 0.52f + 0.06f * grain + 0.06f * streak;
-        return Vec3{v, v, v};
+            0.5f + 0.5f * std::sin(2.f * kPi * (u * 72.f + warp) + 0.35f * std::sin(2.f * kPi * v * 9.f));
+        const float t = 0.54f + 0.035f * grain + 0.055f * streak;
+        return Vec3{t, t, t};
       })).id;
 
   const std::uint64_t glass_tex_id =
       add_texture(make_material_texture([](std::uint32_t x, std::uint32_t y) {
-        const float coarse = material_hash(x >> 4, y >> 4);
-        const float fine = material_hash(x, y);
-        const float v = 0.76f + 0.03f * coarse + 0.025f * fine;
-        return Vec3{0.96f * v, 0.99f * v, v};
+        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
+        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
+        const float mottling = fbm_uv(u, v, 8, 4);
+        const float grain = material_hash(x, y);
+        const float t = 0.78f + 0.018f * mottling + 0.012f * grain;
+        return Vec3{0.96f * t, 0.99f * t, t};
       })).id;
 
   const std::uint64_t wood_tex_id =
       add_texture(make_material_texture([](std::uint32_t x, std::uint32_t y) {
-        const float px = static_cast<float>(x) * kInvSize;
-        const float py = static_cast<float>(y) * kInvSize;
+        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
+        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
+        const float warp = 0.28f * fbm_uv(u, v, 8, 5);
         const float grain =
-            std::sin(2.f * kPi * px * 7.f + 1.8f * std::sin(2.f * kPi * py * 3.f)) +
-            0.18f * std::sin(2.f * kPi * px * 17.f);
-        const float fine = material_hash(x, y);
-        const float shade = 0.80f + 0.16f * (0.5f + 0.5f * grain) + 0.025f * fine;
-        return Vec3{0.58f * shade, 0.40f * shade, 0.24f * shade};
+            std::sin(2.f * kPi * (u * 28.f + warp) + 1.35f * std::sin(2.f * kPi * v * 6.f)) +
+            0.16f * std::sin(2.f * kPi * (u * 54.f + 0.4f * warp));
+        const float pores = material_hash(x, y);
+        const float shade = 0.78f + 0.14f * (0.5f + 0.5f * grain) + 0.04f * pores;
+        return Vec3{0.58f * shade, 0.39f * shade, 0.22f * shade};
       })).id;
 
   const std::uint64_t plaster_tex_id =
       add_texture(make_material_texture([](std::uint32_t x, std::uint32_t y) {
-        const float coarse = material_hash(x >> 4, y >> 4);
-        const float fine = material_hash(x, y);
-        const float v = 0.86f + 0.04f * coarse + 0.03f * fine;
-        return Vec3{v, v, v};
+        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
+        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
+        const float mottling = fbm_uv(u, v, 14, 5);
+        const float grain = material_hash(x, y);
+        const float t = 0.88f + 0.025f * mottling + 0.02f * grain;
+        return Vec3{t, t * 0.995f, t * 0.98f};
       })).id;
 
   auto seed = [this](std::string name, Vec3 color, float roughness, float metallic,
