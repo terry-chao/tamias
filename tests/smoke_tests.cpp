@@ -1,8 +1,10 @@
+#include "app/viewport_floor.h"
 #include "bim/host_geometry.h"
 #include "bim/host_update.h"
 #include "command/command_system.h"
 #include "command/history.h"
 #include "command/move_entities_command.h"
+#include "command/edit_entity_grip_command.h"
 #include "engine/io/binary_archive.h"
 #include "engine/document/document_io.h"
 #include "entity/beam_entity.h"
@@ -11,6 +13,7 @@
 #include "entity/circle_entity.h"
 #include "entity/column_entity.h"
 #include "entity/door_entity.h"
+#include "entity/entity_grip.h"
 #include "entity/family_entity.h"
 #include "entity/line_entity.h"
 #include "entity/polyline_entity.h"
@@ -24,12 +27,15 @@
 #include "engine/math/grid.h"
 #include "engine/math/math.h"
 #include "engine/document/picking.h"
+#include "engine/math/camera.h"
 #include "engine/modeling/occt_feature.h"
 #include "engine/modeling/occt_shape_ops.h"
 #include "engine/modeling/shape_ops.h"
 #include "engine/render/render_runtime.h"
 
 #include <gtest/gtest.h>
+
+#include <cmath>
 
 using namespace tamias;
 
@@ -267,6 +273,11 @@ TEST(DocumentIo, EntityRoundTrip) {
   EXPECT_EQ(re->model.features()[0].kind, FeatureKind::RectProfile);
   EXPECT_DOUBLE_EQ(re->model.param(re->model.features()[0].id, "width", 0.0), 0.2);
   EXPECT_EQ(re->model.features()[1].kind, FeatureKind::Extrude);
+  ASSERT_EQ(re->grips.size(), 2u);
+  const auto grips = collect_entity_grips(*re);
+  ASSERT_EQ(grips.size(), 2u);
+  EXPECT_NEAR(grips[0].world.z, 0.f, 0.05f);
+  EXPECT_NEAR(grips[1].world.z, 5.f, 0.05f);
 }
 
 TEST(DocumentIo, EntityFileRoundTrip) {
@@ -442,6 +453,62 @@ TEST(Picking, ProjectWorldToScreenCenter) {
   ASSERT_TRUE(project_world_to_screen(vp, {}, 200.f, 200.f, sx, sy));
   EXPECT_NEAR(sx, 100.f, 3.f);
   EXPECT_NEAR(sy, 100.f, 3.f);
+}
+
+TEST(Picking, OrthoProjectsCenterAndParallelRays) {
+  TurntableCamera camera;
+  camera.set_target({});
+  camera.set_distance(8.f);
+  camera.look_front();
+  camera.set_orthographic(true);
+  const Mat4 vp = camera.proj_matrix(1.f) * camera.view_matrix();
+  float sx = 0.f;
+  float sy = 0.f;
+  ASSERT_TRUE(project_world_to_screen(vp, {}, 200.f, 200.f, sx, sy));
+  EXPECT_NEAR(sx, 100.f, 3.f);
+  EXPECT_NEAR(sy, 100.f, 3.f);
+
+  const Ray a = camera_ray(camera, 1.f, 50.f, 100.f, 200.f, 200.f);
+  const Ray b = camera_ray(camera, 1.f, 150.f, 100.f, 200.f, 200.f);
+  EXPECT_NEAR(a.direction.x, b.direction.x, 1e-5f);
+  EXPECT_NEAR(a.direction.y, b.direction.y, 1e-5f);
+  EXPECT_NEAR(a.direction.z, b.direction.z, 1e-5f);
+  EXPECT_GT(std::fabs(a.origin.x - b.origin.x), 0.1f);
+}
+
+TEST(Picking, OrthoPlanLooksDownYWithDrawingYUp) {
+  TurntableCamera camera;
+  camera.set_target({});
+  camera.set_distance(8.f);
+  camera.look_plan();
+  camera.set_orthographic(true);
+  const Mat4 vp = camera.proj_matrix(1.f) * camera.view_matrix();
+  float ox = 0.f;
+  float oy = 0.f;
+  float xx = 0.f;
+  float xy = 0.f;
+  float zx = 0.f;
+  float zy = 0.f;
+  ASSERT_TRUE(project_world_to_screen(vp, {}, 200.f, 200.f, ox, oy));
+  ASSERT_TRUE(project_world_to_screen(vp, {1.f, 0.f, 0.f}, 200.f, 200.f, xx, xy));
+  ASSERT_TRUE(project_world_to_screen(vp, {0.f, 0.f, 1.f}, 200.f, 200.f, zx, zy));
+  EXPECT_NEAR(ox, 100.f, 3.f);
+  EXPECT_NEAR(oy, 100.f, 3.f);
+  EXPECT_GT(xx, ox);  // world +X is screen right
+  EXPECT_NEAR(xy, oy, 3.f);
+  EXPECT_NEAR(zx, ox, 3.f);
+  EXPECT_LT(zy, oy);  // world +Z is drawing Y (screen up)
+}
+
+TEST(ViewportFloor, ClustersSeparateElevations) {
+  Document doc("floors");
+  doc.add_import_mesh("low", make_demo_cube(), Mat4::identity(), {1.f, 1.f, 1.f});
+  doc.add_import_mesh("high", make_demo_cube(), translate({0.f, 3.f, 0.f}), {1.f, 1.f, 1.f});
+  const std::vector<ViewportFloor> floors = infer_viewport_floors(doc);
+  ASSERT_EQ(floors.size(), 2u);
+  EXPECT_EQ(floors[0].label, "1F");
+  EXPECT_EQ(floors[1].label, "2F");
+  EXPECT_LT(floors[0].y_min, floors[1].y_min);
 }
 
 TEST(Picking, RayHitsTransformedNode) {
@@ -866,6 +933,96 @@ TEST(CommandSystem, CreatePolylineConfirm) {
   EXPECT_TRUE(*done);
   ASSERT_EQ(doc.entities().size(), 1u);
   EXPECT_EQ(doc.entities().begin()->second->kind(), EntityKind::Polyline);
+}
+
+TEST(EntityGrip, LineAndWallRebuild) {
+  LineEntity line({0.f, 0.f, 0.f}, {2.f, 0.f, 0.f});
+  auto line_grips = collect_entity_grips(line);
+  ASSERT_EQ(line_grips.size(), 2u);
+  EXPECT_NEAR(line_grips[0].world.x, 0.f, 1e-4f);
+  EXPECT_NEAR(line_grips[1].world.x, 2.f, 1e-4f);
+  ASSERT_TRUE(apply_entity_grip(line, 1, {4.f, 0.f, 1.f}));
+  line_grips = collect_entity_grips(line);
+  EXPECT_NEAR(line_grips[1].world.x, 4.f, 1e-4f);
+  EXPECT_NEAR(line_grips[1].world.z, 1.f, 1e-4f);
+  auto mesh = line.createGeom();
+  ASSERT_TRUE(mesh) << mesh.error();
+
+  WallEntity wall({0.f, 0.f, 0.f}, {4.f, 0.f, 0.f}, 0.2, 3.0);
+  auto wall_grips = collect_entity_grips(wall);
+  ASSERT_EQ(wall_grips.size(), 2u);
+  EXPECT_NEAR(wall_grips[0].world.x, 0.f, 0.05f);
+  EXPECT_NEAR(wall_grips[1].world.x, 4.f, 0.05f);
+  ASSERT_TRUE(apply_entity_grip(wall, 1, {6.f, 0.f, 0.f}));
+  wall_grips = collect_entity_grips(wall);
+  EXPECT_NEAR(wall_grips[1].world.x, 6.f, 0.05f);
+
+  PolylineEntity poly({{0.f, 0.f, 0.f}, {1.f, 0.f, 0.f}, {1.f, 0.f, 1.f}});
+  EXPECT_EQ(collect_entity_grips(poly).size(), 3u);
+  BezierEntity bez(std::vector<Vec3>{
+      {0.f, 0.f, 0.f}, {0.f, 0.f, 1.f}, {2.f, 0.f, 1.f}, {2.f, 0.f, 0.f}});
+  EXPECT_EQ(collect_entity_grips(bez).size(), 4u);
+}
+
+TEST(EntityGrip, EditCommandUndo) {
+  Document doc("grip-undo");
+  LineEntity line({0.f, 0.f, 0.f}, {2.f, 0.f, 0.f});
+  auto geom = line.createGeom();
+  ASSERT_TRUE(geom) << geom.error();
+  Entity* entity = doc.add_entity(std::make_unique<LineEntity>(std::move(line)), std::move(*geom));
+  ASSERT_NE(entity, nullptr);
+  const FeatureModel from_model = entity->model;
+  const Mat4 from_xf = entity->local_transform;
+  ASSERT_TRUE(apply_entity_grip(*entity, 1, {3.f, 0.f, 0.f}));
+  EditEntityGripCommand command(doc, entity->id, from_model, from_xf, entity->model,
+                                entity->local_transform);
+  ASSERT_TRUE(command.execute()) << "execute";
+  command.undo();
+  const auto grips = collect_entity_grips(*entity);
+  ASSERT_EQ(grips.size(), 2u);
+  EXPECT_NEAR(grips[1].world.x, 2.f, 1e-3f);
+}
+
+TEST(DocumentIo, EntityGripsRoundTrip) {
+  Document doc("grip-doc");
+  LineEntity line({0.f, 0.f, 0.f}, {2.f, 0.f, 0.f});
+  auto geom = line.createGeom();
+  ASSERT_TRUE(geom) << geom.error();
+  Entity* entity = doc.add_entity(std::make_unique<LineEntity>(std::move(line)), std::move(*geom));
+  ASSERT_NE(entity, nullptr);
+  ASSERT_EQ(entity->grips.size(), 2u);
+  ASSERT_TRUE(apply_entity_grip(*entity, 1, {4.f, 0.f, 1.f}));
+  ASSERT_EQ(entity->grips.size(), 2u);
+  EXPECT_NEAR(entity->grips[1].x, 4.f, 1e-4f);
+  EXPECT_NEAR(entity->grips[1].z, 1.f, 1e-4f);
+
+  auto bytes = serialize_document(doc);
+  ASSERT_TRUE(bytes) << bytes.error();
+  auto restored = deserialize_document(*bytes);
+  ASSERT_TRUE(restored) << restored.error();
+  const Entity* re = restored->entity(entity->id);
+  ASSERT_NE(re, nullptr);
+  ASSERT_EQ(re->grips.size(), 2u);
+  EXPECT_NEAR(re->grips[0].x, 0.f, 1e-4f);
+  EXPECT_NEAR(re->grips[1].x, 4.f, 1e-4f);
+  EXPECT_NEAR(re->grips[1].z, 1.f, 1e-4f);
+  const auto world = collect_entity_grips(*re);
+  ASSERT_EQ(world.size(), 2u);
+  EXPECT_NEAR(world[1].world.x, 4.f, 1e-4f);
+  EXPECT_NEAR(world[1].world.z, 1.f, 1e-4f);
+
+  ViewportState viewport{};
+  const auto path = std::filesystem::temp_directory_path() / "tamias_grip_roundtrip.tdoc";
+  ASSERT_TRUE(save_document(path, doc, viewport)) << "save failed";
+  auto loaded = load_document(path);
+  ASSERT_TRUE(loaded) << loaded.error();
+  const Entity* fe = loaded->document.entity(entity->id);
+  ASSERT_NE(fe, nullptr);
+  ASSERT_EQ(fe->grips.size(), 2u);
+  EXPECT_NEAR(fe->grips[1].x, 4.f, 1e-4f);
+  EXPECT_NEAR(fe->grips[1].z, 1.f, 1e-4f);
+  std::error_code ec;
+  std::filesystem::remove(path, ec);
 }
 
 TEST(FeatureModel, FilletIncreasesFaces) {

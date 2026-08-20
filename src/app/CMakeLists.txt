@@ -20,6 +20,7 @@ add_executable(tamias
   handle_inspector.cpp
   property_panel.cpp
   view_cube_widget.cpp
+  viewport_tool_strip.cpp
   rhi_backends.cpp
   resources.qrc
 )

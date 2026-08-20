@@ -1,5 +1,6 @@
 #include "add_feature_command.h"
 
+#include "entity/entity_grip.h"
 #include "engine/modeling/occt_geom_builder.h"
 
 namespace tamias {
@@ -39,6 +40,7 @@ Result<void> AddFeatureCommand::apply(bool add) {
     return Err("AddFeatureCommand: mesh asset not found");
   }
   asset->cpu = std::move(*mesh);
+  sync_entity_grips(*entity);
   document_->recompute_scene();
   document_->mark_dirty();
   return {};

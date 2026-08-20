@@ -2,6 +2,7 @@
 
 #include "engine/graphics/mesh.h"
 #include "engine/io/binary_archive.h"
+#include "entity/entity_grip.h"
 
 #include <algorithm>
 #include <cctype>
@@ -13,8 +14,9 @@ namespace tamias {
 namespace {
 
 constexpr char kMagic[4] = {'T', 'M', 'A', 'S'};
-constexpr std::uint32_t kFormatVersion = 6;
+constexpr std::uint32_t kFormatVersion = 7;
 constexpr std::uint32_t kMinFormatVersion = 5;
+constexpr std::uint32_t kGripsFormatVersion = 7;
 
 constexpr std::uint32_t fourcc(char a, char b, char c, char d) {
   return static_cast<std::uint32_t>(static_cast<std::uint8_t>(a)) |
@@ -432,10 +434,21 @@ Result<void> write_entity(BinaryWriter& w, const Entity& e) {
   if (auto r = write_mat4(w, e.local_transform); !r) {
     return r;
   }
-  return write_feature_model(w, e.model);
+  if (auto r = write_feature_model(w, e.model); !r) {
+    return r;
+  }
+  if (auto r = w.write_u64(static_cast<std::uint64_t>(e.grips.size())); !r) {
+    return r;
+  }
+  for (const Vec3& p : e.grips) {
+    if (auto r = write_vec3(w, p); !r) {
+      return r;
+    }
+  }
+  return {};
 }
 
-Result<void> read_entity(BinaryReader& r, std::unique_ptr<Entity>& out) {
+Result<void> read_entity(BinaryReader& r, std::unique_ptr<Entity>& out, bool read_grips) {
   auto id = r.read_u64();
   if (!id) {
     return Err(id.error());
@@ -469,6 +482,21 @@ Result<void> read_entity(BinaryReader& r, std::unique_ptr<Entity>& out) {
   entity->local_transform = transform;
   if (auto res = read_feature_model(r, entity->model); !res) {
     return res;
+  }
+  if (read_grips) {
+    auto count = r.read_u64();
+    if (!count) {
+      return Err(count.error());
+    }
+    entity->grips.resize(static_cast<std::size_t>(*count));
+    for (Vec3& p : entity->grips) {
+      if (auto res = read_vec3(r, p); !res) {
+        return res;
+      }
+    }
+  }
+  if (entity->grips.empty()) {
+    sync_entity_grips(*entity);
   }
   out = std::move(entity);
   return {};
@@ -822,7 +850,7 @@ Result<Document> read_document_body(BinaryReader& r) {
   }
   for (std::uint64_t i = 0; i < *entity_count; ++i) {
     std::unique_ptr<Entity> entity;
-    if (auto res = read_entity(r, entity); !res) {
+    if (auto res = read_entity(r, entity, true); !res) {
       return Err(res.error());
     }
     document.insert_entity(std::move(entity));
@@ -1225,7 +1253,7 @@ Result<LoadedDocument> load_document(const std::filesystem::path& path) {
       entities.reserve(static_cast<std::size_t>(*count));
       for (std::uint64_t f = 0; f < *count; ++f) {
         std::unique_ptr<Entity> entity;
-        if (auto res = read_entity(chunk_r, entity); !res) {
+        if (auto res = read_entity(chunk_r, entity, *version >= kGripsFormatVersion); !res) {
           return Err(res.error());
         }
         entities.push_back(std::move(entity));

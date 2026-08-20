@@ -1,6 +1,7 @@
 #include "set_feature_param_command.h"
 
 #include "bim/host_update.h"
+#include "entity/entity_grip.h"
 #include "engine/modeling/feature.h"
 #include "engine/modeling/occt_geom_builder.h"
 
@@ -36,6 +37,7 @@ Result<void> SetFeatureParamCommand::apply(double value) {
     return Err("SetFeatureParamCommand: entity not found");
   }
   entity->model.set_param(feature_id_, param_name_, value);
+  sync_entity_grips(*entity);
 
   auto mesh = geometry_builder().build(entity->model, 0.05);
   if (!mesh) {

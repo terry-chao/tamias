@@ -45,6 +45,7 @@ struct FrameSubmission {
   std::vector<Vec3> preview_polyline;
   std::vector<Vec3> preview_control_polyline;  // 贝塞尔控制多边形
   std::vector<Vec3> preview_points;            // 控制点标记
+  std::vector<Vec3> grip_points;               // 选中实体的夹点
   std::optional<Vec3> snap_point;              // 网格交点捕捉标记
   float clear_color[4] = {0.14f, 0.18f, 0.24f, 1.f};
 };

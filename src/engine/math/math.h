@@ -145,6 +145,18 @@ inline Mat4 perspective(float fovy_rad, float aspect, float znear, float zfar) {
   return r;
 }
 
+// Vulkan clip Z in [0, 1], matching perspective() so OpenGL's clip remap stays valid.
+inline Mat4 ortho(float left, float right, float bottom, float top, float znear, float zfar) {
+  Mat4 r = Mat4::identity();
+  r(0, 0) = 2.f / (right - left);
+  r(1, 1) = 2.f / (top - bottom);
+  r(2, 2) = 1.f / (znear - zfar);
+  r(0, 3) = -(right + left) / (right - left);
+  r(1, 3) = -(top + bottom) / (top - bottom);
+  r(2, 3) = znear / (znear - zfar);
+  return r;
+}
+
 inline Mat4 look_at(Vec3 eye, Vec3 center, Vec3 up) {
   const Vec3 f = normalize(center - eye);
   const Vec3 s = normalize(cross(f, up));

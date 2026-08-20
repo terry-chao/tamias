@@ -198,7 +198,7 @@ class Document {
   void insert_entity(std::unique_ptr<Entity> entity, MeshAsset mesh);
 
   // 只存实体（其 node + mesh 已存在），供 load 用。
-  void insert_entity(std::unique_ptr<Entity> entity) { entities_[entity->id] = std::move(entity); }
+  void insert_entity(std::unique_ptr<Entity> entity);
 
   // ===== 选择（内部改 SceneNode.selected）=====
   void select(std::uint64_t id) {

@@ -1,6 +1,7 @@
 #include "picking.h"
 
 #include <algorithm>
+#include <functional>
 #include <limits>
 #include <vector>
 
@@ -87,7 +88,8 @@ void Bvh::build(const Document& doc) {
   root_ = build_range(ids, doc, 0, static_cast<int>(ids.size()));
 }
 
-std::optional<PickHit> Bvh::closest_hit(const Ray& ray, const Document& doc) const {
+std::optional<PickHit> Bvh::closest_hit(const Ray& ray, const Document& doc,
+                                        const std::function<bool(std::uint64_t)>& accept) const {
   if (root_ < 0) {
     return std::nullopt;
   }
@@ -106,6 +108,9 @@ std::optional<PickHit> Bvh::closest_hit(const Ray& ray, const Document& doc) con
     if (node.leaf) {
       const SceneNode* sn = doc.scene().find(node.scene_node_id);
       if (!sn) {
+        continue;
+      }
+      if (accept && !accept(sn->id)) {
         continue;
       }
       const MeshAsset* asset = doc.mesh(sn->mesh_asset_id);
@@ -161,16 +166,21 @@ Ray camera_ray(const TurntableCamera& camera, float aspect, float mouse_x, float
                float width, float height) {
   const float ndc_x = (2.f * mouse_x / width) - 1.f;
   const float ndc_y = 1.f - (2.f * mouse_y / height);
-  const Vec3 eye = camera.eye_position();
-  const Vec3 forward = normalize(camera.target() - eye);
-  const Vec3 right = normalize(cross(forward, {0.f, 1.f, 0.f}));
-  const Vec3 up = cross(right, forward);
+  Vec3 right;
+  Vec3 up;
+  Vec3 forward;
+  camera.axes(right, up, forward);
   const Mat4 proj = camera.proj_matrix(aspect);
-  const float tanx = ndc_x / proj(0, 0);
-  const float tany = ndc_y / proj(1, 1);
+  const float ox = ndc_x / proj(0, 0);
+  const float oy = ndc_y / proj(1, 1);
   Ray ray;
-  ray.origin = eye;
-  ray.direction = normalize(right * tanx + up * tany + forward);
+  if (camera.orthographic()) {
+    ray.origin = camera.eye_position() + right * ox + up * oy;
+    ray.direction = forward;
+  } else {
+    ray.origin = camera.eye_position();
+    ray.direction = normalize(right * ox + up * oy + forward);
+  }
   return ray;
 }
 

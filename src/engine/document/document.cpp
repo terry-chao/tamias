@@ -1,5 +1,7 @@
 #include "engine/document/document.h"
 
+#include "entity/entity_grip.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -194,6 +196,9 @@ Entity* Document::add_entity(std::unique_ptr<Entity> entity, MeshCpu mesh) {
 
   Entity* raw = entity.get();
   entities_[entity->id] = std::move(entity);
+  if (raw->grips.empty()) {
+    sync_entity_grips(*raw);
+  }
   if (raw->material_id == 0) {
     const char* preset = nullptr;
     switch (raw->kind()) {
@@ -247,8 +252,19 @@ void Document::insert_entity(std::unique_ptr<Entity> entity, MeshAsset mesh) {
   scene_.insert_node(std::move(node));
 
   entities_[id] = std::move(entity);
+  if (Entity* raw = entities_[id].get(); raw != nullptr && raw->grips.empty()) {
+    sync_entity_grips(*raw);
+  }
   recompute_scene();
   mark_dirty();
+}
+
+void Document::insert_entity(std::unique_ptr<Entity> entity) {
+  const std::uint64_t id = entity->id;
+  entities_[id] = std::move(entity);
+  if (Entity* raw = entities_[id].get(); raw != nullptr && raw->grips.empty()) {
+    sync_entity_grips(*raw);
+  }
 }
 
 std::vector<SceneDrawItem> Document::render_items(const Frustum* frustum) const {

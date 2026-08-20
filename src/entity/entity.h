@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace tamias {
 
@@ -49,6 +50,7 @@ class Entity {
   std::uint64_t mesh_asset_id = 0;         // 评估结果喂给的网格资产
   std::uint64_t material_id = 0;           // 材质库引用（0 = 默认材质）
   Mat4 local_transform = Mat4::identity();  // 放置（墙=位置+朝向，盒子/圆柱=位置）
+  std::vector<Vec3> grips;                 // 局部夹点，随文档持久化
 };
 
 // 按 kind 构造一个实体（供反序列化 / clone 用）。

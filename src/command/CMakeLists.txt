@@ -9,6 +9,7 @@ add_library(tamias_command STATIC
   delete_entity_command.cpp
   move_entities_command.cpp
   set_feature_param_command.cpp
+  edit_entity_grip_command.cpp
   set_material_command.cpp
   command_system.cpp
   register_commands.cpp

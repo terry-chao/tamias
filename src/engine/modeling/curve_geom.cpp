@@ -220,6 +220,22 @@ std::vector<Vec3> bezier_control_points(const FeatureModel& model, const Feature
           get_xyz(model, f.id, "p3")};
 }
 
+Vec3 feature_xyz(const FeatureModel& model, std::uint64_t feature_id, const std::string& prefix,
+                 Vec3 fallback) {
+  return get_xyz(model, feature_id, prefix, fallback);
+}
+
+void set_feature_xyz(FeatureModel& model, std::uint64_t feature_id, const std::string& prefix,
+                     Vec3 point) {
+  model.set_param(feature_id, prefix + "x", static_cast<double>(point.x));
+  model.set_param(feature_id, prefix + "y", static_cast<double>(point.y));
+  model.set_param(feature_id, prefix + "z", static_cast<double>(point.z));
+}
+
+std::vector<Vec3> polyline_points(const FeatureModel& model, const Feature& f) {
+  return polyline_from_params(model, f.id);
+}
+
 std::vector<Vec3> sample_rect_xz(Vec3 a, Vec3 b) {
   const float y = a.y;
   const Vec3 p0{a.x, y, a.z};

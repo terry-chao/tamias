@@ -35,6 +35,11 @@ namespace tamias {
 [[nodiscard]] std::vector<Vec3> sample_bezier(const std::vector<Vec3>& controls, int segments = 0);
 [[nodiscard]] std::vector<Vec3> sample_rect_xz(Vec3 a, Vec3 b);
 [[nodiscard]] std::vector<Vec3> bezier_control_points(const FeatureModel& model, const Feature& f);
+[[nodiscard]] Vec3 feature_xyz(const FeatureModel& model, std::uint64_t feature_id,
+                               const std::string& prefix, Vec3 fallback = {});
+void set_feature_xyz(FeatureModel& model, std::uint64_t feature_id, const std::string& prefix,
+                     Vec3 point);
+[[nodiscard]] std::vector<Vec3> polyline_points(const FeatureModel& model, const Feature& f);
 
 [[nodiscard]] std::vector<Vec3> sample_sketch_feature(const FeatureModel& model, const Feature& f);
 [[nodiscard]] MeshCpu make_polyline_lines(const std::vector<Vec3>& points);

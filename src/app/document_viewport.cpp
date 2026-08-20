@@ -2,17 +2,22 @@
 
 #include "app_settings.h"
 #include "bim/wall_size.h"
+#include "command/edit_entity_grip_command.h"
 #include "engine/core/log.h"
 #include "engine/math/grid.h"
 #include "engine/modeling/curve_geom.h"
 #include "engine/modeling/feature.h"
+#include "entity/entity_grip.h"
 
 #if defined(TAMIAS_HAS_RHI_OPENGL)
 #include "engine/render/rhi/opengl/opengl_backend.h"
 #endif
 
 #include <QAction>
+#include <QActionGroup>
 #include <QCoreApplication>
+#include <QCursor>
+#include <QIcon>
 #include <QKeyEvent>
 #include <QKeySequence>
 #include <QMenu>
@@ -100,9 +105,21 @@ DocumentViewport::DocumentViewport(std::shared_ptr<Document> document,
   connect(view_cube_, &ViewCubeWidget::corner_clicked, this, &DocumentViewport::on_view_cube_corner);
   connect(view_cube_, &ViewCubeWidget::orbit_dragged, this, [this](float dyaw, float dpitch) {
     stop_view_animation();
+    if (plan_view_) {
+      set_plan_view(false, false);
+    }
     camera_.orbit(dyaw, dpitch);
     request_redraw();
   });
+
+  tool_strip_ = new ViewportToolStrip(this);
+  connect(tool_strip_, &ViewportToolStrip::plan_view_toggled, this,
+          [this](bool plan) { set_plan_view(plan); });
+  connect(tool_strip_, &ViewportToolStrip::frame_all_clicked, this, &DocumentViewport::frame_scene);
+  connect(tool_strip_, &ViewportToolStrip::visibility_menu_about_to_show, this,
+          &DocumentViewport::populate_visibility_menu);
+  connect(tool_strip_, &ViewportToolStrip::floor_menu_about_to_show, this,
+          &DocumentViewport::populate_floor_menu);
 
   view_anim_timer_ = new QTimer(this);
   view_anim_timer_->setInterval(16);
@@ -207,6 +224,11 @@ void DocumentViewport::layout_overlays() {
     view_cube_->move(width() - view_cube_->width() - kMargin, kMargin);
     view_cube_->raise();
   }
+  if (tool_strip_) {
+    const int strip_y = view_cube_ ? (kMargin + view_cube_->height() + 8) : kMargin;
+    tool_strip_->move(width() - tool_strip_->width() - kMargin, strip_y);
+    tool_strip_->raise();
+  }
   if (coord_label_) {
     coord_label_->adjustSize();
     coord_label_->move(kMargin, height() - coord_label_->height() - kMargin);
@@ -232,7 +254,9 @@ Vec3 DocumentViewport::cursor_world_position(const QPoint& pos) const {
                  static_cast<float>(pos.y() * dpr), static_cast<float>(width() * dpr),
                  static_cast<float>(height() * dpr));
 
-  if (auto hit = bvh_.closest_hit(ray, *document_)) {
+  if (auto hit = bvh_.closest_hit(ray, *document_, [this](std::uint64_t id) {
+        return node_visible_in_view(id);
+      })) {
     return ray.origin + ray.direction * hit->t;
   }
 
@@ -279,7 +303,7 @@ void DocumentViewport::start_view_animation(float target_yaw, float target_pitch
   anim_from_yaw_ = camera_.yaw();
   anim_from_pitch_ = camera_.pitch();
   anim_to_yaw_ = target_yaw;
-  anim_to_pitch_ = std::clamp(target_pitch, -1.5f, 1.5f);
+  anim_to_pitch_ = std::clamp(target_pitch, -kHalfPi, kHalfPi);
 
   // Shortest yaw arc so e.g. Front↔Back never spins the long way.
   float delta = anim_to_yaw_ - anim_from_yaw_;
@@ -343,11 +367,14 @@ void DocumentViewport::on_view_cube_face(ViewCubeFace face) {
       pitch = 0.f;
       break;
     case ViewCubeFace::Top:
-      pitch = 1.5f;
+      pitch = kHalfPi;
       break;
     case ViewCubeFace::Bottom:
-      pitch = -1.5f;
+      pitch = -kHalfPi;
       break;
+  }
+  if (plan_view_ && face != ViewCubeFace::Top) {
+    set_plan_view(false, false);
   }
   start_view_animation(yaw, pitch);
 }
@@ -384,6 +411,9 @@ void DocumentViewport::on_view_cube_corner(ViewCubeCorner corner) {
   const Vec3 d = normalize(dir);
   const float pitch = std::asin(std::clamp(d.y, -1.f, 1.f));
   const float yaw = std::atan2(d.x, d.z);
+  if (plan_view_) {
+    set_plan_view(false, false);
+  }
   start_view_animation(yaw, pitch);
 }
 
@@ -488,7 +518,13 @@ void DocumentViewport::submit_current_frame() {
   frame.eye_position = camera_.eye_position();
   frame.mode = mode_;
   const Frustum frustum = Frustum::from_view_proj(frame.proj * frame.view);
+  refresh_floors();
   frame.items = document_->render_items(&frustum);
+  frame.items.erase(std::remove_if(frame.items.begin(), frame.items.end(),
+                                   [this](const SceneDrawItem& item) {
+                                     return !node_visible_in_view(item.node_id);
+                                   }),
+                    frame.items.end());
   const Vec3 cursor = has_cursor_ ? cursor_ground_position(last_mouse_) : Vec3{};
   frame.preview_polyline = command_system_.preview_polyline(cursor);
   frame.preview_control_polyline = command_system_.preview_control_polyline(cursor);
@@ -496,22 +532,7 @@ void DocumentViewport::submit_current_frame() {
   if (grid_snap_active() && has_cursor_ && is_on_grid_xz(cursor)) {
     frame.snap_point = cursor;
   }
-  if (frame.preview_control_polyline.empty() && frame.preview_points.empty() && document_) {
-    if (const Entity* entity = document_->selected_entity();
-        entity != nullptr && entity->kind() == EntityKind::Bezier) {
-      if (const Feature* feature = entity->model.output_feature();
-          feature != nullptr && feature->kind == FeatureKind::Bezier) {
-        const std::vector<Vec3> local = bezier_control_points(entity->model, *feature);
-        frame.preview_control_polyline.reserve(local.size());
-        frame.preview_points.reserve(local.size());
-        for (const Vec3& p : local) {
-          const Vec3 world = entity->local_transform * p;
-          frame.preview_control_polyline.push_back(world);
-          frame.preview_points.push_back(world);
-        }
-      }
-    }
-  }
+  fill_grip_overlay(frame);
   channel_->submit(std::move(frame));
 }
 
@@ -555,7 +576,9 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
             camera_ray(camera_, aspect, static_cast<float>(event->pos().x() * dpr),
                        static_cast<float>(event->pos().y() * dpr),
                        static_cast<float>(width() * dpr), static_cast<float>(height() * dpr));
-        if (auto hit = bvh_.closest_hit(ray, *document_)) {
+        if (auto hit = bvh_.closest_hit(ray, *document_, [this](std::uint64_t id) {
+              return node_visible_in_view(id);
+            })) {
           if (const Entity* host = document_->entity(hit->node_id);
               host != nullptr && host->kind() == EntityKind::Wall) {
             picked = host->id;
@@ -571,6 +594,18 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
       return;
     }
     press_hit_ = pick_node_at(event->pos());
+    EntityGrip grip{};
+    if (pick_grip_at(event->pos(), grip)) {
+      Entity* entity = document_->entity(grip.entity_id);
+      if (entity != nullptr) {
+        gripping_ = true;
+        active_grip_ = grip;
+        grip_from_model_ = entity->model;
+        grip_from_transform_ = entity->local_transform;
+        grip_from_world_ = grip.world;
+        return;
+      }
+    }
     const bool shift = (event->modifiers() & Qt::ShiftModifier) != 0;
     if (press_hit_ != 0) {
       const SceneNode* node = document_->scene().find(press_hit_);
@@ -606,7 +641,7 @@ void DocumentViewport::mouseMoveEvent(QMouseEvent* event) {
   last_mouse_ = event->pos();
   has_cursor_ = true;
   if (mmb_nav_ && (event->buttons() & Qt::MiddleButton)) {
-    if (event->modifiers() & Qt::ShiftModifier) {
+    if (plan_view_ || (event->modifiers() & Qt::ShiftModifier)) {
       const float scale = camera_.distance() * 0.002f;
       camera_.pan(-delta.x() * scale, delta.y() * scale);
     } else {
@@ -619,6 +654,10 @@ void DocumentViewport::mouseMoveEvent(QMouseEvent* event) {
     const float scale = camera_.distance() * 0.002f;
     camera_.pan(-delta.x() * scale, delta.y() * scale);
     request_redraw();
+    return;
+  }
+  if (gripping_ && (event->buttons() & Qt::LeftButton)) {
+    apply_grip_at(event->pos());
     return;
   }
   if (tool_mode_ != ToolMode::None) {
@@ -635,12 +674,21 @@ void DocumentViewport::mouseMoveEvent(QMouseEvent* event) {
       return;
     }
   }
+  EntityGrip hover{};
+  if (pick_grip_at(event->pos(), hover)) {
+    setCursor(Qt::SizeAllCursor);
+  } else {
+    unsetCursor();
+  }
   sync_coord_readout();
 }
 
 void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
   if (event->button() == Qt::LeftButton) {
-    if (tool_mode_ == ToolMode::None) {
+    if (gripping_) {
+      commit_grip_drag();
+      gripping_ = false;
+    } else if (tool_mode_ == ToolMode::None) {
       if (box_selecting_) {
         finish_box_select(event->pos(), (event->modifiers() & Qt::ShiftModifier) != 0);
       } else if ((event->pos() - press_mouse_).manhattanLength() < 4 && press_hit_ == 0 &&
@@ -662,7 +710,16 @@ void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
     panning_ = false;
     if ((event->pos() - press_mouse_).manhattanLength() < 4) {
       if (tool_mode_ != ToolMode::None) {
-        set_tool(ToolMode::None);  // 右键单击退出绘制命令
+        // 折线 / 贝塞尔：右键先提交已点的顶点，再退出工具。
+        if (command_system_.accepts_confirm()) {
+          const Result<bool> done = command_system_.confirm();
+          if (done && *done) {
+            resync_all_meshes();
+            rebuild_bvh();
+            emit document_changed();
+          }
+        }
+        set_tool(ToolMode::None);
         return;
       }
       if (const std::uint64_t hit = pick_node_at(event->pos());
@@ -974,7 +1031,9 @@ std::uint64_t DocumentViewport::pick_node_at(const QPoint& pos) const {
       camera_ray(camera_, aspect, static_cast<float>(pos.x() * dpr),
                  static_cast<float>(pos.y() * dpr), static_cast<float>(width() * dpr),
                  static_cast<float>(height() * dpr));
-  if (auto hit = bvh_.closest_hit(ray, *document_)) {
+  if (auto hit = bvh_.closest_hit(ray, *document_, [this](std::uint64_t id) {
+        return node_visible_in_view(id);
+      })) {
     return hit->node_id;
   }
   return 0;
@@ -985,9 +1044,17 @@ void DocumentViewport::show_entity_context_menu(const QPoint& global_pos) {
     return;
   }
   QMenu menu(this);
+  QAction* hide_act = menu.addAction(tr("Hide"));
+  QAction* isolate_act = menu.addAction(tr("Isolate"));
+  menu.addSeparator();
   QAction* delete_act = menu.addAction(tr("Delete"));
   delete_act->setShortcut(QKeySequence::Delete);
-  if (menu.exec(global_pos) == delete_act) {
+  QAction* chosen = menu.exec(global_pos);
+  if (chosen == hide_act) {
+    hide_selected();
+  } else if (chosen == isolate_act) {
+    isolate_selected();
+  } else if (chosen == delete_act) {
     delete_selected();
   }
 }
@@ -1123,10 +1190,316 @@ void DocumentViewport::finish_box_select(const QPoint& pos, bool additive) {
     document_->clear_selection();
   }
   for (const std::uint64_t id : ids) {
-    document_->select(id);
+    if (node_visible_in_view(id)) {
+      document_->select(id);
+    }
   }
   request_redraw();
   emit selection_changed();
+}
+
+void DocumentViewport::set_plan_view(bool plan, bool restore_perspective) {
+  if (plan_view_ == plan) {
+    if (tool_strip_) {
+      tool_strip_->set_plan_view(plan_view_);
+    }
+    return;
+  }
+  if (plan) {
+    persp_yaw_ = camera_.yaw();
+    persp_pitch_ = camera_.pitch();
+    stop_view_animation();
+    camera_.look_plan();
+    camera_.set_orthographic(true);
+    plan_view_ = true;
+  } else {
+    plan_view_ = false;
+    camera_.set_orthographic(false);
+    if (restore_perspective) {
+      start_view_animation(persp_yaw_, persp_pitch_);
+    }
+  }
+  if (tool_strip_) {
+    tool_strip_->set_plan_view(plan_view_);
+  }
+  request_redraw();
+}
+
+void DocumentViewport::hide_selected() {
+  const std::vector<std::uint64_t> ids = document_->selected_ids();
+  if (ids.empty()) {
+    return;
+  }
+  for (const std::uint64_t id : ids) {
+    hidden_ids_.insert(id);
+    isolated_ids_.erase(id);
+  }
+  request_redraw();
+}
+
+void DocumentViewport::isolate_selected() {
+  const std::vector<std::uint64_t> ids = document_->selected_ids();
+  if (ids.empty()) {
+    return;
+  }
+  isolated_ids_.clear();
+  for (const std::uint64_t id : ids) {
+    isolated_ids_.insert(id);
+    hidden_ids_.erase(id);
+  }
+  request_redraw();
+}
+
+void DocumentViewport::show_all_visible() {
+  hidden_ids_.clear();
+  isolated_ids_.clear();
+  hidden_kinds_.clear();
+  request_redraw();
+}
+
+void DocumentViewport::set_kind_hidden(EntityKind kind, bool hidden) {
+  if (hidden) {
+    hidden_kinds_.insert(kind);
+  } else {
+    hidden_kinds_.erase(kind);
+  }
+  request_redraw();
+}
+
+void DocumentViewport::set_active_floor(int index) {
+  refresh_floors();
+  if (index >= static_cast<int>(floors_.size())) {
+    index = -1;
+  }
+  if (active_floor_ == index) {
+    return;
+  }
+  active_floor_ = index;
+  request_redraw();
+}
+
+void DocumentViewport::refresh_floors() {
+  floors_ = infer_viewport_floors(*document_);
+  if (active_floor_ >= static_cast<int>(floors_.size())) {
+    active_floor_ = -1;
+  }
+}
+
+bool DocumentViewport::node_visible_in_view(std::uint64_t id) const {
+  if (hidden_ids_.count(id) != 0) {
+    return false;
+  }
+  if (!isolated_ids_.empty() && isolated_ids_.count(id) == 0) {
+    return false;
+  }
+  const Entity* entity = document_->entity(id);
+  if (entity != nullptr && hidden_kinds_.count(entity->kind()) != 0) {
+    return false;
+  }
+  if (active_floor_ >= 0 && active_floor_ < static_cast<int>(floors_.size())) {
+    const SceneNode* node = document_->scene().find(id);
+    if (node != nullptr &&
+        !viewport_floor_contains(floors_[static_cast<std::size_t>(active_floor_)],
+                                 node->world_bounds)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void DocumentViewport::populate_visibility_menu() {
+  if (tool_strip_ == nullptr) {
+    return;
+  }
+  QMenu* menu = tool_strip_->visibility_menu();
+  menu->clear();
+  QAction* hide_act = menu->addAction(tr("Hide Selected"));
+  hide_act->setEnabled(!document_->selected_ids().empty());
+  connect(hide_act, &QAction::triggered, this, &DocumentViewport::hide_selected);
+  QAction* isolate_act = menu->addAction(tr("Isolate Selected"));
+  isolate_act->setEnabled(!document_->selected_ids().empty());
+  connect(isolate_act, &QAction::triggered, this, &DocumentViewport::isolate_selected);
+  QAction* show_act = menu->addAction(tr("Show All"));
+  show_act->setEnabled(!hidden_ids_.empty() || !isolated_ids_.empty() || !hidden_kinds_.empty());
+  connect(show_act, &QAction::triggered, this, &DocumentViewport::show_all_visible);
+
+  std::unordered_set<EntityKind> present;
+  for (const auto& [unused, entity] : document_->entities()) {
+    (void)unused;
+    if (entity) {
+      present.insert(entity->kind());
+    }
+  }
+  if (present.empty()) {
+    return;
+  }
+  menu->addSeparator();
+  QMenu* cats = menu->addMenu(tr("Categories"));
+  const auto add_kind = [this, cats, &present](EntityKind kind, const QString& label,
+                                               const QString& icon) {
+    if (present.count(kind) == 0) {
+      return;
+    }
+    QAction* act = cats->addAction(QIcon(icon), label);
+    act->setCheckable(true);
+    act->setChecked(hidden_kinds_.count(kind) == 0);
+    connect(act, &QAction::toggled, this, [this, kind](bool visible) {
+      set_kind_hidden(kind, !visible);
+    });
+  };
+  add_kind(EntityKind::Wall, tr("Walls"), QStringLiteral(":/icons/wall.svg"));
+  add_kind(EntityKind::Beam, tr("Beams"), QStringLiteral(":/icons/beam.svg"));
+  add_kind(EntityKind::Column, tr("Columns"), QStringLiteral(":/icons/column.svg"));
+  add_kind(EntityKind::Slab, tr("Slabs"), QStringLiteral(":/icons/slab.svg"));
+  add_kind(EntityKind::Door, tr("Doors"), QStringLiteral(":/icons/door.svg"));
+  add_kind(EntityKind::Window, tr("Windows"), QStringLiteral(":/icons/window.svg"));
+  add_kind(EntityKind::Box, tr("Boxes"), QStringLiteral(":/icons/box.svg"));
+  add_kind(EntityKind::Cylinder, tr("Cylinders"), QStringLiteral(":/icons/cylinder.svg"));
+  add_kind(EntityKind::Line, tr("Lines"), QStringLiteral(":/icons/line.svg"));
+  add_kind(EntityKind::Polyline, tr("Polylines"), QStringLiteral(":/icons/polyline.svg"));
+  add_kind(EntityKind::Circle, tr("Circles"), QStringLiteral(":/icons/circle.svg"));
+  add_kind(EntityKind::Arc, tr("Arcs"), QStringLiteral(":/icons/arc.svg"));
+  add_kind(EntityKind::Bezier, tr("Beziers"), QStringLiteral(":/icons/bezier.svg"));
+  add_kind(EntityKind::Rectangle, tr("Rectangles"), QStringLiteral(":/icons/rectangle.svg"));
+}
+
+void DocumentViewport::populate_floor_menu() {
+  if (tool_strip_ == nullptr) {
+    return;
+  }
+  refresh_floors();
+  QMenu* menu = tool_strip_->floor_menu();
+  menu->clear();
+  auto* group = new QActionGroup(menu);
+  group->setExclusive(true);
+
+  QAction* all = menu->addAction(tr("All Floors"));
+  all->setCheckable(true);
+  all->setChecked(active_floor_ < 0);
+  group->addAction(all);
+  connect(all, &QAction::triggered, this, [this] { set_active_floor(-1); });
+
+  if (floors_.empty()) {
+    QAction* empty = menu->addAction(tr("No floors in this model"));
+    empty->setEnabled(false);
+    return;
+  }
+  menu->addSeparator();
+  for (int i = 0; i < static_cast<int>(floors_.size()); ++i) {
+    QAction* act = menu->addAction(QString::fromStdString(floors_[static_cast<std::size_t>(i)].label));
+    act->setCheckable(true);
+    act->setChecked(active_floor_ == i);
+    group->addAction(act);
+    connect(act, &QAction::triggered, this, [this, i] { set_active_floor(i); });
+  }
+}
+
+bool DocumentViewport::pick_grip_at(const QPoint& pos, EntityGrip& out) const {
+  if (tool_mode_ != ToolMode::None || document_ == nullptr) {
+    return false;
+  }
+  const Mat4 vp = view_proj();
+  const float w = static_cast<float>((std::max)(1, width()));
+  const float h = static_cast<float>((std::max)(1, height()));
+  float best = 10.f;
+  bool hit = false;
+  for (const std::uint64_t id : document_->selected_ids()) {
+    const Entity* entity = document_->entity(id);
+    if (entity == nullptr) {
+      continue;
+    }
+    for (const EntityGrip& grip : collect_entity_grips(*entity)) {
+      float sx = 0.f;
+      float sy = 0.f;
+      if (!project_world_to_screen(vp, grip.world, w, h, sx, sy)) {
+        continue;
+      }
+      const float dx = sx - static_cast<float>(pos.x());
+      const float dy = sy - static_cast<float>(pos.y());
+      const float d = std::sqrt(dx * dx + dy * dy);
+      if (d < best) {
+        best = d;
+        out = grip;
+        hit = true;
+      }
+    }
+  }
+  return hit;
+}
+
+void DocumentViewport::apply_grip_at(const QPoint& pos) {
+  Entity* entity = document_->entity(active_grip_.entity_id);
+  if (entity == nullptr) {
+    return;
+  }
+  Vec3 p = snapped_ground_position(pos);
+  p.y = grip_from_world_.y;
+  if (!apply_entity_grip(*entity, active_grip_.index, p)) {
+    return;
+  }
+  if (auto r = rebuild_entity_mesh(*document_, entity->id); !r) {
+    entity->model = grip_from_model_;
+    entity->local_transform = grip_from_transform_;
+    sync_entity_grips(*entity);
+    (void)rebuild_entity_mesh(*document_, entity->id);
+    log_error(r.error());
+    return;
+  }
+  if (render_thread_) {
+    if (const MeshAsset* asset = document_->mesh(entity->mesh_asset_id)) {
+      if (auto gpu = render_thread_->upload_mesh(asset->id, asset->cpu); !gpu) {
+        log_error(gpu.error());
+      }
+    }
+  }
+  request_redraw();
+}
+
+void DocumentViewport::commit_grip_drag() {
+  Entity* entity = document_->entity(active_grip_.entity_id);
+  if (entity == nullptr) {
+    return;
+  }
+  const std::vector<EntityGrip> now = collect_entity_grips(*entity);
+  Vec3 to_world = grip_from_world_;
+  if (active_grip_.index >= 0 &&
+      active_grip_.index < static_cast<int>(now.size())) {
+    to_world = now[static_cast<std::size_t>(active_grip_.index)].world;
+  }
+  if (length(to_world - grip_from_world_) < 1e-4f) {
+    return;
+  }
+  auto command = std::make_unique<EditEntityGripCommand>(
+      *document_, entity->id, grip_from_model_, grip_from_transform_, entity->model,
+      entity->local_transform);
+  command_system_.push_executed(std::move(command));
+  rebuild_bvh();
+  emit document_changed();
+}
+
+void DocumentViewport::fill_grip_overlay(FrameSubmission& frame) const {
+  if (tool_mode_ != ToolMode::None || document_ == nullptr) {
+    return;
+  }
+  for (const std::uint64_t id : document_->selected_ids()) {
+    const Entity* entity = document_->entity(id);
+    if (entity == nullptr) {
+      continue;
+    }
+    const std::vector<EntityGrip> grips = collect_entity_grips(*entity);
+    if (grips.empty()) {
+      continue;
+    }
+    if (entity->kind() == EntityKind::Bezier && frame.preview_control_polyline.empty()) {
+      frame.preview_control_polyline.reserve(grips.size());
+      for (const EntityGrip& g : grips) {
+        frame.preview_control_polyline.push_back(g.world);
+      }
+    }
+    for (const EntityGrip& g : grips) {
+      frame.grip_points.push_back(g.world);
+    }
+  }
 }
 
 }  // namespace tamias

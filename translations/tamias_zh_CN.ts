@@ -12,6 +12,121 @@
         <source>Delete</source>
         <translation>删除</translation>
     </message>
+    <message>
+        <source>Hide</source>
+        <translation>隐藏</translation>
+    </message>
+    <message>
+        <source>Isolate</source>
+        <translation>隔离</translation>
+    </message>
+    <message>
+        <source>Hide Selected</source>
+        <translation>隐藏选中</translation>
+    </message>
+    <message>
+        <source>Isolate Selected</source>
+        <translation>隔离选中</translation>
+    </message>
+    <message>
+        <source>Show All</source>
+        <translation>显示全部</translation>
+    </message>
+    <message>
+        <source>Categories</source>
+        <translation>类别</translation>
+    </message>
+    <message>
+        <source>Walls</source>
+        <translation>墙</translation>
+    </message>
+    <message>
+        <source>Beams</source>
+        <translation>梁</translation>
+    </message>
+    <message>
+        <source>Columns</source>
+        <translation>柱</translation>
+    </message>
+    <message>
+        <source>Slabs</source>
+        <translation>板</translation>
+    </message>
+    <message>
+        <source>Doors</source>
+        <translation>门</translation>
+    </message>
+    <message>
+        <source>Windows</source>
+        <translation>窗</translation>
+    </message>
+    <message>
+        <source>Boxes</source>
+        <translation>盒子</translation>
+    </message>
+    <message>
+        <source>Cylinders</source>
+        <translation>圆柱</translation>
+    </message>
+    <message>
+        <source>Lines</source>
+        <translation>直线</translation>
+    </message>
+    <message>
+        <source>Polylines</source>
+        <translation>折线</translation>
+    </message>
+    <message>
+        <source>Circles</source>
+        <translation>圆</translation>
+    </message>
+    <message>
+        <source>Arcs</source>
+        <translation>弧</translation>
+    </message>
+    <message>
+        <source>Beziers</source>
+        <translation>贝塞尔</translation>
+    </message>
+    <message>
+        <source>Rectangles</source>
+        <translation>矩形</translation>
+    </message>
+    <message>
+        <source>All Floors</source>
+        <translation>全部楼层</translation>
+    </message>
+    <message>
+        <source>No floors in this model</source>
+        <translation>当前模型没有楼层</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::ViewportToolStrip</name>
+    <message>
+        <source>Switch between 2D top view (Y up) and 3D perspective</source>
+        <translation>在二维俯视（Y 朝上）与三维透视之间切换</translation>
+    </message>
+    <message>
+        <source>2D top view, Y up</source>
+        <translation>二维俯视图，Y 朝上</translation>
+    </message>
+    <message>
+        <source>3D perspective</source>
+        <translation>三维透视</translation>
+    </message>
+    <message>
+        <source>Hide or isolate components</source>
+        <translation>隐藏或隔离构件</translation>
+    </message>
+    <message>
+        <source>Filter by floor</source>
+        <translation>按楼层过滤</translation>
+    </message>
+    <message>
+        <source>Fit All</source>
+        <translation>适应窗口</translation>
+    </message>
 </context>
 <context>
     <name>tamias::HomePage</name>

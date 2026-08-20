@@ -792,8 +792,9 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     const bool has_curve = frame.preview_polyline.size() >= 2;
     const bool has_controls = frame.preview_control_polyline.size() >= 2;
     const bool has_points = !frame.preview_points.empty();
+    const bool has_grips = !frame.grip_points.empty();
     const bool has_snap = frame.snap_point.has_value();
-    if (has_curve || has_controls || has_points || has_snap) {
+    if (has_curve || has_controls || has_points || has_grips || has_snap) {
       channel.command_list->set_pipeline(*line_pipeline_);
       channel.command_list->set_texture(*default_texture_, 0);
       channel.command_list->set_vertex_buffer(*preview_line_mesh_.vertex_buffer);
@@ -897,6 +898,9 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
         } else {
           draw_diamond(p, half * 0.85f, 1.00f, 0.72f, 0.22f);
         }
+      }
+      for (const Vec3& p : frame.grip_points) {
+        draw_square(p, marker_half(p) * 0.85f, 0.35f, 0.78f, 1.00f);
       }
       if (has_snap) {
         const Vec3 p = *frame.snap_point;

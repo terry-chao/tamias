@@ -5,6 +5,7 @@
 #include "engine/math/math.h"
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <vector>
 
@@ -19,7 +20,9 @@ struct PickHit {
 class Bvh {
  public:
   void build(const Document& doc);
-  [[nodiscard]] std::optional<PickHit> closest_hit(const Ray& ray, const Document& doc) const;
+  [[nodiscard]] std::optional<PickHit> closest_hit(
+      const Ray& ray, const Document& doc,
+      const std::function<bool(std::uint64_t)>& accept = {}) const;
 
  private:
   struct Node {

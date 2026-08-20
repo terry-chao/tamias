@@ -61,6 +61,7 @@ std::unique_ptr<Entity> Entity::clone() const {
   e->mesh_asset_id = mesh_asset_id;
   e->material_id = material_id;
   e->local_transform = local_transform;
+  e->grips = grips;
   if (auto* family = dynamic_cast<FamilyEntity*>(e.get())) {
     if (const auto* self_family = dynamic_cast<const FamilyEntity*>(this)) {
       family->set_family_type(self_family->family_type());

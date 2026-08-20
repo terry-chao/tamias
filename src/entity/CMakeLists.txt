@@ -14,6 +14,7 @@ add_library(tamias_entity STATIC
   arc_entity.cpp
   bezier_entity.cpp
   rectangle_entity.cpp
+  entity_grip.cpp
 )
 add_library(tamias::entity ALIAS tamias_entity)
 target_include_directories(tamias_entity PUBLIC ${CMAKE_SOURCE_DIR}/src)

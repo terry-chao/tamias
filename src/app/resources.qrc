@@ -34,5 +34,9 @@
     <file alias="home.svg">../../assets/icons/home.svg</file>
     <file alias="properties.svg">../../assets/icons/properties.svg</file>
     <file alias="inspector.svg">../../assets/icons/inspector.svg</file>
+    <file alias="view_2d.svg">../../assets/icons/view_2d.svg</file>
+    <file alias="view_3d.svg">../../assets/icons/view_3d.svg</file>
+    <file alias="visibility.svg">../../assets/icons/visibility.svg</file>
+    <file alias="storey.svg">../../assets/icons/storey.svg</file>
   </qresource>
 </RCC>
