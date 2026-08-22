@@ -18,7 +18,7 @@ Tamias 已经有自研 RHI：`draw_channel` 不认 Vulkan / OpenGL，只认 `RHI
 | B. 用 wgpu 换掉自研 RHI | 绘制代码直接写 WebGPU | 否。bind group、WGSL、无 polygon mode 会掀开绘制层 |
 | C. 用 wgpu 替换手写 Vulkan | 默认走 wgpu，OpenGL 仍做老卡兼容 | **P1 对齐之后的产品决策**，不当第一步 |
 
-一期目标是 **桌面 Qt 视口**，不是浏览器。wasm 没有 Qt Widgets，那是另一条产品线。
+一期目标是 **桌面 Qt 视口**，不是浏览器。浏览器产品线是 [引擎 WASM + WebGL2](WEB.md)，不走 wgpu-native。
 
 实现库：**wgpu-native**（`webgpu.h`，发预编译 `wgpu_native.dll` / `.so`），仓库不引 Rust 工具链。Dawn 更「正统 C++」但更重；若以后要跟 Chromium 对齐再换，RHI 边界可以保住。
 

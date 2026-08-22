@@ -15,7 +15,9 @@
 namespace tamias {
 
 std::filesystem::path executable_directory() {
-#ifdef _WIN32
+#ifdef __EMSCRIPTEN__
+  return std::filesystem::path("/");
+#elif defined(_WIN32)
   std::wstring buf(32768, L'\0');
   const DWORD n = GetModuleFileNameW(nullptr, buf.data(), static_cast<DWORD>(buf.size()));
   if (n == 0 || n >= buf.size()) {

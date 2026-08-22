@@ -63,7 +63,7 @@
 | BIM 业务层 | [BIM.md](BIM.md) |
 | 场景图 | [总述](scene/index.md)、[语义树](SCENE-GRAPH.md) |
 | 造型 | [FEATURE-TREE-EVALUATOR.md](FEATURE-TREE-EVALUATOR.md)、[MCAD-PIPELINE.md](MCAD-PIPELINE.md)、[ISHAPE-OPS.md](ISHAPE-OPS.md)（几何边界） |
-| 渲染（含 RHI） | [RENDERING.md](RENDERING.md)、[NDC.md](NDC.md)、[OPENGL.md](OPENGL.md)、[WGPU.md](WGPU.md)（第三后端方案）、[FRUSTUM-CULLING.md](FRUSTUM-CULLING.md) |
+| 渲染（含 RHI） | [RENDERING.md](RENDERING.md)、[NDC.md](NDC.md)、[OPENGL.md](OPENGL.md)、[WGPU.md](WGPU.md)（第三桌面后端方案）、[WEB.md](WEB.md)（引擎 WASM 查看器）、[FRUSTUM-CULLING.md](FRUSTUM-CULLING.md) |
 
 两个最容易误解的点：
 

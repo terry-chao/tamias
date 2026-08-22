@@ -42,6 +42,8 @@ Result<Document> deserialize_document(std::span<const std::uint8_t> bytes);
 Result<void> save_document(const std::filesystem::path& path, const Document& document,
                            const ViewportState& viewport);
 Result<LoadedDocument> load_document(const std::filesystem::path& path);
+// File-format .tdoc (magic + chunks), from memory. Does not set Document::path.
+Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes);
 
 [[nodiscard]] bool is_tdoc_document_path(const std::filesystem::path& path);
 

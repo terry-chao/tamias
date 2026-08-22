@@ -11,3 +11,7 @@ endif()
 if(TAMIAS_ENABLE_OPENGL_BACKEND)
   add_subdirectory(opengl)
 endif()
+
+if(TAMIAS_ENABLE_WEBGL_BACKEND)
+  add_subdirectory(webgl)
+endif()

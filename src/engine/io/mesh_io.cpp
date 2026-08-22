@@ -2,6 +2,7 @@
 
 #include "engine/core/log.h"
 
+#if !defined(__EMSCRIPTEN__)
 #if defined(_MSC_VER)
 #pragma warning(push)
 #pragma warning(disable : 5311) // rapidobj: deprecated `operator"" _suffix` spacing
@@ -9,6 +10,7 @@
 #include <rapidobj/rapidobj.hpp>
 #if defined(_MSC_VER)
 #pragma warning(pop)
+#endif
 #endif
 
 #include <algorithm>
@@ -18,6 +20,8 @@
 #include <fstream>
 #include <iomanip>
 #include <optional>
+#include <span>
+#include <sstream>
 #include <string_view>
 #include <vector>
 
@@ -390,7 +394,137 @@ MeshCpu make_demo_cube() {
   return mesh;
 }
 
+std::string lower_ascii(std::string_view text) {
+  std::string out(text);
+  for (char& c : out) {
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  }
+  return out;
+}
+
+// Minimal in-memory OBJ: v / vn / f (triangles and triangle fans). No MTL.
+Result<MeshCpu> load_obj_bytes(std::span<const std::byte> bytes) {
+  if (bytes.empty()) {
+    return Err("OBJ bytes are empty");
+  }
+  const std::string text(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+  std::istringstream in(text);
+
+  std::vector<Vec3> positions;
+  std::vector<Vec3> normals;
+  MeshCpu mesh;
+  std::string line;
+  while (std::getline(in, line)) {
+    if (!line.empty() && line.back() == '\r') {
+      line.pop_back();
+    }
+    std::istringstream ls(line);
+    std::string tag;
+    ls >> tag;
+    if (tag == "v") {
+      Vec3 p{};
+      ls >> p.x >> p.y >> p.z;
+      positions.push_back(p);
+    } else if (tag == "vn") {
+      Vec3 n{};
+      ls >> n.x >> n.y >> n.z;
+      normals.push_back(n);
+    } else if (tag == "f") {
+      struct FaceIndex {
+        int p = -1;
+        int n = -1;
+      };
+      std::vector<FaceIndex> face;
+      std::string tok;
+      while (ls >> tok) {
+        FaceIndex idx{};
+        const auto slash1 = tok.find('/');
+        idx.p = std::atoi(tok.c_str());
+        if (slash1 != std::string::npos) {
+          const auto slash2 = tok.find('/', slash1 + 1);
+          if (slash2 != std::string::npos && slash2 + 1 < tok.size()) {
+            idx.n = std::atoi(tok.c_str() + slash2 + 1);
+          }
+        }
+        if (idx.p < 0) {
+          idx.p = static_cast<int>(positions.size()) + idx.p + 1;
+        }
+        if (idx.n < 0 && idx.n != -1) {
+          idx.n = static_cast<int>(normals.size()) + idx.n + 1;
+        }
+        face.push_back(idx);
+      }
+      if (face.size() < 3) {
+        continue;
+      }
+      const auto emit = [&](FaceIndex a, FaceIndex b, FaceIndex c) {
+        Vertex tri[3]{};
+        const FaceIndex ids[3] = {a, b, c};
+        for (int i = 0; i < 3; ++i) {
+          const int pi = ids[i].p - 1;
+          if (pi < 0 || static_cast<std::size_t>(pi) >= positions.size()) {
+            return;
+          }
+          tri[i].position = positions[static_cast<std::size_t>(pi)];
+          tri[i].color = kDefaultMeshColor;
+          if (ids[i].n > 0 && static_cast<std::size_t>(ids[i].n - 1) < normals.size()) {
+            tri[i].normal = normals[static_cast<std::size_t>(ids[i].n - 1)];
+          }
+        }
+        if (length(tri[0].normal) < 1e-6f) {
+          const Vec3 n = normalize(cross(tri[1].position - tri[0].position,
+                                         tri[2].position - tri[0].position));
+          tri[0].normal = tri[1].normal = tri[2].normal = n;
+        }
+        const auto base = static_cast<std::uint32_t>(mesh.vertices.size());
+        mesh.vertices.push_back(tri[0]);
+        mesh.vertices.push_back(tri[1]);
+        mesh.vertices.push_back(tri[2]);
+        mesh.indices.push_back(base);
+        mesh.indices.push_back(base + 1);
+        mesh.indices.push_back(base + 2);
+      };
+      for (std::size_t i = 1; i + 1 < face.size(); ++i) {
+        emit(face[0], face[i], face[i + 1]);
+      }
+    }
+  }
+  if (mesh.indices.empty()) {
+    return Err("OBJ contained no triangles");
+  }
+  recompute_bounds(mesh);
+  return mesh;
+}
+
+Result<MeshCpu> load_mesh_bytes(std::span<const std::byte> bytes, std::string_view extension) {
+  const auto ext = lower_ascii(extension);
+  if (ext == ".obj" || ext == "obj") {
+    return load_obj_bytes(bytes);
+  }
+  if (ext == ".tdoc" || ext == "tdoc") {
+    return Err("use load_document_bytes for .tdoc");
+  }
+  return Err("unsupported in-memory mesh format: " + std::string(extension));
+}
+
 Result<MeshCpu> load_obj(const std::filesystem::path& path) {
+#if defined(__EMSCRIPTEN__)
+  std::ifstream in(path, std::ios::binary);
+  if (!in) {
+    return Err("failed to open OBJ: " + path.string());
+  }
+  in.seekg(0, std::ios::end);
+  const auto size = static_cast<std::size_t>(in.tellg());
+  in.seekg(0);
+  std::vector<std::byte> bytes(size);
+  if (size > 0) {
+    in.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size));
+    if (!in) {
+      return Err("failed to read OBJ: " + path.string());
+    }
+  }
+  return load_obj_bytes(bytes);
+#else
   // Optional MTL so samples without companion .mtl still load.
   auto result = rapidobj::ParseFile(path, rapidobj::MaterialLibrary::Default(rapidobj::Load::Optional));
   if (result.error) {
@@ -452,6 +586,7 @@ Result<MeshCpu> load_obj(const std::filesystem::path& path) {
   }
   recompute_bounds(mesh);
   return mesh;
+#endif
 }
 
 Result<MeshCpu> load_gltf(const std::filesystem::path& path) {

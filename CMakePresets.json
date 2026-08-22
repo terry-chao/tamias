@@ -40,6 +40,39 @@
       }
     },
     {
+      "name": "wasm",
+      "displayName": "Emscripten WebGL viewer",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/wasm",
+      "toolchainFile": "C:/dev/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+      "environment": {
+        "EMSDK": "C:/dev/emsdk",
+        "EMSDK_NODE": "C:/dev/emsdk/node/24.19.0_64bit/node.exe",
+        "EMSDK_PYTHON": "C:/dev/emsdk/python/3.13.3_64bit/python.exe",
+        "CMAKE_TOOLCHAIN_FILE": "C:/dev/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+        "VCPKG_ROOT": "",
+        "VCPKG_INSTALLATION_ROOT": "",
+        "PATH": "C:/dev/emsdk;C:/dev/emsdk/upstream/emscripten;C:/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja;$penv{PATH}"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CROSSCOMPILING_EMULATOR": "C:/dev/emsdk/node/24.19.0_64bit/node.exe",
+        "CMAKE_MAKE_PROGRAM": "C:/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe",
+        "VCPKG_MANIFEST_MODE": "OFF",
+        "TAMIAS_ENABLE_VULKAN_BACKEND": "OFF",
+        "TAMIAS_ENABLE_OPENGL_BACKEND": "OFF",
+        "TAMIAS_ENABLE_WEBGL_BACKEND": "ON",
+        "TAMIAS_ENABLE_OCCT": "OFF",
+        "TAMIAS_BUILD_TESTS": "OFF",
+        "TAMIAS_USE_FETCHCONTENT": "OFF"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": [ "Windows" ]
+        }
+      }
+    },
+    {
       "name": "linux",
       "displayName": "Linux x64 (Vulkan, X11/XCB)",
       "condition": {
@@ -88,6 +121,18 @@
     {
       "name": "linux-relwithdebinfo",
       "configurePreset": "linux"
+    },
+    {
+      "name": "wasm-serve",
+      "displayName": "WASM 预览 (localhost:3000)",
+      "configurePreset": "wasm",
+      "targets": ["serve_viewer"]
+    },
+    {
+      "name": "wasm-stop",
+      "displayName": "WASM 停止预览",
+      "configurePreset": "wasm",
+      "targets": ["stop_viewer"]
     }
   ],
   "testPresets": [

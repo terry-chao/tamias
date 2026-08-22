@@ -13,8 +13,12 @@ endif()
 unset(OpenCASCADE_DIR CACHE)
 unset(opencascade_DIR CACHE)
 
-find_package(Vulkan REQUIRED)
-find_package(Qt6 REQUIRED COMPONENTS Widgets Gui Svg LinguistTools)
+if(NOT EMSCRIPTEN)
+  if(TAMIAS_ENABLE_VULKAN_BACKEND)
+    find_package(Vulkan REQUIRED)
+  endif()
+  find_package(Qt6 REQUIRED COMPONENTS Widgets Gui Svg LinguistTools)
+endif()
 
 set(TAMIAS_THIRDPARTY_DIR "${CMAKE_SOURCE_DIR}/3rdparty")
 
@@ -43,7 +47,7 @@ configure_file(
   COPYONLY)
 set(RAPIDOBJ_INCLUDE_DIRS "${CMAKE_BINARY_DIR}/thirdparty_include" CACHE PATH "" FORCE)
 
-if(TAMIAS_BUILD_TESTS)
+if(TAMIAS_BUILD_TESTS AND NOT EMSCRIPTEN)
   find_package(GTest CONFIG QUIET)
   if(NOT TARGET GTest::gtest)
     if(TAMIAS_USE_FETCHCONTENT)
@@ -63,6 +67,15 @@ endif()
 
 find_program(TAMIAS_DXC NAMES dxc
   HINTS "$ENV{VULKAN_SDK}/Bin" "$ENV{VULKAN_SDK}/bin")
+
+if(NOT TAMIAS_ENABLE_OCCT)
+  set(TAMIAS_OCCT_ROOT "(disabled)")
+  set(TAMIAS_OCCT_INCLUDE_DIR "")
+  set(TAMIAS_OCCT_LIBRARIES "")
+  set(TAMIAS_OCCT_RUNTIME_PATH "")
+  set(TAMIAS_IFC_SCHEMAS "(disabled)")
+  return()
+endif()
 
 # --- OCCT (required, via vcpkg opencascade) ---
 find_package(OpenCASCADE CONFIG QUIET)

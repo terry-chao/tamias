@@ -4,7 +4,7 @@
   "cmake.configureOnOpen": true,
   "cmake.configurePreset": "msvc",
   "cmake.buildPreset": "debug",
-  "cmake.buildBeforeRun": false,
+  "cmake.buildBeforeRun": true,
   "cmake.saveBeforeBuild": true,
   "cmake.outputLogEncoding": "gbk",
   "cmake.environment": {
@@ -13,8 +13,8 @@
     "VCPKG_ROOT": "C:\\dev\\vcpkg",
     "VCPKG_INSTALLATION_ROOT": "C:\\dev\\vcpkg"
   },
-  "cmake.debugConfig": {
-    "preLaunchTask": "Tamias: 编译"
+  "terminal.integrated.env.windows": {
+    "PATH": "C:\\dev\\emsdk;C:\\dev\\emsdk\\upstream\\emscripten;${env:PATH}"
   },
 
   "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",

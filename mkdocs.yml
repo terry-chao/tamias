@@ -32,6 +32,7 @@ nav:
       - overview/index.md
       - 路线图: ROADMAP.md
       - MCAD 与 BIM: DECISION-MCAD-BIM.md
+      - Web 查看器: WEB.md
   - 客户端:
       - app/index.md
       - Qt 壳: APP.md
@@ -53,4 +54,5 @@ nav:
       - 视锥、NDC 与屏幕: NDC.md
       - OpenGL 后端: OPENGL.md
       - wgpu 接入: WGPU.md
+      - Web 查看器: WEB.md
       - 视锥剔除: FRUSTUM-CULLING.md

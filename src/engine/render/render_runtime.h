@@ -54,9 +54,12 @@ struct FrameSubmission {
 struct RenderDeviceConfig {
   GraphicsBackend backend = GraphicsBackend::Vulkan;
   bool enable_validation = true;
+  // When true, start() does not spawn a worker; call pump() on the host thread.
+  bool synchronous = false;
 
   [[nodiscard]] bool shares_execution_thread_with(const RenderDeviceConfig& other) const {
-    return backend != GraphicsBackend::OpenGL && backend == other.backend &&
+    return backend != GraphicsBackend::OpenGL && backend != GraphicsBackend::WebGL &&
+           !synchronous && !other.synchronous && backend == other.backend &&
            enable_validation == other.enable_validation;
   }
 };
@@ -74,6 +77,8 @@ class RenderThread {
 
   Result<void> start();
   void stop();
+  // Drain queued work and present dirty channels. Required when synchronous.
+  void pump();
 
   // Upload mesh on the render thread and map it from a semantic asset id; returns
   // the assigned GPU mesh id. The semantic side refers to geometry by asset id.
@@ -107,6 +112,8 @@ class RenderThread {
   };
 
   void thread_main();
+  void post(std::function<void()> task);
+  void drain_once();
   Result<void> ensure_pipelines();
   Result<void> draw_channel(std::uint64_t id, ChannelState& channel, const FrameSubmission& frame);
 

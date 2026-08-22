@@ -8,6 +8,7 @@
 #include <cctype>
 #include <cstring>
 #include <fstream>
+#include <span>
 #include <string>
 
 namespace tamias {
@@ -1113,22 +1114,7 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
   return {};
 }
 
-Result<LoadedDocument> load_document(const std::filesystem::path& path) {
-  std::ifstream in(path, std::ios::binary);
-  if (!in) {
-    return Err("Failed to open file: " + path.string());
-  }
-  in.seekg(0, std::ios::end);
-  const auto file_size = static_cast<std::size_t>(in.tellg());
-  in.seekg(0, std::ios::beg);
-  std::vector<std::uint8_t> bytes(file_size);
-  if (file_size > 0) {
-    in.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(file_size));
-    if (!in) {
-      return Err("Failed to read file: " + path.string());
-    }
-  }
-
+Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes) {
   BinaryReader reader(bytes);
   char magic[4]{};
   if (auto r = reader.read_bytes(magic, 4); !r) {
@@ -1321,7 +1307,6 @@ Result<LoadedDocument> load_document(const std::filesystem::path& path) {
 
   LoadedDocument loaded;
   loaded.document = Document(std::move(name));
-  loaded.document.set_path(path);
   for (auto& asset : meshes) {
     loaded.document.insert_mesh(std::move(asset));
   }
@@ -1349,6 +1334,29 @@ Result<LoadedDocument> load_document(const std::filesystem::path& path) {
   loaded.document.clear_dirty();
   loaded.viewport = viewport;
   loaded.has_viewport = has_view;
+  return loaded;
+}
+
+Result<LoadedDocument> load_document(const std::filesystem::path& path) {
+  std::ifstream in(path, std::ios::binary);
+  if (!in) {
+    return Err("Failed to open file: " + path.string());
+  }
+  in.seekg(0, std::ios::end);
+  const auto file_size = static_cast<std::size_t>(in.tellg());
+  in.seekg(0, std::ios::beg);
+  std::vector<std::uint8_t> bytes(file_size);
+  if (file_size > 0) {
+    in.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(file_size));
+    if (!in) {
+      return Err("Failed to read file: " + path.string());
+    }
+  }
+  auto loaded = load_document_bytes(bytes);
+  if (!loaded) {
+    return loaded;
+  }
+  loaded->document.set_path(path);
   return loaded;
 }
 

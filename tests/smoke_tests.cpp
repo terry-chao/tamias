@@ -36,6 +36,11 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <span>
+#include <vector>
 
 using namespace tamias;
 
@@ -1272,5 +1277,38 @@ TEST(Bim, RelationRoundTrip) {
   EXPECT_NEAR(loaded->placement.along, 0.42, 1e-9);
   EXPECT_NEAR(loaded->placement.sill, 0.9, 1e-9);
   EXPECT_TRUE(loaded->valid);
+}
+
+TEST(Io, LoadObjBytesTriangle) {
+  const char* obj =
+      "v 0 0 0\n"
+      "v 1 0 0\n"
+      "v 0 1 0\n"
+      "f 1 2 3\n";
+  const auto bytes = std::as_bytes(std::span(obj, std::strlen(obj)));
+  auto mesh = load_obj_bytes(bytes);
+  ASSERT_TRUE(mesh) << mesh.error();
+  EXPECT_EQ(mesh->indices.size(), 3u);
+  EXPECT_TRUE(mesh->bounds.valid());
+}
+
+TEST(DocumentIo, LoadDocumentBytesRoundTrip) {
+  Document doc("mem");
+  doc.add_import_mesh("cube", make_demo_cube(), Mat4::identity(), {0.7f, 0.7f, 0.7f});
+  const auto tmp = std::filesystem::temp_directory_path() / "tamias_mem_io.tdoc";
+  ViewportState view{};
+  ASSERT_TRUE(save_document(tmp, doc, view)) << "save_document failed";
+  std::ifstream in(tmp, std::ios::binary);
+  ASSERT_TRUE(in);
+  in.seekg(0, std::ios::end);
+  const auto size = static_cast<std::size_t>(in.tellg());
+  in.seekg(0);
+  std::vector<std::uint8_t> bytes(size);
+  in.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size));
+  auto loaded = load_document_bytes(bytes);
+  ASSERT_TRUE(loaded) << loaded.error();
+  EXPECT_EQ(loaded->document.name(), "mem");
+  EXPECT_EQ(loaded->document.meshes().size(), 1u);
+  EXPECT_FALSE(loaded->document.render_items().empty());
 }
 

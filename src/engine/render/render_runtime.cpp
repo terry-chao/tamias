@@ -2,15 +2,20 @@
 
 #include "engine/core/executable_directory.h"
 #include "engine/core/log.h"
+#if defined(TAMIAS_HAS_RHI_WEBGL)
+#include "engine/render/rhi/webgl/webgl_shaders.h"
+#endif
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <future>
 #include <optional>
 #include <span>
+#include <string>
 
 namespace tamias {
 
@@ -161,6 +166,61 @@ RenderThread::RenderThread(RenderDeviceConfig config) : config_(config) {}
 
 RenderThread::~RenderThread() { stop(); }
 
+void RenderThread::post(std::function<void()> task) {
+  if (config_.synchronous) {
+    task();
+    return;
+  }
+  {
+    std::scoped_lock lock(mutex_);
+    tasks_.push(std::move(task));
+  }
+  cv_.notify_one();
+}
+
+void RenderThread::drain_once() {
+  std::vector<std::function<void()>> tasks;
+  std::vector<std::uint64_t> dirty_channels;
+  {
+    std::unique_lock lock(mutex_);
+    while (!tasks_.empty()) {
+      tasks.push_back(std::move(tasks_.front()));
+      tasks_.pop();
+    }
+  }
+  for (auto& task : tasks) {
+    task();
+  }
+  {
+    std::scoped_lock lock(mutex_);
+    for (auto& [id, ch] : channels_) {
+      if (ch.latest) {
+        dirty_channels.push_back(id);
+      }
+    }
+  }
+  for (auto id : dirty_channels) {
+    ChannelState* channel = nullptr;
+    std::optional<FrameSubmission> frame;
+    {
+      std::scoped_lock lock(mutex_);
+      auto it = channels_.find(id);
+      if (it != channels_.end() && it->second.latest) {
+        channel = &it->second;
+        frame = *it->second.latest;
+      }
+    }
+    if (!channel || !frame) {
+      continue;
+    }
+    if (auto r = draw_channel(id, *channel, *frame); !r) {
+      log_warn(r.error());
+    }
+  }
+}
+
+void RenderThread::pump() { drain_once(); }
+
 Result<void> RenderThread::start() {
   if (running_) {
     return {};
@@ -175,7 +235,9 @@ Result<void> RenderThread::start() {
   device_ = std::move(*device);
   stop_requested_ = false;
   running_ = true;
-  thread_ = std::thread([this] { thread_main(); });
+  if (!config_.synchronous) {
+    thread_ = std::thread([this] { thread_main(); });
+  }
   return {};
 }
 
@@ -251,9 +313,7 @@ void RenderThread::destroy_channel(std::uint64_t channel_id) {
 Result<std::uint64_t> RenderThread::upload_mesh(std::uint64_t asset_id, MeshCpu mesh) {
   auto promise = std::make_shared<std::promise<Result<std::uint64_t>>>();
   auto future = promise->get_future();
-  {
-    std::scoped_lock lock(mutex_);
-    tasks_.push([this, mesh = std::move(mesh), promise, asset_id]() mutable {
+  post([this, mesh = std::move(mesh), promise, asset_id]() mutable {
       BufferDesc vb{};
       vb.size = mesh.vertices.size() * sizeof(Vertex);
       vb.usage = BufferDesc::Usage::Vertex;
@@ -295,17 +355,13 @@ Result<std::uint64_t> RenderThread::upload_mesh(std::uint64_t asset_id, MeshCpu 
       asset_to_gpu_[asset_id] = id;
       promise->set_value(id);
     });
-  }
-  cv_.notify_one();
   return future.get();
 }
 
 Result<std::uint64_t> RenderThread::upload_texture(std::uint64_t asset_id, TextureAsset asset) {
   auto promise = std::make_shared<std::promise<Result<std::uint64_t>>>();
   auto future = promise->get_future();
-  {
-    std::scoped_lock lock(mutex_);
-    tasks_.push([this, asset = std::move(asset), promise, asset_id]() mutable {
+  post([this, asset = std::move(asset), promise, asset_id]() mutable {
       // 幂等：同一资产只上传一次，后续直接返回缓存的 GPU 纹理 id。
       if (auto it = texture_asset_to_gpu_.find(asset_id); it != texture_asset_to_gpu_.end()) {
         promise->set_value(it->second);
@@ -336,8 +392,6 @@ Result<std::uint64_t> RenderThread::upload_texture(std::uint64_t asset_id, Textu
       texture_asset_to_gpu_[asset_id] = id;
       promise->set_value(id);
     });
-  }
-  cv_.notify_one();
   return future.get();
 }
 
@@ -361,9 +415,13 @@ void RenderThread::resize_surface(std::uint64_t channel_id, NativeWindowHandle w
   ChannelState& channel = it->second;
   const std::uint32_t width = std::max(1u, w);
   const std::uint32_t height = std::max(1u, h);
+  const bool same_canvas =
+      channel.window.canvas_selector == window.canvas_selector ||
+      (channel.window.canvas_selector != nullptr && window.canvas_selector != nullptr &&
+       std::strcmp(channel.window.canvas_selector, window.canvas_selector) == 0);
   const bool same_window = channel.window.hwnd == window.hwnd &&
                            channel.window.display == window.display &&
-                           channel.window.window == window.window;
+                           channel.window.window == window.window && same_canvas;
   if (same_window && channel.width == width && channel.height == height) {
     return;
   }
@@ -382,36 +440,51 @@ Result<void> RenderThread::ensure_pipelines() {
     return {};
   }
 
-  // Keep SPIR-V alive for the create_shader_module span lifetime.
+  // Keep SPIR-V / GLSL alive for the create_shader_module span lifetime.
   std::vector<std::uint32_t> vs_spirv;
   std::vector<std::uint32_t> fs_spirv;
+  std::string vs_glsl;
+  std::string fs_glsl;
 
   const bool opengl = device_->backend() == GraphicsBackend::OpenGL;
-  const char* vs_name = opengl ? "mesh.vert.gl.spv" : "mesh.vert.spv";
-  const char* fs_name = opengl ? "mesh.frag.gl.spv" : "mesh.frag.spv";
-
-  auto vs_words = load_spirv_file(resolve_shader_path(vs_name).string());
-  if (!vs_words) {
-    return Err(vs_words.error());
-  }
-  auto fs_words = load_spirv_file(resolve_shader_path(fs_name).string());
-  if (!fs_words) {
-    return Err(fs_words.error());
-  }
-  vs_spirv = std::move(*vs_words);
-  fs_spirv = std::move(*fs_words);
+  const bool webgl = device_->backend() == GraphicsBackend::WebGL;
 
   ShaderModuleDesc vs_desc{};
-  vs_desc.language = ShaderLanguage::Spirv;
   vs_desc.stage = ShaderStage::Vertex;
-  vs_desc.spirv = vs_spirv;
   vs_desc.entry = "main";
-
   ShaderModuleDesc fs_desc{};
-  fs_desc.language = ShaderLanguage::Spirv;
   fs_desc.stage = ShaderStage::Fragment;
-  fs_desc.spirv = fs_spirv;
   fs_desc.entry = "main";
+
+  if (webgl) {
+#if defined(TAMIAS_HAS_RHI_WEBGL)
+    vs_glsl.assign(webgl_shaders::mesh_vert());
+    fs_glsl.assign(webgl_shaders::mesh_frag());
+    vs_desc.language = ShaderLanguage::Glsl;
+    vs_desc.glsl = std::span<const char>(vs_glsl.data(), vs_glsl.size());
+    fs_desc.language = ShaderLanguage::Glsl;
+    fs_desc.glsl = std::span<const char>(fs_glsl.data(), fs_glsl.size());
+#else
+    return Err("WebGL shaders were not compiled into this binary");
+#endif
+  } else {
+    const char* vs_name = opengl ? "mesh.vert.gl.spv" : "mesh.vert.spv";
+    const char* fs_name = opengl ? "mesh.frag.gl.spv" : "mesh.frag.spv";
+    auto vs_words = load_spirv_file(resolve_shader_path(vs_name).string());
+    if (!vs_words) {
+      return Err(vs_words.error());
+    }
+    auto fs_words = load_spirv_file(resolve_shader_path(fs_name).string());
+    if (!fs_words) {
+      return Err(fs_words.error());
+    }
+    vs_spirv = std::move(*vs_words);
+    fs_spirv = std::move(*fs_words);
+    vs_desc.language = ShaderLanguage::Spirv;
+    vs_desc.spirv = vs_spirv;
+    fs_desc.language = ShaderLanguage::Spirv;
+    fs_desc.spirv = fs_spirv;
+  }
 
   auto vs = device_->create_shader_module(vs_desc);
   if (!vs) {
@@ -442,31 +515,45 @@ Result<void> RenderThread::ensure_pipelines() {
   wire_pipeline_ = std::move(*p1);
 
   // 天空管线（全屏三角形，深度测试关、不写深度）。
-  const char* sky_vs_name = opengl ? "sky.vert.gl.spv" : "sky.vert.spv";
-  const char* sky_fs_name = opengl ? "sky.frag.gl.spv" : "sky.frag.spv";
   std::vector<std::uint32_t> sky_vs_spirv;
   std::vector<std::uint32_t> sky_fs_spirv;
-  auto sky_vs_words = load_spirv_file(resolve_shader_path(sky_vs_name).string());
-  if (!sky_vs_words) {
-    return Err(sky_vs_words.error());
-  }
-  auto sky_fs_words = load_spirv_file(resolve_shader_path(sky_fs_name).string());
-  if (!sky_fs_words) {
-    return Err(sky_fs_words.error());
-  }
-  sky_vs_spirv = std::move(*sky_vs_words);
-  sky_fs_spirv = std::move(*sky_fs_words);
-
+  std::string sky_vs_glsl;
+  std::string sky_fs_glsl;
   ShaderModuleDesc sky_vs_desc{};
-  sky_vs_desc.language = ShaderLanguage::Spirv;
   sky_vs_desc.stage = ShaderStage::Vertex;
-  sky_vs_desc.spirv = sky_vs_spirv;
   sky_vs_desc.entry = "main";
   ShaderModuleDesc sky_fs_desc{};
-  sky_fs_desc.language = ShaderLanguage::Spirv;
   sky_fs_desc.stage = ShaderStage::Fragment;
-  sky_fs_desc.spirv = sky_fs_spirv;
   sky_fs_desc.entry = "main";
+  if (webgl) {
+#if defined(TAMIAS_HAS_RHI_WEBGL)
+    sky_vs_glsl.assign(webgl_shaders::sky_vert());
+    sky_fs_glsl.assign(webgl_shaders::sky_frag());
+    sky_vs_desc.language = ShaderLanguage::Glsl;
+    sky_vs_desc.glsl = std::span<const char>(sky_vs_glsl.data(), sky_vs_glsl.size());
+    sky_fs_desc.language = ShaderLanguage::Glsl;
+    sky_fs_desc.glsl = std::span<const char>(sky_fs_glsl.data(), sky_fs_glsl.size());
+#else
+    return Err("WebGL shaders were not compiled into this binary");
+#endif
+  } else {
+    const char* sky_vs_name = opengl ? "sky.vert.gl.spv" : "sky.vert.spv";
+    const char* sky_fs_name = opengl ? "sky.frag.gl.spv" : "sky.frag.spv";
+    auto sky_vs_words = load_spirv_file(resolve_shader_path(sky_vs_name).string());
+    if (!sky_vs_words) {
+      return Err(sky_vs_words.error());
+    }
+    auto sky_fs_words = load_spirv_file(resolve_shader_path(sky_fs_name).string());
+    if (!sky_fs_words) {
+      return Err(sky_fs_words.error());
+    }
+    sky_vs_spirv = std::move(*sky_vs_words);
+    sky_fs_spirv = std::move(*sky_fs_words);
+    sky_vs_desc.language = ShaderLanguage::Spirv;
+    sky_vs_desc.spirv = sky_vs_spirv;
+    sky_fs_desc.language = ShaderLanguage::Spirv;
+    sky_fs_desc.spirv = sky_fs_spirv;
+  }
 
   auto sky_vs = device_->create_shader_module(sky_vs_desc);
   if (!sky_vs) {
@@ -490,31 +577,45 @@ Result<void> RenderThread::ensure_pipelines() {
   sky_pipeline_ = std::move(*psky);
 
   // 地面网格管线（网格 shader；测深度但不写深度，不遮挡地下的模型）。
-  const char* grid_vs_name = opengl ? "grid.vert.gl.spv" : "grid.vert.spv";
-  const char* grid_fs_name = opengl ? "grid.frag.gl.spv" : "grid.frag.spv";
   std::vector<std::uint32_t> grid_vs_spirv;
   std::vector<std::uint32_t> grid_fs_spirv;
-  auto grid_vs_words = load_spirv_file(resolve_shader_path(grid_vs_name).string());
-  if (!grid_vs_words) {
-    return Err(grid_vs_words.error());
-  }
-  auto grid_fs_words = load_spirv_file(resolve_shader_path(grid_fs_name).string());
-  if (!grid_fs_words) {
-    return Err(grid_fs_words.error());
-  }
-  grid_vs_spirv = std::move(*grid_vs_words);
-  grid_fs_spirv = std::move(*grid_fs_words);
-
+  std::string grid_vs_glsl;
+  std::string grid_fs_glsl;
   ShaderModuleDesc grid_vs_desc{};
-  grid_vs_desc.language = ShaderLanguage::Spirv;
   grid_vs_desc.stage = ShaderStage::Vertex;
-  grid_vs_desc.spirv = grid_vs_spirv;
   grid_vs_desc.entry = "main";
   ShaderModuleDesc grid_fs_desc{};
-  grid_fs_desc.language = ShaderLanguage::Spirv;
   grid_fs_desc.stage = ShaderStage::Fragment;
-  grid_fs_desc.spirv = grid_fs_spirv;
   grid_fs_desc.entry = "main";
+  if (webgl) {
+#if defined(TAMIAS_HAS_RHI_WEBGL)
+    grid_vs_glsl.assign(webgl_shaders::grid_vert());
+    grid_fs_glsl.assign(webgl_shaders::grid_frag());
+    grid_vs_desc.language = ShaderLanguage::Glsl;
+    grid_vs_desc.glsl = std::span<const char>(grid_vs_glsl.data(), grid_vs_glsl.size());
+    grid_fs_desc.language = ShaderLanguage::Glsl;
+    grid_fs_desc.glsl = std::span<const char>(grid_fs_glsl.data(), grid_fs_glsl.size());
+#else
+    return Err("WebGL shaders were not compiled into this binary");
+#endif
+  } else {
+    const char* grid_vs_name = opengl ? "grid.vert.gl.spv" : "grid.vert.spv";
+    const char* grid_fs_name = opengl ? "grid.frag.gl.spv" : "grid.frag.spv";
+    auto grid_vs_words = load_spirv_file(resolve_shader_path(grid_vs_name).string());
+    if (!grid_vs_words) {
+      return Err(grid_vs_words.error());
+    }
+    auto grid_fs_words = load_spirv_file(resolve_shader_path(grid_fs_name).string());
+    if (!grid_fs_words) {
+      return Err(grid_fs_words.error());
+    }
+    grid_vs_spirv = std::move(*grid_vs_words);
+    grid_fs_spirv = std::move(*grid_fs_words);
+    grid_vs_desc.language = ShaderLanguage::Spirv;
+    grid_vs_desc.spirv = grid_vs_spirv;
+    grid_fs_desc.language = ShaderLanguage::Spirv;
+    grid_fs_desc.spirv = grid_fs_spirv;
+  }
 
   auto grid_vs = device_->create_shader_module(grid_vs_desc);
   if (!grid_vs) {
