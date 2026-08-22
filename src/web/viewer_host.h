@@ -47,7 +47,7 @@ class ViewerHost {
   std::uint32_t height_ = 1;
   float last_x_ = 0.f;
   float last_y_ = 0.f;
-  bool dragging_ = false;
+  bool orbiting_ = false;
   bool panning_ = false;
 };
 

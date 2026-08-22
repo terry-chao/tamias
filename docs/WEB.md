@@ -104,7 +104,7 @@ cmake --build --preset wasm-stop
 
 或 `powershell -File scripts/wasm.ps1`。产物在 `build/wasm/bin/`。
 
-浏览器里：左键旋转，右键平移，滚轮缩放。顶栏打开 `.tdoc` 或 `.obj`。没有文件时画演示立方体。
+浏览器里：中键旋转，右键平移，滚轮缩放。顶栏打开 `.tdoc` 或 `.obj`。没有文件时画演示立方体。
 
 不要在 `build/` 里找 `CMakePresets.json`。不要给 wasm 配 vcpkg。
 

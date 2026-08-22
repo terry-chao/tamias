@@ -144,8 +144,9 @@ void ViewerHost::resize(std::uint32_t width, std::uint32_t height) {
 void ViewerHost::pointer_down(float x, float y, int button) {
   last_x_ = x;
   last_y_ = y;
-  dragging_ = button == 0;
-  panning_ = button == 1 || button == 2;
+  // Match desktop viewport: middle orbit, right pan. MouseEvent.button: 1 = middle, 2 = right.
+  orbiting_ = button == 1;
+  panning_ = button == 2;
 }
 
 void ViewerHost::pointer_move(float x, float y) {
@@ -156,13 +157,13 @@ void ViewerHost::pointer_move(float x, float y) {
   if (panning_) {
     const float scale = camera_.distance() * 0.0025f;
     camera_.pan(-dx * scale, dy * scale);
-  } else if (dragging_) {
-    camera_.orbit(dx * 0.01f, dy * 0.01f);
+  } else if (orbiting_) {
+    camera_.orbit(-dx * 0.01f, dy * 0.01f);
   }
 }
 
 void ViewerHost::pointer_up(float, float, int) {
-  dragging_ = false;
+  orbiting_ = false;
   panning_ = false;
 }
 
