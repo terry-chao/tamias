@@ -789,14 +789,20 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
 
   // 地面网格（相机锚定四边形 + 网格 shader；测深度不写深度）。
   if (grid_pipeline_ && grid_mesh_.index_buffer) {
-    const Mat4 grid_model = translate({frame.eye_position.x, 0.0f, frame.eye_position.z});
+    constexpr float kGridQuadExtent = 2000.f;
+    const float view_scale = std::max(frame.view_distance, 1.f);
+    // Fade ends at 32× view distance; grow the camera-anchored quad so it still covers it.
+    const float extent_scale = std::max(view_scale * 32.f / kGridQuadExtent, 1.f);
+    const Mat4 grid_model =
+        translate({frame.eye_position.x, 0.0f, frame.eye_position.z}) *
+        scale({extent_scale, 1.f, extent_scale});
     PushConstants pc{};
     pc.mvp = view_proj * grid_model;
     pc.model = grid_model;
     pc.eye_pos_mode[0] = frame.eye_position.x;
     pc.eye_pos_mode[1] = frame.eye_position.y;
     pc.eye_pos_mode[2] = frame.eye_position.z;
-    pc.eye_pos_mode[3] = 0.f;
+    pc.eye_pos_mode[3] = view_scale;
     channel.command_list->set_pipeline(*grid_pipeline_);
     channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
     channel.command_list->set_vertex_buffer(*grid_mesh_.vertex_buffer);

@@ -190,6 +190,7 @@ void ViewerHost::render() {
   frame.view = camera_.view_matrix();
   frame.proj = camera_.proj_matrix(aspect);
   frame.eye_position = camera_.eye_position();
+  frame.view_distance = camera_.distance();
   frame.mode = RenderMode::Shaded;
   frame.items = document_->render_items();
   channel_->resize(window(), width_, height_);

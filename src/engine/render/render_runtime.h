@@ -39,6 +39,7 @@ struct FrameSubmission {
   Mat4 view = Mat4::identity();
   Mat4 proj = Mat4::identity();
   Vec3 eye_position{};
+  float view_distance = 5.f;
   RenderMode mode = RenderMode::Shaded;
   std::vector<SceneDrawItem> items;
   bool show_axes = true;  // 世界坐标轴（X红/Y绿/Z蓝）

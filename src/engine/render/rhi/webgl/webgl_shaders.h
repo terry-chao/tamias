@@ -180,19 +180,28 @@ inline std::string_view grid_frag() {
                                  std::string(kPushBlock) + R"GLSL(
 in vec3 v_world_pos;
 out vec4 frag_color;
+float grid_line(vec2 coord, float spacing, vec2 deriv) {
+  vec2 cell = min(fract(coord / spacing), 1.0 - fract(coord / spacing));
+  vec2 px = cell * spacing / max(deriv, vec2(1e-5));
+  return 1.0 - clamp(min(px.x, px.y), 0.0, 1.0);
+}
 void main() {
   vec2 coord = v_world_pos.xz;
   vec2 deriv = fwidth(coord);
-  vec2 minor_d = min(fract(coord), 1.0 - fract(coord));
-  vec2 minor_px = minor_d / max(deriv, vec2(1e-5));
-  float minor_strength = 1.0 - clamp(min(minor_px.x, minor_px.y), 0.0, 1.0);
-  const float major_scale = 5.0;
-  vec2 major_d = min(fract(coord / major_scale), 1.0 - fract(coord / major_scale));
-  vec2 major_px = major_d * major_scale / max(deriv, vec2(1e-5));
-  float major_strength = 1.0 - clamp(min(major_px.x, major_px.y), 0.0, 1.0);
+  float world_per_pixel = max(max(deriv.x, deriv.y), 1e-5);
+  float lod = log(max(world_per_pixel * 8.0, 1.0)) / log(10.0);
+  float lod_base = floor(lod);
+  float lod_frac = clamp(lod - lod_base, 0.0, 1.0);
+  float minor_lo = pow(10.0, lod_base);
+  float minor_hi = minor_lo * 10.0;
+  float minor_strength = mix(grid_line(coord, minor_lo, deriv),
+                             grid_line(coord, minor_hi, deriv), lod_frac);
+  float major_strength = mix(grid_line(coord, minor_lo * 5.0, deriv),
+                             grid_line(coord, minor_hi * 5.0, deriv), lod_frac);
+  float view_scale = max(pc.eye_pos_mode.w, 1.0);
   float dist = length(v_world_pos.xz - pc.eye_pos_mode.xz);
-  float fade = 1.0 - smoothstep(40.0, 160.0, dist);
-  fade *= smoothstep(0.0, 2.0, dist);
+  float fade = 1.0 - smoothstep(8.0 * view_scale, 32.0 * view_scale, dist);
+  fade *= smoothstep(0.0, 0.4 * view_scale, dist);
   vec3 fill = vec3(0.22, 0.24, 0.28);
   vec3 color = fill;
   color = mix(color, vec3(0.38, 0.41, 0.46), clamp(minor_strength * 0.50, 0.0, 1.0));

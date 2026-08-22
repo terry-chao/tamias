@@ -447,6 +447,21 @@ TEST(Picking, RayHitsCube) {
   ASSERT_TRUE(hit.has_value());
 }
 
+TEST(Camera, DollyScalesClipPlanesWithDistance) {
+  TurntableCamera camera;
+  EXPECT_NEAR(camera.distance(), 5.f, 1e-4f);
+  EXPECT_NEAR(camera.zfar(), 500.f, 1e-3f);
+
+  camera.dolly(10.f);
+  EXPECT_NEAR(camera.distance(), 50.f, 1e-3f);
+  EXPECT_NEAR(camera.znear(), 0.05f, 1e-4f);
+  EXPECT_NEAR(camera.zfar(), 2500.f, 1e-2f);
+
+  camera.set_distance(2.f);
+  EXPECT_NEAR(camera.znear(), 0.01f, 1e-4f);
+  EXPECT_NEAR(camera.zfar(), 500.f, 1e-2f);
+}
+
 TEST(Picking, ProjectWorldToScreenCenter) {
   TurntableCamera camera;
   camera.set_target({});

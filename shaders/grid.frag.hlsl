@@ -1,26 +1,34 @@
 #include "mesh.hlsli"
 
-// 深色 CAD 地面网格：暗填充上叠浅色线，主次网格 + 世界轴 + 距离淡出。
+float grid_line(float2 coord, float spacing, float2 deriv) {
+  float2 cell = min(frac(coord / spacing), 1.0 - frac(coord / spacing));
+  float2 px = cell * spacing / max(deriv, 1e-5);
+  return 1.0 - saturate(min(px.x, px.y));
+}
+
+// 深色 CAD 地面网格：暗填充上叠浅色线，主次网格随视距分级 + 距离淡出。
 float4 main(VsOutput input) : SV_Target0 {
   float2 coord = input.world_pos.xz;
   float2 deriv = fwidth(coord);
 
-  // 次网格：每 1 个世界单位（与 engine/math/grid.h kGridMinorSpacing 一致）。
-  float2 minor_d = min(frac(coord), 1.0 - frac(coord));
-  float2 minor_px = minor_d / max(deriv, 1e-5);
-  float minor_strength = 1.0 - saturate(min(minor_px.x, minor_px.y));
+  // 约 8 像素一条次线；缩小时升到 10 / 100… 避免远景线密成一片灰。
+  float world_per_pixel = max(max(deriv.x, deriv.y), 1e-5);
+  float lod = log10(max(world_per_pixel * 8.0, 1.0));
+  float lod_base = floor(lod);
+  float lod_frac = saturate(lod - lod_base);
+  float minor_lo = pow(10.0, lod_base);
+  float minor_hi = minor_lo * 10.0;
 
-  // 主网格：每 5 个世界单位（与 kGridMajorSpacing 一致）。
-  const float major_scale = 5.0;
-  float2 major_d = min(frac(coord / major_scale), 1.0 - frac(coord / major_scale));
-  float2 major_px = major_d * major_scale / max(deriv, 1e-5);
-  float major_strength = 1.0 - saturate(min(major_px.x, major_px.y));
+  float minor_strength = lerp(grid_line(coord, minor_lo, deriv),
+                              grid_line(coord, minor_hi, deriv), lod_frac);
+  float major_strength = lerp(grid_line(coord, minor_lo * 5.0, deriv),
+                              grid_line(coord, minor_hi * 5.0, deriv), lod_frac);
 
-  // 距相机水平距离淡出，远处与天空地平线融为一体。
+  // 淡出随视距缩放，避免缩小后地平线被提前融进天空。
+  float view_scale = max(pc.eye_pos_mode.w, 1.0);
   float dist = length(input.world_pos.xz - pc.eye_pos_mode.xz);
-  float fade = 1.0 - smoothstep(40.0, 160.0, dist);
-  // 相机脚下避免一条线贴在镜头前。
-  float near_fade = smoothstep(0.0, 2.0, dist);
+  float fade = 1.0 - smoothstep(8.0 * view_scale, 32.0 * view_scale, dist);
+  float near_fade = smoothstep(0.0, 0.4 * view_scale, dist);
   fade *= near_fade;
 
   float3 fill = float3(0.22, 0.24, 0.28);         // 与天空地平线同色

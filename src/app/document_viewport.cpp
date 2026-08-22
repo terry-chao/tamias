@@ -182,10 +182,6 @@ void DocumentViewport::apply_viewport_state(const ViewportState& state) {
   camera_.set_distance(state.distance);
   camera_.set_yaw_pitch(state.yaw, state.pitch);
   camera_.set_fovy(state.fovy);
-  // Recompute clip planes from distance so stale znear/zfar cannot clip the scene.
-  const float distance = camera_.distance();
-  camera_.set_znear(std::max(distance * 0.001f, 0.01f));
-  camera_.set_zfar(std::max(distance * 20.f, 100.f));
   mode_ = static_cast<RenderMode>(state.render_mode);
   sync_view_cube();
   // Do not submit here if the widget is not yet laid out — an early present at the
@@ -516,6 +512,7 @@ void DocumentViewport::submit_current_frame() {
   frame.view = camera_.view_matrix();
   frame.proj = camera_.proj_matrix(aspect);
   frame.eye_position = camera_.eye_position();
+  frame.view_distance = camera_.distance();
   frame.mode = mode_;
   const Frustum frustum = Frustum::from_view_proj(frame.proj * frame.view);
   refresh_floors();

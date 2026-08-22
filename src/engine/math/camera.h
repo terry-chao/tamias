@@ -14,7 +14,13 @@ inline constexpr float kHalfPi = 1.570796327f;
 class TurntableCamera {
  public:
   void set_target(Vec3 target) { target_ = target; }
-  void set_distance(float d) { distance_ = std::max(0.01f, d); }
+  void set_distance(float d) {
+    distance_ = std::max(0.01f, d);
+    // Keep the far plane beyond the ground-grid fade so zooming out cannot
+    // clip the horizon into empty sky.
+    znear_ = std::max(distance_ * 0.001f, 0.01f);
+    zfar_ = std::max(distance_ * 50.f, 500.f);
+  }
   void set_yaw_pitch(float yaw, float pitch) {
     yaw_ = yaw;
     pitch_ = std::clamp(pitch, -kHalfPi, kHalfPi);
@@ -124,9 +130,7 @@ class TurntableCamera {
     target_ = box.center();
     const Vec3 e = box.extent();
     const float radius = length(e) * 0.5f;
-    distance_ = std::max(radius * 2.5f, 0.5f);
-    znear_ = std::max(distance_ * 0.001f, 0.01f);
-    zfar_ = std::max(distance_ * 20.f, 100.f);
+    set_distance(std::max(radius * 2.5f, 0.5f));
   }
 
   [[nodiscard]] float yaw() const { return yaw_; }
