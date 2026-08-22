@@ -113,7 +113,8 @@ class DocumentViewport final : public QWidget {
   void layout_overlays();
   void sync_view_cube();
   void sync_coord_readout();
-  void start_view_animation(float target_yaw, float target_pitch);
+  void start_view_animation(float target_yaw, float target_pitch,
+                           bool finish_orthographic = false);
   void stop_view_animation();
   void populate_visibility_menu();
   void populate_floor_menu();
@@ -164,6 +165,7 @@ class DocumentViewport final : public QWidget {
   float anim_yaw_delta_ = 0.f;
   float anim_to_yaw_ = 0.f;
   float anim_to_pitch_ = 0.f;
+  bool anim_finish_orthographic_ = false;
   QPoint last_mouse_;
   QPoint press_mouse_;
   std::uint64_t press_hit_ = 0;

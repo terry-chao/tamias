@@ -294,8 +294,10 @@ void DocumentViewport::stop_view_animation() {
   }
 }
 
-void DocumentViewport::start_view_animation(float target_yaw, float target_pitch) {
+void DocumentViewport::start_view_animation(float target_yaw, float target_pitch,
+                                            bool finish_orthographic) {
   constexpr float kPi = 3.141592654f;
+  anim_finish_orthographic_ = finish_orthographic;
   anim_from_yaw_ = camera_.yaw();
   anim_from_pitch_ = camera_.pitch();
   anim_to_yaw_ = target_yaw;
@@ -313,6 +315,10 @@ void DocumentViewport::start_view_animation(float target_yaw, float target_pitch
 
   if (std::abs(anim_yaw_delta_) < 1e-4f && std::abs(anim_to_pitch_ - anim_from_pitch_) < 1e-4f) {
     camera_.set_yaw_pitch(anim_to_yaw_, anim_to_pitch_);
+    if (anim_finish_orthographic_) {
+      camera_.set_orthographic(true);
+      anim_finish_orthographic_ = false;
+    }
     stop_view_animation();
     request_redraw();
     return;
@@ -320,7 +326,7 @@ void DocumentViewport::start_view_animation(float target_yaw, float target_pitch
 
   view_anim_clock_.restart();
   view_anim_timer_->start();
-  on_view_anim_tick();
+  this->on_view_anim_tick();
 }
 
 void DocumentViewport::on_view_anim_tick() {
@@ -337,6 +343,10 @@ void DocumentViewport::on_view_anim_tick() {
 
   if (t_raw >= 1.f) {
     camera_.set_yaw_pitch(anim_to_yaw_, anim_to_pitch_);
+    if (anim_finish_orthographic_) {
+      camera_.set_orthographic(true);
+      anim_finish_orthographic_ = false;
+    }
     stop_view_animation();
     request_redraw();
   }
@@ -1205,10 +1215,8 @@ void DocumentViewport::set_plan_view(bool plan, bool restore_perspective) {
   if (plan) {
     persp_yaw_ = camera_.yaw();
     persp_pitch_ = camera_.pitch();
-    stop_view_animation();
-    camera_.look_plan();
-    camera_.set_orthographic(true);
     plan_view_ = true;
+    start_view_animation(0.f, kHalfPi, true);
   } else {
     plan_view_ = false;
     camera_.set_orthographic(false);

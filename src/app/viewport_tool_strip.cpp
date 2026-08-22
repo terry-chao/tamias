@@ -26,9 +26,9 @@
 namespace tamias {
 namespace {
 
-constexpr int kPlateRadius = 12;
-constexpr int kPlateWidth = 96;  // match ViewCube
-constexpr int kPad = 10;
+constexpr int kPlateRadius = 10;
+constexpr int kPlateWidth = 48;  // half of ViewCube (96)
+constexpr int kPad = 6;
 constexpr int kButtonSize = 36;
 constexpr int kGap = 6;
 const QColor kPlateBg(42, 45, 52);
@@ -36,7 +36,7 @@ const QColor kPlateBg(42, 45, 52);
 QIcon tinted_mask_icon(const QString& resource, const QColor& color) {
   const QIcon source(resource);
   QIcon result;
-  const int sizes[] = {16, 20, 32};
+  const int sizes[] = {16, 18, 20, 32};
   for (int size : sizes) {
     const QPixmap src = source.pixmap(QSize(size, size));
     QPixmap tinted(src.size());
@@ -106,7 +106,7 @@ ViewportToolStrip::ViewportToolStrip(QWidget* parent) : QWidget(parent) {
 
   setStyleSheet(QStringLiteral(
       "QToolButton#viewportStripButton {"
-      "  background: transparent; border: none; border-radius: 8px; padding: 2px;"
+      "  background: transparent; border: none; border-radius: 6px; padding: 0px;"
       "}"
       "QToolButton#viewportStripButton:hover { background: rgba(255, 255, 255, 28); }"
       "QToolButton#viewportStripButton:checked, QToolButton#viewportStripButton:pressed {"
@@ -131,7 +131,7 @@ QToolButton* ViewportToolStrip::add_button(QVBoxLayout* layout, const QIcon& ico
   button->setObjectName(QStringLiteral("viewportStripButton"));
   button->setAttribute(Qt::WA_NativeWindow);
   button->setIcon(icon);
-  button->setIconSize(QSize(20, 20));
+  button->setIconSize(QSize(18, 18));
   button->setFixedSize(kButtonSize, kButtonSize);
   button->setToolButtonStyle(Qt::ToolButtonIconOnly);
   button->setAutoRaise(true);
