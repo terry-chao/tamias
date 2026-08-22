@@ -13,6 +13,13 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if(MSVC)
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
   add_compile_options(/utf-8 /MP /FS /W4 /permissive- /EHsc)
+  # CMake 4 leaves CMAKE_<LANG>_FLAGS_<CONFIG> empty; vcpkg also blanks
+  # CMAKE_MSVC_DEBUG_INFORMATION_FORMAT. RelWithDebInfo then has no /Zi or
+  # /DEBUG, so Cursor/cppvsdbg breakpoints show "no debug info".
+  add_compile_options("$<$<CONFIG:Debug,RelWithDebInfo>:/Zi>")
+  add_compile_options("$<$<CONFIG:RelWithDebInfo>:/O2;/Ob1>")
+  add_compile_definitions("$<$<CONFIG:Release,RelWithDebInfo,MinSizeRel>:NDEBUG>")
+  add_link_options("$<$<CONFIG:Debug,RelWithDebInfo>:/DEBUG:FULL>")
 else()
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
