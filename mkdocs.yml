@@ -28,6 +28,19 @@ markdown_extensions:
 # 导航按路线图分层（见 ROADMAP §2）；BIM 夹在客户端与场景图之间
 nav:
   - 首页: index.md
+  - 入门教程:
+      - tutorial/index.md
+      - 1. 认识 Tamias: tutorial/01-what-is-tamias.md
+      - 2. 构建与运行: tutorial/02-build-and-run.md
+      - 3. 界面与交互: tutorial/03-ui-and-interaction.md
+      - 4. 代码骨架: tutorial/04-code-map.md
+      - 5. 几何与造型: tutorial/05-geometry-and-modeling.md
+      - 6. 文档与场景: tutorial/06-document-and-scene.md
+      - 7. 命令与撤销: tutorial/07-commands-and-undo.md
+      - 8. 渲染管线: tutorial/08-rendering-pipeline.md
+      - 9. BIM 业务层: tutorial/09-bim-layer.md
+      - 10. Web 与路线图: tutorial/10-web-and-roadmap.md
+      - 术语速查: tutorial/glossary.md
   - 总览:
       - overview/index.md
       - 路线图: ROADMAP.md
@@ -48,6 +61,7 @@ nav:
       - 特征树求值器: FEATURE-TREE-EVALUATOR.md
       - MCAD 管线: MCAD-PIPELINE.md
       - 几何边界: ISHAPE-OPS.md
+      - 几何边界入口: kernel/index.md
   - 渲染:
       - render/index.md
       - 管线与 RHI: RENDERING.md

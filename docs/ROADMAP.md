@@ -77,7 +77,7 @@
 
 ### 决策一：语义树 与 渲染场景图 分离 ✅（M6 已落地）
 
-用稳定 ID 关联，不要让一个结构同时干两件事。当前 [scene.h](../src/engine/document/scene.h) 的 `SceneNode` 已是树（parent/children + local/world transform + 缓存 world bounds），`gpu_mesh_id` 已从语义侧移除、迁到渲染侧（[render_runtime.h](../src/engine/render/render_runtime.h) 的 `asset_to_gpu_`）。
+用稳定 ID 关联，不要让一个结构同时干两件事。当前 [scene.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/scene.h) 的 `SceneNode` 已是树（parent/children + local/world transform + 缓存 world bounds），`gpu_mesh_id` 已从语义侧移除、迁到渲染侧（[render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.h) 的 `asset_to_gpu_`）。
 
 「墙属于几楼」这类**建筑规则不写在 `SceneNode` 上**。语义树只记 `parent`；楼层、轴网、当前标高、宿主由 [BIM 业务层](BIM.md) 决定后写入。现状还没有楼层系统，构件入树 `parent = 0`。
 
@@ -120,7 +120,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 
 ## 5. 渲染：重点难点
 
-现在渲染器是 [render_runtime.h](../src/engine/render/render_runtime.h) 里的 forward + push constant + 单材质（颜色 + 光照方向 + eye/模式），wireframe/shaded/realistic 三模式基本退化。重点难点按优先级排：
+现在渲染器是 [render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.h) 里的 forward + push constant + 单材质（颜色 + 光照方向 + eye/模式），wireframe/shaded/realistic 三模式基本退化。重点难点按优先级排：
 
 ### 当前渲染路径的真实现状（先看清基线）
 
@@ -136,7 +136,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 > 注：没剔除不是“画不出来”——GPU 的顶点裁剪会丢掉屏外三角形；但 draw call 已经付了。大 BIM 里 10 万个 item = 10 万次 draw，哪怕 9 万在屏外，CPU 还是发了 10 万次。这就是“无剔除”的代价，也是 draw call 爆炸的直接来源。
 
 1. **大模型可扩展性（第一优先级）。** IFC 动辄 10 万+ 元素、千万级三角。核心指标是 **draw call 数**——绝不能每元素一个 draw。手段：按材质分桶合批、GPU instancing、[视锥剔除](FRUSTUM-CULLING.md) + 空间索引、渐进/流式加载 + LOD。
-2. **材质系统。** 现在材质就是一个 push constant 里的 `color[4]`。需要真正的 Material 抽象：PBR metallic-roughness + base color + 纹理 + 透明度，语义对齐 glTF。这要求 RHI 补上真东西——[device.h](../src/engine/render/rhi/device.h) 里 `create_texture` 还是占位，只有 push constant 没有 descriptor set / UBO / sampler。
+2. **材质系统。** 现在材质就是一个 push constant 里的 `color[4]`。需要真正的 Material 抽象：PBR metallic-roughness + base color + 纹理 + 透明度，语义对齐 glTF。这要求 RHI 补上真东西——[device.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/device.h) 里 `create_texture` 还是占位，只有 push constant 没有 descriptor set / UBO / sampler。
 3. **截面裁剪（BIM 刚需）。** clip plane 传 shader 逐像素 discard，或 stencil 双面裁剪 + cap 面填充。双后端 RHI 两套管线语义要对齐。
 4. **透明度。** 玻璃/幕墙。不透明先画、透明按深度排序、per-material blend 状态。
 5. **选择/高亮/分类着色。** 现在是单 `selected` 单色高亮。升级：多选、轮廓高亮、按 IFC 类型/系统/专业分类着色（Appearance Profiler）。
@@ -151,7 +151,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 
 1. **特征树 + 求值器。** 每个操作 = 一个带参数的节点（Box / Extrude / Fillet / Boolean…），求值器从根到尾算一遍得到 BRep。**改参数 → 只重算下游节点**。
 2. **拓扑命名（Topological Naming，最难、最著名的坑）。** 「给这条边倒圆角」引用的是「当前 BRep 里的边 #N」，但改了上游参数后 BRep 重算、边的编号全变，圆角就倒错边了。解法从简单到复杂：**索引法**（按编号，简单但脆）→ **几何法**（按边的位置/方向/相邻面匹配，稳但复杂）。FreeCAD 被此问题折磨多年。
-3. **命令化 undo。** 现在 [history.h](../src/document/history.h) 是全量快照，几何编辑多了会重。目标：每条操作（改参数/加特征）是一条可逆命令。
+3. **命令化 undo。** 现在 [history.h](https://github.com/terry-chao/tamias/blob/main/src/command/history.h) 是全量快照，几何编辑多了会重。目标：每条操作（改参数/加特征）是一条可逆命令。
 4. **BRep / 特征树序列化。** OCCT 原生支持 `BRepTools::Write/Read` 和 STEP 写出；特征树（参数 + 依赖）要自研序列化进 `.tdoc`。三角网和 BRep 都是缓存，不存或存缓存。容器后期从整文件 `binary_archive` **改成 LevelDB**（见第 1 节），P4 先把特征树写进现有格式即可，不必等存储引擎换完。
 5. **建模 UI。** 选择对象、预览、参数输入的完整交互链——这是「内核」之外的另一个大工程。
 
@@ -193,7 +193,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 ## 8. 建议的第一步（可执行）
 
 1. 设计特征树最小数据模型（`Feature{ id, kind, inputs, params }`）+ 求值器（Box + Extrude 两个节点够用），挂在现有 OCCT 集成上。
-2. 让 `Shape`（[shape_ops.h](../src/modeling/shape_ops.h)）从「read_file + tessellate」升级为「持有特征树 + evaluate() → TopoDS_Shape + tessellate()」。
+2. 让 `Shape`（[shape_ops.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/shape_ops.h)）从「read_file + tessellate」升级为「持有特征树 + evaluate() → TopoDS_Shape + tessellate()」。
 3. 做一个极简入口：改参数 → 重算 → 上传新三角网 → 渲染更新，先跑通闭环，再谈 UI 和拓扑命名。
 
 并行：IfcParse 最小 demo 已通（`tamias_ifc_dump` / 打开 `.ifc` 打印空间结构树）。完整导入仍走支撑线。

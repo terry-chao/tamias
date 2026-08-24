@@ -4,9 +4,9 @@
 
 实现入口：
 
-- 契约：[`native_window_handle.h`](../src/engine/core/native_window_handle.h)、[`document_io.h`](../src/engine/document/document_io.h)、[`mesh_io.h`](../src/engine/io/mesh_io.h)
-- RHI：[`src/engine/render/rhi/webgl/`](../src/engine/render/rhi/webgl/)
-- 宿主：[`ViewerHost`](../src/web/viewer_host.h) + [`web/index.html`](../web/index.html)
+- 契约：[`native_window_handle.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/core/native_window_handle.h)、[`document_io.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document_io.h)、[`mesh_io.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/io/mesh_io.h)
+- RHI：[`src/engine/render/rhi/webgl/`](https://github.com/terry-chao/tamias/tree/main/src/engine/render/rhi/webgl)
+- 宿主：[`ViewerHost`](https://github.com/terry-chao/tamias/blob/main/src/web/viewer_host.h) + [`web/index.html`](https://github.com/terry-chao/tamias/blob/main/web/index.html)
 
 ---
 
