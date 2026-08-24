@@ -10,6 +10,7 @@
 #include "engine/modeling/occt_shape_ops.h"
 #include "engine/modeling/shape_ops.h"
 #include "handle_inspector.h"
+#include "plugin/plugin_host.h"
 #include "property_panel.h"
 #include "ribbon_bar.h"
 #include "ribbon_group.h"
@@ -24,6 +25,7 @@
 #include <QScreen>
 #include <QShowEvent>
 #include <QStyle>
+#include <QStatusBar>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
@@ -46,6 +48,7 @@
 #include <QVector>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <string>
 
 namespace tamias {
 namespace {
@@ -114,6 +117,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     sync_render_mode_actions();
     refresh_property_panel();
     refresh_handle_inspector();
+    bind_plugin_session();
   });
   connect(home_, &HomePage::openRequested, this, &MainWindow::open_file);
   connect(home_, &HomePage::fileActivated, this, &MainWindow::open_recent_path);
@@ -214,7 +218,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
                             tr("Slab"), this);
   slab_action_->setCheckable(true);
   slab_action_->setProperty("toolMode", static_cast<int>(ToolMode::Slab));
-  slab_action_->setToolTip(tr("Create a slab: click two opposite corners"));
+  slab_action_->setToolTip(
+      tr("Create a slab in plan view: click two opposite corners"));
   connect(slab_action_, &QAction::triggered, this, [this] { set_create_tool(ToolMode::Slab); });
   create_group_->addAction(slab_action_);
   addAction(slab_action_);
@@ -471,6 +476,34 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   RibbonGroup* workspace_group = view_page->add_group(tr("Workspace"));
   workspace_group->add_action(home_action);
 
+  plugin_host_.set_log_sink([this](std::string_view msg) {
+    statusBar()->showMessage(QString::fromUtf8(msg.data(), static_cast<int>(msg.size())), 8000);
+  });
+  if (auto loaded = plugin_host_.load(); !loaded) {
+    log_warn(loaded.error());
+    statusBar()->showMessage(QString::fromStdString(loaded.error()), 8000);
+  }
+  RibbonPage* plugins_page = ribbon->add_page(tr("Plugins"));
+  RibbonGroup* plugin_group = plugins_page->add_group(tr("Commands"));
+  for (const auto& cmd : plugin_host_.commands()) {
+    auto* action = new QAction(ribbon_icon(QStringLiteral(":/icons/inspector.svg")),
+                               QString::fromUtf8(cmd.title.data(), static_cast<int>(cmd.title.size())),
+                               this);
+    if (!cmd.tooltip.empty()) {
+      action->setToolTip(
+          QString::fromUtf8(cmd.tooltip.data(), static_cast<int>(cmd.tooltip.size())));
+    }
+    const std::string id = cmd.id;
+    connect(action, &QAction::triggered, this, [this, id] {
+      bind_plugin_session();
+      if (auto r = plugin_host_.invoke(id); !r) {
+        statusBar()->showMessage(QString::fromStdString(r.error()), 5000);
+        log_error(r.error());
+      }
+    });
+    plugin_group->add_action(action);
+  }
+
   setMenuWidget(ribbon);
 
   connect(property_panel_, &PropertyPanel::param_edited, this,
@@ -519,7 +552,7 @@ void MainWindow::showEvent(QShowEvent* event) {
 void MainWindow::set_create_tool(ToolMode mode) {
   if (auto* vp = current_viewport()) {
     vp->set_tool(mode);
-    sync_create_tool_actions(mode);
+    sync_create_tool_actions(vp->tool_mode());
     return;
   }
   sync_create_tool_actions(ToolMode::None);
@@ -658,6 +691,9 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
   connect(vp, &DocumentViewport::tool_mode_changed, this, [this](ToolMode mode) {
     sync_create_tool_actions(mode);
   });
+  connect(vp, &DocumentViewport::status_message, this, [this](const QString& text) {
+    statusBar()->showMessage(text, 5000);
+  });
   connect(vp, &DocumentViewport::selection_changed, this, &MainWindow::refresh_property_panel);
   connect(vp, &DocumentViewport::document_changed, this, &MainWindow::refresh_property_panel);
   connect(vp, &DocumentViewport::selection_changed, this, &MainWindow::refresh_handle_inspector);
@@ -670,6 +706,7 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
     vp->request_redraw();
   }
   sync_render_mode_actions();
+  bind_plugin_session();
 }
 
 void MainWindow::new_document() {
@@ -1048,6 +1085,15 @@ void MainWindow::sync_render_mode_actions() {
   wireframe_action_->setChecked(mode == RenderMode::Wireframe);
   shaded_action_->setChecked(mode == RenderMode::Shaded);
   realistic_action_->setChecked(mode == RenderMode::Realistic);
+}
+
+void MainWindow::bind_plugin_session() {
+  auto* vp = current_viewport();
+  if (vp == nullptr) {
+    plugin_host_.unbind();
+    return;
+  }
+  plugin_host_.bind(&vp->document(), &vp->command_system(), [vp] { vp->refresh_after_edit(); });
 }
 
 void MainWindow::activate_viewport(DocumentViewport* vp) {

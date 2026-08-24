@@ -1,9 +1,10 @@
-add_executable(tamias_tests smoke_tests.cpp ifc_spatial_tree_tests.cpp)
+add_executable(tamias_tests smoke_tests.cpp ifc_spatial_tree_tests.cpp plugin_host_tests.cpp)
 target_link_libraries(tamias_tests
   PRIVATE
     tamias::io
     tamias::document
     tamias::command
+    tamias::plugin
     tamias::modeling
     tamias::render
     tamias::ifc
@@ -26,3 +27,4 @@ gtest_discover_tests(tamias_tests
   PROPERTIES ENVIRONMENT_MODIFICATION "${_tamias_test_env_mod}"
 )
 tamias_copy_runtime_dlls(tamias_tests)
+tamias_copy_nethost(tamias_tests)

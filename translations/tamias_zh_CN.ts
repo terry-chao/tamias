@@ -21,6 +21,14 @@
         <translation>隔离</translation>
     </message>
     <message>
+        <source>Slabs can only be drawn in plan view</source>
+        <translation>板只能在平面视图中绘制</translation>
+    </message>
+    <message>
+        <source>Slab</source>
+        <translation>板</translation>
+    </message>
+    <message>
         <source>Hide Selected</source>
         <translation>隐藏选中</translation>
     </message>
@@ -439,8 +447,8 @@
         <translation>板</translation>
     </message>
     <message>
-        <source>Create a slab: click two opposite corners</source>
-        <translation>创建板：点击两个对角点</translation>
+        <source>Create a slab in plan view: click two opposite corners</source>
+        <translation>在平面视图中创建板：点击两个对角点</translation>
     </message>
     <message>
         <source>Door</source>
@@ -834,6 +842,14 @@ Click an object to select it, or use a create tool</source>
     <message>
         <source>Workspace</source>
         <translation>工作区</translation>
+    </message>
+    <message>
+        <source>Plugins</source>
+        <translation>插件</translation>
+    </message>
+    <message>
+        <source>Commands</source>
+        <translation>命令</translation>
     </message>
     <message>
         <source>Inspector</source>

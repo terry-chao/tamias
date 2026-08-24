@@ -60,6 +60,7 @@
 | 层 | 文档 |
 |---|---|
 | Qt 客户端 | [APP.md](APP.md) |
+| 插件 / 脚本宿主 | [插件系列](plugin/index.md) |
 | BIM 业务层 | [BIM.md](BIM.md) |
 | 场景图 | [总述](scene/index.md)、[语义树](SCENE-GRAPH.md) |
 | 造型 | [FEATURE-TREE-EVALUATOR.md](FEATURE-TREE-EVALUATOR.md)、[MCAD-PIPELINE.md](MCAD-PIPELINE.md)、[ISHAPE-OPS.md](ISHAPE-OPS.md)（几何边界） |

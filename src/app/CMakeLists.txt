@@ -57,6 +57,7 @@ target_link_libraries(tamias
     tamias::io
     tamias::modeling
     tamias::command
+    tamias::plugin
     tamias::ifc
     Qt6::Widgets
     Qt6::Gui
@@ -97,3 +98,5 @@ if(WIN32)
   include(${CMAKE_SOURCE_DIR}/cmake/TamiasDeployQt.cmake)
   tamias_deploy_qt_runtime(tamias)
 endif()
+
+tamias_publish_csharp(tamias)

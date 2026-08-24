@@ -15,6 +15,9 @@ class CreateSlabCommand final : public Command {
   [[nodiscard]] Result<bool> on_point(Vec3 point) override;
   [[nodiscard]] bool has_start() const override { return has_start_; }
   [[nodiscard]] Vec3 start() const override { return start_; }
+  [[nodiscard]] float work_plane_y() const override {
+    return static_cast<float>(elevation_);
+  }
   [[nodiscard]] std::vector<Vec3> preview_polyline(Vec3 cursor) const override;
 
   [[nodiscard]] Result<void> execute() override;

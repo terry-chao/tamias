@@ -14,6 +14,7 @@
 | ViewCube | 快速换视角 | [`view_cube_widget`](https://github.com/terry-chao/tamias/blob/main/src/app/view_cube_widget.cpp) |
 | 设置对话框 | 选渲染后端（Vulkan/OpenGL）等 | [`settings_dialog`](https://github.com/terry-chao/tamias/blob/main/src/app/settings_dialog.cpp) |
 | 句柄检查（Ctrl+D） | 显示构件在 `.tdoc` 里的 id | [`handle_inspector`](https://github.com/terry-chao/tamias/blob/main/src/app/handle_inspector.cpp) |
+| Ribbon「插件」 | 列出选择、删除所选（C# 示例） | [`plugin_host`](https://github.com/terry-chao/tamias/blob/main/src/plugin/plugin_host.cpp)；说明见[插件系列](../plugin/index.md) |
 
 ## 3.2 相机操作（先记住这套）
 
@@ -63,10 +64,12 @@
 2. 拖一面墙，然后在墙上放一扇窗或门——注意它们会不会「贴」在墙上（这是 BIM 宿主关系，第 9 章讲）。
 3. 按 `Ctrl+D` 打开句柄检查，点选几个构件，看看 id 是怎么分配的。
 4. 试试设置里切换 Vulkan / OpenGL，用 `F` 框住后比较画面（行为应一致）。
+5. 选中一个盒子，打开 Ribbon「插件」，点「列出选择」，看状态栏是否打出 id / 种类 / 名字。
 
 ## 延伸阅读
 
 - [Qt 壳](../APP.md)：app 层职责与接缝
+- [插件·使用](../plugin/usage.md)：Ribbon「插件」页与示例命令
 - [渲染管线](../RENDERING.md) 第 3 节：视口怎么喊「画一帧」
 - [关联关系](../bim/relations.md)：窗/门贴墙的规则
 

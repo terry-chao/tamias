@@ -13,6 +13,7 @@ theme:
   hljs_languages:
     - yaml
     - cpp
+    - csharp
     - cmake
     - bash
 
@@ -49,6 +50,12 @@ nav:
   - 客户端:
       - app/index.md
       - Qt 壳: APP.md
+  - 插件:
+      - plugin/index.md
+      - 设计理念: plugin/design.md
+      - 使用: plugin/usage.md
+      - 宿主功能: plugin/api.md
+      - 开发插件: plugin/develop.md
   - BIM:
       - bim/index.md
       - BIM 业务层: BIM.md

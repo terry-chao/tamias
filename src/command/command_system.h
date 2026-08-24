@@ -10,6 +10,7 @@
 #include <string>
 #include <unordered_map>
 #include <variant>
+#include <vector>
 
 namespace tamias {
 
@@ -54,6 +55,9 @@ class CommandSystem {
   [[nodiscard]] bool has_pending() const { return pending_ != nullptr; }
   [[nodiscard]] bool drag_started() const { return pending_ && pending_->has_start(); }
   [[nodiscard]] Vec3 drag_start() const { return pending_ ? pending_->start() : Vec3{}; }
+  [[nodiscard]] float work_plane_y() const {
+    return pending_ ? pending_->work_plane_y() : 0.f;
+  }
   [[nodiscard]] bool accepts_confirm() const { return pending_ && pending_->accepts_confirm(); }
   [[nodiscard]] std::vector<Vec3> preview_polyline(Vec3 cursor) const {
     return pending_ ? pending_->preview_polyline(cursor) : std::vector<Vec3>{};

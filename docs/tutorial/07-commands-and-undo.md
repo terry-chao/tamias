@@ -81,6 +81,7 @@ class Command {
 ## 延伸阅读
 
 - [Qt 壳](../APP.md)：命令和 app 的接缝
+- [插件系列](../plugin/index.md)：C# 插件同样走 `dispatch`，不另开编辑通道
 - [关联关系](../bim/relations.md)：`SetFeatureParamCommand` 之后 BIM 怎么被通知
 - [特征树求值器](../FEATURE-TREE-EVALUATOR.md) 第 1.5 节：改参数闭环
 

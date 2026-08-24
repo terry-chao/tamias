@@ -5,6 +5,7 @@
 #include "engine/render/render_runtime.h"
 #include "home_page.h"
 #include "engine/document/document_io.h"
+#include "plugin/plugin_host.h"
 #include "recent_files.h"
 
 #include <QMainWindow>
@@ -62,6 +63,7 @@ class MainWindow final : public QMainWindow {
   void notify_save_success(const QString& path);
   void set_render_mode(RenderMode mode);
   void sync_render_mode_actions();
+  void bind_plugin_session();
   const MeshCpu* selected_mesh(Document& document) const;
   const MeshCpu* mesh_for_obj_export(Document& document) const;
   int find_open_document(const QString& path) const;
@@ -95,6 +97,7 @@ class MainWindow final : public QMainWindow {
   QActionGroup* create_group_ = nullptr;
   PropertyPanel* property_panel_ = nullptr;
   HandleInspector* handle_inspector_ = nullptr;
+  PluginHost plugin_host_;
   bool placed_on_primary_ = false;
 };
 

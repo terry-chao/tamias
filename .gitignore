@@ -21,3 +21,5 @@ out/
 site/
 .cache/
 .wix/
+csharp/**/bin/
+csharp/**/obj/

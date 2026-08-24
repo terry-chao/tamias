@@ -18,6 +18,13 @@ install(DIRECTORY "${TAMIAS_SHADER_OUTPUT_DIR}/"
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/assets/samples"
   DESTINATION assets)
 
+install(DIRECTORY "$<TARGET_FILE_DIR:tamias>/managed/"
+  DESTINATION managed
+  OPTIONAL)
+install(DIRECTORY "$<TARGET_FILE_DIR:tamias>/plugins/"
+  DESTINATION plugins
+  OPTIONAL)
+
 # POST_BUILD already copies OCCT / freetype / Qt next to the exe. Reuse that
 # set so transitive DLLs (freetype, zlib, …) are not dropped.
 install(CODE "

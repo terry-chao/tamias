@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Tamias.Api</RootNamespace>
+    <AssemblyName>Tamias.Api</AssemblyName>
+  </PropertyGroup>
+</Project>

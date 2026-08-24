@@ -8,6 +8,7 @@
 src/
 ├── app/         Qt 壳：窗口、视口、面板、工具条（只发命令、只显示结果）
 ├── command/     命令系统：每个编辑操作 = 一个可撤销的 Command
+├── plugin/      C# 插件宿主：HostApi C ABI、hostfxr、Ribbon「插件」页
 ├── entity/      参数化实体：BoxEntity、WallEntity、DoorEntity…（写特征树配方）
 ├── bim/         BIM 业务层：楼层、宿主、关联关系、IFC 空间结构
 ├── engine/
@@ -19,14 +20,16 @@ src/
 │   ├── modeling/ 特征树、求值器、几何边界（IShapeOps / OCCT）
 │   └── render/   渲染线程、RHI 抽象、Vulkan/OpenGL/WebGL 后端
 ├── web/         Web 查看器宿主（ViewerHost）
-└── …（tests/ 在仓库根）
+└── …（tests/ 在仓库根；csharp/ 是 C# 插件 API / 宿主 / 示例）
 ```
 
 ## 4.2 五层，每层只干一件事
 
 ```
 ┌────────────── Qt 客户端 (app) ──────────────┐
-│  窗口 / 视口 / 工具按钮 / 属性面板            │
+│  窗口 / 视口 / 工具按钮 / 属性面板 / 插件页    │
+├────────────── 插件宿主 (plugin) ────────────┤
+│  C# IPlugin · HostApi · dispatch 已有命令    │
 ├────────────── 命令 (command) ───────────────┤
 │  事务、撤销；BIM 命令只调 bim 层              │
 ├────────────── BIM 业务层 (bim) ─────────────┤
@@ -100,6 +103,7 @@ MainWindow window; window.show();      // 5. 显示主窗口
 
 - [总览](../overview/index.md)：分层表 + 每层读哪些文档
 - [Qt 壳](../APP.md)：app 层职责与「现在有/还没有」
+- [插件系列](../plugin/index.md)：C# 宿主与命令层的接缝
 - [路线图](../ROADMAP.md) 第 2 节：分层架构 + 最容易误解的两点
 
 下一章：[几何与造型](05-geometry-and-modeling.md)

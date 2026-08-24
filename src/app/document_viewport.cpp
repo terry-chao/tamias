@@ -21,6 +21,7 @@
 #include <QKeyEvent>
 #include <QKeySequence>
 #include <QMenu>
+#include <QMessageBox>
 #include <QMouseEvent>
 #include <QShowEvent>
 #include <QResizeEvent>
@@ -572,6 +573,11 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
   has_cursor_ = true;
   press_hit_ = 0;
   if (event->button() == Qt::LeftButton) {
+    if (tool_mode_ == ToolMode::Slab && !plan_view_) {
+      refuse_slab_outside_plan(true);
+      set_tool(ToolMode::None);
+      return;
+    }
     if (tool_mode_ != ToolMode::None) {
       Vec3 point = cursor_ground_position(event->pos());
       std::uint64_t picked = 0;
@@ -801,7 +807,20 @@ void DocumentViewport::keyPressEvent(QKeyEvent* event) {
   }
 }
 
+void DocumentViewport::refuse_slab_outside_plan(bool popup) {
+  const QString text = tr("Slabs can only be drawn in plan view");
+  emit status_message(text);
+  if (popup) {
+    QMessageBox::warning(this, tr("Slab"), text);
+  }
+}
+
 void DocumentViewport::set_tool(ToolMode mode) {
+  if (mode == ToolMode::Slab && !plan_view_) {
+    refuse_slab_outside_plan(true);
+    emit tool_mode_changed(tool_mode_);
+    return;
+  }
   tool_mode_ = mode;
   if (mode != ToolMode::None) {
     command_system_.cancel();  // 取消之前的 pending
@@ -961,6 +980,15 @@ void DocumentViewport::run_command(const std::string& name, const CommandArgs& a
   } else {
     log_error(r.error());
   }
+}
+
+void DocumentViewport::refresh_after_edit() {
+  resync_all_meshes();
+  document_->recompute_scene();
+  rebuild_bvh();
+  request_redraw();
+  emit document_changed();
+  emit selection_changed();
 }
 
 void DocumentViewport::set_entity_param(std::uint64_t entity_id, std::uint64_t feature_id,
@@ -1132,9 +1160,10 @@ Vec3 DocumentViewport::cursor_ground_position(const QPoint& pos) const {
                  static_cast<float>(pos.y() * dpr), static_cast<float>(width() * dpr),
                  static_cast<float>(height() * dpr));
   Vec3 hit = ray.origin + ray.direction * camera_.distance();
-  // 与地面平面 y=0 求交。
+  // 与当前工作面求交（地面 y=0；画板时是板的标高，避免透视下点偏）。
+  const float plane_y = command_system_.work_plane_y();
   if (std::fabs(ray.direction.y) > 1e-6f) {
-    const float t = -ray.origin.y / ray.direction.y;
+    const float t = (plane_y - ray.origin.y) / ray.direction.y;
     if (t > 0.f) {
       hit = ray.origin + ray.direction * t;
     }
@@ -1154,8 +1183,9 @@ Vec3 DocumentViewport::snapped_ground_position(const QPoint& pos) const {
                  static_cast<float>(pos.y() * dpr), static_cast<float>(width() * dpr),
                  static_cast<float>(height() * dpr));
   Vec3 hit = ray.origin + ray.direction * camera_.distance();
+  const float plane_y = command_system_.work_plane_y();
   if (std::fabs(ray.direction.y) > 1e-6f) {
-    const float t = -ray.origin.y / ray.direction.y;
+    const float t = (plane_y - ray.origin.y) / ray.direction.y;
     if (t > 0.f) {
       hit = ray.origin + ray.direction * t;
     }
@@ -1226,6 +1256,10 @@ void DocumentViewport::set_plan_view(bool plan, bool restore_perspective) {
   }
   if (tool_strip_) {
     tool_strip_->set_plan_view(plan_view_);
+  }
+  if (!plan_view_ && tool_mode_ == ToolMode::Slab) {
+    set_tool(ToolMode::None);
+    refuse_slab_outside_plan(false);
   }
   request_redraw();
 }

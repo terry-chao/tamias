@@ -32,6 +32,9 @@ class Command {
   // 交互式命令的「起点」（供视口画预览线）。默认无起点。
   virtual bool has_start() const { return false; }
   virtual Vec3 start() const { return {}; }
+  // 交互拾取的水平工作面高度。默认地面 y=0；板等抬升构件覆盖为自身标高，
+  // 这样两点落在实体上，而不是先打到地面再竖直抬起来（透视下会偏）。
+  virtual float work_plane_y() const { return 0.f; }
   // 预览折线（已确定的点 + 当前光标）。默认：若有起点则画起点→光标。
   virtual std::vector<Vec3> preview_polyline(Vec3 cursor) const {
     if (!has_start()) {

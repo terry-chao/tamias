@@ -35,6 +35,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
@@ -711,6 +712,22 @@ TEST(Entity, SlabTwoCornersSetsSize) {
   EXPECT_FLOAT_EQ(slab.local_transform(2, 3), 0.5f);
 }
 
+TEST(Entity, SlabTwoCornersMeshCoversCorners) {
+  const Vec3 a{-1.f, 0.5f, 2.f};
+  const Vec3 b{3.f, 0.5f, -1.f};
+  const SlabEntity slab(a, b, 0.2);
+  auto mesh = slab.createGeom();
+  ASSERT_TRUE(mesh) << mesh.error();
+  const Aabb world = transform_aabb(mesh->bounds, slab.local_transform);
+  ASSERT_TRUE(world.valid());
+  EXPECT_NEAR(world.min.x, (std::min)(a.x, b.x), 1e-3f);
+  EXPECT_NEAR(world.max.x, (std::max)(a.x, b.x), 1e-3f);
+  EXPECT_NEAR(world.min.z, (std::min)(a.z, b.z), 1e-3f);
+  EXPECT_NEAR(world.max.z, (std::max)(a.z, b.z), 1e-3f);
+  EXPECT_NEAR(world.min.y, a.y, 1e-3f);
+  EXPECT_NEAR(world.max.y, a.y + 0.2f, 1e-3f);
+}
+
 TEST(Entity, BuildingComponentsCreateGeom) {
   const BeamEntity beam({0.f, 0.f, 0.f}, {4.f, 0.f, 0.f}, 0.3, 0.5);
   const ColumnEntity column({0.f, 0.f, 0.f}, 0.4, 0.4, 3.0);
@@ -772,6 +789,7 @@ TEST(CommandSystem, DispatchCreateSlabTwoCorners) {
   Document doc("cmd-slab");
   ASSERT_TRUE(system.dispatch(doc, "create_slab", {{"thickness", 0.2}}));
   EXPECT_EQ(doc.entities().size(), 0u);
+  EXPECT_FLOAT_EQ(system.work_plane_y(), static_cast<float>(kDefaultWallHeight));
 
   auto p1 = system.feed_point({0.f, 0.f, 0.f});
   ASSERT_TRUE(p1) << p1.error();

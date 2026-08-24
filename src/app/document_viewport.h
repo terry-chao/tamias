@@ -82,11 +82,14 @@ class DocumentViewport final : public QWidget {
   void chamfer_selected(double distance = 0.05);
   // 删除当前选中实体（走 delete_entity 命令，可撤销）。
   void delete_selected();
+  [[nodiscard]] CommandSystem& command_system() { return command_system_; }
+  void refresh_after_edit();
 
  signals:
   void tool_mode_changed(ToolMode mode);
   void selection_changed();  // 选中对象变化
   void document_changed();   // 文档内容/参数变化（undo/redo/命令执行后）
+  void status_message(const QString& text);  // 状态栏提示（如三维中拒绝画板）
 
  protected:
   void showEvent(QShowEvent* event) override;
@@ -134,6 +137,7 @@ class DocumentViewport final : public QWidget {
   void resync_all_meshes();
   void resync_textures();
   void cancel_tool();
+  void refuse_slab_outside_plan(bool popup);
   [[nodiscard]] bool finish_pending_if_done(const Result<bool>& done);
   [[nodiscard]] Vec3 snapped_ground_position(const QPoint& pos) const;
   void update_box_select_rect(const QPoint& pos);
