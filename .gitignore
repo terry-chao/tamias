@@ -23,3 +23,5 @@ site/
 .wix/
 csharp/**/bin/
 csharp/**/obj/
+plugins/**/bin/
+plugins/**/obj/

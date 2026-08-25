@@ -7,4 +7,4 @@ C++ 内核不动。C# 做插件 / 脚本宿主。对标 Revit / Rhino：扩展�
 - [宿主功能](api.md) —— `IHost` 能查什么、能 `Dispatch` 哪些命令
 - [开发插件](develop.md) —— 实现 `IPlugin`、参数格式、部署
 
-代码：[`src/plugin/`](https://github.com/terry-chao/tamias/tree/main/src/plugin)（C++ 宿主）、[`csharp/`](https://github.com/terry-chao/tamias/tree/main/csharp)（`Tamias.Api` / `Tamias.Host` / 示例 `Tamias.Hello`）。
+代码：[`src/plugin/`](https://github.com/terry-chao/tamias/tree/main/src/plugin)（C++ 宿主）、[`csharp/`](https://github.com/terry-chao/tamias/tree/main/csharp)（`Tamias.Api` / `Tamias.Host` 系统组件）、[`plugins/csharp/`](https://github.com/terry-chao/tamias/tree/main/plugins/csharp)（插件示例，如 `Tamias.Hello`）。

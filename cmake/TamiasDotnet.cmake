@@ -109,7 +109,7 @@ function(tamias_publish_csharp target)
   endif()
 
   set(_host_csproj "${CMAKE_SOURCE_DIR}/csharp/Tamias.Host/Tamias.Host.csproj")
-  set(_hello_csproj "${CMAKE_SOURCE_DIR}/csharp/Tamias.Hello/Tamias.Hello.csproj")
+  set(_hello_csproj "${CMAKE_SOURCE_DIR}/plugins/csharp/Tamias.Hello/Tamias.Hello.csproj")
   if(NOT EXISTS "${_host_csproj}")
     return()
   endif()

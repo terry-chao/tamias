@@ -82,7 +82,7 @@ host.AddCommand("my.delete_walls", "删除选中的墙", () =>
 - 每个 `delete_entity` 是一条可撤销命令（一次按钮可能进栈多条）。
 - 需要改尺寸时用 `set_param`（要知道 `feature_id` 和参数名）。宿主**还不能**枚举特征树；这一版只能你自己约定 id，或先从属性面板/句柄检查对着看。
 
-完整可运行样本：[`HelloPlugin.cs`](https://github.com/terry-chao/tamias/blob/main/csharp/Tamias.Hello/HelloPlugin.cs)。命令与参数表见[宿主功能](api.md)。
+完整可运行样本：[`HelloPlugin.cs`](https://github.com/terry-chao/tamias/blob/main/plugins/csharp/Tamias.Hello/HelloPlugin.cs)。命令与参数表见[宿主功能](api.md)。
 
 ---
 

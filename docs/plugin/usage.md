@@ -67,6 +67,6 @@ build/bin/Debug/
 
 ## 4. 示例插件在做什么
 
-[`HelloPlugin.cs`](https://github.com/terry-chao/tamias/blob/main/csharp/Tamias.Hello/HelloPlugin.cs) 是最小范本：`Load` 里 `AddCommand` 两次，回调里只读 `Selection` / `Entities`，或 `Dispatch`。没有自定义窗口、没有直接改 `Document`。
+[`HelloPlugin.cs`](https://github.com/terry-chao/tamias/blob/main/plugins/csharp/Tamias.Hello/HelloPlugin.cs) 是最小范本：`Load` 里 `AddCommand` 两次，回调里只读 `Selection` / `Entities`，或 `Dispatch`。没有自定义窗口、没有直接改 `Document`。
 
 下一篇：[宿主功能](api.md)（能调哪些 API、能发哪些命令）。要写自己的 DLL，见[开发插件](develop.md)。
