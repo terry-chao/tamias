@@ -59,6 +59,10 @@ class DocumentViewport final : public QWidget {
                         const std::string& param_name, double value);
   // 给实体分配/新建材质（走 set_material 命令，可撤销；供属性面板调用）。
   void set_entity_material(std::uint64_t entity_id, const Material& material);
+  void create_storey(const std::string& name, double elevation);
+  void set_active_storey(std::uint64_t storey_id);
+  void set_entity_location(std::uint64_t entity_id, std::uint64_t storey_id,
+                           double elevation_offset);
   // 给选中实体追加倒圆角 / 倒斜角特征（走 fillet/chamfer 命令，可撤销）。
   void fillet_selected(double radius = 0.05);
   void chamfer_selected(double distance = 0.05);

@@ -18,7 +18,9 @@ enum class ToolMode {
   Circle,
   Arc,
   Bezier,
-  Rectangle
+  Rectangle,
+  BSpline,
+  Nurbs
 };
 
 }  // namespace tamias

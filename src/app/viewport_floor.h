@@ -43,6 +43,32 @@ inline bool viewport_floor_anchor_kind(const Entity* entity) {
 }
 
 inline std::vector<ViewportFloor> infer_viewport_floors(const Document& doc) {
+  if (!doc.bim().storeys().empty()) {
+    std::vector<const Storey*> storeys;
+    storeys.reserve(doc.bim().storeys().size());
+    for (const Storey& storey : doc.bim().storeys()) {
+      storeys.push_back(&storey);
+    }
+    std::sort(storeys.begin(), storeys.end(),
+              [](const Storey* a, const Storey* b) { return a->elevation < b->elevation; });
+    std::vector<ViewportFloor> floors;
+    floors.reserve(storeys.size());
+    for (std::size_t i = 0; i < storeys.size(); ++i) {
+      ViewportFloor floor;
+      floor.label = storeys[i]->name;
+      floor.y_min = static_cast<float>(storeys[i]->elevation);
+      floor.y_max =
+          i + 1 < storeys.size()
+              ? static_cast<float>(storeys[i + 1]->elevation)
+              : floor.y_min + static_cast<float>(kDefaultWallHeight);
+      if (floor.y_max <= floor.y_min + 0.05f) {
+        floor.y_max = floor.y_min + static_cast<float>(kDefaultWallHeight);
+      }
+      floors.push_back(std::move(floor));
+    }
+    return floors;
+  }
+
   std::vector<float> elevs;
   for (const auto& node : doc.scene().nodes()) {
     if (node.mesh_asset_id == 0 || !node.world_bounds.valid()) {

@@ -87,6 +87,47 @@ std::unordered_map<std::string, double> bezier_feature_params(Vec3 p0, Vec3 p1, 
   return bezier_feature_params(std::vector<Vec3>{p0, p1, p2, p3});
 }
 
+int default_spline_degree(std::size_t n_points) {
+  if (n_points <= 1) {
+    return 1;
+  }
+  return std::min(3, static_cast<int>(n_points - 1));
+}
+
+namespace {
+
+int clamp_spline_degree(std::size_t n_points, int degree) {
+  const int max_p = n_points <= 1 ? 1 : static_cast<int>(n_points - 1);
+  int p = degree > 0 ? degree : default_spline_degree(n_points);
+  if (p < 1) {
+    p = 1;
+  }
+  if (p > max_p) {
+    p = max_p;
+  }
+  return p;
+}
+
+}  // namespace
+
+std::unordered_map<std::string, double> bspline_feature_params(const std::vector<Vec3>& points,
+                                                               int degree) {
+  auto params = polyline_feature_params(points);
+  params["degree"] = static_cast<double>(clamp_spline_degree(points.size(), degree));
+  return params;
+}
+
+std::unordered_map<std::string, double> nurbs_feature_params(const std::vector<Vec3>& points,
+                                                             const std::vector<float>& weights,
+                                                             int degree) {
+  auto params = bspline_feature_params(points, degree);
+  for (std::size_t i = 0; i < points.size(); ++i) {
+    const float w = i < weights.size() ? weights[i] : 1.f;
+    params["w" + std::to_string(i)] = static_cast<double>(w);
+  }
+  return params;
+}
+
 std::unordered_map<std::string, double> rect_wire_params(Vec3 a, Vec3 b) {
   std::unordered_map<std::string, double> params;
   put_xyz(params, "a", a);
@@ -220,6 +261,170 @@ std::vector<Vec3> bezier_control_points(const FeatureModel& model, const Feature
           get_xyz(model, f.id, "p3")};
 }
 
+std::vector<Vec3> spline_control_points(const FeatureModel& model, const Feature& f) {
+  if (f.kind == FeatureKind::Bezier) {
+    return bezier_control_points(model, f);
+  }
+  if (f.kind != FeatureKind::BSpline && f.kind != FeatureKind::Nurbs) {
+    return {};
+  }
+  return polyline_from_params(model, f.id);
+}
+
+std::vector<float> nurbs_weights(const FeatureModel& model, const Feature& f) {
+  const std::vector<Vec3> ctrls = spline_control_points(model, f);
+  std::vector<float> weights;
+  weights.reserve(ctrls.size());
+  for (std::size_t i = 0; i < ctrls.size(); ++i) {
+    weights.push_back(static_cast<float>(model.param(f.id, "w" + std::to_string(i), 1.0)));
+  }
+  return weights;
+}
+
+int spline_degree(const FeatureModel& model, const Feature& f) {
+  const std::size_t n = spline_control_points(model, f).size();
+  return clamp_spline_degree(n, static_cast<int>(model.param(f.id, "degree", 0.0)));
+}
+
+namespace {
+
+std::vector<float> clamped_uniform_knots(int n, int p) {
+  const int m = n + p + 1;
+  std::vector<float> U(static_cast<std::size_t>(m + 1), 0.f);
+  for (int i = 0; i <= p; ++i) {
+    U[static_cast<std::size_t>(i)] = 0.f;
+  }
+  const int interior = n - p;
+  for (int j = 1; j <= interior; ++j) {
+    U[static_cast<std::size_t>(p + j)] =
+        static_cast<float>(j) / static_cast<float>(interior + 1);
+  }
+  for (int i = m - p; i <= m; ++i) {
+    U[static_cast<std::size_t>(i)] = 1.f;
+  }
+  return U;
+}
+
+int find_knot_span(int n, int p, float u, const std::vector<float>& U) {
+  if (u >= U[static_cast<std::size_t>(n + 1)]) {
+    return n;
+  }
+  if (u <= U[static_cast<std::size_t>(p)]) {
+    return p;
+  }
+  int low = p;
+  int high = n + 1;
+  int mid = (low + high) / 2;
+  while (u < U[static_cast<std::size_t>(mid)] || u >= U[static_cast<std::size_t>(mid + 1)]) {
+    if (u < U[static_cast<std::size_t>(mid)]) {
+      high = mid;
+    } else {
+      low = mid;
+    }
+    mid = (low + high) / 2;
+  }
+  return mid;
+}
+
+std::vector<float> basis_funs(int span, float u, int p, const std::vector<float>& U) {
+  std::vector<float> N(static_cast<std::size_t>(p + 1), 0.f);
+  std::vector<float> left(static_cast<std::size_t>(p + 1), 0.f);
+  std::vector<float> right(static_cast<std::size_t>(p + 1), 0.f);
+  N[0] = 1.f;
+  for (int j = 1; j <= p; ++j) {
+    left[static_cast<std::size_t>(j)] = u - U[static_cast<std::size_t>(span + 1 - j)];
+    right[static_cast<std::size_t>(j)] = U[static_cast<std::size_t>(span + j)] - u;
+    float saved = 0.f;
+    for (int r = 0; r < j; ++r) {
+      const float denom =
+          right[static_cast<std::size_t>(r + 1)] + left[static_cast<std::size_t>(j - r)];
+      const float temp = std::abs(denom) < 1e-12f ? 0.f : N[static_cast<std::size_t>(r)] / denom;
+      N[static_cast<std::size_t>(r)] = saved + right[static_cast<std::size_t>(r + 1)] * temp;
+      saved = left[static_cast<std::size_t>(j - r)] * temp;
+    }
+    N[static_cast<std::size_t>(j)] = saved;
+  }
+  return N;
+}
+
+Vec3 eval_nurbs(const std::vector<Vec3>& ctrls, const std::vector<float>& weights, int degree,
+                float u) {
+  if (ctrls.empty()) {
+    return {};
+  }
+  if (ctrls.size() == 1) {
+    return ctrls.front();
+  }
+  const int n = static_cast<int>(ctrls.size()) - 1;
+  const int p = clamp_spline_degree(ctrls.size(), degree);
+  const std::vector<float> U = clamped_uniform_knots(n, p);
+  const float t = std::clamp(u, 0.f, 1.f);
+  if (t <= 0.f) {
+    return ctrls.front();
+  }
+  if (t >= 1.f) {
+    return ctrls.back();
+  }
+  const int span = find_knot_span(n, p, t, U);
+  const std::vector<float> N = basis_funs(span, t, p, U);
+  Vec3 num{};
+  float den = 0.f;
+  for (int i = 0; i <= p; ++i) {
+    const int idx = span - p + i;
+    if (idx < 0 || idx > n) {
+      continue;
+    }
+    const float w = idx < static_cast<int>(weights.size()) ? weights[static_cast<std::size_t>(idx)]
+                                                           : 1.f;
+    const float nw = N[static_cast<std::size_t>(i)] * w;
+    num = num + ctrls[static_cast<std::size_t>(idx)] * nw;
+    den += nw;
+  }
+  if (std::abs(den) < 1e-12f) {
+    return ctrls.front();
+  }
+  return num * (1.f / den);
+}
+
+int spline_sample_count(std::size_t n_points, int segments) {
+  if (segments > 0) {
+    return std::max(4, segments);
+  }
+  return std::max(16, static_cast<int>(n_points <= 1 ? 1 : n_points - 1) * 16);
+}
+
+}  // namespace
+
+std::vector<Vec3> sample_bspline(const std::vector<Vec3>& controls, int degree, int segments) {
+  if (controls.size() < 2) {
+    return controls;
+  }
+  std::vector<float> ones(controls.size(), 1.f);
+  const int n = spline_sample_count(controls.size(), segments);
+  std::vector<Vec3> pts;
+  pts.reserve(static_cast<std::size_t>(n) + 1);
+  for (int i = 0; i <= n; ++i) {
+    const float t = static_cast<float>(i) / static_cast<float>(n);
+    pts.push_back(eval_nurbs(controls, ones, degree, t));
+  }
+  return pts;
+}
+
+std::vector<Vec3> sample_nurbs(const std::vector<Vec3>& controls, const std::vector<float>& weights,
+                               int degree, int segments) {
+  if (controls.size() < 2) {
+    return controls;
+  }
+  const int n = spline_sample_count(controls.size(), segments);
+  std::vector<Vec3> pts;
+  pts.reserve(static_cast<std::size_t>(n) + 1);
+  for (int i = 0; i <= n; ++i) {
+    const float t = static_cast<float>(i) / static_cast<float>(n);
+    pts.push_back(eval_nurbs(controls, weights, degree, t));
+  }
+  return pts;
+}
+
 Vec3 feature_xyz(const FeatureModel& model, std::uint64_t feature_id, const std::string& prefix,
                  Vec3 fallback) {
   return get_xyz(model, feature_id, prefix, fallback);
@@ -261,6 +466,11 @@ std::vector<Vec3> sample_sketch_feature(const FeatureModel& model, const Feature
                             get_xyz(model, f.id, "c"));
     case FeatureKind::Bezier:
       return sample_bezier(bezier_control_points(model, f));
+    case FeatureKind::BSpline:
+      return sample_bspline(spline_control_points(model, f), spline_degree(model, f));
+    case FeatureKind::Nurbs:
+      return sample_nurbs(spline_control_points(model, f), nurbs_weights(model, f),
+                          spline_degree(model, f));
     case FeatureKind::RectWire:
       return sample_rect_xz(get_xyz(model, f.id, "a"), get_xyz(model, f.id, "b"));
     default:

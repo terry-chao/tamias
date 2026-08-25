@@ -179,6 +179,82 @@ void Document::seed_default_materials() {
   seed("Plaster", {0.92f, 0.90f, 0.85f}, 0.95f, 0.0f, plaster_tex_id);
 }
 
+Storey& Document::add_storey(std::string name, double elevation) {
+  SceneNode node{};
+  node.name = name;
+  SceneNode& stored_node = scene_.add_node(std::move(node));
+  Storey storey{stored_node.id, std::move(name), elevation};
+  Storey& stored = bim_.insert_storey(std::move(storey));
+  if (bim_.active_storey_id() == 0) {
+    bim_.set_active_storey_id(stored.id);
+  }
+  recompute_scene();
+  mark_dirty();
+  return stored;
+}
+
+Storey& Document::insert_storey(Storey storey) {
+  SceneNode node{};
+  node.id = storey.id;
+  node.name = storey.name;
+  scene_.insert_node(std::move(node));
+  Storey& stored = bim_.insert_storey(std::move(storey));
+  recompute_scene();
+  mark_dirty();
+  return stored;
+}
+
+void Document::remove_storey(std::uint64_t id) {
+  const double elevation = bim_.storey_elevation(id);
+  for (auto& [entity_id, entity_ptr] : entities_) {
+    (void)entity_id;
+    if (entity_ptr->location && entity_ptr->location->storey_id() == id) {
+      entity_ptr->location->set_storey_id(0);
+      entity_ptr->location->set_elevation_offset(
+          entity_ptr->location->elevation_offset() + elevation);
+      entity_ptr->sync_from_location(0.0);
+      scene_.set_parent(entity_ptr->id, 0);
+      scene_.set_transform(entity_ptr->id, entity_ptr->local_transform);
+    }
+  }
+  bim_.remove_storey(id);
+  scene_.remove_node(id);
+  recompute_scene();
+  mark_dirty();
+}
+
+void Document::set_active_storey(std::uint64_t id) {
+  bim_.set_active_storey_id(id);
+  mark_dirty();
+}
+
+void Document::assign_active_storey(Entity& entity) {
+  if (!entity.location) {
+    return;
+  }
+  const std::uint64_t storey_id = bim_.active_storey_id();
+  const double world_elevation =
+      static_cast<double>(entity.local_transform(1, 3));
+  entity.location->set_storey_id(storey_id);
+  entity.location->set_elevation_offset(
+      world_elevation - bim_.storey_elevation(storey_id));
+  entity.sync_from_location(bim_.storey_elevation(storey_id));
+}
+
+bool Document::sync_entity_location(std::uint64_t entity_id) {
+  Entity* target = entity(entity_id);
+  if (target == nullptr || !target->location) {
+    return false;
+  }
+  const std::uint64_t storey_id = target->location->storey_id();
+  target->sync_from_location(bim_.storey_elevation(storey_id));
+  scene_.set_transform(entity_id, target->local_transform);
+  scene_.set_parent(entity_id, bim_.find_storey(storey_id) != nullptr ? storey_id : 0);
+  recompute_scene();
+  mark_dirty();
+  return true;
+}
+
 // 只接收已求值的实体 + 几何，不做造型（造型在 Entity::createGeom，见 entity.cpp）。
 Entity* Document::add_entity(std::unique_ptr<Entity> entity, MeshCpu mesh) {
   MeshAsset asset{};
@@ -191,6 +267,9 @@ Entity* Document::add_entity(std::unique_ptr<Entity> entity, MeshCpu mesh) {
   node.name = entity->name;
   node.mesh_asset_id = entity->mesh_asset_id;
   node.local_transform = entity->local_transform;
+  if (entity->location && bim_.find_storey(entity->location->storey_id()) != nullptr) {
+    node.parent = entity->location->storey_id();
+  }
   SceneNode& stored_node = scene_.add_node(std::move(node));
   entity->id = stored_node.id;  // entity id == scene node id
 
@@ -249,6 +328,9 @@ void Document::insert_entity(std::unique_ptr<Entity> entity, MeshAsset mesh) {
   node.name = entity->name;
   node.mesh_asset_id = mesh_id;
   node.local_transform = entity->local_transform;
+  if (entity->location && bim_.find_storey(entity->location->storey_id()) != nullptr) {
+    node.parent = entity->location->storey_id();
+  }
   scene_.insert_node(std::move(node));
 
   entities_[id] = std::move(entity);

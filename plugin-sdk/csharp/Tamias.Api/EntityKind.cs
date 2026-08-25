@@ -17,4 +17,6 @@ public enum EntityKind
     Arc = 11,
     Bezier = 12,
     Rectangle = 13,
+    BSpline = 14,
+    Nurbs = 15,
 }

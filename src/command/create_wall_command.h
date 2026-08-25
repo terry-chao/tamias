@@ -14,6 +14,9 @@ class CreateWallCommand final : public Command {
   [[nodiscard]] Result<bool> on_point(Vec3 point) override;
   [[nodiscard]] bool has_start() const override { return has_start_; }
   [[nodiscard]] Vec3 start() const override { return start_; }
+  [[nodiscard]] float work_plane_y() const override {
+    return static_cast<float>(elevation_);
+  }
 
   [[nodiscard]] Result<void> execute() override;
   void undo() override;
@@ -25,6 +28,7 @@ class CreateWallCommand final : public Command {
   Document* document_ = nullptr;
   double thickness_ = 0.2;
   double height_ = 3.0;
+  double elevation_ = 0.0;
   bool has_start_ = false;
   Vec3 start_{};
   Vec3 end_{};

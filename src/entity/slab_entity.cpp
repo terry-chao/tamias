@@ -1,5 +1,7 @@
 #include "entity/slab_entity.h"
 
+#include "bim/surface_location.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -11,7 +13,10 @@ void init_slab(SlabEntity& slab, Vec3 center, double length, double width, doubl
   auto& profile = slab.model.add_feature(FeatureKind::RectProfile, {},
                                          {{"width", length}, {"height", width}});
   slab.model.add_feature(FeatureKind::Extrude, {profile.id}, {{"depth", thickness}});
-  slab.local_transform = translate(center);
+  slab.location = std::make_unique<SurfaceLocation>(
+      Vec3{center.x, 0.f, center.z}, Vec3{1.f, 0.f, 0.f}, 0,
+      static_cast<double>(center.y));
+  slab.sync_from_location(0.0);
 }
 
 }  // namespace

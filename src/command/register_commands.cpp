@@ -6,9 +6,11 @@
 #include "command/create_primitive_command.h"
 #include "command/create_sketch_command.h"
 #include "command/create_slab_command.h"
+#include "command/create_storey_command.h"
 #include "command/create_wall_command.h"
 #include "command/delete_entity_command.h"
 #include "command/set_feature_param_command.h"
+#include "command/set_location_command.h"
 #include "command/set_material_command.h"
 #include "bim/wall_size.h"
 
@@ -39,6 +41,18 @@ std::string arg_string(const CommandArgs& args, const std::string& name, std::st
 }  // namespace
 
 void register_commands(CommandRegistry& registry) {
+  registry.register_command("create_storey", [](Document& doc, const CommandArgs& args) {
+    return std::make_unique<CreateStoreyCommand>(
+        doc, arg_string(args, "name", "Storey"),
+        arg_double(args, "elevation", 0.0));
+  });
+  registry.register_command("set_location", [](Document& doc, const CommandArgs& args) {
+    return std::make_unique<SetLocationCommand>(
+        doc, static_cast<std::uint64_t>(arg_int(args, "entity_id", 0)),
+        static_cast<std::uint64_t>(arg_int(args, "storey_id", 0)),
+        arg_double(args, "elevation_offset", 0.0));
+  });
+
   registry.register_command("create_wall", [](Document& doc, const CommandArgs& args) {
     return std::make_unique<CreateWallCommand>(
         doc, arg_double(args, "thickness", kDefaultWallThickness),
@@ -66,9 +80,11 @@ void register_commands(CommandRegistry& registry) {
   });
 
   registry.register_command("create_slab", [](Document& doc, const CommandArgs& args) {
+    const double default_offset =
+        doc.bim().active_storey_id() == 0 ? kDefaultWallHeight : 0.0;
     return std::make_unique<CreateSlabCommand>(
         doc, arg_double(args, "thickness", 0.2),
-        arg_double(args, "elevation", kDefaultWallHeight));
+        arg_double(args, "elevation", default_offset));
   });
 
   registry.register_command("create_door", [](Document& doc, const CommandArgs& args) {
@@ -104,6 +120,14 @@ void register_commands(CommandRegistry& registry) {
   registry.register_command("create_rectangle", [](Document& doc, const CommandArgs& args) {
     (void)args;
     return std::make_unique<CreateSketchCommand>(doc, SketchKind::Rectangle);
+  });
+  registry.register_command("create_bspline", [](Document& doc, const CommandArgs& args) {
+    (void)args;
+    return std::make_unique<CreateSketchCommand>(doc, SketchKind::BSpline);
+  });
+  registry.register_command("create_nurbs", [](Document& doc, const CommandArgs& args) {
+    (void)args;
+    return std::make_unique<CreateSketchCommand>(doc, SketchKind::Nurbs);
   });
 
   registry.register_command("set_param", [](Document& doc, const CommandArgs& args) {

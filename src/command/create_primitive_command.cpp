@@ -10,7 +10,12 @@
 namespace tamias {
 
 CreatePrimitiveCommand::CreatePrimitiveCommand(Document& document, PrimitiveKind kind)
-    : document_(&document), kind_(kind) {}
+    : document_(&document), kind_(kind) {
+  if (kind_ == PrimitiveKind::Column) {
+    work_plane_y_ = static_cast<float>(
+        document.bim().storey_elevation(document.bim().active_storey_id()));
+  }
+}
 
 Result<bool> CreatePrimitiveCommand::on_point(Vec3 point) { return on_pick(point, 0); }
 
@@ -45,6 +50,7 @@ Result<void> CreatePrimitiveCommand::execute() {
     }
     case PrimitiveKind::Column: {
       ColumnEntity column(position_);
+      document_->assign_active_storey(column);
       auto geometry = column.createGeom();
       if (!geometry) {
         return Err(geometry.error());

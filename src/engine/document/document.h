@@ -37,6 +37,15 @@ class Document {
   [[nodiscard]] BimModel& bim() { return bim_; }
   [[nodiscard]] const BimModel& bim() const { return bim_; }
 
+  Storey& add_storey(std::string name, double elevation);
+  Storey& insert_storey(Storey storey);
+  void remove_storey(std::uint64_t id);
+  void set_active_storey(std::uint64_t id);
+  // 按 Location 刷新实体造型放置缓存、场景变换及楼层归属。
+  bool sync_entity_location(std::uint64_t entity_id);
+  // 将构件当前世界标高换算为当前楼层的相对偏移。
+  void assign_active_storey(Entity& entity);
+
   MeshAsset& add_mesh(MeshAsset asset) {
     asset.id = next_mesh_id_++;
     auto& stored = meshes_[asset.id];

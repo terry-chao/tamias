@@ -51,7 +51,12 @@ Result<void> EditEntityGripCommand::apply(bool to_target) {
     return Err("EditEntityGripCommand: entity not found");
   }
   entity->model = to_target ? to_model_ : from_model_;
-  entity->local_transform = to_target ? to_transform_ : from_transform_;
+  const Mat4 transform = to_target ? to_transform_ : from_transform_;
+  const double storey_elevation =
+      entity->location
+          ? document_->bim().storey_elevation(entity->location->storey_id())
+          : 0.0;
+  entity->sync_location_from_transform(transform, storey_elevation);
   sync_entity_grips(*entity);
   return rebuild_entity_mesh(*document_, entity_id_);
 }

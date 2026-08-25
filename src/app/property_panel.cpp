@@ -16,6 +16,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <cctype>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -53,6 +54,10 @@ QString PropertyPanel::entity_label(EntityKind kind) {
       return tr("Bezier");
     case EntityKind::Rectangle:
       return tr("Rectangle");
+    case EntityKind::BSpline:
+      return tr("B-spline");
+    case EntityKind::Nurbs:
+      return tr("NURBS");
   }
   return tr("Entity");
 }
@@ -82,6 +87,23 @@ QString PropertyPanel::param_label(EntityKind entity_kind, FeatureKind feature_k
   if (feature_kind == FeatureKind::Boolean) {
     if (is("operation")) {
       return tr("Operation");
+    }
+  }
+  if (feature_kind == FeatureKind::BSpline || feature_kind == FeatureKind::Nurbs) {
+    if (is("degree")) {
+      return tr("Degree");
+    }
+  }
+  if (feature_kind == FeatureKind::Nurbs && param_name.size() >= 2 && param_name[0] == QLatin1Char('w')) {
+    bool digits = true;
+    for (int i = 1; i < param_name.size(); ++i) {
+      if (!param_name[i].isDigit()) {
+        digits = false;
+        break;
+      }
+    }
+    if (digits) {
+      return tr("Weight %1").arg(param_name.mid(1));
     }
   }
   switch (entity_kind) {
@@ -175,6 +197,8 @@ QString PropertyPanel::param_label(EntityKind entity_kind, FeatureKind feature_k
     case EntityKind::Polyline:
     case EntityKind::Arc:
     case EntityKind::Bezier:
+    case EntityKind::BSpline:
+    case EntityKind::Nurbs:
     case EntityKind::Rectangle:
       break;
   }
@@ -246,6 +270,48 @@ void PropertyPanel::show_entity(const Entity* entity, Document* document,
   form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
   form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
+  if (entity->location != nullptr && document != nullptr) {
+    auto* storey_combo = new QComboBox(content_);
+    storey_combo->addItem(tr("Unassigned"), static_cast<qulonglong>(0));
+    int selected_storey = entity->location->storey_id() == 0 ? 0 : -1;
+    for (const Storey& storey : document->bim().storeys()) {
+      storey_combo->addItem(QString::fromStdString(storey.name),
+                            static_cast<qulonglong>(storey.id));
+      if (storey.id == entity->location->storey_id()) {
+        selected_storey = storey_combo->count() - 1;
+      }
+    }
+    storey_combo->setCurrentIndex(selected_storey >= 0 ? selected_storey : 0);
+
+    auto* offset_spin = new QDoubleSpinBox(content_);
+    offset_spin->setRange(-1.0e6, 1.0e6);
+    offset_spin->setDecimals(3);
+    offset_spin->setSingleStep(0.1);
+    offset_spin->setKeyboardTracking(false);
+    offset_spin->setValue(entity->location->elevation_offset());
+
+    connect(storey_combo, &QComboBox::currentIndexChanged, this,
+            [this, eid, storey_combo, offset_spin](int index) {
+              if (index < 0) {
+                return;
+              }
+              emit location_edited(
+                  eid,
+                  static_cast<std::uint64_t>(storey_combo->itemData(index).toULongLong()),
+                  offset_spin->value());
+            });
+    connect(offset_spin, &QDoubleSpinBox::valueChanged, this,
+            [this, eid, storey_combo](double offset) {
+              emit location_edited(
+                  eid,
+                  static_cast<std::uint64_t>(
+                      storey_combo->currentData().toULongLong()),
+                  offset);
+            });
+    form->addRow(tr("Storey"), storey_combo);
+    form->addRow(tr("Elevation Offset"), offset_spin);
+  }
+
   // 扁平 grid：每行 [参数名 | 数值 spinbox]，按特征顺序 + 参数名排序，顺序稳定。
   for (const auto& feature : entity->model.features()) {
     std::vector<std::string> keys;
@@ -258,8 +324,14 @@ void PropertyPanel::show_entity(const Entity* entity, Document* document,
 
     const std::uint64_t fid = feature.id;
     for (const auto& key : keys) {
-      if (is_sketch_feature(feature.kind) && key != "radius") {
-        continue;
+      if (is_sketch_feature(feature.kind)) {
+        const bool is_weight = key.size() >= 2 && key[0] == 'w' &&
+                               std::all_of(key.begin() + 1, key.end(), [](unsigned char c) {
+                                 return std::isdigit(c) != 0;
+                               });
+        if (key != "radius" && key != "degree" && !is_weight) {
+          continue;
+        }
       }
       auto* spin = new QDoubleSpinBox(content_);
       spin->setRange(-1.0e6, 1.0e6);

@@ -2,7 +2,7 @@
 
 > 墙、梁、板、柱、门、窗、轴网、楼层这些**建筑语义**不该散落在 Qt、命令或语义树里。它们有自己的一层：介于「命令」和「Document / Scene」之间。几何怎么挤、节点怎么挂父子，分别是造型层和语义树的事；**谁属于哪一层、贴哪道轴、窗开在哪面墙上**，是这一层的事。
 
-**现状：** 没有楼层系统，也没有轴网。墙梁板柱已经能画。**门窗宿主关联已经落地**：点在墙上放窗/门会写入 `HostedOn` 关系，墙一改就通知开口重造型。本文是这一层的落点。
+**现状：** 楼层与构件 Location 已落地，轴网尚未实现。墙、柱、板分别使用线、点、面 Location；门窗宿主关联通过 `HostedOn` 关系维护。
 
 代码在 [`src/bim/`](https://github.com/terry-chao/tamias/tree/main/src/bim)。实体几何仍在 [`src/entity/`](https://github.com/terry-chao/tamias/tree/main/src/entity)，命令仍在 [`src/command/`](https://github.com/terry-chao/tamias/tree/main/src/command)。`BimModel` 作为 `Document` 的一个侧面挂上（和 `Scene`、实体表并列）。
 
@@ -37,7 +37,7 @@ BIM 业务层就是 [MCAD 与 BIM](DECISION-MCAD-BIM.md) 里说的那层**域分
 ├────────────── 命令 (command) ───────────────┤
 │  事务、撤销；BIM 命令只调本层，不直接 set_parent │
 ├────────────── BIM 业务层 (bim) ★ ───────────┤
-│  关联关系 · 宿主更新 ·（将来）楼层 / 轴网 / 当前标高 │
+│  关联关系 · 宿主更新 · 楼层 / Location / 当前标高 │
 ├────────────── 场景图 (document/scene) ────────┤
 │  parent / 变换 / 包围盒（域无关容器）          │
 ├────────────── 造型 (modeling) ───────────────┤
@@ -64,8 +64,8 @@ BIM 业务层就是 [MCAD 与 BIM](DECISION-MCAD-BIM.md) 里说的那层**域分
 
 | 对象 | 含义 | 在树上的落法 |
 |---|---|---|
-| 空间结构 | 项目 → 场地 → 建筑 → 楼层（对齐 IFC `IfcBuildingStorey` 那一截） | 楼层 = **分组节点**（`mesh_asset_id = 0`）；**尚未实现** |
-| 当前标高 | 会话/文档上的「正在画哪一层」 | 不是 Scene 字段；本层持有 `active_storey_id`；**尚未实现** |
+| 空间结构 | 项目 → 场地 → 建筑 → 楼层（对齐 IFC `IfcBuildingStorey` 那一截） | 楼层 = **分组节点**（`mesh_asset_id = 0`） |
+| 当前标高 | 会话/文档上的「正在画哪一层」 | 不是 Scene 字段；`BimModel` 持有 `active_storey_id` |
 | 墙梁板柱门窗 | 放置、归属楼层、后改宿主 | 叶子节点；`parent` 指向楼层（或门窗指向宿主墙） |
 | 轴网 | 定位参考，不是实体构件 | 数据在本层；显示走 overlay；**尚未实现** |
 | **关联 / 宿主** | 窗属于墙、门属于墙 | **显式 `Relation`**，存进 `.tdoc` 的 `RELA` chunk；不靠 Z 坐标反推 |
@@ -93,9 +93,7 @@ BIM 业务层就是 [MCAD 与 BIM](DECISION-MCAD-BIM.md) 里说的那层**域分
 
 ## 5. 没指定楼层时怎么办
 
-**现在：** 没有楼层对象。`add_entity` 不写 `parent`，墙挂在根上。这是合法的「未归属」，不是 bug。宿主关联不依赖楼层。
-
-**楼层落地后：**
+没有当前楼层时，构件挂在根上。这是合法的「未归属」，不是 bug。宿主关联不依赖楼层。
 
 1. 用户没点选楼层 ≠ 语义树去猜。归属只来自本层写入的 `parent`。
 2. 有当前标高 → `place_wall` 把墙的 `parent` 设成该楼层的分组节点。

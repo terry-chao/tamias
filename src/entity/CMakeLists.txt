@@ -1,4 +1,7 @@
 add_library(tamias_entity STATIC
+  ${CMAKE_SOURCE_DIR}/src/bim/point_location.cpp
+  ${CMAKE_SOURCE_DIR}/src/bim/line_location.cpp
+  ${CMAKE_SOURCE_DIR}/src/bim/surface_location.cpp
   entity.cpp
   wall_entity.cpp
   box_entity.cpp
@@ -14,6 +17,8 @@ add_library(tamias_entity STATIC
   arc_entity.cpp
   bezier_entity.cpp
   rectangle_entity.cpp
+  bspline_entity.cpp
+  nurbs_entity.cpp
   entity_grip.cpp
 )
 add_library(tamias::entity ALIAS tamias_entity)

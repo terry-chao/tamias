@@ -2,8 +2,10 @@
 
 #include "entity/arc_entity.h"
 #include "entity/bezier_entity.h"
+#include "entity/bspline_entity.h"
 #include "entity/circle_entity.h"
 #include "entity/line_entity.h"
+#include "entity/nurbs_entity.h"
 #include "entity/polyline_entity.h"
 #include "entity/rectangle_entity.h"
 #include "engine/modeling/curve_geom.h"
@@ -18,12 +20,37 @@ bool nearly_same(Vec3 a, Vec3 b) { return length(a - b) < 1e-4f; }
 CreateSketchCommand::CreateSketchCommand(Document& document, SketchKind kind)
     : document_(&document), kind_(kind) {}
 
+bool CreateSketchCommand::open_ended() const {
+  switch (kind_) {
+    case SketchKind::Polyline:
+    case SketchKind::Bezier:
+    case SketchKind::BSpline:
+    case SketchKind::Nurbs:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool CreateSketchCommand::shows_control_polygon() const {
+  switch (kind_) {
+    case SketchKind::Bezier:
+    case SketchKind::BSpline:
+    case SketchKind::Nurbs:
+      return true;
+    default:
+      return false;
+  }
+}
+
 int CreateSketchCommand::required_points() const {
   switch (kind_) {
     case SketchKind::Arc:
       return 3;
     case SketchKind::Polyline:
     case SketchKind::Bezier:
+    case SketchKind::BSpline:
+    case SketchKind::Nurbs:
       return 0;  // 不定长，靠 confirm（右键 / Enter）
     case SketchKind::Line:
     case SketchKind::Circle:
@@ -38,14 +65,14 @@ Result<bool> CreateSketchCommand::on_point(Vec3 point) {
     return false;
   }
   points_.push_back(point);
-  if (kind_ == SketchKind::Polyline || kind_ == SketchKind::Bezier) {
+  if (open_ended()) {
     return false;
   }
   return static_cast<int>(points_.size()) >= required_points();
 }
 
 Result<bool> CreateSketchCommand::on_confirm() {
-  if (kind_ != SketchKind::Polyline && kind_ != SketchKind::Bezier) {
+  if (!open_ended()) {
     return false;
   }
   if (points_.size() < 2) {
@@ -54,7 +81,7 @@ Result<bool> CreateSketchCommand::on_confirm() {
   return true;
 }
 
-std::vector<Vec3> CreateSketchCommand::bezier_live_controls(Vec3 cursor) const {
+std::vector<Vec3> CreateSketchCommand::live_controls(Vec3 cursor) const {
   if (points_.empty()) {
     return {};
   }
@@ -66,17 +93,17 @@ std::vector<Vec3> CreateSketchCommand::bezier_live_controls(Vec3 cursor) const {
 }
 
 std::vector<Vec3> CreateSketchCommand::preview_control_polyline(Vec3 cursor) const {
-  if (kind_ != SketchKind::Bezier) {
+  if (!shows_control_polygon()) {
     return {};
   }
-  return bezier_live_controls(cursor);
+  return live_controls(cursor);
 }
 
 std::vector<Vec3> CreateSketchCommand::preview_points(Vec3 cursor) const {
-  if (kind_ != SketchKind::Bezier) {
+  if (!shows_control_polygon()) {
     return {};
   }
-  return bezier_live_controls(cursor);
+  return live_controls(cursor);
 }
 
 std::vector<Vec3> CreateSketchCommand::preview_polyline(Vec3 cursor) const {
@@ -102,11 +129,25 @@ std::vector<Vec3> CreateSketchCommand::preview_polyline(Vec3 cursor) const {
       }
       return sample_arc_3pt(points_[0], points_[1], cursor);
     case SketchKind::Bezier: {
-      const std::vector<Vec3> ctrls = bezier_live_controls(cursor);
+      const std::vector<Vec3> ctrls = live_controls(cursor);
       if (ctrls.size() < 2) {
         return {};
       }
       return sample_bezier(ctrls);
+    }
+    case SketchKind::BSpline: {
+      const std::vector<Vec3> ctrls = live_controls(cursor);
+      if (ctrls.size() < 2) {
+        return {};
+      }
+      return sample_bspline(ctrls);
+    }
+    case SketchKind::Nurbs: {
+      const std::vector<Vec3> ctrls = live_controls(cursor);
+      if (ctrls.size() < 2) {
+        return {};
+      }
+      return sample_nurbs(ctrls, {});
     }
     case SketchKind::Polyline: {
       std::vector<Vec3> pts = points_;
@@ -153,6 +194,16 @@ Result<std::unique_ptr<Entity>> CreateSketchCommand::make_sketch() const {
         return Err("Bezier needs at least two control points");
       }
       return std::make_unique<BezierEntity>(points_);
+    case SketchKind::BSpline:
+      if (points_.size() < 2) {
+        return Err("B-spline needs at least two control points");
+      }
+      return std::make_unique<BSplineEntity>(points_);
+    case SketchKind::Nurbs:
+      if (points_.size() < 2) {
+        return Err("NURBS needs at least two control points");
+      }
+      return std::make_unique<NurbsEntity>(points_);
     case SketchKind::Rectangle:
       if (points_.size() < 2 || nearly_same(points_[0], points_[1])) {
         return Err("Rectangle needs two distinct corners");

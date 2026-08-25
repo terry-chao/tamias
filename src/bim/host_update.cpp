@@ -46,6 +46,9 @@ Result<void> reshape_hosted(Document& document, Relation& relation) {
   relation.valid = placement_is_valid(relation.placement, wall, opening);
 
   sync_transform(document, *guest, hosted_transform(*host, relation.placement));
+  if (const SceneNode* host_node = document.scene().find(host->id)) {
+    document.scene().set_parent(guest->id, host_node->parent);
+  }
   if (auto r = remesh_entity(document, *guest); !r) {
     return r;
   }

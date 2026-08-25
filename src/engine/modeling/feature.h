@@ -22,6 +22,8 @@ enum class FeatureKind : std::uint8_t {
   Arc = 9,          // 三点圆弧 start/through/end，params{ ax..cz }
   Bezier = 10,      // 贝塞尔，params{ n, p0x,p0y,p0z, ... }；旧文件可能只有 p0..p3
   RectWire = 11,    // 轴对齐矩形轮廓，params{ ax,ay,az, bx,by,bz }
+  BSpline = 12,     // 夹紧均匀 B 样条，params{ n, degree, p0x,p0y,p0z, ... }
+  Nurbs = 13,       // NURBS，params{ n, degree, p0x.., w0, w1, ... }
 };
 
 inline bool is_sketch_feature(FeatureKind kind) {
@@ -32,6 +34,8 @@ inline bool is_sketch_feature(FeatureKind kind) {
     case FeatureKind::Arc:
     case FeatureKind::Bezier:
     case FeatureKind::RectWire:
+    case FeatureKind::BSpline:
+    case FeatureKind::Nurbs:
       return true;
     default:
       return false;

@@ -15,7 +15,10 @@ bool nearly_same_xz(Vec3 a, Vec3 b) {
 }  // namespace
 
 CreateSlabCommand::CreateSlabCommand(Document& document, double thickness, double elevation)
-    : document_(&document), thickness_(thickness), elevation_(elevation) {}
+    : document_(&document),
+      thickness_(thickness),
+      elevation_(document.bim().storey_elevation(document.bim().active_storey_id()) +
+                 elevation) {}
 
 Result<bool> CreateSlabCommand::on_point(Vec3 point) {
   point.y = static_cast<float>(elevation_);
@@ -41,6 +44,7 @@ std::vector<Vec3> CreateSlabCommand::preview_polyline(Vec3 cursor) const {
 
 Result<void> CreateSlabCommand::execute() {
   SlabEntity slab(start_, end_, thickness_);
+  document_->assign_active_storey(slab);
   auto geometry = slab.createGeom();
   if (!geometry) {
     return Err(geometry.error());

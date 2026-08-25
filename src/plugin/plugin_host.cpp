@@ -62,6 +62,10 @@ constexpr std::int32_t kLogError = 2;
       return "Bezier";
     case EntityKind::Rectangle:
       return "Rectangle";
+    case EntityKind::BSpline:
+      return "BSpline";
+    case EntityKind::Nurbs:
+      return "Nurbs";
   }
   return "Unknown";
 }

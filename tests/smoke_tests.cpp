@@ -10,12 +10,14 @@
 #include "entity/beam_entity.h"
 #include "entity/bezier_entity.h"
 #include "entity/box_entity.h"
+#include "entity/bspline_entity.h"
 #include "entity/circle_entity.h"
 #include "entity/column_entity.h"
 #include "entity/door_entity.h"
 #include "entity/entity_grip.h"
 #include "entity/family_entity.h"
 #include "entity/line_entity.h"
+#include "entity/nurbs_entity.h"
 #include "entity/polyline_entity.h"
 #include "entity/rectangle_entity.h"
 #include "entity/sketch_entity.h"
@@ -668,6 +670,19 @@ TEST(SketchEntity, CreateGeomAndNotFamily) {
   auto bezier_mesh = bezier.createGeom();
   ASSERT_TRUE(bezier_mesh) << bezier_mesh.error();
   EXPECT_TRUE(bezier_mesh->line_list);
+
+  BSplineEntity bspline(std::vector<Vec3>{
+      {0.f, 0.f, 0.f}, {0.f, 0.f, 1.f}, {2.f, 0.f, 1.f}, {2.f, 0.f, 0.f}, {3.f, 0.f, 0.5f}});
+  auto bspline_mesh = bspline.createGeom();
+  ASSERT_TRUE(bspline_mesh) << bspline_mesh.error();
+  EXPECT_TRUE(bspline_mesh->line_list);
+  EXPECT_TRUE(bspline.is_sketch_entity());
+
+  NurbsEntity nurbs(std::vector<Vec3>{{0.f, 0.f, 0.f}, {1.f, 0.f, 1.f}, {2.f, 0.f, 0.f}},
+                    std::vector<float>{1.f, 4.f, 1.f});
+  auto nurbs_mesh = nurbs.createGeom();
+  ASSERT_TRUE(nurbs_mesh) << nurbs_mesh.error();
+  EXPECT_TRUE(nurbs_mesh->line_list);
 }
 
 TEST(CurveGeom, ArcPassesThroughMidPoint) {
@@ -932,6 +947,46 @@ TEST(CommandSystem, CreateBezierClicksThenConfirm) {
   EXPECT_EQ(doc.entities().begin()->second->kind(), EntityKind::Bezier);
 }
 
+TEST(CommandSystem, CreateBSplineClicksThenConfirm) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document doc("sketch-bspline");
+  ASSERT_TRUE(system.dispatch(doc, "create_bspline", {}));
+  ASSERT_TRUE(system.feed_point({0.f, 0.f, 0.f}));
+  ASSERT_TRUE(system.feed_point({1.f, 0.f, 1.f}));
+  ASSERT_TRUE(system.feed_point({2.f, 0.f, 0.f}));
+  EXPECT_EQ(doc.entities().size(), 0u);
+  EXPECT_GE(system.preview_polyline({3.f, 0.f, 0.f}).size(), 2u);
+  EXPECT_EQ(system.preview_control_polyline({3.f, 0.f, 0.f}).size(), 4u);
+  auto done = system.confirm();
+  ASSERT_TRUE(done) << done.error();
+  EXPECT_TRUE(*done);
+  ASSERT_EQ(doc.entities().size(), 1u);
+  EXPECT_EQ(doc.entities().begin()->second->kind(), EntityKind::BSpline);
+}
+
+TEST(CommandSystem, CreateNurbsClicksThenConfirm) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document doc("sketch-nurbs");
+  ASSERT_TRUE(system.dispatch(doc, "create_nurbs", {}));
+  ASSERT_TRUE(system.feed_point({0.f, 0.f, 0.f}));
+  auto too_soon = system.confirm();
+  ASSERT_TRUE(too_soon) << too_soon.error();
+  EXPECT_FALSE(*too_soon);
+  ASSERT_TRUE(system.feed_point({2.f, 0.f, 1.f}));
+  ASSERT_TRUE(system.feed_point({4.f, 0.f, 0.f}));
+  auto done = system.confirm();
+  ASSERT_TRUE(done) << done.error();
+  EXPECT_TRUE(*done);
+  ASSERT_EQ(doc.entities().size(), 1u);
+  EXPECT_EQ(doc.entities().begin()->second->kind(), EntityKind::Nurbs);
+}
+
 TEST(CurveGeom, BezierControlPointsAndQuadratic) {
   FeatureModel model;
   const Vec3 p0{0.f, 0.f, 0.f};
@@ -953,6 +1008,28 @@ TEST(CurveGeom, BezierControlPointsAndQuadratic) {
   ASSERT_GE(high.size(), 16u);
   EXPECT_NEAR(high.front().x, p0.x, 1e-5f);
   EXPECT_NEAR(high.back().x, 3.f, 1e-5f);
+}
+
+TEST(CurveGeom, BSplineMatchesCubicBezierAndNurbsPulls) {
+  const Vec3 p0{0.f, 0.f, 0.f};
+  const Vec3 p1{0.f, 0.f, 1.f};
+  const Vec3 p2{2.f, 0.f, 1.f};
+  const Vec3 p3{2.f, 0.f, 0.f};
+  const auto bez = sample_bezier({p0, p1, p2, p3}, 32);
+  const auto bsp = sample_bspline({p0, p1, p2, p3}, 3, 32);
+  ASSERT_EQ(bez.size(), bsp.size());
+  for (std::size_t i = 0; i < bez.size(); ++i) {
+    EXPECT_NEAR(length(bez[i] - bsp[i]), 0.f, 1e-4f) << "i=" << i;
+  }
+
+  const auto unweighted = sample_nurbs({p0, p1, p2}, {1.f, 1.f, 1.f}, 2, 24);
+  const auto weighted = sample_nurbs({p0, p1, p2}, {1.f, 8.f, 1.f}, 2, 24);
+  ASSERT_EQ(unweighted.size(), weighted.size());
+  const Vec3 mid_u = unweighted[unweighted.size() / 2];
+  const Vec3 mid_w = weighted[weighted.size() / 2];
+  EXPECT_LT(length(mid_w - p1), length(mid_u - p1));
+  EXPECT_NEAR(unweighted.front().x, p0.x, 1e-5f);
+  EXPECT_NEAR(weighted.back().x, p2.x, 1e-5f);
 }
 
 TEST(CommandSystem, CreatePolylineConfirm) {
@@ -1000,6 +1077,107 @@ TEST(EntityGrip, LineAndWallRebuild) {
   BezierEntity bez(std::vector<Vec3>{
       {0.f, 0.f, 0.f}, {0.f, 0.f, 1.f}, {2.f, 0.f, 1.f}, {2.f, 0.f, 0.f}});
   EXPECT_EQ(collect_entity_grips(bez).size(), 4u);
+
+  BSplineEntity bspline(std::vector<Vec3>{
+      {0.f, 0.f, 0.f}, {1.f, 0.f, 1.f}, {2.f, 0.f, 0.f}, {3.f, 0.f, 1.f}});
+  EXPECT_EQ(collect_entity_grips(bspline).size(), 4u);
+  ASSERT_TRUE(apply_entity_grip(bspline, 1, {1.5f, 0.f, 2.f}));
+  EXPECT_NEAR(collect_entity_grips(bspline)[1].world.x, 1.5f, 1e-4f);
+
+  NurbsEntity nurbs(std::vector<Vec3>{{0.f, 0.f, 0.f}, {1.f, 0.f, 1.f}, {2.f, 0.f, 0.f}},
+                    std::vector<float>{1.f, 2.f, 1.f});
+  EXPECT_EQ(collect_entity_grips(nurbs).size(), 3u);
+  ASSERT_TRUE(apply_entity_grip(nurbs, 2, {3.f, 0.f, -1.f}));
+  EXPECT_NEAR(collect_entity_grips(nurbs)[2].world.x, 3.f, 1e-4f);
+  EXPECT_DOUBLE_EQ(nurbs.model.param(nurbs.model.features()[0].id, "w1", 0.0), 2.0);
+}
+
+namespace {
+
+bool grip_at(const Entity& entity, Vec3 world, float eps = 1e-3f) {
+  for (const EntityGrip& g : collect_entity_grips(entity)) {
+    if (length(g.world - world) < eps) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool try_drag_from_press(Entity& entity, const FeatureModel& from_model, const Mat4& from_xf,
+                         int index, Vec3 world) {
+  entity.model = from_model;
+  entity.local_transform = from_xf;
+  return apply_entity_grip(entity, index, world);
+}
+
+}  // namespace
+
+TEST(EntityGrip, FootprintCornerCrossesOpposite) {
+  BoxEntity box({0.f, 0.f, 0.f});
+  auto grips = collect_entity_grips(box);
+  ASSERT_EQ(grips.size(), 4u);
+  const FeatureModel from_model = box.model;
+  const Mat4 from_xf = box.local_transform;
+  const Vec3 keep = grips[0].world;
+  const Vec3 start = grips[2].world;
+  const Vec3 steps[] = {
+      {start.x + 0.25f, 0.f, start.z + 0.25f},
+      {keep.x + 0.05f, 0.f, keep.z + 0.05f},
+      {keep.x - 0.8f, 0.f, keep.z - 0.8f},
+      {keep.x - 1.5f, 0.f, keep.z - 1.5f},
+  };
+  for (Vec3 p : steps) {
+    ASSERT_TRUE(try_drag_from_press(box, from_model, from_xf, 2, p));
+    EXPECT_TRUE(grip_at(box, keep)) << "opposite corner must stay pinned";
+    EXPECT_TRUE(grip_at(box, p)) << "dragged corner must follow the cursor";
+  }
+
+  // Plan-view top-right is typically index 1 (max X, min Z).
+  const Vec3 keep1 = grips[3].world;
+  ASSERT_TRUE(
+      try_drag_from_press(box, from_model, from_xf, 1, {keep1.x - 1.2f, 0.f, keep1.z + 1.2f}));
+  EXPECT_TRUE(grip_at(box, keep1));
+  EXPECT_TRUE(grip_at(box, {keep1.x - 1.2f, 0.f, keep1.z + 1.2f}));
+
+  SlabEntity slab({0.f, 0.f, 0.f}, 2.0, 2.0, 0.2);
+  auto slab_grips = collect_entity_grips(slab);
+  ASSERT_EQ(slab_grips.size(), 4u);
+  const FeatureModel slab_from = slab.model;
+  const Mat4 slab_xf = slab.local_transform;
+  const Vec3 slab_keep = slab_grips[0].world;
+  ASSERT_TRUE(try_drag_from_press(slab, slab_from, slab_xf, 2,
+                                 {slab_keep.x - 1.f, 0.f, slab_keep.z - 1.f}));
+  EXPECT_TRUE(grip_at(slab, slab_keep));
+}
+
+TEST(EntityGrip, RectWireCornerCrossesOpposite) {
+  RectangleEntity rect({0.f, 0.f, 0.f}, {2.f, 0.f, 1.f});
+  auto grips = collect_entity_grips(rect);
+  ASSERT_EQ(grips.size(), 4u);
+  const FeatureModel from_model = rect.model;
+  const Mat4 from_xf = rect.local_transform;
+  for (int index = 0; index < 4; ++index) {
+    const Vec3 keep = grips[index ^ 2].world;
+    const Vec3 past{keep.x - 1.5f, 0.f, keep.z - 1.5f};
+    ASSERT_TRUE(try_drag_from_press(rect, from_model, from_xf, index, past)) << "index " << index;
+    EXPECT_TRUE(grip_at(rect, keep)) << "index " << index;
+    EXPECT_TRUE(grip_at(rect, past)) << "index " << index;
+  }
+}
+
+TEST(EntityGrip, RotatedBoxCornerCrossesOpposite) {
+  BoxEntity box({0.f, 0.f, 0.f});
+  box.local_transform = translate({2.f, 0.f, 3.f}) * rotate_y(0.7f);
+  sync_entity_grips(box);
+  auto grips = collect_entity_grips(box);
+  ASSERT_EQ(grips.size(), 4u);
+  const FeatureModel from_model = box.model;
+  const Mat4 from_xf = box.local_transform;
+  const Vec3 keep = grips[0].world;
+  const Vec3 past = keep + (keep - grips[2].world);
+  ASSERT_TRUE(try_drag_from_press(box, from_model, from_xf, 2, past));
+  EXPECT_TRUE(grip_at(box, keep, 2e-3f));
+  EXPECT_TRUE(grip_at(box, {past.x, keep.y, past.z}, 2e-3f));
 }
 
 TEST(EntityGrip, EditCommandUndo) {

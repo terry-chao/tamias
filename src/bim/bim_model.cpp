@@ -1,6 +1,7 @@
 #include "bim/bim_model.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace tamias {
 
@@ -39,6 +40,8 @@ void BimModel::remove_involving(std::uint64_t entity_id) {
 
 void BimModel::clear() {
   relations_.clear();
+  storeys_.clear();
+  active_storey_id_ = 0;
   next_id_ = 1;
 }
 
@@ -98,6 +101,51 @@ std::vector<const Relation*> BimModel::dependents(std::uint64_t host_id) const {
     }
   }
   return out;
+}
+
+Storey& BimModel::insert_storey(Storey storey) {
+  if (Storey* existing = find_storey(storey.id)) {
+    *existing = std::move(storey);
+    return *existing;
+  }
+  storeys_.push_back(std::move(storey));
+  return storeys_.back();
+}
+
+void BimModel::remove_storey(std::uint64_t id) {
+  storeys_.erase(std::remove_if(storeys_.begin(), storeys_.end(),
+                                [id](const Storey& storey) { return storey.id == id; }),
+                 storeys_.end());
+  if (active_storey_id_ == id) {
+    active_storey_id_ = 0;
+  }
+}
+
+Storey* BimModel::find_storey(std::uint64_t id) {
+  for (Storey& storey : storeys_) {
+    if (storey.id == id) {
+      return &storey;
+    }
+  }
+  return nullptr;
+}
+
+const Storey* BimModel::find_storey(std::uint64_t id) const {
+  for (const Storey& storey : storeys_) {
+    if (storey.id == id) {
+      return &storey;
+    }
+  }
+  return nullptr;
+}
+
+void BimModel::set_active_storey_id(std::uint64_t id) {
+  active_storey_id_ = id == 0 || find_storey(id) != nullptr ? id : 0;
+}
+
+double BimModel::storey_elevation(std::uint64_t id) const {
+  const Storey* storey = find_storey(id);
+  return storey != nullptr ? storey->elevation : 0.0;
 }
 
 }  // namespace tamias

@@ -32,6 +32,8 @@ class PropertyPanel final : public QWidget {
                     const QString& param_name, double value);
   // 用户改了材质（下拉选库材质 → 引用；改色/roughness/metallic → 新建自定义材质）。
   void material_edited(std::uint64_t entity_id, Material material);
+  void location_edited(std::uint64_t entity_id, std::uint64_t storey_id,
+                       double elevation_offset);
 
  private:
   static QString entity_label(EntityKind kind);

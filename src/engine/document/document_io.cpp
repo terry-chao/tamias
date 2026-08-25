@@ -1,5 +1,8 @@
 #include "document_io.h"
 
+#include "bim/line_location.h"
+#include "bim/point_location.h"
+#include "bim/surface_location.h"
 #include "engine/graphics/mesh.h"
 #include "engine/io/binary_archive.h"
 #include "entity/entity_grip.h"
@@ -15,9 +18,10 @@ namespace tamias {
 namespace {
 
 constexpr char kMagic[4] = {'T', 'M', 'A', 'S'};
-constexpr std::uint32_t kFormatVersion = 7;
+constexpr std::uint32_t kFormatVersion = 8;
 constexpr std::uint32_t kMinFormatVersion = 5;
 constexpr std::uint32_t kGripsFormatVersion = 7;
+constexpr std::uint32_t kLocationFormatVersion = 8;
 
 constexpr std::uint32_t fourcc(char a, char b, char c, char d) {
   return static_cast<std::uint32_t>(static_cast<std::uint8_t>(a)) |
@@ -34,6 +38,7 @@ constexpr std::uint32_t kChunkFeat = fourcc('F', 'E', 'A', 'T');
 constexpr std::uint32_t kChunkMatl = fourcc('M', 'A', 'T', 'L');
 constexpr std::uint32_t kChunkTex = fourcc('T', 'E', 'X', 'T');
 constexpr std::uint32_t kChunkRela = fourcc('R', 'E', 'L', 'A');
+constexpr std::uint32_t kChunkStry = fourcc('S', 'T', 'R', 'Y');
 
 Result<void> write_vec2(BinaryWriter& w, const Vec2& v) {
   if (auto r = w.write_f32(v.x); !r) {
@@ -100,6 +105,88 @@ Result<void> read_mat4(BinaryReader& r, Mat4& m) {
     f = *v;
   }
   return {};
+}
+
+Result<void> write_location(BinaryWriter& w, const Location* location) {
+  if (auto r = w.write_bool(location != nullptr); !r || location == nullptr) {
+    return r;
+  }
+  if (auto r = w.write_u8(static_cast<std::uint8_t>(location->kind())); !r) {
+    return r;
+  }
+  if (auto r = w.write_u64(location->storey_id()); !r) {
+    return r;
+  }
+  if (auto r = w.write_f64(location->elevation_offset()); !r) {
+    return r;
+  }
+  switch (location->kind()) {
+    case LocationKind::Point:
+      return write_vec3(w, static_cast<const PointLocation*>(location)->point());
+    case LocationKind::Line: {
+      const auto* line = static_cast<const LineLocation*>(location);
+      if (auto r = write_vec3(w, line->start()); !r) {
+        return r;
+      }
+      return write_vec3(w, line->end());
+    }
+    case LocationKind::Surface: {
+      const auto* surface = static_cast<const SurfaceLocation*>(location);
+      if (auto r = write_vec3(w, surface->origin()); !r) {
+        return r;
+      }
+      return write_vec3(w, surface->x_axis());
+    }
+  }
+  return Err("document_io: invalid location kind");
+}
+
+Result<std::unique_ptr<Location>> read_location(BinaryReader& r) {
+  auto present = r.read_bool();
+  if (!present) {
+    return Err(present.error());
+  }
+  if (!*present) {
+    return std::unique_ptr<Location>{};
+  }
+  auto kind = r.read_u8();
+  if (!kind) {
+    return Err(kind.error());
+  }
+  auto storey_id = r.read_u64();
+  if (!storey_id) {
+    return Err(storey_id.error());
+  }
+  auto offset = r.read_f64();
+  if (!offset) {
+    return Err(offset.error());
+  }
+  Vec3 a{};
+  if (auto res = read_vec3(r, a); !res) {
+    return Err(res.error());
+  }
+  switch (static_cast<LocationKind>(*kind)) {
+    case LocationKind::Point:
+      return std::unique_ptr<Location>(
+          std::make_unique<PointLocation>(a, *storey_id, *offset));
+    case LocationKind::Line: {
+      Vec3 b{};
+      if (auto res = read_vec3(r, b); !res) {
+        return Err(res.error());
+      }
+      return std::unique_ptr<Location>(
+          std::make_unique<LineLocation>(a, b, *storey_id, *offset));
+    }
+    case LocationKind::Surface: {
+      Vec3 axis{};
+      if (auto res = read_vec3(r, axis); !res) {
+        return Err(res.error());
+      }
+      return std::unique_ptr<Location>(
+          std::make_unique<SurfaceLocation>(a, axis, *storey_id, *offset));
+    }
+  }
+  return Err("document_io: invalid location kind");
 }
 
 Result<void> write_aabb(BinaryWriter& w, const Aabb& box) {
@@ -416,6 +503,36 @@ Result<void> read_texture_asset(BinaryReader& r, TextureAsset& t) {
   return {};
 }
 
+std::unique_ptr<Location> legacy_location(EntityKind kind, const Mat4& transform,
+                                          const FeatureModel& model) {
+  const double elevation = static_cast<double>(transform(1, 3));
+  if (kind == EntityKind::Column) {
+    return std::make_unique<PointLocation>(
+        Vec3{transform(0, 3), 0.f, transform(2, 3)}, 0, elevation);
+  }
+  if (kind == EntityKind::Slab) {
+    return std::make_unique<SurfaceLocation>(
+        Vec3{transform(0, 3), 0.f, transform(2, 3)},
+        Vec3{transform(0, 0), 0.f, transform(2, 0)}, 0, elevation);
+  }
+  if (kind == EntityKind::Wall) {
+    double length = 1.0;
+    for (const Feature& feature : model.features()) {
+      if (feature.kind == FeatureKind::RectProfile) {
+        length = model.param(feature.id, "height", 1.0);
+        break;
+      }
+    }
+    const float half = static_cast<float>(length * 0.5);
+    Vec3 start = transform * Vec3{0.f, 0.f, -half};
+    Vec3 end = transform * Vec3{0.f, 0.f, half};
+    start.y = 0.f;
+    end.y = 0.f;
+    return std::make_unique<LineLocation>(start, end, 0, elevation);
+  }
+  return nullptr;
+}
+
 Result<void> write_entity(BinaryWriter& w, const Entity& e) {
   if (auto r = w.write_u64(e.id); !r) {
     return r;
@@ -435,6 +552,9 @@ Result<void> write_entity(BinaryWriter& w, const Entity& e) {
   if (auto r = write_mat4(w, e.local_transform); !r) {
     return r;
   }
+  if (auto r = write_location(w, e.location.get()); !r) {
+    return r;
+  }
   if (auto r = write_feature_model(w, e.model); !r) {
     return r;
   }
@@ -449,7 +569,8 @@ Result<void> write_entity(BinaryWriter& w, const Entity& e) {
   return {};
 }
 
-Result<void> read_entity(BinaryReader& r, std::unique_ptr<Entity>& out, bool read_grips) {
+Result<void> read_entity(BinaryReader& r, std::unique_ptr<Entity>& out, bool read_grips,
+                         bool read_location_data) {
   auto id = r.read_u64();
   if (!id) {
     return Err(id.error());
@@ -474,6 +595,14 @@ Result<void> read_entity(BinaryReader& r, std::unique_ptr<Entity>& out, bool rea
   if (auto res = read_mat4(r, transform); !res) {
     return res;
   }
+  std::unique_ptr<Location> location;
+  if (read_location_data) {
+    auto decoded = read_location(r);
+    if (!decoded) {
+      return Err(decoded.error());
+    }
+    location = std::move(*decoded);
+  }
 
   auto entity = make_entity(static_cast<EntityKind>(*kind_u8));
   entity->id = *id;
@@ -484,6 +613,9 @@ Result<void> read_entity(BinaryReader& r, std::unique_ptr<Entity>& out, bool rea
   if (auto res = read_feature_model(r, entity->model); !res) {
     return res;
   }
+  entity->location = read_location_data
+                         ? std::move(location)
+                         : legacy_location(entity->kind(), transform, entity->model);
   if (read_grips) {
     auto count = r.read_u64();
     if (!count) {
@@ -569,6 +701,33 @@ Result<void> read_relation(BinaryReader& r, Relation& rel) {
     return Err(valid.error());
   }
   rel.valid = *valid;
+  return {};
+}
+
+Result<void> write_storey(BinaryWriter& w, const Storey& storey) {
+  if (auto r = w.write_u64(storey.id); !r) {
+    return r;
+  }
+  if (auto r = w.write_string(storey.name); !r) {
+    return r;
+  }
+  return w.write_f64(storey.elevation);
+}
+
+Result<void> read_storey(BinaryReader& r, Storey& storey) {
+  auto id = r.read_u64();
+  if (!id) {
+    return Err(id.error());
+  }
+  auto name = r.read_string();
+  if (!name) {
+    return Err(name.error());
+  }
+  auto elevation = r.read_f64();
+  if (!elevation) {
+    return Err(elevation.error());
+  }
+  storey = {*id, std::move(*name), *elevation};
   return {};
 }
 
@@ -794,6 +953,17 @@ Result<void> write_document_body(BinaryWriter& w, const Document& document) {
       return r;
     }
   }
+  if (auto r = w.write_u64(static_cast<std::uint64_t>(document.bim().storeys().size())); !r) {
+    return r;
+  }
+  for (const Storey& storey : document.bim().storeys()) {
+    if (auto r = write_storey(w, storey); !r) {
+      return r;
+    }
+  }
+  if (auto r = w.write_u64(document.bim().active_storey_id()); !r) {
+    return r;
+  }
   return {};
 }
 
@@ -851,7 +1021,7 @@ Result<Document> read_document_body(BinaryReader& r) {
   }
   for (std::uint64_t i = 0; i < *entity_count; ++i) {
     std::unique_ptr<Entity> entity;
-    if (auto res = read_entity(r, entity, true); !res) {
+    if (auto res = read_entity(r, entity, true, true); !res) {
       return Err(res.error());
     }
     document.insert_entity(std::move(entity));
@@ -898,6 +1068,24 @@ Result<Document> read_document_body(BinaryReader& r) {
       document.bim().insert(std::move(rel));
     }
     document.bim().set_next_id(*next_rel);
+  }
+  if (r.remaining() > 0) {
+    auto storey_count = r.read_u64();
+    if (!storey_count) {
+      return Err(storey_count.error());
+    }
+    for (std::uint64_t i = 0; i < *storey_count; ++i) {
+      Storey storey{};
+      if (auto res = read_storey(r, storey); !res) {
+        return Err(res.error());
+      }
+      document.bim().insert_storey(std::move(storey));
+    }
+    auto active_storey = r.read_u64();
+    if (!active_storey) {
+      return Err(active_storey.error());
+    }
+    document.bim().set_active_storey_id(*active_storey);
   }
 
   document.set_next_mesh_id(*next_mesh);
@@ -1061,6 +1249,20 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
     }
   }
 
+  BinaryWriter stry_w;
+  if (auto r = stry_w.write_u64(document.bim().active_storey_id()); !r) {
+    return r;
+  }
+  if (auto r = stry_w.write_u64(static_cast<std::uint64_t>(document.bim().storeys().size()));
+      !r) {
+    return r;
+  }
+  for (const Storey& storey : document.bim().storeys()) {
+    if (auto r = write_storey(stry_w, storey); !r) {
+      return r;
+    }
+  }
+
   BinaryWriter view_w;
   if (auto r = write_viewport(view_w, viewport); !r) {
     return r;
@@ -1073,7 +1275,7 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
   if (auto r = file.write_u32(kFormatVersion); !r) {
     return r;
   }
-  if (auto r = file.write_u32(8); !r) {  // chunk_count
+  if (auto r = file.write_u32(9); !r) {  // chunk_count
     return r;
   }
   if (auto r = append_chunk(file, kChunkMeta, meta_w.data()); !r) {
@@ -1095,6 +1297,9 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
     return r;
   }
   if (auto r = append_chunk(file, kChunkRela, rela_w.data()); !r) {
+    return r;
+  }
+  if (auto r = append_chunk(file, kChunkStry, stry_w.data()); !r) {
     return r;
   }
   if (auto r = append_chunk(file, kChunkView, view_w.data()); !r) {
@@ -1146,7 +1351,9 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes) 
   std::vector<Material> materials;
   std::vector<TextureAsset> textures;
   std::vector<Relation> relations;
+  std::vector<Storey> storeys;
   std::uint64_t next_relation_id = 1;
+  std::uint64_t active_storey_id = 0;
   ViewportState viewport{};
   bool has_meta = false;
   bool has_mesh = false;
@@ -1239,7 +1446,10 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes) 
       entities.reserve(static_cast<std::size_t>(*count));
       for (std::uint64_t f = 0; f < *count; ++f) {
         std::unique_ptr<Entity> entity;
-        if (auto res = read_entity(chunk_r, entity, *version >= kGripsFormatVersion); !res) {
+        if (auto res =
+                read_entity(chunk_r, entity, *version >= kGripsFormatVersion,
+                            *version >= kLocationFormatVersion);
+            !res) {
           return Err(res.error());
         }
         entities.push_back(std::move(entity));
@@ -1291,6 +1501,25 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes) 
         }
         relations.push_back(std::move(rel));
       }
+    } else if (*id == kChunkStry) {
+      auto active = chunk_r.read_u64();
+      if (!active) {
+        return Err(active.error());
+      }
+      active_storey_id = *active;
+      auto count = chunk_r.read_u64();
+      if (!count) {
+        return Err(count.error());
+      }
+      storeys.clear();
+      storeys.reserve(static_cast<std::size_t>(*count));
+      for (std::uint64_t n = 0; n < *count; ++n) {
+        Storey storey{};
+        if (auto res = read_storey(chunk_r, storey); !res) {
+          return Err(res.error());
+        }
+        storeys.push_back(std::move(storey));
+      }
     } else if (*id == kChunkView) {
       if (auto res = read_viewport(chunk_r, viewport); !res) {
         return Err(res.error());
@@ -1325,6 +1554,10 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes) 
   for (auto& rel : relations) {
     loaded.document.bim().insert(std::move(rel));
   }
+  for (auto& storey : storeys) {
+    loaded.document.bim().insert_storey(std::move(storey));
+  }
+  loaded.document.bim().set_active_storey_id(active_storey_id);
   loaded.document.bim().set_next_id(next_relation_id);
   loaded.document.set_next_mesh_id(next_mesh_id);
   loaded.document.scene().set_next_id(next_node_id);

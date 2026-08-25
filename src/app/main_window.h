@@ -99,6 +99,8 @@ class MainWindow final : public QMainWindow {
   QAction* circle_action_ = nullptr;
   QAction* arc_action_ = nullptr;
   QAction* bezier_action_ = nullptr;
+  QAction* bspline_action_ = nullptr;
+  QAction* nurbs_action_ = nullptr;
   QAction* rectangle_action_ = nullptr;
   QAction* fillet_action_ = nullptr;
   QAction* chamfer_action_ = nullptr;

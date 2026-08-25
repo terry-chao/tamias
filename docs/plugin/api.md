@@ -23,14 +23,14 @@ public interface IHost
 | 成员 | 行为 |
 |---|---|
 | `DocumentName` | 当前绑定文档的名字；无文档时为空 |
-| `Entities` | 全部实体：`Id` / `Kind` / `Name`。id 升序。种类是字符串解析成 `EntityKind`（`Wall`…`Rectangle`，解析失败为 `Unknown`） |
+| `Entities` | 全部实体：`Id` / `Kind` / `Name`。id 升序。种类是字符串解析成 `EntityKind`（`Wall`…`Nurbs`，解析失败为 `Unknown`） |
 | `Selection` | 当前选中 id 列表（文档选择顺序） |
 | `Log` | UTF-8 日志；主窗口接到后显示状态栏 |
 | `Dispatch` | 把命令名 + 参数文本交给 C++ `CommandSystem`；失败抛 `InvalidOperationException`（宿主会 `Log` 异常消息） |
 | `AddCommand` | 在 `Load` 时登记 Ribbon 按钮。`id` 全局唯一；重复登记失败。`title` 是按钮文字，`tooltip` 可选 |
 
 `EntityInfo`：`(ulong Id, EntityKind Kind, string Name)`。  
-`EntityKind`：`Unknown = -1`，其余与 C++ `EntityKind` 同序（Wall=0 … Rectangle=13）。
+`EntityKind`：`Unknown = -1`，其余与 C++ `EntityKind` 同序（Wall=0 … Nurbs=15）。
 
 没有活动文档时：实体/选择为空，`Dispatch` 失败（「no active document」）。
 
@@ -83,7 +83,7 @@ host.Dispatch("set_param", new CommandArgs()
 
 ### 3.2 交互式（dispatch 只「武装」工具）
 
-`create_wall` / `create_beam` / `create_box` / `create_cylinder` / `create_column` / `create_slab` / `create_door` / `create_window` 以及草图类 `create_line`、`create_polyline`、`create_circle`、`create_arc`、`create_bezier`、`create_rectangle` 在 C++ 里是交互命令：`dispatch` 只把它们设成 pending，**还要在视口里点**。
+`create_wall` / `create_beam` / `create_box` / `create_cylinder` / `create_column` / `create_slab` / `create_door` / `create_window` 以及草图类 `create_line`、`create_polyline`、`create_circle`、`create_arc`、`create_bezier`、`create_rectangle`、`create_bspline`、`create_nurbs` 在 C++ 里是交互命令：`dispatch` 只把它们设成 pending，**还要在视口里点**。
 
 部分创建命令接受默认尺寸，但仍然要拾取：
 

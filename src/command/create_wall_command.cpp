@@ -5,7 +5,10 @@
 namespace tamias {
 
 CreateWallCommand::CreateWallCommand(Document& document, double thickness, double height)
-    : document_(&document), thickness_(thickness), height_(height) {}
+    : document_(&document),
+      thickness_(thickness),
+      height_(height),
+      elevation_(document.bim().storey_elevation(document.bim().active_storey_id())) {}
 
 Result<bool> CreateWallCommand::on_point(Vec3 point) {
   if (!has_start_) {
@@ -19,6 +22,7 @@ Result<bool> CreateWallCommand::on_point(Vec3 point) {
 
 Result<void> CreateWallCommand::execute() {
   WallEntity wall(start_, end_, thickness_, height_);  // 两点构造实体
+  document_->assign_active_storey(wall);
   auto geometry = wall.createGeom();                    // 造型（实体 createGeom）
   if (!geometry) {
     return Err(geometry.error());

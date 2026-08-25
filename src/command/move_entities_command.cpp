@@ -20,7 +20,11 @@ void MoveEntitiesCommand::apply(bool to_target) {
   for (const EntityTransform& item : items_) {
     const Mat4& local = to_target ? item.to : item.from;
     if (Entity* entity = document_->entity(item.id)) {
-      entity->local_transform = local;
+      const double storey_elevation =
+          entity->location
+              ? document_->bim().storey_elevation(entity->location->storey_id())
+              : 0.0;
+      entity->sync_location_from_transform(local, storey_elevation);
     }
     document_->scene().set_transform(item.id, local);
   }

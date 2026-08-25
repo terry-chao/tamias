@@ -45,6 +45,10 @@ const char* kind_name(EntityKind kind) {
       return "Bezier";
     case EntityKind::Rectangle:
       return "Rectangle";
+    case EntityKind::BSpline:
+      return "BSpline";
+    case EntityKind::Nurbs:
+      return "Nurbs";
   }
   return "Entity";
 }

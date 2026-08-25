@@ -5,12 +5,14 @@ add_library(tamias_command STATIC
   create_beam_command.cpp
   create_primitive_command.cpp
   create_slab_command.cpp
+  create_storey_command.cpp
   create_sketch_command.cpp
   delete_entity_command.cpp
   move_entities_command.cpp
   set_feature_param_command.cpp
   edit_entity_grip_command.cpp
   set_material_command.cpp
+  set_location_command.cpp
   command_system.cpp
   register_commands.cpp
 )

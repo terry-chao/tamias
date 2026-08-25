@@ -18,8 +18,10 @@
 #include <QCoreApplication>
 #include <QCursor>
 #include <QIcon>
+#include <QInputDialog>
 #include <QKeyEvent>
 #include <QKeySequence>
+#include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
 #include <QMouseEvent>
@@ -901,6 +903,14 @@ void DocumentViewport::dispatch_tool_command(ToolMode mode) {
     if (auto r = session_->dispatch("create_bezier", {}); !r) {
       log_error(r.error());
     }
+  } else if (mode == ToolMode::BSpline) {
+    if (auto r = session_->dispatch("create_bspline", {}); !r) {
+      log_error(r.error());
+    }
+  } else if (mode == ToolMode::Nurbs) {
+    if (auto r = session_->dispatch("create_nurbs", {}); !r) {
+      log_error(r.error());
+    }
   } else if (mode == ToolMode::Rectangle) {
     if (auto r = session_->dispatch("create_rectangle", {}); !r) {
       log_error(r.error());
@@ -1027,6 +1037,25 @@ void DocumentViewport::set_entity_material(std::uint64_t entity_id, const Materi
   } else {
     log_error(r.error());
   }
+}
+
+void DocumentViewport::create_storey(const std::string& name, double elevation) {
+  run_command("create_storey", {{"name", name}, {"elevation", elevation}});
+}
+
+void DocumentViewport::set_active_storey(std::uint64_t storey_id) {
+  document_->set_active_storey(storey_id);
+  request_redraw();
+  emit document_changed();
+}
+
+void DocumentViewport::set_entity_location(std::uint64_t entity_id, std::uint64_t storey_id,
+                                           double elevation_offset) {
+  run_command("set_location",
+              {{"entity_id", static_cast<std::int64_t>(entity_id)},
+               {"storey_id", static_cast<std::int64_t>(storey_id)},
+               {"elevation_offset", elevation_offset}},
+              /*notify=*/false);
 }
 
 void DocumentViewport::fillet_selected(double radius) {
@@ -1406,6 +1435,8 @@ void DocumentViewport::populate_visibility_menu() {
   add_kind(EntityKind::Circle, tr("Circles"), QStringLiteral(":/icons/circle.svg"));
   add_kind(EntityKind::Arc, tr("Arcs"), QStringLiteral(":/icons/arc.svg"));
   add_kind(EntityKind::Bezier, tr("Beziers"), QStringLiteral(":/icons/bezier.svg"));
+  add_kind(EntityKind::BSpline, tr("B-splines"), QStringLiteral(":/icons/bspline.svg"));
+  add_kind(EntityKind::Nurbs, tr("NURBS"), QStringLiteral(":/icons/nurbs.svg"));
   add_kind(EntityKind::Rectangle, tr("Rectangles"), QStringLiteral(":/icons/rectangle.svg"));
 }
 
@@ -1416,6 +1447,45 @@ void DocumentViewport::populate_floor_menu() {
   refresh_floors();
   QMenu* menu = tool_strip_->floor_menu();
   menu->clear();
+
+  QAction* current_header = menu->addAction(tr("Current Storey"));
+  current_header->setEnabled(false);
+  auto* storey_group = new QActionGroup(menu);
+  storey_group->setExclusive(true);
+  QAction* unassigned = menu->addAction(tr("Unassigned"));
+  unassigned->setCheckable(true);
+  unassigned->setChecked(document_->bim().active_storey_id() == 0);
+  storey_group->addAction(unassigned);
+  connect(unassigned, &QAction::triggered, this, [this] { set_active_storey(0); });
+  for (const Storey& storey : document_->bim().storeys()) {
+    QAction* action = menu->addAction(
+        tr("%1  (%2 m)").arg(QString::fromStdString(storey.name)).arg(storey.elevation, 0, 'f', 3));
+    action->setCheckable(true);
+    action->setChecked(document_->bim().active_storey_id() == storey.id);
+    storey_group->addAction(action);
+    connect(action, &QAction::triggered, this,
+            [this, id = storey.id] { set_active_storey(id); });
+  }
+  QAction* create = menu->addAction(tr("New Storey..."));
+  connect(create, &QAction::triggered, this, [this] {
+    bool accepted = false;
+    const QString name =
+        QInputDialog::getText(this, tr("New Storey"), tr("Name"), QLineEdit::Normal,
+                              tr("Storey"), &accepted);
+    if (!accepted || name.trimmed().isEmpty()) {
+      return;
+    }
+    const double elevation =
+        QInputDialog::getDouble(this, tr("New Storey"), tr("Elevation (m)"), 0.0,
+                                -1000000.0, 1000000.0, 3, &accepted);
+    if (accepted) {
+      create_storey(name.trimmed().toStdString(), elevation);
+    }
+  });
+
+  menu->addSeparator();
+  QAction* filter_header = menu->addAction(tr("Visibility Filter"));
+  filter_header->setEnabled(false);
   auto* group = new QActionGroup(menu);
   group->setExclusive(true);
 
@@ -1480,7 +1550,17 @@ void DocumentViewport::apply_grip_at(const QPoint& pos) {
   }
   Vec3 p = snapped_ground_position(pos);
   p.y = grip_from_world_.y;
+  // Always reshape from the press-time snapshot. Canonical corner indices
+  // remap after a rebuild; applying incrementally would pin the wrong opposite
+  // once the dragged corner crosses through it.
+  const FeatureModel last_model = entity->model;
+  const Mat4 last_xf = entity->local_transform;
+  entity->model = grip_from_model_;
+  entity->local_transform = grip_from_transform_;
   if (!apply_entity_grip(*entity, active_grip_.index, p)) {
+    entity->model = last_model;
+    entity->local_transform = last_xf;
+    sync_entity_grips(*entity);
     return;
   }
   if (auto r = rebuild_entity_mesh(*document_, entity->id); !r) {
@@ -1536,7 +1616,9 @@ void DocumentViewport::fill_grip_overlay(FrameSubmission& frame) const {
     if (grips.empty()) {
       continue;
     }
-    if (entity->kind() == EntityKind::Bezier && frame.preview_control_polyline.empty()) {
+    if ((entity->kind() == EntityKind::Bezier || entity->kind() == EntityKind::BSpline ||
+         entity->kind() == EntityKind::Nurbs) &&
+        frame.preview_control_polyline.empty()) {
       frame.preview_control_polyline.reserve(grips.size());
       for (const EntityGrip& g : grips) {
         frame.preview_control_polyline.push_back(g.world);

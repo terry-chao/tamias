@@ -24,6 +24,8 @@
     <file alias="circle.svg">../../assets/icons/circle.svg</file>
     <file alias="arc.svg">../../assets/icons/arc.svg</file>
     <file alias="bezier.svg">../../assets/icons/bezier.svg</file>
+    <file alias="bspline.svg">../../assets/icons/bspline.svg</file>
+    <file alias="nurbs.svg">../../assets/icons/nurbs.svg</file>
     <file alias="rectangle.svg">../../assets/icons/rectangle.svg</file>
     <file alias="fillet.svg">../../assets/icons/fillet.svg</file>
     <file alias="chamfer.svg">../../assets/icons/chamfer.svg</file>

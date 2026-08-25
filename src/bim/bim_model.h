@@ -1,6 +1,7 @@
 #pragma once
 
 #include "bim/relation.h"
+#include "bim/storey.h"
 
 #include <cstdint>
 #include <vector>
@@ -31,8 +32,20 @@ class BimModel {
   [[nodiscard]] std::uint64_t next_id() const { return next_id_; }
   void set_next_id(std::uint64_t id);
 
+  Storey& insert_storey(Storey storey);
+  void remove_storey(std::uint64_t id);
+  [[nodiscard]] Storey* find_storey(std::uint64_t id);
+  [[nodiscard]] const Storey* find_storey(std::uint64_t id) const;
+  [[nodiscard]] const std::vector<Storey>& storeys() const { return storeys_; }
+  [[nodiscard]] std::vector<Storey>& storeys() { return storeys_; }
+  [[nodiscard]] std::uint64_t active_storey_id() const { return active_storey_id_; }
+  void set_active_storey_id(std::uint64_t id);
+  [[nodiscard]] double storey_elevation(std::uint64_t id) const;
+
  private:
   std::vector<Relation> relations_;
+  std::vector<Storey> storeys_;
+  std::uint64_t active_storey_id_ = 0;
   std::uint64_t next_id_ = 1;
 };
 

@@ -1,5 +1,6 @@
 #include "entity/entity_grip.h"
 
+#include "bim/line_location.h"
 #include "entity/entity.h"
 #include "engine/modeling/curve_geom.h"
 #include "engine/modeling/feature.h"
@@ -50,6 +51,9 @@ std::vector<Vec3> sketch_locals(const Entity& entity) {
       return polyline_points(entity.model, *out);
     case FeatureKind::Bezier:
       return bezier_control_points(entity.model, *out);
+    case FeatureKind::BSpline:
+    case FeatureKind::Nurbs:
+      return spline_control_points(entity.model, *out);
     case FeatureKind::Arc:
       return {feature_xyz(entity.model, out->id, "a"), feature_xyz(entity.model, out->id, "b"),
               feature_xyz(entity.model, out->id, "c")};
@@ -103,8 +107,26 @@ bool apply_sketch(Entity& entity, int index, Vec3 world) {
         return false;
       }
       ctrls[static_cast<std::size_t>(index)] = local;
-      const auto params = bezier_feature_params(ctrls);
-      out->params = params;
+      out->params = bezier_feature_params(ctrls);
+      return true;
+    }
+    case FeatureKind::BSpline: {
+      auto ctrls = spline_control_points(entity.model, *out);
+      if (index < 0 || index >= static_cast<int>(ctrls.size())) {
+        return false;
+      }
+      ctrls[static_cast<std::size_t>(index)] = local;
+      out->params = bspline_feature_params(ctrls, spline_degree(entity.model, *out));
+      return true;
+    }
+    case FeatureKind::Nurbs: {
+      auto ctrls = spline_control_points(entity.model, *out);
+      if (index < 0 || index >= static_cast<int>(ctrls.size())) {
+        return false;
+      }
+      auto weights = nurbs_weights(entity.model, *out);
+      ctrls[static_cast<std::size_t>(index)] = local;
+      out->params = nurbs_feature_params(ctrls, weights, spline_degree(entity.model, *out));
       return true;
     }
     case FeatureKind::Arc: {
@@ -133,21 +155,28 @@ bool apply_sketch(Entity& entity, int index, Vec3 world) {
       return true;
     }
     case FeatureKind::RectWire: {
-      Vec3 a = feature_xyz(entity.model, out->id, "a");
-      Vec3 b = feature_xyz(entity.model, out->id, "b");
-      Vec3 corners[4] = {{a.x, a.y, a.z}, {b.x, a.y, a.z}, {b.x, a.y, b.z}, {a.x, a.y, b.z}};
+      const Vec3 a = feature_xyz(entity.model, out->id, "a");
+      const Vec3 b = feature_xyz(entity.model, out->id, "b");
+      const Vec3 corners[4] = {
+          {a.x, a.y, a.z}, {b.x, a.y, a.z}, {b.x, a.y, b.z}, {a.x, a.y, b.z}};
       if (index < 0 || index > 3) {
         return false;
       }
-      const int opp = index ^ 2;
-      const Vec3 keep = corners[opp];
-      a = {keep.x, a.y, keep.z};
-      b = {local.x, a.y, local.z};
-      if (std::abs(b.x - a.x) < kMinSize || std::abs(b.z - a.z) < kMinSize) {
-        return false;
+      // Pin the opposite corner. Canonicalize a=min, b=max so winding stays stable
+      // even when the dragged corner crosses through the keep corner.
+      const Vec3 keep = corners[index ^ 2];
+      float bx = local.x;
+      float bz = local.z;
+      if (std::abs(bx - keep.x) < kMinSize) {
+        bx = keep.x + (bx >= keep.x ? kMinSize : -kMinSize);
       }
-      set_feature_xyz(entity.model, out->id, "a", a);
-      set_feature_xyz(entity.model, out->id, "b", b);
+      if (std::abs(bz - keep.z) < kMinSize) {
+        bz = keep.z + (bz >= keep.z ? kMinSize : -kMinSize);
+      }
+      set_feature_xyz(entity.model, out->id, "a",
+                      {std::min(keep.x, bx), a.y, std::min(keep.z, bz)});
+      set_feature_xyz(entity.model, out->id, "b",
+                      {std::max(keep.x, bx), a.y, std::max(keep.z, bz)});
       return true;
     }
     default:
@@ -173,7 +202,18 @@ bool apply_segment(Entity& entity, int index, Vec3 world) {
   const Vec3 mid{(a.x + b.x) * 0.5f, start.y, (a.z + b.z) * 0.5f};
   const float yaw = std::atan2(d.x, d.z);
   entity.model.set_param(profile->id, "height", static_cast<double>(len));
-  entity.local_transform = translate(mid) * rotate_y(yaw);
+  const double storey_elevation =
+      entity.location ? static_cast<double>(entity.local_transform(1, 3)) -
+                            entity.location->elevation_offset()
+                      : 0.0;
+  if (entity.location && entity.location->kind() == LocationKind::Line) {
+    auto* line = static_cast<LineLocation*>(entity.location.get());
+    line->set_start(a);
+    line->set_end(b);
+    entity.sync_from_location(storey_elevation);
+  } else {
+    entity.local_transform = translate(mid) * rotate_y(yaw);
+  }
   return true;
 }
 
@@ -187,21 +227,29 @@ bool apply_footprint_corner(Entity& entity, int index, Vec3 world) {
   const float hh =
       static_cast<float>(std::max(entity.model.param(profile->id, "height", 1.0), 0.0)) * 0.5f;
   const Vec3 corners[4] = {
-      entity.local_transform * Vec3{-hw, 0.f, -hh},
-      entity.local_transform * Vec3{hw, 0.f, -hh},
-      entity.local_transform * Vec3{hw, 0.f, hh},
-      entity.local_transform * Vec3{-hw, 0.f, hh},
+      {-hw, 0.f, -hh},
+      {hw, 0.f, -hh},
+      {hw, 0.f, hh},
+      {-hw, 0.f, hh},
   };
   const Vec3 keep = corners[index ^ 2];
-  const Vec3 t{entity.local_transform(0, 3), entity.local_transform(1, 3),
-               entity.local_transform(2, 3)};
-  const float nx = (world.x + keep.x) * 0.5f;
-  const float nz = (world.z + keep.z) * 0.5f;
-  const float w = std::max(std::abs(world.x - keep.x), kMinSize);
-  const float d = std::max(std::abs(world.z - keep.z), kMinSize);
+  Vec3 local = invert_affine(entity.local_transform) * world;
+  local.y = 0.f;
+  const float w = std::max(std::abs(local.x - keep.x), kMinSize);
+  const float d = std::max(std::abs(local.z - keep.z), kMinSize);
+  const Vec3 local_mid{(local.x + keep.x) * 0.5f, 0.f, (local.z + keep.z) * 0.5f};
+  const Vec3 world_mid = entity.local_transform * local_mid;
   entity.model.set_param(profile->id, "width", static_cast<double>(w));
   entity.model.set_param(profile->id, "height", static_cast<double>(d));
-  entity.local_transform = translate({nx, t.y, nz});
+  Mat4 xf = entity.local_transform;
+  xf(0, 3) = world_mid.x;
+  xf(1, 3) = world_mid.y;
+  xf(2, 3) = world_mid.z;
+  const double storey_elevation =
+      entity.location ? static_cast<double>(entity.local_transform(1, 3)) -
+                            entity.location->elevation_offset()
+                      : 0.0;
+  entity.sync_location_from_transform(xf, storey_elevation);
   return true;
 }
 
@@ -210,6 +258,8 @@ std::vector<Vec3> inferred_grip_locals(const Entity& entity) {
     case EntityKind::Line:
     case EntityKind::Polyline:
     case EntityKind::Bezier:
+    case EntityKind::BSpline:
+    case EntityKind::Nurbs:
     case EntityKind::Arc:
     case EntityKind::Circle:
     case EntityKind::Rectangle:
@@ -268,6 +318,8 @@ bool apply_entity_grip(Entity& entity, int index, Vec3 world) {
     case EntityKind::Line:
     case EntityKind::Polyline:
     case EntityKind::Bezier:
+    case EntityKind::BSpline:
+    case EntityKind::Nurbs:
     case EntityKind::Arc:
     case EntityKind::Circle:
     case EntityKind::Rectangle:

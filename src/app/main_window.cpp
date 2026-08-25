@@ -307,6 +307,28 @@ MainWindow::MainWindow(QWidget* parent)
   create_group_->addAction(bezier_action_);
   addAction(bezier_action_);
 
+  bspline_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/bspline.svg")),
+                               tr("B-spline"), this);
+  bspline_action_->setCheckable(true);
+  bspline_action_->setProperty("toolMode", static_cast<int>(ToolMode::BSpline));
+  bspline_action_->setToolTip(
+      tr("Create a B-spline: click control points, Enter or double-click to finish"));
+  connect(bspline_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::BSpline); });
+  create_group_->addAction(bspline_action_);
+  addAction(bspline_action_);
+
+  nurbs_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/nurbs.svg")),
+                             tr("NURBS"), this);
+  nurbs_action_->setCheckable(true);
+  nurbs_action_->setProperty("toolMode", static_cast<int>(ToolMode::Nurbs));
+  nurbs_action_->setToolTip(
+      tr("Create a NURBS: click control points, then edit weights in Properties"));
+  connect(nurbs_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::Nurbs); });
+  create_group_->addAction(nurbs_action_);
+  addAction(nurbs_action_);
+
   fillet_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/fillet.svg")),
                               tr("Fillet"), this);
   fillet_action_->setToolTip(tr("Fillet the selected entity's first edge"));
@@ -445,6 +467,8 @@ MainWindow::MainWindow(QWidget* parent)
   draw_group->add_action(circle_action_);
   draw_group->add_action(arc_action_);
   draw_group->add_action(bezier_action_);
+  draw_group->add_action(bspline_action_);
+  draw_group->add_action(nurbs_action_);
 
   RibbonGroup* primitives_group = home_page->add_group(tr("Primitives"));
   primitives_group->add_action(box_action_);
@@ -540,6 +564,13 @@ MainWindow::MainWindow(QWidget* parent)
           [this](std::uint64_t entity_id, Material material) {
             if (auto* vp = current_viewport()) {
               vp->set_entity_material(entity_id, std::move(material));
+            }
+          });
+  connect(property_panel_, &PropertyPanel::location_edited, this,
+          [this](std::uint64_t entity_id, std::uint64_t storey_id,
+                 double elevation_offset) {
+            if (auto* vp = current_viewport()) {
+              vp->set_entity_location(entity_id, storey_id, elevation_offset);
             }
           });
   refresh_property_panel();

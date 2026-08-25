@@ -1,9 +1,13 @@
 #include "set_feature_param_command.h"
 
+#include "bim/line_location.h"
 #include "bim/host_update.h"
 #include "entity/entity_grip.h"
 #include "engine/modeling/feature.h"
 #include "engine/modeling/occt_geom_builder.h"
+
+#include <algorithm>
+#include <cmath>
 
 namespace tamias {
 
@@ -37,6 +41,25 @@ Result<void> SetFeatureParamCommand::apply(double value) {
     return Err("SetFeatureParamCommand: entity not found");
   }
   entity->model.set_param(feature_id_, param_name_, value);
+  const Feature* changed = entity->model.find(feature_id_);
+  if (entity->kind() == EntityKind::Wall && entity->location &&
+      entity->location->kind() == LocationKind::Line && changed != nullptr &&
+      changed->kind == FeatureKind::RectProfile && param_name_ == "height") {
+    auto* line = static_cast<LineLocation*>(entity->location.get());
+    const Vec3 start = line->start();
+    const Vec3 end = line->end();
+    const Vec3 mid = (start + end) * 0.5f;
+    const Vec3 delta = end - start;
+    const float old_length = std::sqrt(delta.x * delta.x + delta.z * delta.z);
+    const Vec3 direction =
+        old_length > 1e-6f ? delta * (1.f / old_length) : Vec3{0.f, 0.f, 1.f};
+    const float half = static_cast<float>(std::max(value, 1e-3) * 0.5);
+    line->set_start(mid - direction * half);
+    line->set_end(mid + direction * half);
+    entity->sync_from_location(
+        document_->bim().storey_elevation(entity->location->storey_id()));
+    document_->scene().set_transform(entity_id_, entity->local_transform);
+  }
   sync_entity_grips(*entity);
 
   auto mesh = geometry_builder().build(entity->model, 0.05);
