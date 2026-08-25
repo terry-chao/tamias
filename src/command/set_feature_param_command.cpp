@@ -3,11 +3,13 @@
 #include "bim/line_location.h"
 #include "bim/host_update.h"
 #include "entity/entity_grip.h"
+#include "engine/modeling/curve_geom.h"
 #include "engine/modeling/feature.h"
 #include "engine/modeling/occt_geom_builder.h"
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace tamias {
 
@@ -40,6 +42,7 @@ Result<void> SetFeatureParamCommand::apply(double value) {
   if (entity == nullptr) {
     return Err("SetFeatureParamCommand: entity not found");
   }
+  const double previous = entity->model.param(feature_id_, param_name_, value);
   entity->model.set_param(feature_id_, param_name_, value);
   const Feature* changed = entity->model.find(feature_id_);
   if (entity->kind() == EntityKind::Wall && entity->location &&
@@ -59,6 +62,35 @@ Result<void> SetFeatureParamCommand::apply(double value) {
     entity->sync_from_location(
         document_->bim().storey_elevation(entity->location->storey_id()));
     document_->scene().set_transform(entity_id_, entity->local_transform);
+  }
+  if (changed != nullptr && changed->kind == FeatureKind::PolygonProfile &&
+      (param_name_ == "width" || param_name_ == "height") && std::abs(previous) > 1e-6) {
+    Feature* profile = entity->model.find(feature_id_);
+    auto pts = polyline_points(entity->model, *changed);
+    if (profile != nullptr && pts.size() >= 3) {
+      float cx = 0.f;
+      float cz = 0.f;
+      for (const Vec3& p : pts) {
+        cx += p.x;
+        cz += p.z;
+      }
+      const float inv = 1.f / static_cast<float>(pts.size());
+      cx *= inv;
+      cz *= inv;
+      const float s = static_cast<float>(value / previous);
+      for (Vec3& p : pts) {
+        if (param_name_ == "width") {
+          p.x = cx + (p.x - cx) * s;
+        } else {
+          p.z = cz + (p.z - cz) * s;
+        }
+      }
+      const double w = profile->params["width"];
+      const double h = profile->params["height"];
+      profile->params = polyline_feature_params(pts);
+      profile->params["width"] = w;
+      profile->params["height"] = h;
+    }
   }
   sync_entity_grips(*entity);
 

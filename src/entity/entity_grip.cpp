@@ -62,11 +62,8 @@ std::vector<Vec3> sketch_locals(const Entity& entity) {
       const float r = static_cast<float>(entity.model.param(out->id, "radius", 0.5));
       return {c, {c.x + r, c.y, c.z}};
     }
-    case FeatureKind::RectWire: {
-      const Vec3 a = feature_xyz(entity.model, out->id, "a");
-      const Vec3 b = feature_xyz(entity.model, out->id, "b");
-      return {{a.x, a.y, a.z}, {b.x, a.y, a.z}, {b.x, a.y, b.z}, {a.x, a.y, b.z}};
-    }
+    case FeatureKind::RectWire:
+      return rect_wire_points(entity.model, *out);
     default:
       return {};
   }
@@ -155,28 +152,25 @@ bool apply_sketch(Entity& entity, int index, Vec3 world) {
       return true;
     }
     case FeatureKind::RectWire: {
-      const Vec3 a = feature_xyz(entity.model, out->id, "a");
-      const Vec3 b = feature_xyz(entity.model, out->id, "b");
-      const Vec3 corners[4] = {
-          {a.x, a.y, a.z}, {b.x, a.y, a.z}, {b.x, a.y, b.z}, {a.x, a.y, b.z}};
-      if (index < 0 || index > 3) {
+      auto corners = rect_wire_points(entity.model, *out);
+      if (index < 0 || index >= static_cast<int>(corners.size())) {
         return false;
       }
-      // Pin the opposite corner. Canonicalize a=min, b=max so winding stays stable
-      // even when the dragged corner crosses through the keep corner.
-      const Vec3 keep = corners[index ^ 2];
-      float bx = local.x;
-      float bz = local.z;
-      if (std::abs(bx - keep.x) < kMinSize) {
-        bx = keep.x + (bx >= keep.x ? kMinSize : -kMinSize);
+      const float y = corners[static_cast<std::size_t>(index)].y;
+      corners[static_cast<std::size_t>(index)] = {local.x, y, local.z};
+      out->params = polyline_feature_params(corners);
+      float min_x = corners[0].x;
+      float max_x = corners[0].x;
+      float min_z = corners[0].z;
+      float max_z = corners[0].z;
+      for (const Vec3& p : corners) {
+        min_x = std::min(min_x, p.x);
+        max_x = std::max(max_x, p.x);
+        min_z = std::min(min_z, p.z);
+        max_z = std::max(max_z, p.z);
       }
-      if (std::abs(bz - keep.z) < kMinSize) {
-        bz = keep.z + (bz >= keep.z ? kMinSize : -kMinSize);
-      }
-      set_feature_xyz(entity.model, out->id, "a",
-                      {std::min(keep.x, bx), a.y, std::min(keep.z, bz)});
-      set_feature_xyz(entity.model, out->id, "b",
-                      {std::max(keep.x, bx), a.y, std::max(keep.z, bz)});
+      set_feature_xyz(entity.model, out->id, "a", {min_x, y, min_z});
+      set_feature_xyz(entity.model, out->id, "b", {max_x, y, max_z});
       return true;
     }
     default:
@@ -217,39 +211,64 @@ bool apply_segment(Entity& entity, int index, Vec3 world) {
   return true;
 }
 
-bool apply_footprint_corner(Entity& entity, int index, Vec3 world) {
-  Feature* profile = find_kind(entity.model, FeatureKind::RectProfile);
-  if (profile == nullptr || index < 0 || index > 3) {
-    return false;
+Feature* find_footprint(FeatureModel& model) {
+  if (Feature* poly = find_kind(model, FeatureKind::PolygonProfile)) {
+    return poly;
+  }
+  return find_kind(model, FeatureKind::RectProfile);
+}
+
+const Feature* find_footprint(const FeatureModel& model) {
+  if (const Feature* poly = find_kind(model, FeatureKind::PolygonProfile)) {
+    return poly;
+  }
+  return find_kind(model, FeatureKind::RectProfile);
+}
+
+std::vector<Vec3> footprint_corners(const FeatureModel& model, const Feature& profile) {
+  if (profile.kind == FeatureKind::PolygonProfile) {
+    return polyline_points(model, profile);
   }
   const float hw =
-      static_cast<float>(std::max(entity.model.param(profile->id, "width", 1.0), 0.0)) * 0.5f;
+      static_cast<float>(std::max(model.param(profile.id, "width", 1.0), 0.0)) * 0.5f;
   const float hh =
-      static_cast<float>(std::max(entity.model.param(profile->id, "height", 1.0), 0.0)) * 0.5f;
-  const Vec3 corners[4] = {
-      {-hw, 0.f, -hh},
-      {hw, 0.f, -hh},
-      {hw, 0.f, hh},
-      {-hw, 0.f, hh},
-  };
-  const Vec3 keep = corners[index ^ 2];
+      static_cast<float>(std::max(model.param(profile.id, "height", 1.0), 0.0)) * 0.5f;
+  return {{-hw, 0.f, -hh}, {hw, 0.f, -hh}, {hw, 0.f, hh}, {-hw, 0.f, hh}};
+}
+
+void write_footprint_polygon(Feature& profile, const std::vector<Vec3>& corners) {
+  auto params = polyline_feature_params(corners);
+  if (!corners.empty()) {
+    float min_x = corners[0].x;
+    float max_x = corners[0].x;
+    float min_z = corners[0].z;
+    float max_z = corners[0].z;
+    for (const Vec3& p : corners) {
+      min_x = std::min(min_x, p.x);
+      max_x = std::max(max_x, p.x);
+      min_z = std::min(min_z, p.z);
+      max_z = std::max(max_z, p.z);
+    }
+    params["width"] = static_cast<double>(std::max(max_x - min_x, kMinSize));
+    params["height"] = static_cast<double>(std::max(max_z - min_z, kMinSize));
+  }
+  profile.kind = FeatureKind::PolygonProfile;
+  profile.params = std::move(params);
+}
+
+bool apply_footprint_corner(Entity& entity, int index, Vec3 world) {
+  Feature* profile = find_footprint(entity.model);
+  if (profile == nullptr || index < 0) {
+    return false;
+  }
+  auto corners = footprint_corners(entity.model, *profile);
+  if (index >= static_cast<int>(corners.size())) {
+    return false;
+  }
   Vec3 local = invert_affine(entity.local_transform) * world;
   local.y = 0.f;
-  const float w = std::max(std::abs(local.x - keep.x), kMinSize);
-  const float d = std::max(std::abs(local.z - keep.z), kMinSize);
-  const Vec3 local_mid{(local.x + keep.x) * 0.5f, 0.f, (local.z + keep.z) * 0.5f};
-  const Vec3 world_mid = entity.local_transform * local_mid;
-  entity.model.set_param(profile->id, "width", static_cast<double>(w));
-  entity.model.set_param(profile->id, "height", static_cast<double>(d));
-  Mat4 xf = entity.local_transform;
-  xf(0, 3) = world_mid.x;
-  xf(1, 3) = world_mid.y;
-  xf(2, 3) = world_mid.z;
-  const double storey_elevation =
-      entity.location ? static_cast<double>(entity.local_transform(1, 3)) -
-                            entity.location->elevation_offset()
-                      : 0.0;
-  entity.sync_location_from_transform(xf, storey_elevation);
+  corners[static_cast<std::size_t>(index)] = local;
+  write_footprint_polygon(*profile, corners);
   return true;
 }
 
@@ -276,13 +295,11 @@ std::vector<Vec3> inferred_grip_locals(const Entity& entity) {
     case EntityKind::Box:
     case EntityKind::Slab:
     case EntityKind::Column: {
-      const Feature* profile = find_kind(entity.model, FeatureKind::RectProfile);
+      const Feature* profile = find_footprint(entity.model);
       if (profile == nullptr) {
         return {};
       }
-      const float hw = static_cast<float>(entity.model.param(profile->id, "width", 1.0)) * 0.5f;
-      const float hh = static_cast<float>(entity.model.param(profile->id, "height", 1.0)) * 0.5f;
-      return {{-hw, 0.f, -hh}, {hw, 0.f, -hh}, {hw, 0.f, hh}, {-hw, 0.f, hh}};
+      return footprint_corners(entity.model, *profile);
     }
     case EntityKind::Cylinder: {
       const Feature* profile = find_kind(entity.model, FeatureKind::CircleProfile);

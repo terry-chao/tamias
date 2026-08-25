@@ -1153,7 +1153,9 @@ TEST(EntityGrip, FootprintCornerCrossesOpposite) {
   const FeatureModel from_model = box.model;
   const Mat4 from_xf = box.local_transform;
   const Vec3 keep = grips[0].world;
+  const Vec3 adj1 = grips[1].world;
   const Vec3 start = grips[2].world;
+  const Vec3 adj3 = grips[3].world;
   const Vec3 steps[] = {
       {start.x + 0.25f, 0.f, start.z + 0.25f},
       {keep.x + 0.05f, 0.f, keep.z + 0.05f},
@@ -1162,15 +1164,21 @@ TEST(EntityGrip, FootprintCornerCrossesOpposite) {
   };
   for (Vec3 p : steps) {
     ASSERT_TRUE(try_drag_from_press(box, from_model, from_xf, 2, p));
-    EXPECT_TRUE(grip_at(box, keep)) << "opposite corner must stay pinned";
+    EXPECT_TRUE(grip_at(box, keep)) << "untouched corners must stay pinned";
+    EXPECT_TRUE(grip_at(box, adj1)) << "untouched corners must stay pinned";
+    EXPECT_TRUE(grip_at(box, adj3)) << "untouched corners must stay pinned";
     EXPECT_TRUE(grip_at(box, p)) << "dragged corner must follow the cursor";
   }
 
   // Plan-view top-right is typically index 1 (max X, min Z).
   const Vec3 keep1 = grips[3].world;
+  const Vec3 stay1 = grips[0].world;
+  const Vec3 stay2 = grips[2].world;
   ASSERT_TRUE(
       try_drag_from_press(box, from_model, from_xf, 1, {keep1.x - 1.2f, 0.f, keep1.z + 1.2f}));
   EXPECT_TRUE(grip_at(box, keep1));
+  EXPECT_TRUE(grip_at(box, stay1));
+  EXPECT_TRUE(grip_at(box, stay2));
   EXPECT_TRUE(grip_at(box, {keep1.x - 1.2f, 0.f, keep1.z + 1.2f}));
 
   SlabEntity slab({0.f, 0.f, 0.f}, 2.0, 2.0, 0.2);
@@ -1179,9 +1187,11 @@ TEST(EntityGrip, FootprintCornerCrossesOpposite) {
   const FeatureModel slab_from = slab.model;
   const Mat4 slab_xf = slab.local_transform;
   const Vec3 slab_keep = slab_grips[0].world;
+  const Vec3 slab_adj = slab_grips[1].world;
   ASSERT_TRUE(try_drag_from_press(slab, slab_from, slab_xf, 2,
                                  {slab_keep.x - 1.f, 0.f, slab_keep.z - 1.f}));
   EXPECT_TRUE(grip_at(slab, slab_keep));
+  EXPECT_TRUE(grip_at(slab, slab_adj));
 }
 
 TEST(EntityGrip, RectWireCornerCrossesOpposite) {
@@ -1194,7 +1204,11 @@ TEST(EntityGrip, RectWireCornerCrossesOpposite) {
     const Vec3 keep = grips[index ^ 2].world;
     const Vec3 past{keep.x - 1.5f, 0.f, keep.z - 1.5f};
     ASSERT_TRUE(try_drag_from_press(rect, from_model, from_xf, index, past)) << "index " << index;
-    EXPECT_TRUE(grip_at(rect, keep)) << "index " << index;
+    for (int i = 0; i < 4; ++i) {
+      if (i != index) {
+        EXPECT_TRUE(grip_at(rect, grips[static_cast<std::size_t>(i)].world)) << "index " << index;
+      }
+    }
     EXPECT_TRUE(grip_at(rect, past)) << "index " << index;
   }
 }
@@ -1208,10 +1222,31 @@ TEST(EntityGrip, RotatedBoxCornerCrossesOpposite) {
   const FeatureModel from_model = box.model;
   const Mat4 from_xf = box.local_transform;
   const Vec3 keep = grips[0].world;
+  const Vec3 adj1 = grips[1].world;
+  const Vec3 adj3 = grips[3].world;
   const Vec3 past = keep + (keep - grips[2].world);
   ASSERT_TRUE(try_drag_from_press(box, from_model, from_xf, 2, past));
   EXPECT_TRUE(grip_at(box, keep, 2e-3f));
+  EXPECT_TRUE(grip_at(box, adj1, 2e-3f));
+  EXPECT_TRUE(grip_at(box, adj3, 2e-3f));
   EXPECT_TRUE(grip_at(box, {past.x, keep.y, past.z}, 2e-3f));
+}
+
+TEST(EntityGrip, BoxCornerMovesAloneThenRebuilds) {
+  BoxEntity box({0.f, 0.f, 0.f});
+  auto grips = collect_entity_grips(box);
+  ASSERT_EQ(grips.size(), 4u);
+  const Vec3 stay0 = grips[0].world;
+  const Vec3 stay1 = grips[1].world;
+  const Vec3 stay3 = grips[3].world;
+  const Vec3 target{1.4f, 0.f, 1.1f};
+  ASSERT_TRUE(apply_entity_grip(box, 2, target));
+  EXPECT_TRUE(grip_at(box, stay0));
+  EXPECT_TRUE(grip_at(box, stay1));
+  EXPECT_TRUE(grip_at(box, stay3));
+  EXPECT_TRUE(grip_at(box, target));
+  auto mesh = box.createGeom();
+  ASSERT_TRUE(mesh) << mesh.error();
 }
 
 TEST(EntityGrip, EditCommandUndo) {

@@ -1053,12 +1053,12 @@ void DocumentViewport::adjust_selected_param(double delta) {
   if (entity == nullptr) {
     return;
   }
-  // 找可编辑的轮廓特征：RectProfile 的 width，或 CircleProfile 的 radius。
+  // 找可编辑的轮廓特征：RectProfile / PolygonProfile 的 width，或 CircleProfile 的 radius。
   std::uint64_t feature_id = 0;
   std::string param_name;
   double current = 0.0;
   for (const auto& f : entity->model.features()) {
-    if (f.kind == FeatureKind::RectProfile) {
+    if (f.kind == FeatureKind::RectProfile || f.kind == FeatureKind::PolygonProfile) {
       feature_id = f.id;
       param_name = "width";
       current = entity->model.param(f.id, "width", 0.0);

@@ -24,6 +24,7 @@ enum class FeatureKind : std::uint8_t {
   RectWire = 11,    // 轴对齐矩形轮廓，params{ ax,ay,az, bx,by,bz }
   BSpline = 12,     // 夹紧均匀 B 样条，params{ n, degree, p0x,p0y,p0z, ... }
   Nurbs = 13,       // NURBS，params{ n, degree, p0x.., w0, w1, ... }
+  PolygonProfile = 14,  // 多边形轮廓面，params{ n, p0x,p0y,p0z, ... }；可附带 width/height
 };
 
 inline bool is_sketch_feature(FeatureKind kind) {

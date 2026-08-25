@@ -441,6 +441,18 @@ std::vector<Vec3> polyline_points(const FeatureModel& model, const Feature& f) {
   return polyline_from_params(model, f.id);
 }
 
+std::vector<Vec3> rect_wire_points(const FeatureModel& model, const Feature& f) {
+  if (f.kind != FeatureKind::RectWire) {
+    return {};
+  }
+  if (static_cast<int>(model.param(f.id, "n", 0.0)) >= 4) {
+    return polyline_from_params(model, f.id);
+  }
+  const Vec3 a = get_xyz(model, f.id, "a");
+  const Vec3 b = get_xyz(model, f.id, "b");
+  return {{a.x, a.y, a.z}, {b.x, a.y, a.z}, {b.x, a.y, b.z}, {a.x, a.y, b.z}};
+}
+
 std::vector<Vec3> sample_rect_xz(Vec3 a, Vec3 b) {
   const float y = a.y;
   const Vec3 p0{a.x, y, a.z};
@@ -471,8 +483,14 @@ std::vector<Vec3> sample_sketch_feature(const FeatureModel& model, const Feature
     case FeatureKind::Nurbs:
       return sample_nurbs(spline_control_points(model, f), nurbs_weights(model, f),
                           spline_degree(model, f));
-    case FeatureKind::RectWire:
-      return sample_rect_xz(get_xyz(model, f.id, "a"), get_xyz(model, f.id, "b"));
+    case FeatureKind::RectWire: {
+      auto pts = rect_wire_points(model, f);
+      if (pts.empty()) {
+        return {};
+      }
+      pts.push_back(pts.front());
+      return pts;
+    }
     default:
       return {};
   }

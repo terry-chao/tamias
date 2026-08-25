@@ -67,6 +67,8 @@ QString PropertyPanel::param_label(EntityKind entity_kind, FeatureKind feature_k
   // 求值器把特征树按 Z-up 构造后转到 Y-up（(x,y,z)→(x,z,-y)），因此：
   //   RectProfile.width → 视口 X，RectProfile.height → 视口 Z，Extrude.depth → 视口 Y。
   const auto is = [&](const char* n) { return param_name == QLatin1String(n); };
+  const bool rect_like = feature_kind == FeatureKind::RectProfile ||
+                         feature_kind == FeatureKind::PolygonProfile;
   // 特征级参数（与实体类型无关）。
   if (feature_kind == FeatureKind::Fillet) {
     if (is("radius")) {
@@ -120,7 +122,7 @@ QString PropertyPanel::param_label(EntityKind entity_kind, FeatureKind feature_k
       }
       break;
     case EntityKind::Box:
-      if (feature_kind == FeatureKind::RectProfile) {
+      if (rect_like) {
         if (is("width")) {
           return tr("Width");
         }
@@ -152,7 +154,7 @@ QString PropertyPanel::param_label(EntityKind entity_kind, FeatureKind feature_k
       }
       break;
     case EntityKind::Column:
-      if (feature_kind == FeatureKind::RectProfile) {
+      if (rect_like) {
         if (is("width")) {
           return tr("Width");
         }
@@ -164,7 +166,7 @@ QString PropertyPanel::param_label(EntityKind entity_kind, FeatureKind feature_k
       }
       break;
     case EntityKind::Slab:
-      if (feature_kind == FeatureKind::RectProfile) {
+      if (rect_like) {
         if (is("width")) {
           return tr("Length");
         }
@@ -332,6 +334,10 @@ void PropertyPanel::show_entity(const Entity* entity, Document* document,
         if (key != "radius" && key != "degree" && !is_weight) {
           continue;
         }
+      }
+      if (feature.kind == FeatureKind::PolygonProfile &&
+          (key == "n" || (!key.empty() && key[0] == 'p'))) {
+        continue;
       }
       auto* spin = new QDoubleSpinBox(content_);
       spin->setRange(-1.0e6, 1.0e6);

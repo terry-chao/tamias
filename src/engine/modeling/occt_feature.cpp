@@ -7,6 +7,7 @@
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
+#include <BRepBuilderAPI_MakePolygon.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
 #include <BRepFilletAPI_MakeChamfer.hxx>
 #include <BRepFilletAPI_MakeFillet.hxx>
@@ -31,6 +32,7 @@
 
 #include <exception>
 #include <unordered_map>
+#include <vector>
 
 namespace tamias {
 namespace {
@@ -46,6 +48,24 @@ TopoDS_Face make_rect_face(double width, double height) {
   BRepBuilderAPI_MakeWire wire(BRepBuilderAPI_MakeEdge(p1, p2), BRepBuilderAPI_MakeEdge(p2, p3),
                                BRepBuilderAPI_MakeEdge(p3, p4), BRepBuilderAPI_MakeEdge(p4, p1));
   return BRepBuilderAPI_MakeFace(wire).Face();
+}
+
+// 多边形轮廓面。点是 Tamias 局部 XZ（Y-up），求值器稍后把 OCCT Z-up 转到 Y-up：
+// Tamias (x, 0, z) ↔ OCCT (x, -z, 0)。
+TopoDS_Face make_polygon_face(const std::vector<Vec3>& points) {
+  BRepBuilderAPI_MakePolygon poly;
+  for (const Vec3& p : points) {
+    poly.Add(gp_Pnt(static_cast<double>(p.x), static_cast<double>(-p.z), 0.0));
+  }
+  poly.Close();
+  if (!poly.IsDone()) {
+    return {};
+  }
+  BRepBuilderAPI_MakeFace face(poly.Wire());
+  if (!face.IsDone()) {
+    return {};
+  }
+  return face.Face();
 }
 
 // 圆形轮廓面（在 XY 平面，中心在原点，半径 radius）。
@@ -173,6 +193,17 @@ static Result<MeshCpu> evaluate_feature_model_impl(const FeatureModel& model,
         const double w = model.param(f.id, "width", 1.0);
         const double h = model.param(f.id, "height", 1.0);
         s = make_rect_face(w, h);
+        break;
+      }
+      case FeatureKind::PolygonProfile: {
+        const std::vector<Vec3> pts = polyline_points(model, f);
+        if (pts.size() < 3) {
+          return Err("PolygonProfile needs at least 3 points");
+        }
+        s = make_polygon_face(pts);
+        if (s.IsNull()) {
+          return Err("PolygonProfile: failed to make face");
+        }
         break;
       }
       case FeatureKind::CircleProfile: {
