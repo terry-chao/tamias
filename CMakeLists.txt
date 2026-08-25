@@ -78,7 +78,7 @@ if(NOT EMSCRIPTEN)
   add_subdirectory(src/app)
 endif()
 if(EMSCRIPTEN)
-  add_subdirectory(src/web)
+  add_subdirectory(src/wasm)
 endif()
 
 if(TAMIAS_BUILD_TESTS AND BUILD_TESTING)

@@ -6,7 +6,7 @@
 
 - 契约：[`native_window_handle.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/core/native_window_handle.h)、[`document_io.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document_io.h)、[`mesh_io.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/io/mesh_io.h)
 - RHI：[`src/engine/render/rhi/webgl/`](https://github.com/terry-chao/tamias/tree/main/src/engine/render/rhi/webgl)
-- 宿主：[`ViewerHost`](https://github.com/terry-chao/tamias/blob/main/src/web/viewer_host.h) + [`web/index.html`](https://github.com/terry-chao/tamias/blob/main/web/index.html)
+- 宿主：[`ViewerHost`](https://github.com/terry-chao/tamias/blob/main/src/wasm/viewer_host.h) + [`web/index.html`](https://github.com/terry-chao/tamias/blob/main/web/index.html)
 
 ---
 
@@ -23,7 +23,7 @@ Qt 6 官方支持 WebAssembly，但 Tamias 桌面视口绑的是 HWND / X11、`A
 | 阶段 | 目标 | 已做 / 未做 |
 |---|---|---|
 | **0. 契约** | 非 Qt 宿主能喂窗口和字节 | ✅ `NativeWindowHandle.canvas_selector`；`load_document_bytes` / `load_obj_bytes` |
-| **1. 查看器** | 浏览器打开 `.tdoc` / `.obj` 能转 | ✅ WebGL2 RHI、同步 `RenderThread::pump`、React 单页 |
+| **1. 查看器** | 浏览器打开 `.tdoc` / `.obj` 能转 | ✅ WebGL2 RHI、同步 `RenderThread::pump`、Vite + React + TS 单页 |
 | **2. 轻编辑** | 选中、夹点、撤销 | ❌ `CommandSystem` 尚未 embind |
 | **3. 建模** | 浏览器里布尔 / 拉伸 | ❌ OCCT 未进 WASM |
 | **4. BIM** | IFC 浏览 | ❌ 仍走桌面 / 将来服务端 |
@@ -35,7 +35,7 @@ Qt 6 官方支持 WebAssembly，但 Tamias 桌面视口绑的是 HWND / X11、`A
 ## 2. 分层（浏览器）
 
 ```
-Web UI (web/index.html, React)
+Web UI (web/, Vite + React + TypeScript)
     │  embind：startViewer / loadFile / pointer* / renderFrame
     ▼
 ViewerHost          相机、文件、提交 FrameSubmission
@@ -76,7 +76,10 @@ WebGL2 RHI          GLES 3，绑 #viewport
 
 **OCCT。** WASM 预设关掉 `TAMIAS_ENABLE_OCCT`，`modeling` 链 `stub_geom_builder.cpp`。打开已 tessellate 的 `.tdoc` 只吃 MESH/SCEN 缓存，不重求值。
 
-**UI。** `web/index.html` 用 React 18（esm.sh）做顶栏 + canvas。C++ 通过 embind 暴露函数，不依赖 Qt。以后换成自建 React/Vite 工程时，只换壳，不换 `ViewerHost`。
+**UI。** `web/` 是自建的 Vite + React 18 + TypeScript 工程，依赖全部本地化（不走 esm.sh CDN）。
+`src/viewer.ts` 里有 embind 导出的类型声明和加载器（运行时动态加载同目录的 `tamias_viewer.js`）；
+`src/App.tsx` 负责顶栏、文件打开、拖放、状态栏、键盘快捷键。构建时把 `dist/` 拷进 wasm 输出目录，
+与 `tamias_viewer.js` / `.wasm` 同目录。换 UI 只换 `web/`，不换 `ViewerHost`。
 
 ---
 
@@ -105,6 +108,10 @@ cmake --build --preset wasm-stop
 或 `powershell -File scripts/wasm.ps1`。产物在 `build/wasm/bin/`。
 
 浏览器里：中键旋转，右键平移，滚轮缩放。顶栏打开 `.tdoc` 或 `.obj`。没有文件时画演示立方体。
+
+wasm 构建会自动构建 `web/`（首次若缺少 `node_modules` 会先跑 `npm ci`），
+把 Vite 产物 `index.html` + `assets/` 拷到 `build/wasm/bin/`。
+只想单独构建 UI：`cd web && npm run build`，然后手动把 `dist/*` 拷到 `build/wasm/bin/`。
 
 不要在 `build/` 里找 `CMakePresets.json`。不要给 wasm 配 vcpkg。
 

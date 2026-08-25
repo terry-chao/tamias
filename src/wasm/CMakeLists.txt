@@ -31,12 +31,31 @@ target_link_options(tamias_viewer PRIVATE
   --bind
 )
 
-add_custom_command(TARGET tamias_viewer POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different
-          ${CMAKE_SOURCE_DIR}/web/index.html
-          $<TARGET_FILE_DIR:tamias_viewer>/index.html
-  COMMENT "Copying web viewer shell next to tamias_viewer"
-)
+# Web UI（Vite + React + TypeScript，工程根在 web/）：构建 dist 并拷到 wasm 输出目录，
+# 与 tamias_viewer.js/.wasm 同目录。找不到 node/npm 时跳过 UI（只产出 wasm 文件）。
+find_program(TAMIAS_NODE_EXECUTABLE NAMES node)
+find_program(TAMIAS_NPM_EXECUTABLE NAMES npm)
+set(_web_ui_dir "${CMAKE_SOURCE_DIR}/web")
+
+if(TAMIAS_NODE_EXECUTABLE AND TAMIAS_NPM_EXECUTABLE)
+  set(_ui_bootstrap_cmds)
+  if(NOT EXISTS "${_web_ui_dir}/node_modules")
+    list(APPEND _ui_bootstrap_cmds
+      COMMAND "${TAMIAS_NPM_EXECUTABLE}" --prefix "${_web_ui_dir}" ci
+    )
+  endif()
+  add_custom_command(TARGET tamias_viewer POST_BUILD
+    ${_ui_bootstrap_cmds}
+    COMMAND "${TAMIAS_NPM_EXECUTABLE}" --prefix "${_web_ui_dir}" run build
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${_web_ui_dir}/dist"
+            $<TARGET_FILE_DIR:tamias_viewer>
+    COMMENT "Building web UI (Vite + React + TS) and copying into wasm output"
+    VERBATIM
+  )
+else()
+  message(STATUS "web UI: node/npm not found, skipping UI build (wasm files still produced)")
+endif()
 
 add_custom_target(serve_viewer
   COMMAND "${CMAKE_SOURCE_DIR}/scripts/wasm-launch.cmd" "$<TARGET_FILE_DIR:tamias_viewer>"

@@ -1,0 +1,4 @@
+node_modules/
+dist/
+public/tamias_viewer.js
+public/tamias_viewer.wasm
