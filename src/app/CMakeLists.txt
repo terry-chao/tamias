@@ -15,6 +15,7 @@ add_executable(tamias
   i18n.cpp
   settings_dialog.cpp
   settings_section.cpp
+  plugin_manager_dialog.cpp
   document_viewport.cpp
   box_select_overlay.cpp
   handle_inspector.cpp

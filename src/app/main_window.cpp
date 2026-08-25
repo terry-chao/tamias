@@ -11,6 +11,8 @@
 #include "engine/modeling/shape_ops.h"
 #include "handle_inspector.h"
 #include "plugin/plugin_host.h"
+#include "plugin/plugin_manager.h"
+#include "plugin_manager_dialog.h"
 #include "property_panel.h"
 #include "ribbon_bar.h"
 #include "ribbon_group.h"
@@ -45,10 +47,12 @@
 #include <QSignalBlocker>
 #include <QSize>
 #include <QStatusBar>
+#include <QToolButton>
 #include <QVector>
 #include <QVBoxLayout>
 #include <QWidget>
 #include <string>
+#include <unordered_set>
 
 namespace tamias {
 namespace {
@@ -94,7 +98,8 @@ void center_on_primary_screen(QWidget* widget) {
 
 }  // namespace
 
-MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
+MainWindow::MainWindow(QWidget* parent)
+    : QMainWindow(parent), plugin_manager_(plugin_host_) {
   setWindowTitle("Tamias");
   setWindowIcon(QIcon(QStringLiteral(":/branding/logo.png")));
   resize(1600, 1000);
@@ -483,8 +488,22 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     log_warn(loaded.error());
     statusBar()->showMessage(QString::fromStdString(loaded.error()), 8000);
   }
+  {
+    std::unordered_set<std::string> hidden;
+    for (const QString& id : AppSettings::instance().hidden_plugin_ids()) {
+      hidden.insert(id.toStdString());
+    }
+    plugin_manager_.set_hidden_ids(std::move(hidden));
+  }
   RibbonPage* plugins_page = ribbon->add_page(tr("Plugins"));
-  RibbonGroup* plugin_group = plugins_page->add_group(tr("Commands"));
+  RibbonGroup* manage_group = plugins_page->add_group(tr("Manage"));
+  auto* manage_action = new QAction(ribbon_icon(QStringLiteral(":/icons/settings.svg")),
+                                    tr("Plugin Manager"), this);
+  manage_action->setToolTip(tr("Choose which loaded plugins appear on the ribbon"));
+  connect(manage_action, &QAction::triggered, this, &MainWindow::open_plugin_manager);
+  manage_group->add_action(manage_action);
+
+  plugin_commands_group_ = plugins_page->add_group(tr("Commands"));
   for (const auto& cmd : plugin_host_.commands()) {
     auto* action = new QAction(ribbon_icon(QStringLiteral(":/icons/inspector.svg")),
                                QString::fromUtf8(cmd.title.data(), static_cast<int>(cmd.title.size())),
@@ -501,8 +520,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         log_error(r.error());
       }
     });
-    plugin_group->add_action(action);
+    PluginRibbonButton item;
+    item.plugin_id = cmd.plugin_id;
+    item.button = plugin_commands_group_->add_action(action);
+    plugin_ribbon_buttons_.push_back(item);
   }
+  apply_plugin_visibility();
 
   setMenuWidget(ribbon);
 
@@ -666,6 +689,37 @@ void MainWindow::open_settings() {
   }
   if (!notes.isEmpty()) {
     QMessageBox::information(this, tr("Settings"), notes.join(QStringLiteral("\n\n")));
+  }
+}
+
+void MainWindow::open_plugin_manager() {
+  PluginManagerDialog dialog(plugin_manager_, this);
+  if (dialog.exec() != QDialog::Accepted) {
+    return;
+  }
+  plugin_manager_.commit_hidden_among_loaded(dialog.hidden_loaded_ids());
+  QStringList stored;
+  stored.reserve(static_cast<int>(plugin_manager_.hidden_ids().size()));
+  for (const auto& id : plugin_manager_.hidden_ids()) {
+    stored.push_back(QString::fromStdString(id));
+  }
+  stored.sort();
+  AppSettings::instance().set_hidden_plugin_ids(stored);
+  AppSettings::instance().save();
+  apply_plugin_visibility();
+}
+
+void MainWindow::apply_plugin_visibility() {
+  bool any_visible = false;
+  for (const auto& item : plugin_ribbon_buttons_) {
+    const bool visible = plugin_manager_.is_visible(item.plugin_id);
+    if (item.button != nullptr) {
+      item.button->setVisible(visible);
+    }
+    any_visible = any_visible || visible;
+  }
+  if (plugin_commands_group_ != nullptr) {
+    plugin_commands_group_->setVisible(any_visible);
   }
 }
 

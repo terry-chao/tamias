@@ -5,6 +5,7 @@
 #include "engine/document/document.h"
 #include "plugin/host_api.h"
 #include "plugin/plugin_command.h"
+#include "plugin/plugin_info.h"
 
 #include <cstdint>
 #include <functional>
@@ -40,6 +41,7 @@ class PluginHost {
   Result<void> invoke(std::string_view command_id);
 
   [[nodiscard]] const std::vector<PluginCommand>& commands() const { return registered_; }
+  [[nodiscard]] const std::vector<PluginInfo>& plugins() const { return plugins_; }
   [[nodiscard]] const HostApi& native_api() const { return api_; }
 
   Result<void> dispatch(std::string_view command, std::string_view args_text);
@@ -56,6 +58,7 @@ class PluginHost {
   static std::int32_t host_dispatch(void* context, const char* command, const char* args_utf8);
   static std::int32_t host_register_command(void* context, const char* id, const char* title,
                                             const char* tooltip);
+  static std::int32_t host_register_plugin(void* context, const char* id, const char* title);
 
   void emit_log(std::int32_t level, std::string_view message);
   [[nodiscard]] std::vector<std::uint64_t> entity_ids() const;
@@ -66,6 +69,8 @@ class PluginHost {
   AfterEdit after_edit_;
   LogSink log_sink_;
   std::vector<PluginCommand> registered_;
+  std::vector<PluginInfo> plugins_;
+  std::string current_plugin_id_;
   std::unique_ptr<CsharpRuntime> csharp_;
 };
 

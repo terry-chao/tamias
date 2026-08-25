@@ -71,8 +71,10 @@ static class PluginLoader
             {
                 continue;
             }
+            var pluginId = type.FullName ?? type.Name;
+            host.RegisterPlugin(pluginId, type.Name);
             plugin.Load(host);
-            host.Log("Loaded plugin " + type.FullName);
+            host.Log("Loaded plugin " + pluginId);
         }
     }
 

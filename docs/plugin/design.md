@@ -53,7 +53,7 @@ UI / 插件
 |---|---|---|
 | 对上（C#） | `IHost`：文档名、实体列表、选择、日志、登记 Ribbon 命令、dispatch | 不暴露 Qt、相机、GPU、OCCT |
 | 对下（C++） | `HostApi` 函数指针；`dispatch` 进 `CommandSystem` | 不让插件持有 `Document*` |
-| 对 UI | 启动时扫一遍插件，Ribbon「插件」页出按钮；日志进状态栏 | 不给插件画自定义面板（尚未） |
+| 对 UI | 启动时扫一遍插件，Ribbon「插件」页出按钮；**插件管理**勾选显示后才出现命令；日志进状态栏 | 不给插件画自定义面板（尚未） |
 
 稳定面是 **C ABI**（[`host_api.h`](https://github.com/terry-chao/tamias/blob/main/src/plugin/host_api.h)），不是 C++ 类布局，也不是 C++/CLI。C# 用 P/Invoke 函数指针；以后用 Rust / 纯 C 插件也可以对同一张表。
 
@@ -67,7 +67,7 @@ UI / 插件
 2. **命令名是公共协议。** `delete_entity`、`set_param` 和工具条用同一套注册表（[`register_commands.cpp`](https://github.com/terry-chao/tamias/blob/main/src/command/register_commands.cpp)）。
 3. **宿主失败不能拖死应用。** 找不到 nethost / `managed/Tamias.Host.dll` 时只打日志，主程序照常开。没有插件页而已。
 
-ABI 版本现在是 `1`。C# `Bootstrap.Initialize` 对不上就拒绝加载。
+ABI 版本现在是 `2`。C# `Bootstrap.Initialize` 对不上就拒绝加载。v2 在表末尾加了 `register_plugin`，加载每个 `IPlugin` 时先登记插件身份，随后的 `register_command` 归到该插件，供插件管理器按插件显隐 Ribbon 按钮。
 
 ---
 

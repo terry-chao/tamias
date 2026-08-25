@@ -4,11 +4,9 @@
 
 namespace tamias {
 
-struct PluginCommand {
+struct PluginInfo {
   std::string id;
   std::string title;
-  std::string tooltip;
-  std::string plugin_id;
 };
 
 }  // namespace tamias

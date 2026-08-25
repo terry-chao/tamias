@@ -4,6 +4,7 @@
 #include "engine/graphics/graphics_backend.h"
 
 #include <QString>
+#include <QStringList>
 
 namespace tamias {
 
@@ -28,6 +29,9 @@ class AppSettings {
   [[nodiscard]] bool zoom_to_mouse_position() const { return zoom_to_mouse_position_; }
   void set_zoom_to_mouse_position(bool enabled);
 
+  [[nodiscard]] QStringList hidden_plugin_ids() const { return hidden_plugin_ids_; }
+  void set_hidden_plugin_ids(const QStringList& ids);
+
   [[nodiscard]] RenderDeviceConfig render_device_config() const;
 
  private:
@@ -37,6 +41,7 @@ class AppSettings {
   QString ui_language_ = QStringLiteral("system");
   UiColorScheme ui_color_scheme_ = UiColorScheme::System;
   bool zoom_to_mouse_position_ = true;
+  QStringList hidden_plugin_ids_;
 };
 
 void apply_ui_color_scheme(UiColorScheme scheme);

@@ -15,6 +15,26 @@ sealed class Host : IHost
 
     public IReadOnlyDictionary<string, Action> Actions => actions_;
 
+    public void RegisterPlugin(string id, string title)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(id);
+        var fn = As<HostRegisterPluginFn>(api_.RegisterPlugin);
+        var idPtr = Utf8(id);
+        var titlePtr = Utf8(title ?? id);
+        try
+        {
+            if (fn(api_.Context, idPtr, titlePtr) != 0)
+            {
+                throw new InvalidOperationException("Failed to register plugin '" + id + "'");
+            }
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(idPtr);
+            Marshal.FreeCoTaskMem(titlePtr);
+        }
+    }
+
     public string DocumentName => ReadString(As<HostFillStringFn>(api_.DocumentName));
 
     public IReadOnlyList<EntityInfo> Entities

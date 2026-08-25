@@ -848,12 +848,43 @@ Click an object to select it, or use a create tool</source>
         <translation>插件</translation>
     </message>
     <message>
+        <source>Manage</source>
+        <translation>管理</translation>
+    </message>
+    <message>
+        <source>Plugin Manager</source>
+        <translation>插件管理</translation>
+    </message>
+    <message>
+        <source>Choose which loaded plugins appear on the ribbon</source>
+        <translation>选择哪些已载入插件显示在功能区</translation>
+    </message>
+    <message>
         <source>Commands</source>
         <translation>命令</translation>
     </message>
     <message>
         <source>Inspector</source>
         <translation>检查器</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::PluginManagerDialog</name>
+    <message>
+        <source>Plugin Manager</source>
+        <translation>插件管理</translation>
+    </message>
+    <message>
+        <source>Check the plugins that should appear on the ribbon. Changes apply when you click OK.</source>
+        <translation>勾选要在功能区显示的插件，点击确定后才生效。</translation>
+    </message>
+    <message>
+        <source>No plugins are currently loaded.</source>
+        <translation>当前没有已载入的插件。</translation>
+    </message>
+    <message>
+        <source>%1  (%2)</source>
+        <translation>%1  (%2)</translation>
     </message>
 </context>
 <context>

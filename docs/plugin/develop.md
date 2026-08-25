@@ -108,6 +108,6 @@ C++ 侧入口：[`PluginHost`](https://github.com/terry-chao/tamias/blob/main/sr
 | 在插件里 new 实体对象 | 必须 `Dispatch` |
 | 依赖另一份 `Tamias.Api.dll` | ALC 强制用宿主那份；不要把 API 拷进 `plugins/` |
 
-这些要加的话，先扩 `HostApi` 并 **把 `kHostApiVersion` 加一**，C# `HostApi` 结构体同步改。不要在 v1 表中间插字段。
+这些要加的话，先扩 `HostApi` 并 **把 `kHostApiVersion` 加一**，C# `HostApi` 结构体同步改。不要在 v2 表中间插字段。
 
 设计背景见[设计理念](design.md)。

@@ -81,6 +81,7 @@ PluginHost::PluginHost() : csharp_(std::make_unique<CsharpRuntime>()) {
   api_.selection_id_at = &PluginHost::host_selection_id_at;
   api_.dispatch = &PluginHost::host_dispatch;
   api_.register_command = &PluginHost::host_register_command;
+  api_.register_plugin = &PluginHost::host_register_plugin;
 }
 
 PluginHost::~PluginHost() = default;
@@ -93,6 +94,8 @@ void PluginHost::bind(Document* document, CommandSystem* command_system, AfterEd
 
 Result<void> PluginHost::load() {
   registered_.clear();
+  plugins_.clear();
+  current_plugin_id_.clear();
   const auto exe = executable_directory();
   const auto managed = exe / "managed";
   const auto plugins = exe / "plugins";
@@ -242,6 +245,24 @@ std::int32_t PluginHost::host_dispatch(void* context, const char* command, const
   return 0;
 }
 
+std::int32_t PluginHost::host_register_plugin(void* context, const char* id, const char* title) {
+  auto* self = static_cast<PluginHost*>(context);
+  if (id == nullptr || *id == '\0') {
+    return -1;
+  }
+  PluginInfo info;
+  info.id = id;
+  info.title = title != nullptr && *title != '\0' ? title : id;
+  for (const auto& existing : self->plugins_) {
+    if (existing.id == info.id) {
+      return -1;
+    }
+  }
+  self->current_plugin_id_ = info.id;
+  self->plugins_.push_back(std::move(info));
+  return 0;
+}
+
 std::int32_t PluginHost::host_register_command(void* context, const char* id, const char* title,
                                                const char* tooltip) {
   auto* self = static_cast<PluginHost*>(context);
@@ -252,6 +273,7 @@ std::int32_t PluginHost::host_register_command(void* context, const char* id, co
   cmd.id = id;
   cmd.title = title != nullptr && *title != '\0' ? title : id;
   cmd.tooltip = tooltip != nullptr ? tooltip : "";
+  cmd.plugin_id = self->current_plugin_id_;
   for (const auto& existing : self->registered_) {
     if (existing.id == cmd.id) {
       return -1;

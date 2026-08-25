@@ -6,21 +6,27 @@
 #include "home_page.h"
 #include "engine/document/document_io.h"
 #include "plugin/plugin_host.h"
+#include "plugin/plugin_manager.h"
 #include "recent_files.h"
 
 #include <QMainWindow>
 #include <QStackedWidget>
 #include <QTabWidget>
 #include <memory>
+#include <string>
+#include <vector>
 
 class QAction;
 class QActionGroup;
 class QCloseEvent;
+class QToolButton;
 
 namespace tamias {
 
 class PropertyPanel;
 class HandleInspector;
+class PluginManager;
+class RibbonGroup;
 
 class MainWindow final : public QMainWindow {
   Q_OBJECT
@@ -36,6 +42,7 @@ class MainWindow final : public QMainWindow {
   void open_recent_path(const QString& path);
   void on_missing_recent(const QString& path);
   void open_settings();
+  void open_plugin_manager();
   void show_home();
   void show_documents();
   void activate_open_document(int index);
@@ -64,6 +71,7 @@ class MainWindow final : public QMainWindow {
   void set_render_mode(RenderMode mode);
   void sync_render_mode_actions();
   void bind_plugin_session();
+  void apply_plugin_visibility();
   const MeshCpu* selected_mesh(Document& document) const;
   const MeshCpu* mesh_for_obj_export(Document& document) const;
   int find_open_document(const QString& path) const;
@@ -98,6 +106,13 @@ class MainWindow final : public QMainWindow {
   PropertyPanel* property_panel_ = nullptr;
   HandleInspector* handle_inspector_ = nullptr;
   PluginHost plugin_host_;
+  PluginManager plugin_manager_;
+  RibbonGroup* plugin_commands_group_ = nullptr;
+  struct PluginRibbonButton {
+    std::string plugin_id;
+    QToolButton* button = nullptr;
+  };
+  std::vector<PluginRibbonButton> plugin_ribbon_buttons_;
   bool placed_on_primary_ = false;
 };
 

@@ -23,6 +23,9 @@ public delegate int HostDispatchFn(IntPtr context, IntPtr commandUtf8, IntPtr ar
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 public delegate int HostRegisterCommandFn(IntPtr context, IntPtr idUtf8, IntPtr titleUtf8, IntPtr tooltipUtf8);
 
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+public delegate int HostRegisterPluginFn(IntPtr context, IntPtr idUtf8, IntPtr titleUtf8);
+
 [StructLayout(LayoutKind.Sequential)]
 public struct HostApi
 {
@@ -38,4 +41,5 @@ public struct HostApi
     public IntPtr SelectionIdAt;
     public IntPtr Dispatch;
     public IntPtr RegisterCommand;
+    public IntPtr RegisterPlugin;
 }

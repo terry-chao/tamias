@@ -4,7 +4,7 @@
 
 namespace tamias {
 
-inline constexpr int kHostApiVersion = 1;
+inline constexpr int kHostApiVersion = 2;
 
 // C ABI for C# / native plugins. Layout must match plugin-sdk/csharp/Tamias.Api/HostApi.cs.
 struct HostApi {
@@ -22,6 +22,7 @@ struct HostApi {
   std::int32_t (*dispatch)(void* context, const char* command, const char* args_utf8) = nullptr;
   std::int32_t (*register_command)(void* context, const char* id, const char* title,
                                    const char* tooltip) = nullptr;
+  std::int32_t (*register_plugin)(void* context, const char* id, const char* title) = nullptr;
 };
 
 }  // namespace tamias

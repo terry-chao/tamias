@@ -101,9 +101,9 @@ host.Dispatch("set_param", new CommandArgs()
 
 ## 4. C ABI（给对照实现用）
 
-`HostApi`：`abi_version`（int32，现为 1）+ `context` + 函数指针。x64 上 int32 后有 padding，C# `LayoutKind.Sequential` 与之对齐。
+`HostApi`：`abi_version`（int32，现为 2）+ `context` + 函数指针。x64 上 int32 后有 padding，C# `LayoutKind.Sequential` 与之对齐。
 
-指针约定：字符串 UTF-8；填缓冲的函数写入 `cap-1` 字节并补 `'\0'`，返回写入长度；查询失败返回 -1；`dispatch` / `register_command` 成功 0、失败 -1。
+指针约定：字符串 UTF-8；填缓冲的函数写入 `cap-1` 字节并补 `'\0'`，返回写入长度；查询失败返回 -1；`dispatch` / `register_command` / `register_plugin` 成功 0、失败 -1。`register_plugin` 在 `Load` 每个 `IPlugin` 之前调用；之后的 `register_command` 记在该插件名下。
 
 调用约定：Cdecl（Win x64 实际只有一种）。C# 委托标了 `CallingConvention.Cdecl`；`Bootstrap.Initialize` / `Invoke` 为 `[UnmanagedCallersOnly]`。
 
