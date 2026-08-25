@@ -42,6 +42,7 @@ class MainWindow final : public QMainWindow {
   void open_recent_path(const QString& path);
   void on_missing_recent(const QString& path);
   void open_settings();
+  void open_about();
   void open_plugin_manager();
   void show_home();
   void show_documents();

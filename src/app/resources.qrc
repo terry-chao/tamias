@@ -30,6 +30,7 @@
     <file alias="fillet.svg">../../assets/icons/fillet.svg</file>
     <file alias="chamfer.svg">../../assets/icons/chamfer.svg</file>
     <file alias="settings.svg">../../assets/icons/settings.svg</file>
+    <file alias="about.svg">../../assets/icons/about.svg</file>
     <file alias="wireframe.svg">../../assets/icons/wireframe.svg</file>
     <file alias="shaded.svg">../../assets/icons/shaded.svg</file>
     <file alias="realistic.svg">../../assets/icons/realistic.svg</file>

@@ -871,6 +871,18 @@ Click an object to select it, or use a create tool</source>
         <source>Inspector</source>
         <translation>检查器</translation>
     </message>
+    <message>
+        <source>About</source>
+        <translation>关于</translation>
+    </message>
+    <message>
+        <source>About Tamias</source>
+        <translation>关于 Tamias</translation>
+    </message>
+    <message>
+        <source>Help</source>
+        <translation>帮助</translation>
+    </message>
 </context>
 <context>
     <name>tamias::PluginManagerDialog</name>
@@ -1304,6 +1316,29 @@ Plugin ID: %4</source>
     <message>
         <source>Plaster</source>
         <translation>石膏</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::AboutDialog</name>
+    <message>
+        <source>About Tamias</source>
+        <translation>关于 Tamias</translation>
+    </message>
+    <message>
+        <source>Version %1</source>
+        <translation>版本 %1</translation>
+    </message>
+    <message>
+        <source>Author: %1</source>
+        <translation>作者：%1</translation>
+    </message>
+    <message>
+        <source>A geometry viewer and parametric modeling kernel spanning MCAD and BIM.</source>
+        <translation>跨 MCAD / BIM 的几何查看与参数化编辑内核。</translation>
+    </message>
+    <message>
+        <source>Built with</source>
+        <translation>使用的技术</translation>
     </message>
 </context>
 </TS>

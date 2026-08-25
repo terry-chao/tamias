@@ -1,6 +1,7 @@
 #include "main_window.h"
 
 #include "app_settings.h"
+#include "tamias_version.h"
 #include "command/command_system.h"
 #include "engine/core/log.h"
 #include "engine/render/render_runtime.h"
@@ -10,6 +11,7 @@
 
 #include <QApplication>
 #include <QIcon>
+#include <QString>
 
 #include <string>
 
@@ -22,7 +24,7 @@ int main(int argc, char* argv[]) {
   QApplication app(argc, argv);
   QApplication::setOrganizationName("tamias");
   QApplication::setApplicationName("tamias");
-  QApplication::setApplicationVersion("0.1.0");
+  QApplication::setApplicationVersion(QStringLiteral(TAMIAS_VERSION_FULL));
   app.setWindowIcon(QIcon(QStringLiteral(":/branding/logo.png")));
 
   tamias::init_logging(tamias::LogLevel::Info);

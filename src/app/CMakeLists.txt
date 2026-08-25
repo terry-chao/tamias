@@ -16,6 +16,7 @@ add_executable(tamias
   settings_dialog.cpp
   settings_section.cpp
   plugin_manager_dialog.cpp
+  about_dialog.cpp
   document_viewport.cpp
   box_select_overlay.cpp
   handle_inspector.cpp
@@ -25,6 +26,26 @@ add_executable(tamias
   rhi_backends.cpp
   resources.qrc
 )
+
+set(TAMIAS_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(TAMIAS_VERSION_HEADER "${TAMIAS_GENERATED_DIR}/tamias_version.h")
+execute_process(
+  COMMAND "${CMAKE_COMMAND}"
+          -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+          -DOUTPUT_FILE=${TAMIAS_VERSION_HEADER}
+          -DTAMIAS_VERSION=${PROJECT_VERSION}
+          -P "${CMAKE_SOURCE_DIR}/cmake/TamiasGitVersion.cmake"
+)
+add_custom_target(tamias_git_version
+  COMMAND "${CMAKE_COMMAND}"
+          -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+          -DOUTPUT_FILE=${TAMIAS_VERSION_HEADER}
+          -DTAMIAS_VERSION=${PROJECT_VERSION}
+          -P "${CMAKE_SOURCE_DIR}/cmake/TamiasGitVersion.cmake"
+  BYPRODUCTS "${TAMIAS_VERSION_HEADER}"
+  COMMENT "Refreshing Tamias version header from git"
+)
+add_dependencies(tamias tamias_git_version)
 
 set(TAMIAS_TS_FILES
   ${CMAKE_SOURCE_DIR}/translations/tamias_zh_CN.ts
@@ -40,7 +61,10 @@ if(WIN32)
   set_target_properties(tamias PROPERTIES WIN32_EXECUTABLE $<NOT:$<CONFIG:Debug>>)
 endif()
 
-target_include_directories(tamias PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_include_directories(tamias PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/..
+  ${TAMIAS_GENERATED_DIR}
+)
 target_compile_definitions(tamias PRIVATE
   NOMINMAX
   WIN32_LEAN_AND_MEAN

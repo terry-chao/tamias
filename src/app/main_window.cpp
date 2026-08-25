@@ -1,5 +1,6 @@
 #include "main_window.h"
 
+#include "about_dialog.h"
 #include "app_settings.h"
 #include "bim/ifc_spatial_tree.h"
 #include "engine/core/log.h"
@@ -353,6 +354,12 @@ MainWindow::MainWindow(QWidget* parent)
   connect(settings_action, &QAction::triggered, this, &MainWindow::open_settings);
   addAction(settings_action);
 
+  auto* about_action = new QAction(ribbon_icon(QStringLiteral(":/icons/about.svg")),
+                                   tr("About"), this);
+  about_action->setToolTip(tr("About Tamias"));
+  connect(about_action, &QAction::triggered, this, &MainWindow::open_about);
+  addAction(about_action);
+
   auto* home_action = new QAction(ribbon_icon(QStringLiteral(":/icons/home.svg")),
                                  tr("Welcome"), this);
   home_action->setToolTip(tr("Back to the welcome page"));
@@ -491,6 +498,9 @@ MainWindow::MainWindow(QWidget* parent)
   RibbonGroup* setting_group =
       home_page->add_group(QStringLiteral("settings"), tr("Settings"));
   setting_group->add_action(settings_action);
+
+  RibbonGroup* help_group = home_page->add_group(QStringLiteral("help"), tr("Help"));
+  help_group->add_action(about_action);
 
   RibbonPage* view_page = ribbon->add_page(QStringLiteral("view"), tr("View"));
   RibbonGroup* display_ribbon =
@@ -775,6 +785,11 @@ Result<void> MainWindow::populate_document_meshes(Document& document, RenderThre
   }
   document.recompute_scene();
   return {};
+}
+
+void MainWindow::open_about() {
+  AboutDialog dialog(this);
+  dialog.exec();
 }
 
 void MainWindow::open_settings() {
