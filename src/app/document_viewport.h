@@ -13,6 +13,7 @@
 #include "viewport_tool_strip.h"
 #include "entity/entity_grip.h"
 #include "engine/modeling/feature.h"
+#include "host/session.h"
 
 #include <QElapsedTimer>
 #include <QLabel>
@@ -26,25 +27,6 @@
 #include <vector>
 
 namespace tamias {
-
-// 当前激活的创建工具。
-enum class ToolMode {
-  None,
-  Wall,
-  Box,
-  Cylinder,
-  Beam,
-  Column,
-  Slab,
-  Door,
-  Window,
-  Line,
-  Polyline,
-  Circle,
-  Arc,
-  Bezier,
-  Rectangle
-};
 
 class DocumentViewport final : public QWidget {
   Q_OBJECT
@@ -68,7 +50,7 @@ class DocumentViewport final : public QWidget {
   void apply_viewport_state(const ViewportState& state);
   // 设置当前创建工具（None / Wall / Box / Cylinder）。
   void set_tool(ToolMode mode);
-  [[nodiscard]] ToolMode tool_mode() const { return tool_mode_; }
+  [[nodiscard]] ToolMode tool_mode() const { return session_->tool_mode(); }
   // 撤销 / 重做最近一条命令。
   void undo();
   void redo();
@@ -83,6 +65,8 @@ class DocumentViewport final : public QWidget {
   // 删除当前选中实体（走 delete_entity 命令，可撤销）。
   void delete_selected();
   [[nodiscard]] CommandSystem& command_system() { return command_system_; }
+  // 会话层：文档 / 命令 / 相机 / 工具 / 选择都在这。
+  [[nodiscard]] Session& session() { return *session_; }
   void refresh_after_edit();
 
  signals:
@@ -148,14 +132,14 @@ class DocumentViewport final : public QWidget {
   void commit_grip_drag();
   void fill_grip_overlay(FrameSubmission& frame) const;
 
-  std::shared_ptr<Document> document_;
+  std::unique_ptr<Session> session_;
+  Document* document_ = nullptr;
+  CommandSystem& command_system_;
+  TurntableCamera& camera_;
   std::shared_ptr<RenderThread> render_thread_;
   std::unique_ptr<RenderChannel> channel_;
-  TurntableCamera camera_;
   Bvh bvh_;
   RenderMode mode_ = RenderMode::Shaded;
-  CommandSystem command_system_{command_registry()};
-  ToolMode tool_mode_ = ToolMode::None;
   class NativeSurface;
   NativeSurface* surface_ = nullptr;
   void* gl_hwnd_ = nullptr;  // Win32 OpenGL child HWND (UI-thread owned)

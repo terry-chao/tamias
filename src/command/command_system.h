@@ -71,6 +71,8 @@ class CommandSystem {
 
   void undo();
   void redo();
+  // 清空 pending 与 undo/redo 栈（换文档时用，避免命令持有旧 Document*）。
+  void clear();
   [[nodiscard]] bool can_undo() const { return stack_.can_undo(); }
   [[nodiscard]] bool can_redo() const { return stack_.can_redo(); }
   void push_executed(std::unique_ptr<Command> command) { stack_.push_executed(std::move(command)); }

@@ -47,7 +47,7 @@ C# 用链式 setter，序列化成一段文本再过 ABI：
 | `SetString("name", "wall")` | `s:name=wall` |
 | `SetVec3("origin", 1, 2, 3)` | `v:origin=1,2,3` |
 
-多参数用 `;` 拼接。内核解析见 [`parse_command_arg_text`](https://github.com/terry-chao/tamias/blob/main/src/plugin/command_arg_text.h)。
+多参数用 `;` 拼接。内核解析见 [`parse_command_arg_text`](https://github.com/terry-chao/tamias/blob/main/src/host/command_arg_text.h)。
 
 无类型前缀时按值推断：带逗号当 `Vec3`，纯整数当 `int64`，否则像数字当 `double`，再否则当字符串。内核读参数时按 **variant 类型**取（`arg_int` 不认 double）。**id 请用 `SetInt` / `i:`**，不要写成 `entity_id=1.0`。
 

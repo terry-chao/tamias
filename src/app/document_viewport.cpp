@@ -80,7 +80,10 @@ class DocumentViewport::NativeSurface final : public QWidget {
 DocumentViewport::DocumentViewport(std::shared_ptr<Document> document,
                                    std::shared_ptr<RenderThread> render_thread, QWidget* parent)
     : QWidget(parent),
-      document_(std::move(document)),
+      session_(std::make_unique<Session>(std::move(document))),
+      document_(&session_->document()),
+      command_system_(session_->command_system()),
+      camera_(session_->camera().camera()),
       render_thread_(std::move(render_thread)) {
   setMouseTracking(true);
   setFocusPolicy(Qt::StrongFocus);
@@ -573,15 +576,16 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
   has_cursor_ = true;
   press_hit_ = 0;
   if (event->button() == Qt::LeftButton) {
-    if (tool_mode_ == ToolMode::Slab && !plan_view_) {
+    if (session_->tool_mode() == ToolMode::Slab && !plan_view_) {
       refuse_slab_outside_plan(true);
       set_tool(ToolMode::None);
       return;
     }
-    if (tool_mode_ != ToolMode::None) {
+    if (session_->tool_mode() != ToolMode::None) {
       Vec3 point = cursor_ground_position(event->pos());
       std::uint64_t picked = 0;
-      if (tool_mode_ == ToolMode::Window || tool_mode_ == ToolMode::Door) {
+      if (session_->tool_mode() == ToolMode::Window ||
+          session_->tool_mode() == ToolMode::Door) {
         const auto dpr = devicePixelRatioF();
         const float aspect = static_cast<float>((std::max)(1, width())) /
                              static_cast<float>((std::max)(1, height()));
@@ -625,13 +629,13 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
       const bool already = node != nullptr && node->selected;
       if (shift) {
         if (already) {
-          document_->deselect(press_hit_);
+          session_->deselect(press_hit_);
         } else {
-          document_->select(press_hit_);
+          session_->select(press_hit_);
         }
       } else if (!already) {
-        document_->clear_selection();
-        document_->select(press_hit_);
+        session_->clear_selection();
+        session_->select(press_hit_);
       }
       emit selection_changed();
       request_redraw();
@@ -655,17 +659,15 @@ void DocumentViewport::mouseMoveEvent(QMouseEvent* event) {
   has_cursor_ = true;
   if (mmb_nav_ && (event->buttons() & Qt::MiddleButton)) {
     if (plan_view_ || (event->modifiers() & Qt::ShiftModifier)) {
-      const float scale = camera_.distance() * 0.002f;
-      camera_.pan(-delta.x() * scale, delta.y() * scale);
+      session_->camera().pan(-delta.x(), delta.y());
     } else {
-      camera_.orbit(-delta.x() * 0.01f, delta.y() * 0.01f);
+      session_->camera().orbit(-delta.x(), delta.y());
     }
     request_redraw();
     return;
   }
   if (panning_) {
-    const float scale = camera_.distance() * 0.002f;
-    camera_.pan(-delta.x() * scale, delta.y() * scale);
+    session_->camera().pan(-delta.x(), delta.y());
     request_redraw();
     return;
   }
@@ -673,7 +675,7 @@ void DocumentViewport::mouseMoveEvent(QMouseEvent* event) {
     apply_grip_at(event->pos());
     return;
   }
-  if (tool_mode_ != ToolMode::None) {
+  if (session_->tool_mode() != ToolMode::None) {
     request_redraw();  // 更新网格捕捉点与预览线
     return;
   }
@@ -701,12 +703,12 @@ void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
     if (gripping_) {
       commit_grip_drag();
       gripping_ = false;
-    } else if (tool_mode_ == ToolMode::None) {
+    } else if (session_->tool_mode() == ToolMode::None) {
       if (box_selecting_) {
         finish_box_select(event->pos(), (event->modifiers() & Qt::ShiftModifier) != 0);
       } else if ((event->pos() - press_mouse_).manhattanLength() < 4 && press_hit_ == 0 &&
                  (event->modifiers() & Qt::ShiftModifier) == 0) {
-        document_->clear_selection();
+        session_->clear_selection();
         request_redraw();
         emit selection_changed();
       }
@@ -722,7 +724,7 @@ void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
   if (event->button() == Qt::RightButton) {
     panning_ = false;
     if ((event->pos() - press_mouse_).manhattanLength() < 4) {
-      if (tool_mode_ != ToolMode::None) {
+      if (session_->tool_mode() != ToolMode::None) {
         // 折线 / 贝塞尔：右键先提交已点的顶点，再退出工具。
         if (command_system_.accepts_confirm()) {
           const Result<bool> done = command_system_.confirm();
@@ -737,8 +739,8 @@ void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
       }
       if (const std::uint64_t hit = pick_node_at(event->pos());
           hit != 0 && document_->entity(hit) != nullptr) {
-        document_->clear_selection();
-        document_->select(hit);
+        session_->clear_selection();
+        session_->select(hit);
         request_redraw();
         emit selection_changed();
       }
@@ -770,11 +772,9 @@ void DocumentViewport::wheelEvent(QWheelEvent* event) {
     // Zoom toward the cursor: sample the world point first, dolly, then shift
     // the orbit target so that point stays fixed in screen space.
     const Vec3 focus = cursor_world_position(pos);
-    const Vec3 old_target = camera_.target();
-    camera_.dolly(factor);
-    camera_.set_target(focus + (old_target - focus) * factor);
+    session_->camera().dolly_to_focus(factor, focus);
   } else {
-    camera_.dolly(factor);
+    session_->camera().dolly(factor);
   }
   request_redraw();
 }
@@ -785,7 +785,7 @@ void DocumentViewport::keyPressEvent(QKeyEvent* event) {
       cancel_tool();
       break;
     case Qt::Key_Delete:
-      if (tool_mode_ == ToolMode::None) {
+      if (session_->tool_mode() == ToolMode::None) {
         delete_selected();
       }
       break;
@@ -818,10 +818,10 @@ void DocumentViewport::refuse_slab_outside_plan(bool popup) {
 void DocumentViewport::set_tool(ToolMode mode) {
   if (mode == ToolMode::Slab && !plan_view_) {
     refuse_slab_outside_plan(true);
-    emit tool_mode_changed(tool_mode_);
+    emit tool_mode_changed(session_->tool_mode());
     return;
   }
-  tool_mode_ = mode;
+  session_->set_tool(mode);
   if (mode != ToolMode::None) {
     command_system_.cancel();  // 取消之前的 pending
     setFocus();
@@ -835,67 +835,67 @@ void DocumentViewport::set_tool(ToolMode mode) {
 
 void DocumentViewport::dispatch_tool_command(ToolMode mode) {
   if (mode == ToolMode::Wall) {
-    if (auto r = command_system_.dispatch(*document_, "create_wall",
+    if (auto r = session_->dispatch("create_wall",
                                           {{"thickness", kDefaultWallThickness},
                                            {"height", kDefaultWallHeight}});
         !r) {
       log_error(r.error());
     }
   } else if (mode == ToolMode::Box) {
-    if (auto r = command_system_.dispatch(*document_, "create_box", {}); !r) {
+    if (auto r = session_->dispatch("create_box", {}); !r) {
       log_error(r.error());
     }
   } else if (mode == ToolMode::Cylinder) {
-    if (auto r = command_system_.dispatch(*document_, "create_cylinder", {}); !r) {
+    if (auto r = session_->dispatch("create_cylinder", {}); !r) {
       log_error(r.error());
     }
   } else if (mode == ToolMode::Beam) {
-    if (auto r = command_system_.dispatch(*document_, "create_beam",
+    if (auto r = session_->dispatch("create_beam",
                                           {{"width", 0.3}, {"depth", 0.5}});
         !r) {
       log_error(r.error());
     }
   } else if (mode == ToolMode::Column) {
-    if (auto r = command_system_.dispatch(*document_, "create_column", {}); !r) {
+    if (auto r = session_->dispatch("create_column", {}); !r) {
       log_error(r.error());
     }
   } else if (mode == ToolMode::Slab) {
-    if (auto r = command_system_.dispatch(
-            *document_, "create_slab",
+    if (auto r = session_->dispatch(
+            "create_slab",
             {{"thickness", 0.2}, {"elevation", kDefaultWallHeight}});
         !r) {
       log_error(r.error());
     }
   } else if (mode == ToolMode::Door) {
-    if (auto r = command_system_.dispatch(*document_, "create_door", {}); !r) {
+    if (auto r = session_->dispatch("create_door", {}); !r) {
       log_error(r.error());
     }
   } else if (mode == ToolMode::Window) {
-    if (auto r = command_system_.dispatch(*document_, "create_window", {}); !r) {
+    if (auto r = session_->dispatch("create_window", {}); !r) {
       log_error(r.error());
     }
   } else if (mode == ToolMode::Line) {
-    if (auto r = command_system_.dispatch(*document_, "create_line", {}); !r) {
+    if (auto r = session_->dispatch("create_line", {}); !r) {
       log_error(r.error());
     }
   } else if (mode == ToolMode::Polyline) {
-    if (auto r = command_system_.dispatch(*document_, "create_polyline", {}); !r) {
+    if (auto r = session_->dispatch("create_polyline", {}); !r) {
       log_error(r.error());
     }
   } else if (mode == ToolMode::Circle) {
-    if (auto r = command_system_.dispatch(*document_, "create_circle", {}); !r) {
+    if (auto r = session_->dispatch("create_circle", {}); !r) {
       log_error(r.error());
     }
   } else if (mode == ToolMode::Arc) {
-    if (auto r = command_system_.dispatch(*document_, "create_arc", {}); !r) {
+    if (auto r = session_->dispatch("create_arc", {}); !r) {
       log_error(r.error());
     }
   } else if (mode == ToolMode::Bezier) {
-    if (auto r = command_system_.dispatch(*document_, "create_bezier", {}); !r) {
+    if (auto r = session_->dispatch("create_bezier", {}); !r) {
       log_error(r.error());
     }
   } else if (mode == ToolMode::Rectangle) {
-    if (auto r = command_system_.dispatch(*document_, "create_rectangle", {}); !r) {
+    if (auto r = session_->dispatch("create_rectangle", {}); !r) {
       log_error(r.error());
     }
   }
@@ -904,8 +904,8 @@ void DocumentViewport::dispatch_tool_command(ToolMode mode) {
 bool DocumentViewport::finish_pending_if_done(const Result<bool>& done) {
   if (!done) {
     log_error(done.error());
-    if (tool_mode_ != ToolMode::None) {
-      dispatch_tool_command(tool_mode_);
+    if (session_->tool_mode() != ToolMode::None) {
+      dispatch_tool_command(session_->tool_mode());
     }
     request_redraw();
     return true;
@@ -915,8 +915,8 @@ bool DocumentViewport::finish_pending_if_done(const Result<bool>& done) {
     rebuild_bvh();
     emit document_changed();
     // 画完一个实体后继续同一绘制命令，直到 Esc / 右键退出。
-    if (tool_mode_ != ToolMode::None) {
-      dispatch_tool_command(tool_mode_);
+    if (session_->tool_mode() != ToolMode::None) {
+      dispatch_tool_command(session_->tool_mode());
     }
     request_redraw();
     return true;
@@ -925,11 +925,11 @@ bool DocumentViewport::finish_pending_if_done(const Result<bool>& done) {
 }
 
 void DocumentViewport::cancel_tool() {
-  if (tool_mode_ != ToolMode::None && command_system_.drag_started()) {
+  if (session_->tool_mode() != ToolMode::None && command_system_.drag_started()) {
     command_system_.cancel();
-    dispatch_tool_command(tool_mode_);  // 取消当前放置，仍留在工具
+    dispatch_tool_command(session_->tool_mode());  // 取消当前放置，仍留在工具
     request_redraw();
-  } else if (tool_mode_ != ToolMode::None) {
+  } else if (session_->tool_mode() != ToolMode::None) {
     set_tool(ToolMode::None);  // 退出工具
   }
 }
@@ -969,7 +969,7 @@ void DocumentViewport::adjust_selected_param(double delta) {
 
 void DocumentViewport::run_command(const std::string& name, const CommandArgs& args,
                                    bool notify) {
-  if (auto r = command_system_.dispatch(*document_, name, args); r) {
+  if (auto r = session_->dispatch(name, args); r) {
     resync_all_meshes();
     document_->recompute_scene();
     rebuild_bvh();
@@ -1005,8 +1005,8 @@ void DocumentViewport::set_entity_param(std::uint64_t entity_id, std::uint64_t f
 void DocumentViewport::set_entity_material(std::uint64_t entity_id, const Material& material) {
   // 纯视觉：材质只影响渲染，不重建网格/场景/BVH，仅重绘一帧。
   // 属性面板自己已展示新值，无需 notify 刷新（避免重建丢焦点）。
-  if (auto r = command_system_.dispatch(
-          *document_, "set_material",
+  if (auto r = session_->dispatch(
+          "set_material",
           {{"entity_id", static_cast<std::int64_t>(entity_id)},
            {"material_id", static_cast<std::int64_t>(material.id)},
            {"name", material.name},
@@ -1123,10 +1123,10 @@ void DocumentViewport::resync_textures() {
 }
 
 void DocumentViewport::undo() {
-  if (!command_system_.can_undo()) {
+  if (!session_->can_undo()) {
     return;
   }
-  command_system_.undo();
+  session_->undo();
   resync_all_meshes();
   document_->recompute_scene();
   rebuild_bvh();
@@ -1135,10 +1135,10 @@ void DocumentViewport::undo() {
 }
 
 void DocumentViewport::redo() {
-  if (!command_system_.can_redo()) {
+  if (!session_->can_redo()) {
     return;
   }
-  command_system_.redo();
+  session_->redo();
   resync_all_meshes();
   document_->recompute_scene();
   rebuild_bvh();
@@ -1147,8 +1147,8 @@ void DocumentViewport::redo() {
 }
 
 bool DocumentViewport::grid_snap_active() const {
-  return tool_mode_ != ToolMode::None && tool_mode_ != ToolMode::Door &&
-         tool_mode_ != ToolMode::Window;
+  return session_->tool_mode() != ToolMode::None && session_->tool_mode() != ToolMode::Door &&
+         session_->tool_mode() != ToolMode::Window;
 }
 
 Vec3 DocumentViewport::cursor_ground_position(const QPoint& pos) const {
@@ -1224,11 +1224,11 @@ void DocumentViewport::finish_box_select(const QPoint& pos, bool additive) {
       static_cast<float>(press_mouse_.y()), static_cast<float>(pos.x()),
       static_cast<float>(pos.y()), crossing);
   if (!additive) {
-    document_->clear_selection();
+    session_->clear_selection();
   }
   for (const std::uint64_t id : ids) {
     if (node_visible_in_view(id)) {
-      document_->select(id);
+      session_->select(id);
     }
   }
   request_redraw();
@@ -1257,7 +1257,7 @@ void DocumentViewport::set_plan_view(bool plan, bool restore_perspective) {
   if (tool_strip_) {
     tool_strip_->set_plan_view(plan_view_);
   }
-  if (!plan_view_ && tool_mode_ == ToolMode::Slab) {
+  if (!plan_view_ && session_->tool_mode() == ToolMode::Slab) {
     set_tool(ToolMode::None);
     refuse_slab_outside_plan(false);
   }
@@ -1434,7 +1434,7 @@ void DocumentViewport::populate_floor_menu() {
 }
 
 bool DocumentViewport::pick_grip_at(const QPoint& pos, EntityGrip& out) const {
-  if (tool_mode_ != ToolMode::None || document_ == nullptr) {
+  if (session_->tool_mode() != ToolMode::None || document_ == nullptr) {
     return false;
   }
   const Mat4 vp = view_proj();
@@ -1517,7 +1517,7 @@ void DocumentViewport::commit_grip_drag() {
 }
 
 void DocumentViewport::fill_grip_overlay(FrameSubmission& frame) const {
-  if (tool_mode_ != ToolMode::None || document_ == nullptr) {
+  if (session_->tool_mode() != ToolMode::None || document_ == nullptr) {
     return;
   }
   for (const std::uint64_t id : document_->selected_ids()) {

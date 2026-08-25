@@ -13,6 +13,15 @@ export interface TamiasViewerModule {
   renderFrame(): void;
   status(): string;
   documentName(): string;
+  // 会话层能力（Session 的 embind 导出）
+  dispatch(command: string, argsText?: string): boolean;
+  undo(): void;
+  redo(): void;
+  canUndo(): boolean;
+  canRedo(): boolean;
+  selectionCount(): number;
+  selectionIdAt(index: number): number;
+  clearSelection(): void;
 }
 
 declare global {

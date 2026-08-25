@@ -15,6 +15,7 @@ target_link_libraries(tamias_viewer
     tamias::document
     tamias::entity
     tamias::modeling
+    tamias::host
 )
 target_compile_definitions(tamias_viewer PRIVATE TAMIAS_HAS_RHI_WEBGL=1)
 target_compile_options(tamias_viewer PRIVATE -fexceptions)

@@ -1,5 +1,6 @@
 #include "viewer_host.h"
 
+#include "command/command_system.h"
 #include "engine/core/log.h"
 
 #include <algorithm>
@@ -20,6 +21,7 @@ tamias::ViewerHost& host() {
 
 bool start_viewer(const std::string& canvas) {
   tamias::init_logging(tamias::LogLevel::Info);
+  tamias::register_commands(tamias::command_registry());
   auto r = host().start(canvas.c_str());
   return static_cast<bool>(r);
 }
@@ -44,6 +46,29 @@ void render_frame() { host().render(); }
 std::string status() { return host().status(); }
 std::string document_name() { return host().document_name(); }
 
+bool dispatch_command(const std::string& command, const std::string& args) {
+  return host().dispatch(command, args);
+}
+
+void undo_viewer() { host().undo(); }
+void redo_viewer() { host().redo(); }
+bool can_undo_viewer() { return host().can_undo(); }
+bool can_redo_viewer() { return host().can_redo(); }
+
+int selection_count() {
+  return static_cast<int>(host().selection().size());
+}
+
+std::uint64_t selection_id_at(int index) {
+  const auto selection = host().selection();
+  if (index < 0 || static_cast<std::size_t>(index) >= selection.size()) {
+    return 0;
+  }
+  return selection[static_cast<std::size_t>(index)];
+}
+
+void clear_selection_viewer() { host().clear_selection(); }
+
 }  // namespace
 
 #if defined(__EMSCRIPTEN__)
@@ -59,6 +84,14 @@ EMSCRIPTEN_BINDINGS(tamias_viewer) {
   emscripten::function("renderFrame", &render_frame);
   emscripten::function("status", &status);
   emscripten::function("documentName", &document_name);
+  emscripten::function("dispatch", &dispatch_command);
+  emscripten::function("undo", &undo_viewer);
+  emscripten::function("redo", &redo_viewer);
+  emscripten::function("canUndo", &can_undo_viewer);
+  emscripten::function("canRedo", &can_redo_viewer);
+  emscripten::function("selectionCount", &selection_count);
+  emscripten::function("selectionIdAt", &selection_id_at);
+  emscripten::function("clearSelection", &clear_selection_viewer);
 }
 #endif
 

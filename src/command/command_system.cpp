@@ -82,4 +82,9 @@ void CommandSystem::cancel() { pending_.reset(); }
 void CommandSystem::undo() { stack_.undo(); }
 void CommandSystem::redo() { stack_.redo(); }
 
+void CommandSystem::clear() {
+  pending_.reset();
+  stack_.clear();
+}
+
 }  // namespace tamias

@@ -74,6 +74,24 @@ export default function App() {
     const onKeyDown = (event: KeyboardEvent) => {
       const module = moduleRef.current;
       if (!module) return;
+      if (event.ctrlKey || event.metaKey) {
+        const tag = (event.target as HTMLElement | null)?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        if (event.key === "z" || event.key === "Z") {
+          event.preventDefault();
+          if (event.shiftKey) {
+            module.redo();
+          } else {
+            module.undo();
+          }
+          return;
+        }
+        if (event.key === "y" || event.key === "Y") {
+          event.preventDefault();
+          module.redo();
+          return;
+        }
+      }
       if (event.key !== "f" && event.key !== "F") return;
       const tag = (event.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
@@ -165,6 +183,22 @@ export default function App() {
             type="button"
             className="btn"
             disabled={!ready}
+            onClick={() => moduleRef.current?.undo()}
+          >
+            撤销
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={!ready}
+            onClick={() => moduleRef.current?.redo()}
+          >
+            重做
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={!ready}
             onClick={() => moduleRef.current?.frameAll()}
           >
             框选全部 <kbd>F</kbd>
@@ -198,7 +232,7 @@ export default function App() {
           onContextMenu={(event) => event.preventDefault()}
         />
         {dragging && <div className="drop-overlay">松开以打开文件</div>}
-        <div className="hint">中键旋转 · 右键平移 · 滚轮缩放 · F 框选全部</div>
+        <div className="hint">中键旋转 · 右键平移 · 滚轮缩放 · F 框选全部 · Ctrl+Z 撤销</div>
       </div>
     </div>
   );
