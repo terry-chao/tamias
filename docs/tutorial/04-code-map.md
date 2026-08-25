@@ -101,7 +101,7 @@ MainWindow window; window.show();      // 5. 显示主窗口
 
 ## 延伸阅读
 
-- [总览](../overview/index.md)：分层表 + 每层读哪些文档
+- [首页](../index.md)：分层表 + 每层读哪些文档
 - [Qt 壳](../APP.md)：app 层职责与「现在有/还没有」
 - [插件系列](../plugin/index.md)：C# 宿主与命令层的接缝
 - [路线图](../ROADMAP.md) 第 2 节：分层架构 + 最容易误解的两点

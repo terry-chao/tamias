@@ -71,7 +71,7 @@
 ## 延伸阅读
 
 - [路线图](../ROADMAP.md) 第 0 节：一句话定位与对标物
-- [总览](../overview/index.md)：分层架构总入口
+- [首页](../index.md)：分层架构总入口
 - [插件系列](../plugin/index.md)：C# 扩展为什么停在命令之上
 - [MCAD 与 BIM 决策](../DECISION-MCAD-BIM.md)：为什么一个软件同时做两个领域
 

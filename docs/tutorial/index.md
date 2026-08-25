@@ -42,10 +42,10 @@
 
 | 章 | 学什么 | 对应现有文档 |
 |---|---|---|
-| [1. 认识 Tamias](01-what-is-tamias.md) | 3D 软件的通用组成、Tamias 的技术栈 | [总览](../overview/index.md)、[路线图](../ROADMAP.md) |
+| [1. 认识 Tamias](01-what-is-tamias.md) | 3D 软件的通用组成、Tamias 的技术栈 | [首页](../index.md)、[路线图](../ROADMAP.md) |
 | [2. 构建与运行](02-build-and-run.md) | CMake、依赖、第一次编译 | [BUILD.md](https://github.com/terry-chao/tamias/blob/main/BUILD.md) |
 | [3. 界面与交互](03-ui-and-interaction.md) | 界面元素背后的代码、相机、第一次建模 | [Qt 壳](../APP.md)、[插件·使用](../plugin/usage.md) |
-| [4. 代码骨架](04-code-map.md) | 目录分层、两条数据流、新手导航规则 | [总览](../overview/index.md) |
+| [4. 代码骨架](04-code-map.md) | 目录分层、两条数据流、新手导航规则 | [首页](../index.md) |
 | [5. 几何与造型](05-geometry-and-modeling.md) | 三角网 / BRep / 特征树、OCCT 求值 | [特征树求值器](../FEATURE-TREE-EVALUATOR.md)、[几何边界](../ISHAPE-OPS.md) |
 | [6. 文档与场景](06-document-and-scene.md) | Document、SceneNode、Entity、`.tdoc` | [语义树](../SCENE-GRAPH.md) |
 | [7. 命令与撤销](07-commands-and-undo.md) | Command 接口、命令注册、交互命令 | [命令](../APP.md)（入口）、[插件系列](../plugin/index.md) |
