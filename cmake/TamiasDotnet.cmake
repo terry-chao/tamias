@@ -108,7 +108,7 @@ function(tamias_publish_csharp target)
     return()
   endif()
 
-  set(_host_csproj "${CMAKE_SOURCE_DIR}/plugin-support/csharp/Tamias.Host/Tamias.Host.csproj")
+  set(_host_csproj "${CMAKE_SOURCE_DIR}/plugin-sdk/csharp/Tamias.Host/Tamias.Host.csproj")
   set(_hello_csproj "${CMAKE_SOURCE_DIR}/plugins/csharp/Tamias.Hello/Tamias.Hello.csproj")
   if(NOT EXISTS "${_host_csproj}")
     return()
@@ -125,7 +125,7 @@ function(tamias_publish_csharp target)
             -c $<IF:$<CONFIG:Debug>,Debug,Release>
             --nologo
             -o $<TARGET_FILE_DIR:${target}>/plugins
-    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/plugin-support/csharp"
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/plugin-sdk/csharp"
     COMMENT "Publishing C# plugin host and sample plugins"
     VERBATIM
   )

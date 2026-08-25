@@ -5,7 +5,7 @@
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\plugin-support\csharp\Tamias.Api\Tamias.Api.csproj">
+    <ProjectReference Include="..\..\..\plugin-sdk\csharp\Tamias.Api\Tamias.Api.csproj">
       <Private>false</Private>
       <ExcludeAssets>runtime</ExcludeAssets>
     </ProjectReference>
