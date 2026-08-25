@@ -103,6 +103,7 @@ struct SceneGraphDrawContext {
 
   // ---- 以下状态由 StateCommands 录制累积、Drawable 录制消费 ----
   Vec3 material_color{0.75f, 0.78f, 0.82f};
+  Vec3 category_color{0.72f, 0.74f, 0.78f};
   float material_roughness = 0.6f;
   float material_metallic = 0.f;
   std::uint64_t material_albedo_texture_id = 0;
@@ -124,6 +125,7 @@ class StateCommand {
 class BindMaterialCommand final : public StateCommand {
  public:
   Vec3 color{0.75f, 0.78f, 0.82f};
+  Vec3 category_color{0.72f, 0.74f, 0.78f};
   float roughness = 0.6f;
   float metallic = 0.f;
   std::uint64_t albedo_texture_id = 0;

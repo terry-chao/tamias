@@ -17,7 +17,8 @@ struct SceneDrawItem {
   std::uint64_t mesh_asset_id = 0;      // 语义几何引用，渲染侧映射到 GPU
   Mat4 transform = Mat4::identity();    // world transform
   Aabb bounds{};                        // world bounds（录制时视锥剔除用；无效盒不剔除）
-  Vec3 color{0.75f, 0.78f, 0.82f};      // 解析后的 base_color
+  Vec3 color{0.75f, 0.78f, 0.82f};      // 材质 base_color（真实感）
+  Vec3 category_color{0.72f, 0.74f, 0.78f};  // 构件识别色（着色模式，不读材质）
   float roughness = 0.6f;               // PBR：粗糙度
   float metallic = 0.0f;                // PBR：金属度
   std::uint64_t albedo_texture_id = 0;  // 0 = 无贴图

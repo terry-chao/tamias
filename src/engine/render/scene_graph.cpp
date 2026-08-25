@@ -61,6 +61,7 @@ void RenderVisitor::traverse(DrawableNode&, RenderVisitor&) {}
 
 void BindMaterialCommand::record(SceneGraphDrawContext& ctx) {
   ctx.material_color = color;
+  ctx.category_color = category_color;
   ctx.material_roughness = roughness;
   ctx.material_metallic = metallic;
   ctx.material_albedo_texture_id = albedo_texture_id;
@@ -140,11 +141,14 @@ void RecordCommands::apply(DrawableNode& node) {
   }
   const GpuMesh& mesh = mesh_it->second;
 
-  // 绑定 albedo 纹理：有贴图且已上传 → 实纹理；否则默认白纹理（has_albedo=0 走纯色）。
+  const bool as_lines = ctx_.lines || mesh.line_list;
+  const bool use_material = !as_lines && ctx_.mode_value > 1.5f;
+
+  // 绑定 albedo 纹理：真实感且有贴图且已上传 → 实纹理；着色模式只用构件色。
   Texture* bound = ctx_.default_texture;
   bool has_albedo = false;
-  if (ctx_.material_albedo_texture_id != 0 && ctx_.texture_asset_to_gpu != nullptr &&
-      ctx_.textures != nullptr) {
+  if (use_material && ctx_.material_albedo_texture_id != 0 &&
+      ctx_.texture_asset_to_gpu != nullptr && ctx_.textures != nullptr) {
     const auto tex_it = ctx_.texture_asset_to_gpu->find(ctx_.material_albedo_texture_id);
     if (tex_it != ctx_.texture_asset_to_gpu->end()) {
       const auto gtex_it = ctx_.textures->find(tex_it->second);
@@ -169,7 +173,6 @@ void RecordCommands::apply(DrawableNode& node) {
     ctx_.command_list->set_texture(*bound, 0);
   }
 
-  const bool as_lines = ctx_.lines || mesh.line_list;
   if (as_lines) {
     if (ctx_.entity_line_pipeline == nullptr) {
       return;
@@ -189,17 +192,18 @@ void RecordCommands::apply(DrawableNode& node) {
     }
   }
 
+  const Vec3 color = use_material ? ctx_.material_color : ctx_.category_color;
   PushConstants pc{};
   pc.mvp = *ctx_.view_proj * world;
   pc.model = world;
-  pc.color[0] = ctx_.material_color.x;
-  pc.color[1] = ctx_.material_color.y;
-  pc.color[2] = ctx_.material_color.z;
+  pc.color[0] = color.x;
+  pc.color[1] = color.y;
+  pc.color[2] = color.z;
   pc.color[3] = 1.f;
-  pc.material[0] = ctx_.material_roughness;
-  pc.material[1] = ctx_.material_metallic;
+  pc.material[0] = use_material ? ctx_.material_roughness : 0.6f;
+  pc.material[1] = use_material ? ctx_.material_metallic : 0.f;
   pc.material[2] = has_albedo ? 1.f : 0.f;
-  pc.material[3] = ctx_.material_normal_texture_id != 0 ? 1.f : 0.f;
+  pc.material[3] = use_material && ctx_.material_normal_texture_id != 0 ? 1.f : 0.f;
   pc.light_dir_selected[0] = 0.45f;
   pc.light_dir_selected[1] = 0.35f;
   pc.light_dir_selected[2] = 0.82f;
@@ -222,6 +226,15 @@ void RecordCommands::apply(DrawableNode& node) {
 
 namespace {
 
+void bind_item_material(BindMaterialCommand& material, const SceneDrawItem& item) {
+  material.color = item.color;
+  material.category_color = item.category_color;
+  material.roughness = item.roughness;
+  material.metallic = item.metallic;
+  material.albedo_texture_id = item.albedo_texture_id;
+  material.normal_texture_id = item.normal_texture_id;
+}
+
 // 单个 item 的子树：Transform(world) → StateGroup(材质/选中/线条) → Drawable。
 std::unique_ptr<TransformNode> make_item_subtree(const SceneDrawItem& item) {
   auto transform = std::make_unique<TransformNode>();
@@ -232,11 +245,7 @@ std::unique_ptr<TransformNode> make_item_subtree(const SceneDrawItem& item) {
   state->name = "state_" + std::to_string(item.node_id);
 
   auto material = std::make_unique<BindMaterialCommand>();
-  material->color = item.color;
-  material->roughness = item.roughness;
-  material->metallic = item.metallic;
-  material->albedo_texture_id = item.albedo_texture_id;
-  material->normal_texture_id = item.normal_texture_id;
+  bind_item_material(*material, item);
   state->commands.push_back(std::move(material));
 
   auto selected = std::make_unique<SetSelectedCommand>();
@@ -311,11 +320,7 @@ void update_scene_graph(GroupNode& root,
       }
       state->commands.clear();
       auto material = std::make_unique<BindMaterialCommand>();
-      material->color = item.color;
-      material->roughness = item.roughness;
-      material->metallic = item.metallic;
-      material->albedo_texture_id = item.albedo_texture_id;
-      material->normal_texture_id = item.normal_texture_id;
+      bind_item_material(*material, item);
       state->commands.push_back(std::move(material));
       auto selected = std::make_unique<SetSelectedCommand>();
       selected->selected = item.selected;

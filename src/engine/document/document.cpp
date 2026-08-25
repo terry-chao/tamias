@@ -1,6 +1,7 @@
 #include "engine/document/document.h"
 
 #include "entity/entity_grip.h"
+#include "entity/kind_display_color.h"
 
 #include <algorithm>
 #include <cmath>
@@ -365,8 +366,10 @@ std::vector<SceneDrawItem> Document::render_items(const Frustum* frustum) const 
     item.transform = node.world_transform;
     item.bounds = node.world_bounds;
     item.color = node.color;
+    item.category_color = kImportDisplayColor;
     item.selected = node.selected;
     if (const Entity* e = entity(node.id); e != nullptr) {
+      item.category_color = display_color_for_kind(e->kind());
       if (e->material_id != 0) {
         if (const Material* m = material(e->material_id)) {
           item.color = m->base_color;
@@ -377,7 +380,7 @@ std::vector<SceneDrawItem> Document::render_items(const Frustum* frustum) const 
         }
       } else if (e->is_sketch_entity()) {
         // 草图用青色，与混凝土灰、选中蓝分开。
-        item.color = {0.18f, 0.80f, 0.98f};
+        item.color = display_color_for_kind(e->kind());
         item.lines = true;
       }
     }

@@ -1,5 +1,10 @@
 #include "engine/render/scene_graph.h"
 #include "engine/document/document.h"
+#include "engine/io/mesh_io.h"
+#include "entity/column_entity.h"
+#include "entity/kind_display_color.h"
+#include "entity/slab_entity.h"
+#include "entity/wall_entity.h"
 
 #include <gtest/gtest.h>
 
@@ -129,6 +134,7 @@ void expect_mat4_eq(const Mat4& a, const Mat4& b) {
 
 TEST(SceneGraph, RecordsDrawWithAccumulatedTransformAndMaterial) {
   Fixture f;
+  f.ctx.mode_value = 2.f;
   f.add_mesh(42, 6);
 
   auto root = std::make_unique<GroupNode>();
@@ -167,7 +173,42 @@ TEST(SceneGraph, RecordsDrawWithAccumulatedTransformAndMaterial) {
   EXPECT_FLOAT_EQ(pc.material[0], 0.2f);
   EXPECT_FLOAT_EQ(pc.material[1], 0.9f);
   EXPECT_FLOAT_EQ(pc.light_dir_selected[3], 1.f);  // selected
-  EXPECT_FLOAT_EQ(pc.eye_pos_mode[3], 1.f);        // shaded mode
+  EXPECT_FLOAT_EQ(pc.eye_pos_mode[3], 2.f);        // realistic mode
+}
+
+TEST(SceneGraph, ShadedUsesCategoryColorAndIgnoresAlbedo) {
+  Fixture f;
+  f.add_mesh(42, 6);
+  GpuTexture gpu_tex;
+  gpu_tex.texture = std::make_unique<MockTexture>();
+  f.textures.emplace(1, std::move(gpu_tex));
+  f.texture_asset_to_gpu[9] = 1;
+
+  auto root = std::make_unique<GroupNode>();
+  auto transform = std::make_unique<TransformNode>();
+  auto state = std::make_unique<StateGroupNode>();
+  auto material = std::make_unique<BindMaterialCommand>();
+  material->color = {1.f, 0.f, 0.f};
+  material->category_color = {0.62f, 0.45f, 0.72f};
+  material->roughness = 0.2f;
+  material->metallic = 0.9f;
+  material->albedo_texture_id = 9;
+  state->commands.push_back(std::move(material));
+  state->add_child(make_drawable(7, 42));
+  transform->add_child(std::move(state));
+  root->add_child(std::move(transform));
+
+  f.visit(*root);
+
+  ASSERT_EQ(f.cmds.push_constants.size(), 1u);
+  const PushConstants& pc = f.cmds.push_constants[0];
+  EXPECT_FLOAT_EQ(pc.color[0], 0.62f);
+  EXPECT_FLOAT_EQ(pc.color[1], 0.45f);
+  EXPECT_FLOAT_EQ(pc.color[2], 0.72f);
+  EXPECT_FLOAT_EQ(pc.material[0], 0.6f);
+  EXPECT_FLOAT_EQ(pc.material[1], 0.f);
+  EXPECT_FLOAT_EQ(pc.material[2], 0.f);  // no albedo in shaded
+  EXPECT_FLOAT_EQ(pc.eye_pos_mode[3], 1.f);
 }
 
 TEST(SceneGraph, NestedTransformsMultiplyInTraversalOrder) {
@@ -220,6 +261,7 @@ TEST(SceneGraph, SiblingStateGroupsOverrideExplicitly) {
     auto state = std::make_unique<StateGroupNode>();
     auto material = std::make_unique<BindMaterialCommand>();
     material->color = color;
+    material->category_color = color;
     state->commands.push_back(std::move(material));
     state->add_child(make_drawable(0, 10));
     transform->add_child(std::move(state));
@@ -279,6 +321,7 @@ TEST(SceneGraph, BuildFromItemsMapsFieldsAndTreeShape) {
   a.mesh_asset_id = 42;
   a.transform = world;
   a.color = {1.f, 0.f, 0.f};
+  a.category_color = a.color;
   a.roughness = 0.3f;
   a.metallic = 0.4f;
   a.selected = true;
@@ -287,6 +330,7 @@ TEST(SceneGraph, BuildFromItemsMapsFieldsAndTreeShape) {
   b.node_id = 2;
   b.mesh_asset_id = 43;
   b.color = {0.f, 0.f, 1.f};
+  b.category_color = b.color;
   items.push_back(b);
 
   auto root = build_scene_graph(items);
@@ -425,11 +469,13 @@ TEST(SceneGraphIncremental, UpdatesExistingNodeInPlace) {
   a.mesh_asset_id = 10;
   a.transform = translate({1.f, 0.f, 0.f});
   a.color = {1.f, 0.f, 0.f};
+  a.category_color = a.color;
   items.push_back(a);
   SceneDrawItem b{};
   b.node_id = 2;
   b.mesh_asset_id = 11;
   b.color = {0.f, 1.f, 0.f};
+  b.category_color = b.color;
   items.push_back(b);
 
   std::unordered_map<std::uint64_t, TransformNode*> index;
@@ -442,6 +488,7 @@ TEST(SceneGraphIncremental, UpdatesExistingNodeInPlace) {
   // 只改 node 1（直接改 items[0]，不是局部副本 a）：换世界矩阵 + 颜色 + 选中态。
   items[0].transform = translate({9.f, 8.f, 7.f});
   items[0].color = {0.f, 0.f, 1.f};
+  items[0].category_color = items[0].color;
   items[0].selected = true;
   update_scene_graph(*group, index, items, {1});
 
@@ -527,6 +574,49 @@ TEST(SceneGraphIncremental, RecordCullsByFrustumAndHiddenSet) {
   hidden.clear();
   f.visit(*root);
   ASSERT_EQ(f.cmds.draws.size(), 1u);
+}
+
+TEST(Document, RenderItemsFillCategoryColorsByKind) {
+  Document doc;
+  Entity* wall = doc.add_entity(
+      std::make_unique<WallEntity>(Vec3{0.f, 0.f, 0.f}, Vec3{4.f, 0.f, 0.f}, 0.2, 3.0),
+      make_demo_cube());
+  Entity* column = doc.add_entity(std::make_unique<ColumnEntity>(Vec3{1.f, 0.f, 1.f}),
+                                  make_demo_cube());
+  Entity* slab = doc.add_entity(
+      std::make_unique<SlabEntity>(Vec3{0.f, 0.f, 0.f}, Vec3{4.f, 0.f, 3.f}, 0.2),
+      make_demo_cube());
+  ASSERT_NE(wall, nullptr);
+  ASSERT_NE(column, nullptr);
+  ASSERT_NE(slab, nullptr);
+  ASSERT_NE(wall->material_id, 0u);
+
+  const auto items = doc.render_items();
+  auto color_of = [&](std::uint64_t id) {
+    for (const auto& item : items) {
+      if (item.node_id == id) {
+        return item.category_color;
+      }
+    }
+    return Vec3{};
+  };
+  const Vec3 wall_c = color_of(wall->id);
+  const Vec3 column_c = color_of(column->id);
+  const Vec3 slab_c = color_of(slab->id);
+  const Vec3 expect_wall = display_color_for_kind(EntityKind::Wall);
+  const Vec3 expect_column = display_color_for_kind(EntityKind::Column);
+  const Vec3 expect_slab = display_color_for_kind(EntityKind::Slab);
+  EXPECT_FLOAT_EQ(wall_c.x, expect_wall.x);
+  EXPECT_FLOAT_EQ(wall_c.y, expect_wall.y);
+  EXPECT_FLOAT_EQ(wall_c.z, expect_wall.z);
+  EXPECT_FLOAT_EQ(column_c.x, expect_column.x);
+  EXPECT_FLOAT_EQ(column_c.y, expect_column.y);
+  EXPECT_FLOAT_EQ(column_c.z, expect_column.z);
+  EXPECT_FLOAT_EQ(slab_c.x, expect_slab.x);
+  EXPECT_FLOAT_EQ(slab_c.y, expect_slab.y);
+  EXPECT_FLOAT_EQ(slab_c.z, expect_slab.z);
+  EXPECT_NE(wall_c.x, column_c.x);
+  EXPECT_NE(slab_c.y, wall_c.y);
 }
 
 }  // namespace
