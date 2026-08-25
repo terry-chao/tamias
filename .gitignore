@@ -21,7 +21,7 @@ out/
 site/
 .cache/
 .wix/
-csharp/**/bin/
-csharp/**/obj/
+plugin-support/**/bin/
+plugin-support/**/obj/
 plugins/**/bin/
 plugins/**/obj/

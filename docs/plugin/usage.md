@@ -20,7 +20,7 @@ build/bin/Debug/
     Tamias.Hello.dll
 ```
 
-加载规则（[`PluginLoader.cs`](https://github.com/terry-chao/tamias/blob/main/csharp/Tamias.Host/PluginLoader.cs)）：
+加载规则（[`PluginLoader.cs`](https://github.com/terry-chao/tamias/blob/main/plugin-support/csharp/Tamias.Host/PluginLoader.cs)）：
 
 - 从 `managed/` 的上一级找 `plugins/`
 - 加载该目录下所有 `.dll`

@@ -6,7 +6,7 @@
 
 ## 1. 工程最小集
 
-建议放在 `csharp/` 下，和示例一样用 [`Directory.Build.props`](https://github.com/terry-chao/tamias/blob/main/csharp/Directory.Build.props)（`net8.0`）。
+建议放在 `plugins/csharp/` 下，和示例一样用仓库根目录的 [`Directory.Build.props`](https://github.com/terry-chao/tamias/blob/main/Directory.Build.props)（`net8.0`）。
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">

@@ -2,7 +2,7 @@
 
 > 插件能做的事 = **`IHost` 只读查询 + 日志 + 登记命令 + `Dispatch` 内核命令**。没有相机、文件对话框、自定义 Qt 面板、也没有几何内核句柄。
 
-C# 契约在 [`csharp/Tamias.Api/`](https://github.com/terry-chao/tamias/tree/main/csharp/Tamias.Api)。C ABI 在 [`host_api.h`](https://github.com/terry-chao/tamias/blob/main/src/plugin/host_api.h)，布局必须与 [`HostApi.cs`](https://github.com/terry-chao/tamias/blob/main/csharp/Tamias.Api/HostApi.cs) 一致。
+C# 契约在 [`plugin-support/csharp/Tamias.Api/`](https://github.com/terry-chao/tamias/tree/main/plugin-support/csharp/Tamias.Api)。C ABI 在 [`host_api.h`](https://github.com/terry-chao/tamias/blob/main/src/plugin/host_api.h)，布局必须与 [`HostApi.cs`](https://github.com/terry-chao/tamias/blob/main/plugin-support/csharp/Tamias.Api/HostApi.cs) 一致。
 
 ---
 

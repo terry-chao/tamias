@@ -20,9 +20,11 @@ web/ (React + TS)   壳：工具栏、拖放、状态栏、键盘快捷键
 
 两条硬规则：
 
-- **`src/` 只放 C++**。非 C++ 工程（`web/`、`csharp/`）放根目录；
+- **`src/` 只放 C++**。非 C++ 工程（`web/`、`plugin-support/`）放根目录；
+  **`plugin-support/`** 是插件支持区，按语言放插件系统（当前 `csharp/`：
+  `Tamias.Api` 契约 + `Tamias.Host` 托管宿主，将来可有 `rust/`、`python/` 等）；
   **`plugins/`** 是插件示例区，按语言分子目录（如 `plugins/csharp/Tamias.Hello`），
-  与系统组件（`csharp/Tamias.Api`、`csharp/Tamias.Host`）分开，用户一眼能看出插件放哪。
+  与系统组件分开，用户一眼能看出插件放哪。
 - **会话逻辑只写一份**。某段逻辑桌面和 web 都要用，就进 `src/host/`；只属于某一个壳的
   （QWidget、Ribbon、canvas、RHI 细节）留在壳里。
 

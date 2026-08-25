@@ -20,7 +20,7 @@ src/
 │   ├── modeling/ 特征树、求值器、几何边界（IShapeOps / OCCT）
 │   └── render/   渲染线程、RHI 抽象、Vulkan/OpenGL/WebGL 后端
 ├── web/         Web 查看器宿主（ViewerHost）
-└── …（tests/ 在仓库根；csharp/ 是 C# 插件 API / 宿主 / 示例）
+└── …（tests/ 在仓库根；plugin-support/csharp/ 是 C# 插件系统，plugins/ 是插件示例）
 ```
 
 ## 4.2 五层，每层只干一件事

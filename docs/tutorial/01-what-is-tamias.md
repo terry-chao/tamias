@@ -27,7 +27,7 @@
 | **造型内核** | 把「参数」变成「形状」 | 放盒子、拖墙、改尺寸 | [`src/engine/modeling`](https://github.com/terry-chao/tamias/tree/main/src/engine/modeling)（OCCT） |
 | **渲染器** | 把形状变成屏幕像素 | 你看到的三维视口 | [`src/engine/render`](https://github.com/terry-chao/tamias/tree/main/src/engine/render)（自研 RHI） |
 | **命令系统** | 编辑操作可撤销/重做 | 撤销、重做按钮 | [`src/command`](https://github.com/terry-chao/tamias/tree/main/src/command) |
-| **插件宿主** | C# 扩展：读选择、dispatch 命令 | Ribbon「插件」页 | [`src/plugin`](https://github.com/terry-chao/tamias/tree/main/src/plugin)、[`csharp/`](https://github.com/terry-chao/tamias/tree/main/csharp) |
+| **插件宿主** | C# 扩展：读选择、dispatch 命令 | Ribbon「插件」页 | [`src/plugin`](https://github.com/terry-chao/tamias/tree/main/src/plugin)、[`plugin-support/csharp`](https://github.com/terry-chao/tamias/tree/main/plugin-support/csharp) |
 | **领域层** | 建筑语义规则 | 窗贴在墙上、墙改了窗跟着改 | [`src/bim`](https://github.com/terry-chao/tamias/tree/main/src/bim) |
 
 **新手最容易犯的错**：以为「三维软件 = 渲染」。其实渲染只是最后一公里；前面还有数据、几何、命令、架构一大堆。
