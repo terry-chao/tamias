@@ -204,15 +204,26 @@ class Document {
   void select(std::uint64_t id) {
     if (SceneNode* node = scene_.find(id)) {
       node->selected = true;
+      scene_.bump_generation();
+      scene_.mark_dirty(id);
     }
   }
   void deselect(std::uint64_t id) {
     if (SceneNode* node = scene_.find(id)) {
       node->selected = false;
+      scene_.bump_generation();
+      scene_.mark_dirty(id);
     }
   }
   void clear_selection() { scene_.clear_selection(); }
   [[nodiscard]] std::vector<std::uint64_t> selected_ids() const { return scene_.selected_ids(); }
+
+  // 语义节点变化但没走 Scene mutator（例如实体 material_id 引用变更）时，
+  // 通知渲染侧增量同步：标记该节点脏并递增代次。
+  void mark_scene_dirty(std::uint64_t node_id) {
+    scene_.bump_generation();
+    scene_.mark_dirty(node_id);
+  }
   Entity* selected_entity() {
     const SceneNode* node = scene_.selected_node();
     return node ? entity(node->id) : nullptr;

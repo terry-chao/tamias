@@ -1,5 +1,5 @@
 add_executable(tamias_tests smoke_tests.cpp ifc_spatial_tree_tests.cpp plugin_host_tests.cpp
-  host/session_test.cpp)
+  scene_graph_tests.cpp host/session_test.cpp)
 target_link_libraries(tamias_tests
   PRIVATE
     tamias::io

@@ -281,6 +281,7 @@ std::vector<SceneDrawItem> Document::render_items(const Frustum* frustum) const 
     item.node_id = node.id;
     item.mesh_asset_id = node.mesh_asset_id;
     item.transform = node.world_transform;
+    item.bounds = node.world_bounds;
     item.color = node.color;
     item.selected = node.selected;
     if (const Entity* e = entity(node.id); e != nullptr) {

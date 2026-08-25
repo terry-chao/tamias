@@ -174,6 +174,7 @@ class DocumentViewport final : public QWidget {
   std::unordered_set<EntityKind> hidden_kinds_;
   std::vector<ViewportFloor> floors_;
   int active_floor_ = -1;  // -1 = all floors
+  std::uint64_t last_submitted_scene_generation_ = 0;  // 脏标记游标（见 Scene::dirty_since）
   bool plan_view_ = false;
   float persp_yaw_ = 0.785398163f;
   float persp_pitch_ = 0.35f;

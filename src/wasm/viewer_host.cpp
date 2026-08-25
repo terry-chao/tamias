@@ -195,6 +195,9 @@ void ViewerHost::render() {
   frame.view_distance = cam.distance();
   frame.mode = RenderMode::Shaded;
   frame.items = session_->document().render_items();
+  frame.scene_generation = session_->document().scene().generation();
+  frame.scene_dirty_ids = session_->document().scene().dirty_since(last_submitted_scene_generation_);
+  last_submitted_scene_generation_ = frame.scene_generation;
   channel_->resize(window(), width_, height_);
   channel_->submit(std::move(frame));
   render_thread_->pump();

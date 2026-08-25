@@ -2,6 +2,7 @@
 
 #include "engine/core/executable_directory.h"
 #include "engine/core/log.h"
+#include "engine/render/scene_graph.h"
 #if defined(TAMIAS_HAS_RHI_WEBGL)
 #include "engine/render/rhi/webgl/webgl_shaders.h"
 #endif
@@ -16,6 +17,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <unordered_set>
 
 namespace tamias {
 
@@ -812,81 +814,49 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     channel.command_list->draw_indexed(d);
   }
 
-  // 模型。
+  // 模型：留存渲染场景图 + 脏标记增量同步。代次未变时不重建树，
+  // 只让 RecordCommands 访问者从留存树录制 draw 命令（视锥剔除 / 隐藏集
+  // 在录制时按节点判断）。代次变了但没有脏 id（clear / 整档恢复等）走整树重建兜底。
   const float mode_value = frame.mode == RenderMode::Wireframe  ? 0.f
                            : frame.mode == RenderMode::Realistic ? 2.f
                                                                  : 1.f;
 
-  for (const auto& item : frame.items) {
-    auto gpu_it = asset_to_gpu_.find(item.mesh_asset_id);
-    if (gpu_it == asset_to_gpu_.end()) {
-      continue;
-    }
-    auto mesh_it = meshes_.find(gpu_it->second);
-    if (mesh_it == meshes_.end()) {
-      continue;
-    }
-    const GpuMesh& mesh = mesh_it->second;
-
-    // 绑定 albedo 纹理：有贴图且已上传 → 实纹理；否则默认白纹理（has_albedo=0 走纯色）。
-    Texture* bound = default_texture_.get();
-    bool has_albedo = false;
-    if (item.albedo_texture_id != 0) {
-      auto tex_it = texture_asset_to_gpu_.find(item.albedo_texture_id);
-      if (tex_it != texture_asset_to_gpu_.end()) {
-        auto gtex_it = textures_.find(tex_it->second);
-        if (gtex_it != textures_.end()) {
-          bound = gtex_it->second.texture.get();
-          has_albedo = true;
-        }
-      }
-    }
-    if (!logged_texture_diag_) {
-      log_info("draw texture diag: albedo_id=" + std::to_string(item.albedo_texture_id) +
-               " has_albedo=" + (has_albedo ? "1" : "0") +
-               " gpu_tex_count=" + std::to_string(textures_.size()) +
-               " color=" + std::to_string(item.color.x) + "," + std::to_string(item.color.y) +
-               "," + std::to_string(item.color.z));
-      logged_texture_diag_ = true;
-    }
-    channel.command_list->set_texture(*bound, 0);
-
-    const bool as_lines = item.lines || mesh.line_list;
-    if (as_lines) {
-      if (!entity_line_pipeline_) {
-        continue;
-      }
-      channel.command_list->set_pipeline(*entity_line_pipeline_);
+  if (!channel.scene_root) {
+    channel.scene_root = build_scene_graph(frame.items, &channel.scene_nodes);
+    channel.scene_generation = frame.scene_generation;
+  } else if (frame.scene_generation != channel.scene_generation) {
+    if (frame.scene_dirty_ids.empty()) {
+      channel.scene_root = build_scene_graph(frame.items, &channel.scene_nodes);
+    } else if (auto* root = dynamic_cast<GroupNode*>(channel.scene_root.get())) {
+      update_scene_graph(*root, channel.scene_nodes, frame.items, frame.scene_dirty_ids);
     } else {
-      channel.command_list->set_pipeline(frame.mode == RenderMode::Wireframe ? *wire_pipeline_
-                                                                             : *shaded_pipeline_);
+      channel.scene_root = build_scene_graph(frame.items, &channel.scene_nodes);
     }
+    channel.scene_generation = frame.scene_generation;
+  }
 
-    PushConstants pc{};
-    pc.mvp = view_proj * item.transform;
-    pc.model = item.transform;
-    pc.color[0] = item.color.x;
-    pc.color[1] = item.color.y;
-    pc.color[2] = item.color.z;
-    pc.color[3] = 1.f;
-    pc.material[0] = item.roughness;
-    pc.material[1] = item.metallic;
-    pc.material[2] = has_albedo ? 1.f : 0.f;
-    pc.material[3] = item.normal_texture_id != 0 ? 1.f : 0.f;
-    pc.light_dir_selected[0] = 0.45f;
-    pc.light_dir_selected[1] = 0.35f;
-    pc.light_dir_selected[2] = 0.82f;
-    pc.light_dir_selected[3] = item.selected ? 1.f : 0.f;
-    pc.eye_pos_mode[0] = frame.eye_position.x;
-    pc.eye_pos_mode[1] = frame.eye_position.y;
-    pc.eye_pos_mode[2] = frame.eye_position.z;
-    pc.eye_pos_mode[3] = as_lines ? 3.f : mode_value;
-    channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
-    channel.command_list->set_vertex_buffer(*mesh.vertex_buffer);
-    channel.command_list->set_index_buffer(*mesh.index_buffer);
-    DrawIndexedDesc draw{};
-    draw.index_count = mesh.index_count;
-    channel.command_list->draw_indexed(draw);
+  if (channel.scene_root) {
+    std::unordered_set<std::uint64_t> hidden(frame.hidden_node_ids.begin(),
+                                             frame.hidden_node_ids.end());
+    const Frustum frustum = Frustum::from_view_proj(frame.proj * frame.view);
+    SceneGraphDrawContext ctx{};
+    ctx.command_list = channel.command_list.get();
+    ctx.view_proj = &view_proj;
+    ctx.frustum = &frustum;
+    ctx.hidden_nodes = &hidden;
+    ctx.eye_position = frame.eye_position;
+    ctx.mode_value = mode_value;
+    ctx.shaded_pipeline = shaded_pipeline_.get();
+    ctx.wire_pipeline = wire_pipeline_.get();
+    ctx.entity_line_pipeline = entity_line_pipeline_.get();
+    ctx.default_texture = default_texture_.get();
+    ctx.meshes = &meshes_;
+    ctx.asset_to_gpu = &asset_to_gpu_;
+    ctx.textures = &textures_;
+    ctx.texture_asset_to_gpu = &texture_asset_to_gpu_;
+    ctx.texture_diag_logged = &logged_texture_diag_;
+    RecordCommands visitor(ctx);
+    channel.scene_root->accept(visitor);
   }
 
   // 坐标轴（深度测试关，始终可见）。

@@ -59,6 +59,7 @@ class ViewerHost {
   bool orbiting_ = false;
   bool panning_ = false;
   bool loaded_ = false;
+  std::uint64_t last_submitted_scene_generation_ = 0;  // 脏标记游标（见 Scene::dirty_since）
 };
 
 }  // namespace tamias

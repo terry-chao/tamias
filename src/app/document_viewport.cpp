@@ -528,14 +528,21 @@ void DocumentViewport::submit_current_frame() {
   frame.eye_position = camera_.eye_position();
   frame.view_distance = camera_.distance();
   frame.mode = mode_;
-  const Frustum frustum = Frustum::from_view_proj(frame.proj * frame.view);
   refresh_floors();
-  frame.items = document_->render_items(&frustum);
-  frame.items.erase(std::remove_if(frame.items.begin(), frame.items.end(),
-                                   [this](const SceneDrawItem& item) {
-                                     return !node_visible_in_view(item.node_id);
-                                   }),
-                    frame.items.end());
+  // 留存场景图的同步源必须是全量清单（无视锥剔除）；剔除/可见性过滤移到渲染
+  // 线程录制时按节点判断，树本身保持完整。
+  frame.items = document_->render_items();
+  std::vector<std::uint64_t> hidden;
+  hidden.reserve(frame.items.size());
+  for (const auto& item : frame.items) {
+    if (!node_visible_in_view(item.node_id)) {
+      hidden.push_back(item.node_id);
+    }
+  }
+  frame.hidden_node_ids = std::move(hidden);
+  frame.scene_generation = document_->scene().generation();
+  frame.scene_dirty_ids = document_->scene().dirty_since(last_submitted_scene_generation_);
+  last_submitted_scene_generation_ = frame.scene_generation;
   const Vec3 cursor = has_cursor_ ? cursor_ground_position(last_mouse_) : Vec3{};
   frame.preview_polyline = command_system_.preview_polyline(cursor);
   frame.preview_control_polyline = command_system_.preview_control_polyline(cursor);

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/render/scene_graph.h"
 #include "engine/render/rhi/device.h"
 #include "engine/graphics/mesh.h"
 #include "engine/math/camera.h"
@@ -20,18 +21,6 @@
 
 namespace tamias {
 
-struct GpuMesh {
-  std::unique_ptr<Buffer> vertex_buffer;
-  std::unique_ptr<Buffer> index_buffer;
-  std::uint32_t index_count = 0;
-  Aabb bounds{};
-  bool line_list = false;
-};
-
-struct GpuTexture {
-  std::unique_ptr<Texture> texture;
-};
-
 struct FrameSubmission {
   NativeWindowHandle window{};
   std::uint32_t width = 1;
@@ -42,6 +31,12 @@ struct FrameSubmission {
   float view_distance = 5.f;
   RenderMode mode = RenderMode::Shaded;
   std::vector<SceneDrawItem> items;
+  // 语义侧增量同步：scene_generation 变化时，渲染线程按 scene_dirty_ids
+  // 增量更新留存场景图（空列表 = 整树重建兜底）。
+  std::uint64_t scene_generation = 0;
+  std::vector<std::uint64_t> scene_dirty_ids;
+  // 按语义节点 id 隐藏（视口 floor/类别/isolate 过滤；录制时生效）。
+  std::vector<std::uint64_t> hidden_node_ids;
   bool show_axes = true;  // 世界坐标轴（X红/Y绿/Z蓝）
   std::vector<Vec3> preview_polyline;
   std::vector<Vec3> preview_control_polyline;  // 贝塞尔控制多边形
@@ -92,8 +87,8 @@ class RenderThread {
   std::uint64_t create_channel();
   void destroy_channel(std::uint64_t channel_id);
 
- private:
-  struct ChannelState {
+  private:
+    struct ChannelState {
     std::unique_ptr<SwapChain> swap_chain;
     std::unique_ptr<CommandList> command_list;
     std::optional<FrameSubmission> latest;
@@ -101,15 +96,11 @@ class RenderThread {
     std::uint32_t width = 0;
     std::uint32_t height = 0;
     bool needs_recreate = true;
-  };
-
-  struct PushConstants {
-    Mat4 mvp;
-    Mat4 model;
-    float color[4];
-    float material[4];  // x=roughness, y=metallic, z=has_albedo, w=has_normal
-    float light_dir_selected[4];
-    float eye_pos_mode[4];
+    // 留存渲染场景图（draw-oriented 投影）：由 FrameSubmission 的代次 + 脏列表
+    // 增量同步，不再每帧整树重建。
+    std::unique_ptr<RenderNode> scene_root;
+    std::uint64_t scene_generation = 0;
+    std::unordered_map<std::uint64_t, TransformNode*> scene_nodes;
   };
 
   void thread_main();

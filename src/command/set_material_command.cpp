@@ -23,6 +23,7 @@ Result<void> SetMaterialCommand::execute() {
   }
 
   entity->material_id = new_material_id_;
+  document_->mark_scene_dirty(entity_id_);
   document_->mark_dirty();
   return {};
 }
@@ -30,6 +31,7 @@ Result<void> SetMaterialCommand::execute() {
 void SetMaterialCommand::undo() {
   if (Entity* entity = document_->entity(entity_id_)) {
     entity->material_id = old_material_id_;
+    document_->mark_scene_dirty(entity_id_);
     document_->mark_dirty();
   }
 }
@@ -37,6 +39,7 @@ void SetMaterialCommand::undo() {
 void SetMaterialCommand::redo() {
   if (Entity* entity = document_->entity(entity_id_)) {
     entity->material_id = new_material_id_;
+    document_->mark_scene_dirty(entity_id_);
     document_->mark_dirty();
   }
 }

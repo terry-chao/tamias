@@ -1,6 +1,7 @@
 #include "engine/document/scene.h"
 
 #include <functional>
+#include <unordered_set>
 
 namespace tamias {
 namespace {
@@ -43,11 +44,30 @@ void Scene::set_parent(std::uint64_t child_id, std::uint64_t parent_id) {
     return;
   }
   find(child_id)->parent = parent_id;
+  bump_generation();
+  mark_subtree_dirty(child_id);
 }
 
 void Scene::set_transform(std::uint64_t node_id, Mat4 local) {
   if (SceneNode* n = find(node_id)) {
     n->local_transform = local;
+    bump_generation();
+    mark_subtree_dirty(node_id);
+  }
+}
+
+void Scene::mark_dirty(std::uint64_t node_id) {
+  dirty_history_.push_back({generation_, node_id});
+}
+
+void Scene::mark_subtree_dirty(std::uint64_t node_id) {
+  if (find(node_id) == nullptr) {
+    return;
+  }
+  for (const auto& n : nodes_) {
+    if (n.id == node_id || is_ancestor(nodes_, n.id, node_id)) {
+      mark_dirty(n.id);
+    }
   }
 }
 
