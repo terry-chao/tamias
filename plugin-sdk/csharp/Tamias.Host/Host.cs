@@ -7,6 +7,9 @@ sealed class Host : IHost
 {
     readonly HostApi api_;
     readonly Dictionary<string, Action> actions_ = new(StringComparer.Ordinal);
+    readonly Dictionary<ulong, Action<PointInputResult>> pointInputCallbacks_ = [];
+    readonly object pointInputLock_ = new();
+    ulong nextPointInputRequestId_;
 
     public Host(HostApi api)
     {
@@ -15,23 +18,47 @@ sealed class Host : IHost
 
     public IReadOnlyDictionary<string, Action> Actions => actions_;
 
-    public void RegisterPlugin(string id, string title)
+    public void RegisterPlugin(PluginMetadata metadata)
     {
-        ArgumentException.ThrowIfNullOrEmpty(id);
+        ArgumentNullException.ThrowIfNull(metadata);
+        ArgumentException.ThrowIfNullOrEmpty(metadata.Id);
         var fn = As<HostRegisterPluginFn>(api_.RegisterPlugin);
-        var idPtr = Utf8(id);
-        var titlePtr = Utf8(title ?? id);
+        var idPtr = Utf8(metadata.Id);
+        var namePtr = Utf8(metadata.Name);
+        var authorPtr = Utf8(metadata.Author);
+        var versionPtr = Utf8(metadata.Version);
+        var releaseDatePtr = Utf8(metadata.ReleaseDate);
+        var descriptionPtr = Utf8(metadata.Description);
+        var homepageUrlPtr = Utf8(metadata.HomepageUrl);
+        var iconPathPtr = Utf8(metadata.IconPath);
         try
         {
-            if (fn(api_.Context, idPtr, titlePtr) != 0)
+            var flags = metadata.IsBuiltIn ? 1 : 0;
+            if (fn(
+                    api_.Context,
+                    idPtr,
+                    namePtr,
+                    authorPtr,
+                    versionPtr,
+                    releaseDatePtr,
+                    descriptionPtr,
+                    homepageUrlPtr,
+                    iconPathPtr,
+                    flags) != 0)
             {
-                throw new InvalidOperationException("Failed to register plugin '" + id + "'");
+                throw new InvalidOperationException("Failed to register plugin '" + metadata.Id + "'");
             }
         }
         finally
         {
             Marshal.FreeCoTaskMem(idPtr);
-            Marshal.FreeCoTaskMem(titlePtr);
+            Marshal.FreeCoTaskMem(namePtr);
+            Marshal.FreeCoTaskMem(authorPtr);
+            Marshal.FreeCoTaskMem(versionPtr);
+            Marshal.FreeCoTaskMem(releaseDatePtr);
+            Marshal.FreeCoTaskMem(descriptionPtr);
+            Marshal.FreeCoTaskMem(homepageUrlPtr);
+            Marshal.FreeCoTaskMem(iconPathPtr);
         }
     }
 
@@ -111,17 +138,36 @@ sealed class Host : IHost
         }
     }
 
-    public void AddCommand(string id, string title, Action action, string? tooltip = null)
+    public void AddCommand(
+        string id,
+        string title,
+        Action action,
+        string? tooltip = null,
+        RibbonPlacement? placement = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(id);
         ArgumentNullException.ThrowIfNull(action);
+        placement ??= new RibbonPlacement();
         var fn = As<HostRegisterCommandFn>(api_.RegisterCommand);
         var idPtr = Utf8(id);
         var titlePtr = Utf8(title);
         var tipPtr = Utf8(tooltip ?? "");
+        var pagePtr = Utf8(placement.PageId);
+        var groupPtr = Utf8(placement.GroupId);
+        var iconPtr = Utf8(placement.IconPath ?? "");
         try
         {
-            if (fn(api_.Context, idPtr, titlePtr, tipPtr) != 0)
+            var flags = placement.Checkable ? 1 : 0;
+            if (fn(
+                    api_.Context,
+                    idPtr,
+                    titlePtr,
+                    tipPtr,
+                    pagePtr,
+                    groupPtr,
+                    iconPtr,
+                    placement.Order,
+                    flags) != 0)
             {
                 throw new InvalidOperationException("Failed to register command '" + id + "'");
             }
@@ -131,8 +177,85 @@ sealed class Host : IHost
             Marshal.FreeCoTaskMem(idPtr);
             Marshal.FreeCoTaskMem(titlePtr);
             Marshal.FreeCoTaskMem(tipPtr);
+            Marshal.FreeCoTaskMem(pagePtr);
+            Marshal.FreeCoTaskMem(groupPtr);
+            Marshal.FreeCoTaskMem(iconPtr);
         }
         actions_[id] = action;
+    }
+
+    public ulong BeginPointInput(PointInputOptions options, Action<PointInputResult> callback)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(callback);
+
+        ulong requestId;
+        lock (pointInputLock_)
+        {
+            do
+            {
+                requestId = ++nextPointInputRequestId_;
+            }
+            while (requestId == 0);
+            pointInputCallbacks_.Add(requestId, callback);
+        }
+
+        var curveKindPtr = Utf8(options.PreviewCurveKind ?? "");
+        try
+        {
+            var fn = As<HostBeginPointInputFn>(api_.BeginPointInput);
+            if (fn(
+                    api_.Context,
+                    requestId,
+                    options.MinPoints,
+                    options.MaxPoints,
+                    options.Flags,
+                    options.WorkPlaneY,
+                    (int)options.PreviewKind,
+                    curveKindPtr) != 0)
+            {
+                lock (pointInputLock_)
+                {
+                    pointInputCallbacks_.Remove(requestId);
+                }
+                throw new InvalidOperationException("Host failed to begin point input");
+            }
+        }
+        catch
+        {
+            lock (pointInputLock_)
+            {
+                pointInputCallbacks_.Remove(requestId);
+            }
+            throw;
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(curveKindPtr);
+        }
+        return requestId;
+    }
+
+    public void CancelPointInput(ulong requestId)
+    {
+        var fn = As<HostCancelPointInputFn>(api_.CancelPointInput);
+        if (fn(api_.Context, requestId) != 0)
+        {
+            throw new InvalidOperationException("Host failed to cancel point input");
+        }
+    }
+
+    internal void CompletePointInput(ulong requestId, IReadOnlyList<PickPoint> points, bool cancelled)
+    {
+        Action<PointInputResult>? callback;
+        lock (pointInputLock_)
+        {
+            if (!pointInputCallbacks_.Remove(requestId, out callback))
+            {
+                return;
+            }
+        }
+        callback(new PointInputResult(points, cancelled));
     }
 
     static T As<T>(IntPtr fn) where T : Delegate

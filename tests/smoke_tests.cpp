@@ -306,6 +306,37 @@ TEST(DocumentIo, EntityFileRoundTrip) {
   std::filesystem::remove(path, ec);
 }
 
+TEST(DocumentIo, NurbsCurveRoundTrip) {
+  Document doc("nurbs-file");
+  NurbsEntity nurbs({{0.f, 0.f, 0.f}, {2.f, 0.f, 1.f}, {4.f, 0.f, 0.f}},
+                    {1.f, 3.f, 1.f}, 2);
+  auto geometry = nurbs.createGeom();
+  ASSERT_TRUE(geometry) << geometry.error();
+  Entity* added =
+      doc.add_entity(std::make_unique<NurbsEntity>(std::move(nurbs)),
+                     std::move(*geometry));
+  ASSERT_NE(added, nullptr);
+  const std::uint64_t id = added->id;
+
+  ViewportState viewport{};
+  const auto path = std::filesystem::temp_directory_path() /
+                    "tamias_nurbs_roundtrip.tdoc";
+  ASSERT_TRUE(save_document(path, doc, viewport)) << "save failed";
+  auto loaded = load_document(path);
+  ASSERT_TRUE(loaded) << loaded.error();
+  const Entity* restored = loaded->document.entity(id);
+  ASSERT_NE(restored, nullptr);
+  EXPECT_EQ(restored->kind(), EntityKind::Nurbs);
+  ASSERT_EQ(restored->model.features().size(), 1u);
+  const auto weights =
+      nurbs_weights(restored->model, restored->model.features().front());
+  ASSERT_EQ(weights.size(), 3u);
+  EXPECT_FLOAT_EQ(weights[1], 3.f);
+
+  std::error_code ec;
+  std::filesystem::remove(path, ec);
+}
+
 TEST(Document, RenderItemsAndSelection) {
   Document doc("render");
   add_wall_entity(doc, {0.f, 0.f, 0.f}, {0.f, 0.f, 5.f});
@@ -967,22 +998,25 @@ TEST(CommandSystem, CreateBSplineClicksThenConfirm) {
   EXPECT_EQ(doc.entities().begin()->second->kind(), EntityKind::BSpline);
 }
 
-TEST(CommandSystem, CreateNurbsClicksThenConfirm) {
+TEST(CommandSystem, CreateNurbsThroughGenericCurveCommand) {
   CommandRegistry registry;
   register_commands(registry);
   CommandSystem system(registry);
 
   Document doc("sketch-nurbs");
-  ASSERT_TRUE(system.dispatch(doc, "create_nurbs", {}));
-  ASSERT_TRUE(system.feed_point({0.f, 0.f, 0.f}));
-  auto too_soon = system.confirm();
-  ASSERT_TRUE(too_soon) << too_soon.error();
-  EXPECT_FALSE(*too_soon);
-  ASSERT_TRUE(system.feed_point({2.f, 0.f, 1.f}));
-  ASSERT_TRUE(system.feed_point({4.f, 0.f, 0.f}));
-  auto done = system.confirm();
-  ASSERT_TRUE(done) << done.error();
-  EXPECT_TRUE(*done);
+  ASSERT_TRUE(system.dispatch(
+      doc, "create_curve",
+      {{"curve_kind", std::string("nurbs")},
+       {"points", std::vector<Vec3>{{0.f, 0.f, 0.f},
+                                    {2.f, 0.f, 1.f},
+                                    {4.f, 0.f, 0.f}}},
+       {"weights", std::vector<double>{1.0, 2.0, 1.0}},
+       {"degree", std::int64_t{2}}}));
+  ASSERT_EQ(doc.entities().size(), 1u);
+  EXPECT_EQ(doc.entities().begin()->second->kind(), EntityKind::Nurbs);
+  system.undo();
+  EXPECT_TRUE(doc.entities().empty());
+  system.redo();
   ASSERT_EQ(doc.entities().size(), 1u);
   EXPECT_EQ(doc.entities().begin()->second->kind(), EntityKind::Nurbs);
 }

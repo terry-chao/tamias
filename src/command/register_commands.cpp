@@ -3,6 +3,7 @@
 #include "command/add_feature_command.h"
 #include "command/boolean_command.h"
 #include "command/create_beam_command.h"
+#include "command/create_curve_command.h"
 #include "command/create_primitive_command.h"
 #include "command/create_sketch_command.h"
 #include "command/create_slab_command.h"
@@ -36,6 +37,36 @@ std::string arg_string(const CommandArgs& args, const std::string& name, std::st
   return (it != args.end() && std::holds_alternative<std::string>(it->second))
              ? std::get<std::string>(it->second)
              : std::move(fallback);
+}
+
+std::vector<Vec3> arg_points(const CommandArgs& args, const std::string& name) {
+  const auto it = args.find(name);
+  return (it != args.end() && std::holds_alternative<std::vector<Vec3>>(it->second))
+             ? std::get<std::vector<Vec3>>(it->second)
+             : std::vector<Vec3>{};
+}
+
+std::vector<double> arg_doubles(const CommandArgs& args, const std::string& name) {
+  const auto it = args.find(name);
+  return (it != args.end() && std::holds_alternative<std::vector<double>>(it->second))
+             ? std::get<std::vector<double>>(it->second)
+             : std::vector<double>{};
+}
+
+CurveKind curve_kind_from_name(const std::string& name) {
+  if (name == "polyline") {
+    return CurveKind::Polyline;
+  }
+  if (name == "bezier") {
+    return CurveKind::Bezier;
+  }
+  if (name == "bspline") {
+    return CurveKind::BSpline;
+  }
+  if (name == "nurbs") {
+    return CurveKind::Nurbs;
+  }
+  return name == "line" ? CurveKind::Line : CurveKind::Unknown;
 }
 
 }  // namespace
@@ -125,9 +156,13 @@ void register_commands(CommandRegistry& registry) {
     (void)args;
     return std::make_unique<CreateSketchCommand>(doc, SketchKind::BSpline);
   });
-  registry.register_command("create_nurbs", [](Document& doc, const CommandArgs& args) {
-    (void)args;
-    return std::make_unique<CreateSketchCommand>(doc, SketchKind::Nurbs);
+  registry.register_command("create_curve", [](Document& doc, const CommandArgs& args) {
+    CurveDefinition definition;
+    definition.kind = curve_kind_from_name(arg_string(args, "curve_kind", "line"));
+    definition.points = arg_points(args, "points");
+    definition.weights = arg_doubles(args, "weights");
+    definition.degree = static_cast<int>(arg_int(args, "degree", 0));
+    return std::make_unique<CreateCurveCommand>(doc, std::move(definition));
   });
 
   registry.register_command("set_param", [](Document& doc, const CommandArgs& args) {

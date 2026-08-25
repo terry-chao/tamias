@@ -29,8 +29,20 @@ class AppSettings {
   [[nodiscard]] bool zoom_to_mouse_position() const { return zoom_to_mouse_position_; }
   void set_zoom_to_mouse_position(bool enabled);
 
-  [[nodiscard]] QStringList hidden_plugin_ids() const { return hidden_plugin_ids_; }
-  void set_hidden_plugin_ids(const QStringList& ids);
+  [[nodiscard]] QStringList disabled_plugin_ids() const {
+    return disabled_plugin_ids_;
+  }
+  void set_disabled_plugin_ids(const QStringList& ids);
+  [[nodiscard]] QStringList ribbon_command_order() const {
+    return ribbon_command_order_;
+  }
+  void set_ribbon_command_order(const QStringList& ids);
+  [[nodiscard]] QStringList hidden_plugin_ids() const {
+    return disabled_plugin_ids();
+  }
+  void set_hidden_plugin_ids(const QStringList& ids) {
+    set_disabled_plugin_ids(ids);
+  }
 
   [[nodiscard]] RenderDeviceConfig render_device_config() const;
 
@@ -41,7 +53,8 @@ class AppSettings {
   QString ui_language_ = QStringLiteral("system");
   UiColorScheme ui_color_scheme_ = UiColorScheme::System;
   bool zoom_to_mouse_position_ = true;
-  QStringList hidden_plugin_ids_;
+  QStringList disabled_plugin_ids_;
+  QStringList ribbon_command_order_;
 };
 
 void apply_ui_color_scheme(UiColorScheme scheme);

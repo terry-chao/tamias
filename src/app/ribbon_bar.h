@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QHash>
+#include <QString>
 #include <QWidget>
 
 class QAction;
@@ -22,6 +24,8 @@ class RibbonBar final : public QWidget {
 
   void add_quick_action(QAction* action);
   RibbonPage* add_page(const QString& title);
+  RibbonPage* add_page(const QString& id, const QString& title);
+  [[nodiscard]] RibbonPage* find_page(const QString& id) const;
   void set_collapsed(bool collapsed);
   [[nodiscard]] bool is_collapsed() const { return collapsed_; }
 
@@ -39,6 +43,7 @@ class RibbonBar final : public QWidget {
   QButtonGroup* tab_group_ = nullptr;
   QToolButton* collapse_button_ = nullptr;
   QStackedWidget* pages_ = nullptr;
+  QHash<QString, RibbonPage*> pages_by_id_;
   bool collapsed_ = false;
   bool applying_theme_ = false;
 };

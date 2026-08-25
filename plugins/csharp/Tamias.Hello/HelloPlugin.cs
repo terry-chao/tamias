@@ -4,6 +4,19 @@ namespace Tamias.Hello;
 
 public sealed class HelloPlugin : IPlugin
 {
+    public PluginMetadata Metadata => new()
+    {
+        Id = "tamias.hello",
+        Name = "示例工具",
+        Author = "Tamias",
+        IsBuiltIn = true,
+        Version = "1.0.0",
+        ReleaseDate = "2026-08-25",
+        Description = "提供选择列表与删除所选对象功能的示例工具。",
+        HomepageUrl = "https://github.com/terry-chao/tamias",
+        IconPath = "hello.svg",
+    };
+
     public void Load(IHost host)
     {
         host.AddCommand(

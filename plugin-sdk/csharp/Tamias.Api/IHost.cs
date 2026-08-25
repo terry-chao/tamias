@@ -7,5 +7,12 @@ public interface IHost
     IReadOnlyList<ulong> Selection { get; }
     void Log(string message);
     void Dispatch(string command, CommandArgs? args = null);
-    void AddCommand(string id, string title, Action action, string? tooltip = null);
+    void AddCommand(
+        string id,
+        string title,
+        Action action,
+        string? tooltip = null,
+        RibbonPlacement? placement = null);
+    ulong BeginPointInput(PointInputOptions options, Action<PointInputResult> callback);
+    void CancelPointInput(ulong requestId);
 }

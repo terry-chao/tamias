@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.Loader;
 using Tamias.Api;
@@ -71,11 +72,74 @@ static class PluginLoader
             {
                 continue;
             }
-            var pluginId = type.FullName ?? type.Name;
-            host.RegisterPlugin(pluginId, type.Name);
+            var metadata = NormalizeMetadata(host, plugin.Metadata, type, assembly, dll);
+            host.RegisterPlugin(metadata);
             plugin.Load(host);
-            host.Log("Loaded plugin " + pluginId);
+            host.Log("Loaded plugin " + metadata.Id);
         }
+    }
+
+    static PluginMetadata NormalizeMetadata(
+        Host host,
+        PluginMetadata? source,
+        Type type,
+        Assembly assembly,
+        string dll)
+    {
+        source ??= new PluginMetadata();
+        var metadata = new PluginMetadata
+        {
+            Id = ValueOrDefault(source.Id, type.FullName ?? type.Name),
+            Name = ValueOrDefault(source.Name, type.Name),
+            Author = source.Author ?? "",
+            IsBuiltIn = source.IsBuiltIn,
+            Version = ValueOrDefault(
+                source.Version,
+                assembly.GetName().Version?.ToString() ?? ""),
+            ReleaseDate = source.ReleaseDate ?? "",
+            Description = source.Description ?? "",
+            HomepageUrl = source.HomepageUrl ?? "",
+            IconPath = source.IconPath ?? "",
+        };
+
+        if (!string.IsNullOrEmpty(metadata.ReleaseDate) &&
+            !DateOnly.TryParseExact(
+                metadata.ReleaseDate,
+                "yyyy-MM-dd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out _))
+        {
+            host.Log(
+                "Plugin '" + metadata.Id +
+                "' has invalid ReleaseDate '" + metadata.ReleaseDate +
+                "'; expected yyyy-MM-dd");
+            metadata.ReleaseDate = "";
+        }
+
+        if (!string.IsNullOrEmpty(metadata.HomepageUrl) &&
+            (!Uri.TryCreate(metadata.HomepageUrl, UriKind.Absolute, out var homepage) ||
+             (homepage.Scheme != Uri.UriSchemeHttp && homepage.Scheme != Uri.UriSchemeHttps)))
+        {
+            host.Log(
+                "Plugin '" + metadata.Id +
+                "' has invalid HomepageUrl '" + metadata.HomepageUrl +
+                "'; expected an absolute HTTP(S) URL");
+            metadata.HomepageUrl = "";
+        }
+
+        if (!string.IsNullOrEmpty(metadata.IconPath) && !Path.IsPathRooted(metadata.IconPath))
+        {
+            metadata.IconPath = Path.GetFullPath(
+                Path.Combine(Path.GetDirectoryName(dll) ?? "", metadata.IconPath));
+        }
+
+        return metadata;
+    }
+
+    static string ValueOrDefault(string? value, string fallback)
+    {
+        return string.IsNullOrWhiteSpace(value) ? fallback : value;
     }
 
     static string? ResolvePluginsDirectory(string? pluginsDir)

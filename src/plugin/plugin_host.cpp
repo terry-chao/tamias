@@ -86,6 +86,8 @@ PluginHost::PluginHost() : csharp_(std::make_unique<CsharpRuntime>()) {
   api_.dispatch = &PluginHost::host_dispatch;
   api_.register_command = &PluginHost::host_register_command;
   api_.register_plugin = &PluginHost::host_register_plugin;
+  api_.begin_point_input = &PluginHost::host_begin_point_input;
+  api_.cancel_point_input = &PluginHost::host_cancel_point_input;
 }
 
 PluginHost::~PluginHost() = default;
@@ -249,7 +251,10 @@ std::int32_t PluginHost::host_dispatch(void* context, const char* command, const
   return 0;
 }
 
-std::int32_t PluginHost::host_register_plugin(void* context, const char* id, const char* title) {
+std::int32_t PluginHost::host_register_plugin(
+    void* context, const char* id, const char* title, const char* author,
+    const char* version, const char* release_date, const char* description,
+    const char* homepage_url, const char* icon_path, std::int32_t flags) {
   auto* self = static_cast<PluginHost*>(context);
   if (id == nullptr || *id == '\0') {
     return -1;
@@ -257,6 +262,13 @@ std::int32_t PluginHost::host_register_plugin(void* context, const char* id, con
   PluginInfo info;
   info.id = id;
   info.title = title != nullptr && *title != '\0' ? title : id;
+  info.author = author != nullptr ? author : "";
+  info.version = version != nullptr ? version : "";
+  info.release_date = release_date != nullptr ? release_date : "";
+  info.description = description != nullptr ? description : "";
+  info.homepage_url = homepage_url != nullptr ? homepage_url : "";
+  info.icon_path = icon_path != nullptr ? icon_path : "";
+  info.built_in = (flags & 1) != 0;
   for (const auto& existing : self->plugins_) {
     if (existing.id == info.id) {
       return -1;
@@ -267,8 +279,10 @@ std::int32_t PluginHost::host_register_plugin(void* context, const char* id, con
   return 0;
 }
 
-std::int32_t PluginHost::host_register_command(void* context, const char* id, const char* title,
-                                               const char* tooltip) {
+std::int32_t PluginHost::host_register_command(
+    void* context, const char* id, const char* title, const char* tooltip,
+    const char* page_id, const char* group_id, const char* icon_path,
+    std::int32_t order, std::int32_t flags) {
   auto* self = static_cast<PluginHost*>(context);
   if (id == nullptr || *id == '\0') {
     return -1;
@@ -278,12 +292,68 @@ std::int32_t PluginHost::host_register_command(void* context, const char* id, co
   cmd.title = title != nullptr && *title != '\0' ? title : id;
   cmd.tooltip = tooltip != nullptr ? tooltip : "";
   cmd.plugin_id = self->current_plugin_id_;
+  cmd.placement.page_id = page_id != nullptr && *page_id != '\0' ? page_id : "plugins";
+  cmd.placement.group_id =
+      group_id != nullptr && *group_id != '\0' ? group_id : "commands";
+  cmd.placement.icon_path = icon_path != nullptr ? icon_path : "";
+  cmd.placement.order = order;
+  cmd.placement.checkable = (flags & 1) != 0;
   for (const auto& existing : self->registered_) {
     if (existing.id == cmd.id) {
       return -1;
     }
   }
   self->registered_.push_back(std::move(cmd));
+  return 0;
+}
+
+std::int32_t PluginHost::host_begin_point_input(
+    void* context, std::uint64_t request_id, std::int32_t min_points,
+    std::int32_t max_points, std::int32_t flags, float work_plane_y,
+    std::int32_t preview_kind, const char* preview_curve_kind) {
+  auto* self = static_cast<PluginHost*>(context);
+  if (!self->begin_point_input_ || request_id == 0 || min_points < 0 ||
+      (max_points > 0 && max_points < min_points)) {
+    return -1;
+  }
+  PluginPointInputRequest request;
+  request.request_id = request_id;
+  request.min_points = min_points;
+  request.max_points = max_points;
+  request.flags = flags;
+  request.work_plane_y = work_plane_y;
+  request.preview_kind = preview_kind;
+  request.preview_curve_kind =
+      preview_curve_kind != nullptr ? preview_curve_kind : "";
+  auto started = self->begin_point_input_(
+      std::move(request),
+      [self, request_id](std::vector<PluginPickPoint> points, bool cancelled) {
+        std::vector<HostPickPoint> native;
+        native.reserve(points.size());
+        for (const PluginPickPoint& point : points) {
+          native.push_back({point.position.x, point.position.y, point.position.z, 0,
+                            point.entity_id});
+        }
+        if (auto completed =
+                self->csharp_->complete_point_input(request_id, native, cancelled);
+            !completed) {
+          self->emit_log(kLogError, completed.error());
+        }
+      });
+  if (!started) {
+    self->emit_log(kLogError, started.error());
+    return -1;
+  }
+  return 0;
+}
+
+std::int32_t PluginHost::host_cancel_point_input(void* context,
+                                                  std::uint64_t request_id) {
+  auto* self = static_cast<PluginHost*>(context);
+  if (!self->cancel_point_input_) {
+    return -1;
+  }
+  self->cancel_point_input_(request_id);
   return 0;
 }
 

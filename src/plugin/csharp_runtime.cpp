@@ -137,6 +137,12 @@ Result<void> CsharpRuntime::start(const std::filesystem::path& managed_dir,
 #else
       "Invoke";
 #endif
+  const char_t* point_input_completed_name =
+#ifdef _WIN32
+      L"PointInputCompleted";
+#else
+      "PointInputCompleted";
+#endif
 
   rc = load_assembly(assembly_native.c_str(), type_name, init_name, UNMANAGEDCALLERSONLY_METHOD, nullptr,
                      reinterpret_cast<void**>(&init_));
@@ -148,16 +154,39 @@ Result<void> CsharpRuntime::start(const std::filesystem::path& managed_dir,
   if (rc != 0 || invoke_ == nullptr) {
     return Err("failed to bind Tamias.Host.Bootstrap.Invoke (" + std::to_string(rc) + ")");
   }
+  rc = load_assembly(assembly_native.c_str(), type_name, point_input_completed_name,
+                     UNMANAGEDCALLERSONLY_METHOD, nullptr,
+                     reinterpret_cast<void**>(&point_input_completed_));
+  if (rc != 0 || point_input_completed_ == nullptr) {
+    return Err("failed to bind Tamias.Host.Bootstrap.PointInputCompleted (" +
+               std::to_string(rc) + ")");
+  }
 
   const auto plugins_utf8 = plugins_dir.string();
   const int init_rc = init_(api, plugins_utf8.c_str());
   if (init_rc != 0) {
+    point_input_completed_ = nullptr;
     invoke_ = nullptr;
     init_ = nullptr;
     return Err("Tamias.Host.Initialize failed (" + std::to_string(init_rc) + ")");
   }
   return {};
 #endif
+}
+
+Result<void> CsharpRuntime::complete_point_input(std::uint64_t request_id,
+                                                 const std::vector<HostPickPoint>& points,
+                                                 bool cancelled) {
+  if (point_input_completed_ == nullptr) {
+    return Err("C# point input callback is not loaded");
+  }
+  const int rc = point_input_completed_(
+      request_id, points.empty() ? nullptr : points.data(),
+      static_cast<std::int32_t>(points.size()), cancelled ? 1 : 0);
+  if (rc != 0) {
+    return Err("plugin point input callback failed (" + std::to_string(rc) + ")");
+  }
+  return {};
 }
 
 Result<void> CsharpRuntime::invoke(const std::string& command_id) {

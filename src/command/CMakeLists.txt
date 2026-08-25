@@ -3,6 +3,7 @@ add_library(tamias_command STATIC
   boolean_command.cpp
   create_wall_command.cpp
   create_beam_command.cpp
+  create_curve_command.cpp
   create_primitive_command.cpp
   create_slab_command.cpp
   create_storey_command.cpp

@@ -5,7 +5,6 @@
 #include "entity/bspline_entity.h"
 #include "entity/circle_entity.h"
 #include "entity/line_entity.h"
-#include "entity/nurbs_entity.h"
 #include "entity/polyline_entity.h"
 #include "entity/rectangle_entity.h"
 #include "engine/modeling/curve_geom.h"
@@ -25,7 +24,6 @@ bool CreateSketchCommand::open_ended() const {
     case SketchKind::Polyline:
     case SketchKind::Bezier:
     case SketchKind::BSpline:
-    case SketchKind::Nurbs:
       return true;
     default:
       return false;
@@ -36,7 +34,6 @@ bool CreateSketchCommand::shows_control_polygon() const {
   switch (kind_) {
     case SketchKind::Bezier:
     case SketchKind::BSpline:
-    case SketchKind::Nurbs:
       return true;
     default:
       return false;
@@ -50,7 +47,6 @@ int CreateSketchCommand::required_points() const {
     case SketchKind::Polyline:
     case SketchKind::Bezier:
     case SketchKind::BSpline:
-    case SketchKind::Nurbs:
       return 0;  // 不定长，靠 confirm（右键 / Enter）
     case SketchKind::Line:
     case SketchKind::Circle:
@@ -142,13 +138,6 @@ std::vector<Vec3> CreateSketchCommand::preview_polyline(Vec3 cursor) const {
       }
       return sample_bspline(ctrls);
     }
-    case SketchKind::Nurbs: {
-      const std::vector<Vec3> ctrls = live_controls(cursor);
-      if (ctrls.size() < 2) {
-        return {};
-      }
-      return sample_nurbs(ctrls, {});
-    }
     case SketchKind::Polyline: {
       std::vector<Vec3> pts = points_;
       if (!nearly_same(pts.back(), cursor)) {
@@ -199,11 +188,6 @@ Result<std::unique_ptr<Entity>> CreateSketchCommand::make_sketch() const {
         return Err("B-spline needs at least two control points");
       }
       return std::make_unique<BSplineEntity>(points_);
-    case SketchKind::Nurbs:
-      if (points_.size() < 2) {
-        return Err("NURBS needs at least two control points");
-      }
-      return std::make_unique<NurbsEntity>(points_);
     case SketchKind::Rectangle:
       if (points_.size() < 2 || nearly_same(points_[0], points_[1])) {
         return Err("Rectangle needs two distinct corners");

@@ -67,6 +67,42 @@ namespace {
   return Vec3{static_cast<float>(*x), static_cast<float>(*y), static_cast<float>(*z)};
 }
 
+[[nodiscard]] Result<std::vector<Vec3>> parse_points(std::string_view s) {
+  std::vector<Vec3> points;
+  while (!s.empty()) {
+    const auto split = s.find('|');
+    const auto part = trim(split == std::string_view::npos ? s : s.substr(0, split));
+    s = split == std::string_view::npos ? std::string_view{} : s.substr(split + 1);
+    if (part.empty()) {
+      return Err("point array contains an empty point");
+    }
+    auto point = parse_vec3(part);
+    if (!point) {
+      return Err(point.error());
+    }
+    points.push_back(*point);
+  }
+  return points;
+}
+
+[[nodiscard]] Result<std::vector<double>> parse_doubles(std::string_view s) {
+  std::vector<double> values;
+  while (!s.empty()) {
+    const auto split = s.find('|');
+    const auto part = trim(split == std::string_view::npos ? s : s.substr(0, split));
+    s = split == std::string_view::npos ? std::string_view{} : s.substr(split + 1);
+    if (part.empty()) {
+      return Err("number array contains an empty value");
+    }
+    auto value = parse_f64(part);
+    if (!value) {
+      return Err(value.error());
+    }
+    values.push_back(*value);
+  }
+  return values;
+}
+
 [[nodiscard]] bool looks_like_int(std::string_view s) {
   if (s.empty()) {
     return false;
@@ -156,6 +192,18 @@ Result<CommandArgs> parse_command_arg_text(std::string_view text) {
       case 'v': {
         auto v = parse_vec3(value);
         parsed = v ? Result<CommandArg>{CommandArg{*v}} : Result<CommandArg>{Err(v.error())};
+        break;
+      }
+      case 'p': {
+        auto points = parse_points(value);
+        parsed = points ? Result<CommandArg>{CommandArg{std::move(*points)}}
+                        : Result<CommandArg>{Err(points.error())};
+        break;
+      }
+      case 'a': {
+        auto values = parse_doubles(value);
+        parsed = values ? Result<CommandArg>{CommandArg{std::move(*values)}}
+                        : Result<CommandArg>{Err(values.error())};
         break;
       }
       case 0:

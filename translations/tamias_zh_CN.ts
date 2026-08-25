@@ -860,6 +860,10 @@ Click an object to select it, or use a create tool</source>
         <translation>选择哪些已载入插件显示在功能区</translation>
     </message>
     <message>
+        <source>This plugin is disabled.</source>
+        <translation>此插件已停用。</translation>
+    </message>
+    <message>
         <source>Commands</source>
         <translation>命令</translation>
     </message>
@@ -875,16 +879,106 @@ Click an object to select it, or use a create tool</source>
         <translation>插件管理</translation>
     </message>
     <message>
-        <source>Check the plugins that should appear on the ribbon. Changes apply when you click OK.</source>
-        <translation>勾选要在功能区显示的插件，点击确定后才生效。</translation>
+        <source>Enable plugins and arrange plugin commands on the ribbon. Changes apply when you click OK.</source>
+        <translation>启用插件并调整插件命令在功能区中的顺序，点击确定后生效。</translation>
+    </message>
+    <message>
+        <source>Ribbon commands</source>
+        <translation>功能区命令</translation>
     </message>
     <message>
         <source>No plugins are currently loaded.</source>
         <translation>当前没有已载入的插件。</translation>
     </message>
     <message>
-        <source>%1  (%2)</source>
-        <translation>%1  (%2)</translation>
+        <source>Installed</source>
+        <translation>已安装</translation>
+    </message>
+    <message>
+        <source>Page</source>
+        <translation>页面</translation>
+    </message>
+    <message>
+        <source>Group</source>
+        <translation>分组</translation>
+    </message>
+    <message>
+        <source>Move Up</source>
+        <translation>上移</translation>
+    </message>
+    <message>
+        <source>Move Down</source>
+        <translation>下移</translation>
+    </message>
+    <message>
+        <source>Ribbon Layout</source>
+        <translation>功能区布局</translation>
+    </message>
+    <message>
+        <source>Home</source>
+        <translation>开始</translation>
+    </message>
+    <message>
+        <source>Draw</source>
+        <translation>绘制</translation>
+    </message>
+    <message>
+        <source>Plugins</source>
+        <translation>插件</translation>
+    </message>
+    <message>
+        <source>Commands</source>
+        <translation>命令</translation>
+    </message>
+    <message>
+        <source>View</source>
+        <translation>视图</translation>
+    </message>
+    <message>
+        <source>Panels</source>
+        <translation>面板</translation>
+    </message>
+    <message>
+        <source>Workspace</source>
+        <translation>工作区</translation>
+    </message>
+    <message>
+        <source>Manage</source>
+        <translation>管理</translation>
+    </message>
+    <message>
+        <source>Built-in</source>
+        <translation>内置</translation>
+    </message>
+    <message>
+        <source>Author: %1
+Version: %2
+Released: %3
+Plugin ID: %4</source>
+        <translation>作者：%1
+版本：%2
+发布日期：%3
+插件 ID：%4</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>未知</translation>
+    </message>
+    <message>
+        <source>No description provided.</source>
+        <translation>未提供插件说明。</translation>
+    </message>
+    <message>
+        <source>Open plugin homepage</source>
+        <translation>打开插件主页</translation>
+    </message>
+    <message>
+        <source>%1    %2 / %3</source>
+        <translation>%1    %2 / %3</translation>
+    </message>
+    <message>
+        <source>%1    — %2</source>
+        <translation>%1    — %2</translation>
     </message>
 </context>
 <context>

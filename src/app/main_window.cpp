@@ -52,6 +52,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace tamias {
@@ -119,6 +120,13 @@ MainWindow::MainWindow(QWidget* parent)
 
   connect(tabs_, &QTabWidget::tabCloseRequested, this, &MainWindow::close_tab);
   connect(tabs_, &QTabWidget::currentChanged, this, [this](int) {
+    for (int i = 0; i < tabs_->count(); ++i) {
+      if (i != tabs_->currentIndex()) {
+        if (auto* viewport = qobject_cast<DocumentViewport*>(tabs_->widget(i))) {
+          viewport->cancel_plugin_point_input();
+        }
+      }
+    }
     sync_render_mode_actions();
     refresh_property_panel();
     refresh_handle_inspector();
@@ -318,17 +326,6 @@ MainWindow::MainWindow(QWidget* parent)
   create_group_->addAction(bspline_action_);
   addAction(bspline_action_);
 
-  nurbs_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/nurbs.svg")),
-                             tr("NURBS"), this);
-  nurbs_action_->setCheckable(true);
-  nurbs_action_->setProperty("toolMode", static_cast<int>(ToolMode::Nurbs));
-  nurbs_action_->setToolTip(
-      tr("Create a NURBS: click control points, then edit weights in Properties"));
-  connect(nurbs_action_, &QAction::triggered, this,
-          [this] { set_create_tool(ToolMode::Nurbs); });
-  create_group_->addAction(nurbs_action_);
-  addAction(nurbs_action_);
-
   fillet_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/fillet.svg")),
                               tr("Fillet"), this);
   fillet_action_->setToolTip(tr("Fillet the selected entity's first edge"));
@@ -453,14 +450,14 @@ MainWindow::MainWindow(QWidget* parent)
   ribbon->add_quick_action(undo_action);
   ribbon->add_quick_action(redo_action);
 
-  RibbonPage* home_page = ribbon->add_page(tr("Home"));
-  RibbonGroup* file_group = home_page->add_group(tr("File"));
+  RibbonPage* home_page = ribbon->add_page(QStringLiteral("home"), tr("Home"));
+  RibbonGroup* file_group = home_page->add_group(QStringLiteral("file"), tr("File"));
   file_group->add_action(new_action);
   file_group->add_action(open_action);
   file_group->add_action(save_action);
   file_group->add_action(save_as_action);
 
-  RibbonGroup* draw_group = home_page->add_group(tr("Draw"));
+  RibbonGroup* draw_group = home_page->add_group(QStringLiteral("draw"), tr("Draw"));
   draw_group->add_action(line_action_);
   draw_group->add_action(polyline_action_);
   draw_group->add_action(rectangle_action_);
@@ -468,13 +465,14 @@ MainWindow::MainWindow(QWidget* parent)
   draw_group->add_action(arc_action_);
   draw_group->add_action(bezier_action_);
   draw_group->add_action(bspline_action_);
-  draw_group->add_action(nurbs_action_);
 
-  RibbonGroup* primitives_group = home_page->add_group(tr("Primitives"));
+  RibbonGroup* primitives_group =
+      home_page->add_group(QStringLiteral("primitives"), tr("Primitives"));
   primitives_group->add_action(box_action_);
   primitives_group->add_action(cylinder_action_);
 
-  RibbonGroup* building_group = home_page->add_group(tr("Building"));
+  RibbonGroup* building_group =
+      home_page->add_group(QStringLiteral("building"), tr("Building"));
   building_group->add_action(wall_action_);
   building_group->add_action(beam_action_);
   building_group->add_action(column_action_);
@@ -482,27 +480,31 @@ MainWindow::MainWindow(QWidget* parent)
   building_group->add_action(door_action_);
   building_group->add_action(window_action_);
 
-  RibbonGroup* modify_group = home_page->add_group(tr("Modify"));
+  RibbonGroup* modify_group = home_page->add_group(QStringLiteral("modify"), tr("Modify"));
   modify_group->add_action(fillet_action_);
   modify_group->add_action(chamfer_action_);
 
-  RibbonGroup* navigation_group = home_page->add_group(tr("Navigation"));
+  RibbonGroup* navigation_group =
+      home_page->add_group(QStringLiteral("navigation"), tr("Navigation"));
   navigation_group->add_action(frame_all_action);
 
-  RibbonGroup* setting_group = home_page->add_group(tr("Settings"));
+  RibbonGroup* setting_group =
+      home_page->add_group(QStringLiteral("settings"), tr("Settings"));
   setting_group->add_action(settings_action);
 
-  RibbonPage* view_page = ribbon->add_page(tr("View"));
-  RibbonGroup* display_ribbon = view_page->add_group(tr("Display"));
+  RibbonPage* view_page = ribbon->add_page(QStringLiteral("view"), tr("View"));
+  RibbonGroup* display_ribbon =
+      view_page->add_group(QStringLiteral("display"), tr("Display"));
   display_ribbon->add_action(wireframe_action_);
   display_ribbon->add_action(shaded_action_);
   display_ribbon->add_action(realistic_action_);
 
-  RibbonGroup* panels_group = view_page->add_group(tr("Panels"));
+  RibbonGroup* panels_group = view_page->add_group(QStringLiteral("panels"), tr("Panels"));
   panels_group->add_action(property_toggle);
   panels_group->add_action(handle_toggle);
 
-  RibbonGroup* workspace_group = view_page->add_group(tr("Workspace"));
+  RibbonGroup* workspace_group =
+      view_page->add_group(QStringLiteral("workspace"), tr("Workspace"));
   workspace_group->add_action(home_action);
 
   plugin_host_.set_log_sink([this](std::string_view msg) {
@@ -513,43 +515,112 @@ MainWindow::MainWindow(QWidget* parent)
     statusBar()->showMessage(QString::fromStdString(loaded.error()), 8000);
   }
   {
-    std::unordered_set<std::string> hidden;
-    for (const QString& id : AppSettings::instance().hidden_plugin_ids()) {
-      hidden.insert(id.toStdString());
+    std::unordered_set<std::string> disabled;
+    for (const QString& id : AppSettings::instance().disabled_plugin_ids()) {
+      disabled.insert(id.toStdString());
     }
-    plugin_manager_.set_hidden_ids(std::move(hidden));
+    plugin_manager_.set_disabled_ids(std::move(disabled));
+    std::vector<std::string> order;
+    for (const QString& id : AppSettings::instance().ribbon_command_order()) {
+      order.push_back(id.toStdString());
+    }
+    plugin_manager_.set_command_order(std::move(order));
   }
-  RibbonPage* plugins_page = ribbon->add_page(tr("Plugins"));
-  RibbonGroup* manage_group = plugins_page->add_group(tr("Manage"));
+  RibbonPage* plugins_page = ribbon->add_page(QStringLiteral("plugins"), tr("Plugins"));
+  RibbonGroup* manage_group =
+      plugins_page->add_group(QStringLiteral("manage"), tr("Manage"));
   auto* manage_action = new QAction(ribbon_icon(QStringLiteral(":/icons/settings.svg")),
                                     tr("Plugin Manager"), this);
   manage_action->setToolTip(tr("Choose which loaded plugins appear on the ribbon"));
   connect(manage_action, &QAction::triggered, this, &MainWindow::open_plugin_manager);
   manage_group->add_action(manage_action);
 
-  plugin_commands_group_ = plugins_page->add_group(tr("Commands"));
+  plugin_commands_group_ =
+      plugins_page->add_group(QStringLiteral("commands"), tr("Commands"));
+  std::vector<const PluginCommand*> plugin_commands;
+  plugin_commands.reserve(plugin_host_.commands().size());
   for (const auto& cmd : plugin_host_.commands()) {
-    auto* action = new QAction(ribbon_icon(QStringLiteral(":/icons/inspector.svg")),
+    plugin_commands.push_back(&cmd);
+  }
+  std::unordered_map<std::string, std::size_t> command_rank;
+  for (std::size_t i = 0; i < plugin_manager_.command_order().size(); ++i) {
+    command_rank.emplace(plugin_manager_.command_order()[i], i);
+  }
+  std::stable_sort(
+      plugin_commands.begin(), plugin_commands.end(),
+      [&command_rank](const PluginCommand* a, const PluginCommand* b) {
+        const auto ar = command_rank.find(a->id);
+        const auto br = command_rank.find(b->id);
+        if (ar != command_rank.end() || br != command_rank.end()) {
+          if (ar == command_rank.end()) {
+            return false;
+          }
+          if (br == command_rank.end()) {
+            return true;
+          }
+          return ar->second < br->second;
+        }
+        if (a->placement.order != b->placement.order) {
+          return a->placement.order < b->placement.order;
+        }
+        return a->id < b->id;
+      });
+  for (const PluginCommand* command : plugin_commands) {
+    const PluginCommand& cmd = *command;
+    const QString page_id = QString::fromStdString(cmd.placement.page_id);
+    const QString group_id = QString::fromStdString(cmd.placement.group_id);
+    RibbonPage* target_page = ribbon->find_page(page_id);
+    if (target_page == nullptr) {
+      target_page = ribbon->add_page(page_id, page_id);
+    }
+    RibbonGroup* target_group = target_page->find_group(group_id);
+    if (target_group == nullptr) {
+      target_group = target_page->add_group(group_id, group_id);
+    }
+    const QString icon_path = cmd.placement.icon_path.empty()
+                                  ? QStringLiteral(":/icons/inspector.svg")
+                                  : QString::fromStdString(cmd.placement.icon_path);
+    auto* action = new QAction(ribbon_icon(icon_path),
                                QString::fromUtf8(cmd.title.data(), static_cast<int>(cmd.title.size())),
                                this);
+    action->setCheckable(cmd.placement.checkable);
     if (!cmd.tooltip.empty()) {
       action->setToolTip(
           QString::fromUtf8(cmd.tooltip.data(), static_cast<int>(cmd.tooltip.size())));
     }
     const std::string id = cmd.id;
-    connect(action, &QAction::triggered, this, [this, id] {
+    connect(action, &QAction::triggered, this, [this, id, action](bool checked) {
+      if (!plugin_manager_.is_command_enabled(id)) {
+        action->setChecked(false);
+        statusBar()->showMessage(tr("This plugin is disabled."), 4000);
+        return;
+      }
       bind_plugin_session();
+      if (action->isCheckable() && !checked) {
+        if (auto* vp = current_viewport()) {
+          vp->cancel_plugin_point_input();
+        }
+        return;
+      }
       if (auto r = plugin_host_.invoke(id); !r) {
+        action->setChecked(false);
         statusBar()->showMessage(QString::fromStdString(r.error()), 5000);
         log_error(r.error());
       }
     });
     PluginRibbonButton item;
+    item.command_id = cmd.id;
     item.plugin_id = cmd.plugin_id;
-    item.button = plugin_commands_group_->add_action(action);
+    item.page_id = cmd.placement.page_id;
+    item.group_id = cmd.placement.group_id;
+    item.group = target_group;
+    item.button = target_group->add_action(action);
+    item.action = action;
+    item.in_default_group = target_group == plugin_commands_group_;
     plugin_ribbon_buttons_.push_back(item);
   }
   apply_plugin_visibility();
+  apply_plugin_order();
 
   setMenuWidget(ribbon);
 
@@ -728,29 +799,74 @@ void MainWindow::open_plugin_manager() {
   if (dialog.exec() != QDialog::Accepted) {
     return;
   }
-  plugin_manager_.commit_hidden_among_loaded(dialog.hidden_loaded_ids());
+  plugin_manager_.commit_disabled_among_loaded(
+      dialog.disabled_loaded_ids());
+  plugin_manager_.commit_command_order_among_loaded(
+      dialog.ordered_command_ids());
   QStringList stored;
-  stored.reserve(static_cast<int>(plugin_manager_.hidden_ids().size()));
-  for (const auto& id : plugin_manager_.hidden_ids()) {
+  stored.reserve(static_cast<int>(plugin_manager_.disabled_ids().size()));
+  for (const auto& id : plugin_manager_.disabled_ids()) {
     stored.push_back(QString::fromStdString(id));
   }
   stored.sort();
-  AppSettings::instance().set_hidden_plugin_ids(stored);
+  AppSettings::instance().set_disabled_plugin_ids(stored);
+  QStringList command_order;
+  command_order.reserve(
+      static_cast<int>(plugin_manager_.command_order().size()));
+  for (const std::string& id : plugin_manager_.command_order()) {
+    command_order.push_back(QString::fromStdString(id));
+  }
+  AppSettings::instance().set_ribbon_command_order(command_order);
   AppSettings::instance().save();
   apply_plugin_visibility();
+  apply_plugin_order();
 }
 
 void MainWindow::apply_plugin_visibility() {
-  bool any_visible = false;
+  bool any_default_visible = false;
   for (const auto& item : plugin_ribbon_buttons_) {
-    const bool visible = plugin_manager_.is_visible(item.plugin_id);
+    const bool visible = plugin_manager_.is_enabled(item.plugin_id);
+    if (!visible && item.action != nullptr && item.action->isChecked()) {
+      if (auto* viewport = current_viewport()) {
+        viewport->cancel_plugin_point_input();
+      }
+      item.action->setChecked(false);
+    }
     if (item.button != nullptr) {
       item.button->setVisible(visible);
     }
-    any_visible = any_visible || visible;
+    any_default_visible =
+        any_default_visible || (visible && item.in_default_group);
   }
   if (plugin_commands_group_ != nullptr) {
-    plugin_commands_group_->setVisible(any_visible);
+    plugin_commands_group_->setVisible(any_default_visible);
+  }
+}
+
+void MainWindow::apply_plugin_order() {
+  std::unordered_map<RibbonGroup*, std::pair<std::string, std::string>>
+      locations;
+  for (const auto& item : plugin_ribbon_buttons_) {
+    if (item.group != nullptr) {
+      locations.emplace(item.group,
+                        std::pair{item.page_id, item.group_id});
+    }
+  }
+  for (const auto& [group, location] : locations) {
+    std::unordered_map<std::string, QToolButton*> buttons;
+    for (const auto& item : plugin_ribbon_buttons_) {
+      if (item.group == group && item.button != nullptr) {
+        buttons.emplace(item.command_id, item.button);
+      }
+    }
+    std::vector<QToolButton*> ordered;
+    for (const PluginCommand* command :
+         plugin_manager_.ordered_commands(location.first, location.second)) {
+      if (const auto it = buttons.find(command->id); it != buttons.end()) {
+        ordered.push_back(it->second);
+      }
+    }
+    group->reorder_buttons(ordered);
   }
 }
 
@@ -783,6 +899,17 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
   connect(vp, &DocumentViewport::document_changed, this, &MainWindow::refresh_property_panel);
   connect(vp, &DocumentViewport::selection_changed, this, &MainWindow::refresh_handle_inspector);
   connect(vp, &DocumentViewport::document_changed, this, &MainWindow::refresh_handle_inspector);
+  connect(vp, &DocumentViewport::plugin_point_input_changed, this,
+          [this](bool active) {
+            if (active) {
+              return;
+            }
+            for (const auto& item : plugin_ribbon_buttons_) {
+              if (item.action != nullptr && item.action->isCheckable()) {
+                item.action->setChecked(false);
+              }
+            }
+          });
   const int index = tabs_->addTab(vp, QString::fromStdString(document->name()));
   tabs_->setCurrentIndex(index);
   show_documents();
@@ -1176,9 +1303,19 @@ void MainWindow::bind_plugin_session() {
   auto* vp = current_viewport();
   if (vp == nullptr) {
     plugin_host_.unbind();
+    plugin_host_.set_point_input_handlers({}, {});
     return;
   }
   plugin_host_.bind(&vp->document(), &vp->command_system(), [vp] { vp->refresh_after_edit(); });
+  plugin_host_.set_point_input_handlers(
+      [vp](PluginPointInputRequest request,
+           PluginHost::PointInputCompletion completion) {
+        return vp->begin_plugin_point_input(std::move(request),
+                                            std::move(completion));
+      },
+      [vp](std::uint64_t request_id) {
+        vp->cancel_plugin_point_input(request_id);
+      });
 }
 
 void MainWindow::activate_viewport(DocumentViewport* vp) {

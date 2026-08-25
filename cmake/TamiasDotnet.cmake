@@ -110,6 +110,7 @@ function(tamias_publish_csharp target)
 
   set(_host_csproj "${CMAKE_SOURCE_DIR}/plugin-sdk/csharp/Tamias.Host/Tamias.Host.csproj")
   set(_hello_csproj "${CMAKE_SOURCE_DIR}/plugins/csharp/Tamias.Hello/Tamias.Hello.csproj")
+  set(_nurbs_csproj "${CMAKE_SOURCE_DIR}/plugins/csharp/Tamias.Nurbs/Tamias.Nurbs.csproj")
   if(NOT EXISTS "${_host_csproj}")
     return()
   endif()
@@ -122,6 +123,10 @@ function(tamias_publish_csharp target)
             --nologo
             -o $<TARGET_FILE_DIR:${target}>/managed
     COMMAND "${TAMIAS_DOTNET}" publish "${_hello_csproj}"
+            -c $<IF:$<CONFIG:Debug>,Debug,Release>
+            --nologo
+            -o $<TARGET_FILE_DIR:${target}>/plugins
+    COMMAND "${TAMIAS_DOTNET}" publish "${_nurbs_csproj}"
             -c $<IF:$<CONFIG:Debug>,Debug,Release>
             --nologo
             -o $<TARGET_FILE_DIR:${target}>/plugins

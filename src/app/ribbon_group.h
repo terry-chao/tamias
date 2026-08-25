@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QWidget>
+#include <vector>
 
 class QAction;
 class QFrame;
@@ -16,6 +17,7 @@ class RibbonGroup final : public QWidget {
   explicit RibbonGroup(const QString& title, QWidget* parent = nullptr);
 
   QToolButton* add_action(QAction* action);
+  void reorder_buttons(const std::vector<QToolButton*>& ordered);
   void set_separator_visible(bool visible);
 
  private:

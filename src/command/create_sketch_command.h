@@ -7,7 +7,7 @@
 
 namespace tamias {
 
-enum class SketchKind { Line, Polyline, Circle, Arc, Bezier, Rectangle, BSpline, Nurbs };
+enum class SketchKind { Line, Polyline, Circle, Arc, Bezier, Rectangle, BSpline };
 
 // 创建草图曲线（交互式）：按类型收集 2 / 3 / 4 / N 个点后 createGeom。
 class CreateSketchCommand final : public Command {

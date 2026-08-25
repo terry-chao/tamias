@@ -8,6 +8,7 @@
 #include <QSizePolicy>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <algorithm>
 
 namespace tamias {
 
@@ -58,6 +59,35 @@ QToolButton* RibbonGroup::add_action(QAction* action) {
   button->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
   buttons_layout_->addWidget(button, 0, Qt::AlignTop);
   return button;
+}
+
+void RibbonGroup::reorder_buttons(const std::vector<QToolButton*>& ordered) {
+  if (ordered.empty()) {
+    return;
+  }
+  int insert_at = buttons_layout_->count();
+  for (QToolButton* button : ordered) {
+    if (button == nullptr) {
+      continue;
+    }
+    const int index = buttons_layout_->indexOf(button);
+    if (index >= 0) {
+      insert_at = (std::min)(insert_at, index);
+    }
+  }
+  if (insert_at >= buttons_layout_->count()) {
+    return;
+  }
+  for (QToolButton* button : ordered) {
+    if (button != nullptr) {
+      buttons_layout_->removeWidget(button);
+    }
+  }
+  for (QToolButton* button : ordered) {
+    if (button != nullptr) {
+      buttons_layout_->insertWidget(insert_at++, button, 0, Qt::AlignTop);
+    }
+  }
 }
 
 void RibbonGroup::set_separator_visible(bool visible) {

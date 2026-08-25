@@ -1,6 +1,7 @@
 add_library(tamias_plugin STATIC
   plugin_host.cpp
   plugin_manager.cpp
+  plugin_point_input_session.cpp
   csharp_runtime.cpp
 )
 add_library(tamias::plugin ALIAS tamias_plugin)

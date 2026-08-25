@@ -16,8 +16,9 @@ namespace tamias {
 
 class Document;
 
-// 命令参数：异构值（数值 / 整数 id / 向量 / 字符串）。
-using CommandArg = std::variant<double, std::int64_t, Vec3, std::string>;
+// 命令参数：异构值（数值 / 整数 id / 向量 / 字符串 / 数组）。
+using CommandArg =
+    std::variant<double, std::int64_t, Vec3, std::string, std::vector<Vec3>, std::vector<double>>;
 using CommandArgs = std::unordered_map<std::string, CommandArg>;
 
 // 命令注册表：名字 → 工厂。全局单例，启动时加载一次。

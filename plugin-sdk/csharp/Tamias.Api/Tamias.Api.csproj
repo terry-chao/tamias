@@ -3,4 +3,7 @@
     <RootNamespace>Tamias.Api</RootNamespace>
     <AssemblyName>Tamias.Api</AssemblyName>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Tamias.Host" />
+  </ItemGroup>
 </Project>

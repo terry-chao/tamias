@@ -33,6 +33,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -156,6 +157,7 @@ DocumentViewport::DocumentViewport(std::shared_ptr<Document> document,
 }
 
 DocumentViewport::~DocumentViewport() {
+  cancel_plugin_point_input();
   // Tear down the swapchain/surface while the native HWND is still valid, and
   // wait for the render thread so it cannot draw into a destroyed window.
   alive_ = false;
@@ -546,9 +548,35 @@ void DocumentViewport::submit_current_frame() {
   frame.scene_dirty_ids = document_->scene().dirty_since(last_submitted_scene_generation_);
   last_submitted_scene_generation_ = frame.scene_generation;
   const Vec3 cursor = has_cursor_ ? cursor_ground_position(last_mouse_) : Vec3{};
-  frame.preview_polyline = command_system_.preview_polyline(cursor);
-  frame.preview_control_polyline = command_system_.preview_control_polyline(cursor);
-  frame.preview_points = command_system_.preview_points(cursor);
+  if (plugin_point_input_.active()) {
+    std::vector<Vec3> controls;
+    controls.reserve(plugin_point_input_.points().size() + 1);
+    for (const PluginPickPoint& point : plugin_point_input_.points()) {
+      controls.push_back(point.position);
+    }
+    if (has_cursor_ &&
+        (controls.empty() || length(controls.back() - cursor) >= 1e-4f)) {
+      controls.push_back(cursor);
+    }
+    frame.preview_control_polyline = controls;
+    frame.preview_points = controls;
+    if (controls.size() >= 2 && plugin_point_input_.preview_kind() != 0) {
+      const std::string& kind = plugin_point_input_.preview_curve_kind();
+      if (kind == "nurbs") {
+        frame.preview_polyline = sample_nurbs(controls, {});
+      } else if (kind == "bspline") {
+        frame.preview_polyline = sample_bspline(controls);
+      } else if (kind == "bezier") {
+        frame.preview_polyline = sample_bezier(controls);
+      } else {
+        frame.preview_polyline = controls;
+      }
+    }
+  } else {
+    frame.preview_polyline = command_system_.preview_polyline(cursor);
+    frame.preview_control_polyline = command_system_.preview_control_polyline(cursor);
+    frame.preview_points = command_system_.preview_points(cursor);
+  }
   if (grid_snap_active() && has_cursor_ && is_on_grid_xz(cursor)) {
     frame.snap_point = cursor;
   }
@@ -585,12 +613,37 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
   has_cursor_ = true;
   press_hit_ = 0;
   if (event->button() == Qt::LeftButton) {
+    if (plugin_point_input_.active()) {
+      plugin_input_press_ = true;
+      Vec3 point = cursor_ground_position(event->pos());
+      std::uint64_t picked = 0;
+      if (plugin_point_input_.pick_entities()) {
+        const auto dpr = devicePixelRatioF();
+        const float aspect = static_cast<float>((std::max)(1, width())) /
+                             static_cast<float>((std::max)(1, height()));
+        const Ray ray =
+            camera_ray(camera_, aspect, static_cast<float>(event->pos().x() * dpr),
+                       static_cast<float>(event->pos().y() * dpr),
+                       static_cast<float>(width() * dpr),
+                       static_cast<float>(height() * dpr));
+        if (auto hit = bvh_.closest_hit(ray, *document_, [this](std::uint64_t id) {
+              return node_visible_in_view(id);
+            })) {
+          picked = hit->node_id;
+          point = ray.origin + ray.direction * hit->t;
+        }
+      }
+      plugin_point_input_.add_point({point, picked});
+      request_redraw();
+      return;
+    }
     if (session_->tool_mode() == ToolMode::Slab && !plan_view_) {
       refuse_slab_outside_plan(true);
       set_tool(ToolMode::None);
       return;
     }
-    if (session_->tool_mode() != ToolMode::None) {
+    if (command_system_.has_pending()) {
+      plugin_input_press_ = session_->tool_mode() == ToolMode::None;
       Vec3 point = cursor_ground_position(event->pos());
       std::uint64_t picked = 0;
       if (session_->tool_mode() == ToolMode::Window ||
@@ -684,7 +737,7 @@ void DocumentViewport::mouseMoveEvent(QMouseEvent* event) {
     apply_grip_at(event->pos());
     return;
   }
-  if (session_->tool_mode() != ToolMode::None) {
+  if (plugin_point_input_.active() || command_system_.has_pending()) {
     request_redraw();  // 更新网格捕捉点与预览线
     return;
   }
@@ -709,7 +762,9 @@ void DocumentViewport::mouseMoveEvent(QMouseEvent* event) {
 
 void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
   if (event->button() == Qt::LeftButton) {
-    if (gripping_) {
+    if (plugin_input_press_) {
+      plugin_input_press_ = false;
+    } else if (gripping_) {
       commit_grip_drag();
       gripping_ = false;
     } else if (session_->tool_mode() == ToolMode::None) {
@@ -733,6 +788,24 @@ void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
   if (event->button() == Qt::RightButton) {
     panning_ = false;
     if ((event->pos() - press_mouse_).manhattanLength() < 4) {
+      if (plugin_point_input_.active()) {
+        plugin_point_input_.cancel();
+        request_redraw();
+        return;
+      }
+      if (session_->tool_mode() == ToolMode::None &&
+          command_system_.has_pending()) {
+        if (command_system_.accepts_confirm()) {
+          if (!finish_pending_if_done(command_system_.confirm())) {
+            command_system_.cancel();
+            request_redraw();
+          }
+        } else {
+          command_system_.cancel();
+          request_redraw();
+        }
+        return;
+      }
       if (session_->tool_mode() != ToolMode::None) {
         // 折线 / 贝塞尔：右键先提交已点的顶点，再退出工具。
         if (command_system_.accepts_confirm()) {
@@ -761,12 +834,18 @@ void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
 }
 
 void DocumentViewport::mouseDoubleClickEvent(QMouseEvent* event) {
+  if (event->button() == Qt::LeftButton && plugin_point_input_.active() &&
+      plugin_point_input_.accepts_confirm()) {
+    plugin_point_input_.confirm();
+    request_redraw();
+    return;
+  }
   if (event->button() != Qt::LeftButton || !command_system_.accepts_confirm()) {
     QWidget::mouseDoubleClickEvent(event);
     return;
   }
   last_mouse_ = event->pos();
-  finish_pending_if_done(command_system_.confirm());
+  (void)finish_pending_if_done(command_system_.confirm());
 }
 
 void DocumentViewport::wheelEvent(QWheelEvent* event) {
@@ -789,19 +868,33 @@ void DocumentViewport::wheelEvent(QWheelEvent* event) {
 }
 
 void DocumentViewport::keyPressEvent(QKeyEvent* event) {
+  if (plugin_point_input_.active()) {
+    if (event->key() == Qt::Key_Escape) {
+      plugin_point_input_.cancel();
+      request_redraw();
+      return;
+    }
+    if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) &&
+        plugin_point_input_.accepts_confirm()) {
+      plugin_point_input_.confirm();
+      request_redraw();
+      return;
+    }
+  }
   switch (event->key()) {
     case Qt::Key_Escape:
       cancel_tool();
       break;
     case Qt::Key_Delete:
-      if (session_->tool_mode() == ToolMode::None) {
+      if (session_->tool_mode() == ToolMode::None &&
+          !command_system_.has_pending()) {
         delete_selected();
       }
       break;
     case Qt::Key_Return:
     case Qt::Key_Enter:
       if (command_system_.accepts_confirm()) {
-        finish_pending_if_done(command_system_.confirm());
+        (void)finish_pending_if_done(command_system_.confirm());
       }
       break;
     case Qt::Key_BracketLeft:   // '[' 减参数
@@ -832,6 +925,7 @@ void DocumentViewport::set_tool(ToolMode mode) {
   }
   session_->set_tool(mode);
   if (mode != ToolMode::None) {
+    cancel_plugin_point_input();
     command_system_.cancel();  // 取消之前的 pending
     setFocus();
     dispatch_tool_command(mode);  // 点按钮 → 立即 dispatch 命令（armed）
@@ -907,10 +1001,6 @@ void DocumentViewport::dispatch_tool_command(ToolMode mode) {
     if (auto r = session_->dispatch("create_bspline", {}); !r) {
       log_error(r.error());
     }
-  } else if (mode == ToolMode::Nurbs) {
-    if (auto r = session_->dispatch("create_nurbs", {}); !r) {
-      log_error(r.error());
-    }
   } else if (mode == ToolMode::Rectangle) {
     if (auto r = session_->dispatch("create_rectangle", {}); !r) {
       log_error(r.error());
@@ -942,7 +1032,14 @@ bool DocumentViewport::finish_pending_if_done(const Result<bool>& done) {
 }
 
 void DocumentViewport::cancel_tool() {
-  if (session_->tool_mode() != ToolMode::None && command_system_.drag_started()) {
+  if (plugin_point_input_.active()) {
+    cancel_plugin_point_input();
+    request_redraw();
+  } else if (session_->tool_mode() == ToolMode::None &&
+             command_system_.has_pending()) {
+    command_system_.cancel();
+    request_redraw();
+  } else if (session_->tool_mode() != ToolMode::None && command_system_.drag_started()) {
     command_system_.cancel();
     dispatch_tool_command(session_->tool_mode());  // 取消当前放置，仍留在工具
     request_redraw();
@@ -1006,6 +1103,30 @@ void DocumentViewport::refresh_after_edit() {
   request_redraw();
   emit document_changed();
   emit selection_changed();
+}
+
+Result<void> DocumentViewport::begin_plugin_point_input(
+    PluginPointInputRequest request, PluginHost::PointInputCompletion completion) {
+  set_tool(ToolMode::None);
+  setFocus();
+  auto started = plugin_point_input_.begin(
+      std::move(request),
+      [this, completion = std::move(completion)](
+          std::vector<PluginPickPoint> points, bool cancelled) mutable {
+        emit plugin_point_input_changed(false);
+        completion(std::move(points), cancelled);
+        request_redraw();
+      });
+  if (started) {
+    emit plugin_point_input_changed(true);
+    request_redraw();
+  }
+  return started;
+}
+
+void DocumentViewport::cancel_plugin_point_input(std::uint64_t request_id) {
+  plugin_point_input_.cancel(request_id);
+  request_redraw();
 }
 
 void DocumentViewport::set_entity_param(std::uint64_t entity_id, std::uint64_t feature_id,
@@ -1183,6 +1304,12 @@ void DocumentViewport::redo() {
 }
 
 bool DocumentViewport::grid_snap_active() const {
+  if (plugin_point_input_.active()) {
+    return plugin_point_input_.grid_snap();
+  }
+  if (session_->tool_mode() == ToolMode::None) {
+    return command_system_.has_pending();
+  }
   return session_->tool_mode() != ToolMode::None && session_->tool_mode() != ToolMode::Door &&
          session_->tool_mode() != ToolMode::Window;
 }
@@ -1197,7 +1324,9 @@ Vec3 DocumentViewport::cursor_ground_position(const QPoint& pos) const {
                  static_cast<float>(height() * dpr));
   Vec3 hit = ray.origin + ray.direction * camera_.distance();
   // 与当前工作面求交（地面 y=0；画板时是板的标高，避免透视下点偏）。
-  const float plane_y = command_system_.work_plane_y();
+  const float plane_y = plugin_point_input_.active()
+                            ? plugin_point_input_.work_plane_y()
+                            : command_system_.work_plane_y();
   if (std::fabs(ray.direction.y) > 1e-6f) {
     const float t = (plane_y - ray.origin.y) / ray.direction.y;
     if (t > 0.f) {
@@ -1219,7 +1348,9 @@ Vec3 DocumentViewport::snapped_ground_position(const QPoint& pos) const {
                  static_cast<float>(pos.y() * dpr), static_cast<float>(width() * dpr),
                  static_cast<float>(height() * dpr));
   Vec3 hit = ray.origin + ray.direction * camera_.distance();
-  const float plane_y = command_system_.work_plane_y();
+  const float plane_y = plugin_point_input_.active()
+                            ? plugin_point_input_.work_plane_y()
+                            : command_system_.work_plane_y();
   if (std::fabs(ray.direction.y) > 1e-6f) {
     const float t = (plane_y - ray.origin.y) / ray.direction.y;
     if (t > 0.f) {

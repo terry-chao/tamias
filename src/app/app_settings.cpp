@@ -87,7 +87,13 @@ void AppSettings::load() {
       settings.value(QStringLiteral("ui/color_scheme"), QStringLiteral("system")).toString());
   zoom_to_mouse_position_ =
       settings.value(QStringLiteral("viewport/zoom_to_mouse_position"), true).toBool();
-  hidden_plugin_ids_ = settings.value(QStringLiteral("plugins/hidden_ids")).toStringList();
+  const QString disabled_key = QStringLiteral("plugins/disabled_ids");
+  disabled_plugin_ids_ =
+      settings.contains(disabled_key)
+          ? settings.value(disabled_key).toStringList()
+          : settings.value(QStringLiteral("plugins/hidden_ids")).toStringList();
+  ribbon_command_order_ =
+      settings.value(QStringLiteral("plugins/ribbon_command_order")).toStringList();
 }
 
 void AppSettings::save() const {
@@ -96,7 +102,10 @@ void AppSettings::save() const {
   settings.setValue(QStringLiteral("ui/language"), ui_language_);
   settings.setValue(QStringLiteral("ui/color_scheme"), color_scheme_to_key(ui_color_scheme_));
   settings.setValue(QStringLiteral("viewport/zoom_to_mouse_position"), zoom_to_mouse_position_);
-  settings.setValue(QStringLiteral("plugins/hidden_ids"), hidden_plugin_ids_);
+  settings.setValue(QStringLiteral("plugins/disabled_ids"), disabled_plugin_ids_);
+  settings.setValue(QStringLiteral("plugins/ribbon_command_order"),
+                    ribbon_command_order_);
+  settings.remove(QStringLiteral("plugins/hidden_ids"));
 }
 
 void AppSettings::set_graphics_backend(GraphicsBackend backend) {
@@ -115,8 +124,12 @@ void AppSettings::set_zoom_to_mouse_position(bool enabled) {
   zoom_to_mouse_position_ = enabled;
 }
 
-void AppSettings::set_hidden_plugin_ids(const QStringList& ids) {
-  hidden_plugin_ids_ = ids;
+void AppSettings::set_disabled_plugin_ids(const QStringList& ids) {
+  disabled_plugin_ids_ = ids;
+}
+
+void AppSettings::set_ribbon_command_order(const QStringList& ids) {
+  ribbon_command_order_ = ids;
 }
 
 RenderDeviceConfig AppSettings::render_device_config() const {

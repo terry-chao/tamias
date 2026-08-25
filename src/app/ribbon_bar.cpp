@@ -208,8 +208,17 @@ void RibbonBar::add_quick_action(QAction* action) {
 }
 
 RibbonPage* RibbonBar::add_page(const QString& title) {
+  return add_page(title.trimmed().toCaseFolded(), title);
+}
+
+RibbonPage* RibbonBar::add_page(const QString& id, const QString& title) {
+  if (RibbonPage* existing = find_page(id)) {
+    return existing;
+  }
+
   auto* page = new RibbonPage(pages_);
   const int index = pages_->addWidget(page);
+  pages_by_id_.insert(id, page);
 
   auto* tab = new QToolButton(tab_row_);
   tab->setObjectName(QStringLiteral("ribbonTab"));
@@ -226,6 +235,8 @@ RibbonPage* RibbonBar::add_page(const QString& title) {
   }
   return page;
 }
+
+RibbonPage* RibbonBar::find_page(const QString& id) const { return pages_by_id_.value(id); }
 
 void RibbonBar::set_collapsed(bool collapsed) {
   if (collapsed_ == collapsed) {

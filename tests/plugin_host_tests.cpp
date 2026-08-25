@@ -6,6 +6,7 @@
 #include "host/command_arg_text.h"
 #include "plugin/plugin_host.h"
 #include "plugin/plugin_manager.h"
+#include "plugin/plugin_point_input_session.h"
 
 #include <gtest/gtest.h>
 
@@ -13,6 +14,7 @@
 #include <memory>
 #include <string>
 #include <unordered_set>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -41,10 +43,19 @@ std::uint64_t add_wall_entity(Document& doc, Vec3 start, Vec3 end) {
   return id;
 }
 
+std::int32_t register_test_plugin(const HostApi& api, const char* id,
+                                  const char* title) {
+  return api.register_plugin(api.context, id, title, "Test Author", "1.2.3",
+                             "2026-08-25", "Test plugin",
+                             "https://example.com", "plugin.svg", 0);
+}
+
 }  // namespace
 
 TEST(CommandArgText, ParsesTypedAndInferredValues) {
-  auto args = parse_command_arg_text("i:entity_id=7;d:radius=0.25;s:name=wall;v:origin=1,2,3");
+  auto args = parse_command_arg_text(
+      "i:entity_id=7;d:radius=0.25;s:name=wall;v:origin=1,2,3;"
+      "p:points=1,2,3|4,5,6;a:weights=1|2.5");
   ASSERT_TRUE(args) << args.error();
   EXPECT_EQ(std::get<std::int64_t>((*args)["entity_id"]), 7);
   EXPECT_DOUBLE_EQ(std::get<double>((*args)["radius"]), 0.25);
@@ -53,6 +64,12 @@ TEST(CommandArgText, ParsesTypedAndInferredValues) {
   EXPECT_FLOAT_EQ(origin.x, 1.f);
   EXPECT_FLOAT_EQ(origin.y, 2.f);
   EXPECT_FLOAT_EQ(origin.z, 3.f);
+  const auto points = std::get<std::vector<Vec3>>((*args)["points"]);
+  ASSERT_EQ(points.size(), 2u);
+  EXPECT_FLOAT_EQ(points[1].x, 4.f);
+  const auto weights = std::get<std::vector<double>>((*args)["weights"]);
+  ASSERT_EQ(weights.size(), 2u);
+  EXPECT_DOUBLE_EQ(weights[1], 2.5);
 
   auto inferred = parse_command_arg_text("entity_id=4;radius=1.5");
   ASSERT_TRUE(inferred) << inferred.error();
@@ -63,24 +80,41 @@ TEST(CommandArgText, ParsesTypedAndInferredValues) {
 TEST(PluginHost, RegisterPluginAssociatesCommands) {
   PluginHost host;
   const HostApi& api = host.native_api();
+  EXPECT_EQ(api.abi_version, 4);
   ASSERT_NE(api.register_plugin, nullptr);
-  ASSERT_EQ(api.register_plugin(api.context, "demo.plugin", "Demo"), 0);
-  ASSERT_EQ(api.register_command(api.context, "demo.hello", "Hello", "tip"), 0);
-  ASSERT_EQ(api.register_plugin(api.context, "demo.plugin", "Demo"), -1);
+  ASSERT_NE(api.begin_point_input, nullptr);
+  ASSERT_NE(api.cancel_point_input, nullptr);
+  ASSERT_EQ(register_test_plugin(api, "demo.plugin", "Demo"), 0);
+  ASSERT_EQ(api.register_command(api.context, "demo.hello", "Hello", "tip",
+                                 "home", "draw", "demo.svg", 42, 1),
+            0);
+  ASSERT_EQ(register_test_plugin(api, "demo.plugin", "Demo"), -1);
 
   ASSERT_EQ(host.plugins().size(), 1u);
   EXPECT_EQ(host.plugins()[0].id, "demo.plugin");
   EXPECT_EQ(host.plugins()[0].title, "Demo");
+  EXPECT_EQ(host.plugins()[0].author, "Test Author");
+  EXPECT_EQ(host.plugins()[0].version, "1.2.3");
+  EXPECT_EQ(host.plugins()[0].release_date, "2026-08-25");
+  EXPECT_EQ(host.plugins()[0].description, "Test plugin");
+  EXPECT_EQ(host.plugins()[0].homepage_url, "https://example.com");
+  EXPECT_EQ(host.plugins()[0].icon_path, "plugin.svg");
+  EXPECT_FALSE(host.plugins()[0].built_in);
   ASSERT_EQ(host.commands().size(), 1u);
   EXPECT_EQ(host.commands()[0].id, "demo.hello");
   EXPECT_EQ(host.commands()[0].plugin_id, "demo.plugin");
+  EXPECT_EQ(host.commands()[0].placement.page_id, "home");
+  EXPECT_EQ(host.commands()[0].placement.group_id, "draw");
+  EXPECT_EQ(host.commands()[0].placement.icon_path, "demo.svg");
+  EXPECT_EQ(host.commands()[0].placement.order, 42);
+  EXPECT_TRUE(host.commands()[0].placement.checkable);
 }
 
 TEST(PluginManager, HidesLoadedPluginUntilApplied) {
   PluginHost host;
   const HostApi& api = host.native_api();
-  ASSERT_EQ(api.register_plugin(api.context, "a", "A"), 0);
-  ASSERT_EQ(api.register_plugin(api.context, "b", "B"), 0);
+  ASSERT_EQ(register_test_plugin(api, "a", "A"), 0);
+  ASSERT_EQ(register_test_plugin(api, "b", "B"), 0);
 
   PluginManager manager(host);
   EXPECT_TRUE(manager.is_visible("a"));
@@ -95,6 +129,79 @@ TEST(PluginManager, HidesLoadedPluginUntilApplied) {
   EXPECT_TRUE(manager.is_visible("a"));
   EXPECT_FALSE(manager.is_visible("b"));
   EXPECT_EQ(manager.hidden_ids().count("gone"), 1u);
+}
+
+TEST(PluginManager, OrdersCommandsWithinRibbonLocationAndKeepsUnknownIds) {
+  PluginHost host;
+  const HostApi& api = host.native_api();
+  ASSERT_EQ(register_test_plugin(api, "a", "A"), 0);
+  ASSERT_EQ(api.register_command(api.context, "a.first", "First", "",
+                                 "home", "draw", "", 10, 0),
+            0);
+  ASSERT_EQ(register_test_plugin(api, "b", "B"), 0);
+  ASSERT_EQ(api.register_command(api.context, "b.second", "Second", "",
+                                 "home", "draw", "", 20, 0),
+            0);
+  ASSERT_EQ(api.register_command(api.context, "b.other", "Other", "",
+                                 "view", "display", "", 0, 0),
+            0);
+
+  PluginManager manager(host);
+  manager.set_command_order({"missing.command", "b.second", "a.first"});
+  auto draw = manager.ordered_commands("home", "draw");
+  ASSERT_EQ(draw.size(), 2u);
+  EXPECT_EQ(draw[0]->id, "b.second");
+  EXPECT_EQ(draw[1]->id, "a.first");
+
+  manager.commit_command_order_among_loaded({"a.first", "b.second",
+                                              "b.other"});
+  ASSERT_EQ(manager.command_order().size(), 4u);
+  EXPECT_EQ(manager.command_order()[0], "a.first");
+  EXPECT_EQ(manager.command_order()[1], "b.second");
+  EXPECT_EQ(manager.command_order()[2], "b.other");
+  EXPECT_EQ(manager.command_order()[3], "missing.command");
+}
+
+TEST(PluginPointInputSession, ConfirmsAndCancelsWithoutQt) {
+  PluginPointInputSession input;
+  PluginPointInputRequest request;
+  request.request_id = 7;
+  request.min_points = 2;
+  request.max_points = 0;
+  request.flags = PluginPointInputRequest::kAllowConfirm |
+                  PluginPointInputRequest::kGridSnap;
+
+  bool called = false;
+  bool cancelled = false;
+  std::vector<PluginPickPoint> completed;
+  ASSERT_TRUE(input.begin(
+      request, [&](std::vector<PluginPickPoint> points, bool was_cancelled) {
+        called = true;
+        cancelled = was_cancelled;
+        completed = std::move(points);
+      }));
+  EXPECT_TRUE(input.grid_snap());
+  input.add_point({{1.f, 0.f, 2.f}, 3});
+  input.confirm();
+  EXPECT_FALSE(called);
+  input.add_point({{4.f, 0.f, 5.f}, 6});
+  input.confirm();
+  EXPECT_TRUE(called);
+  EXPECT_FALSE(cancelled);
+  ASSERT_EQ(completed.size(), 2u);
+  EXPECT_EQ(completed[1].entity_id, 6u);
+
+  called = false;
+  ASSERT_TRUE(input.begin(
+      request, [&](std::vector<PluginPickPoint>, bool was_cancelled) {
+        called = true;
+        cancelled = was_cancelled;
+      }));
+  input.cancel(8);
+  EXPECT_FALSE(called);
+  input.cancel(7);
+  EXPECT_TRUE(called);
+  EXPECT_TRUE(cancelled);
 }
 
 TEST(PluginHost, HostApiSelectionAndDispatch) {
@@ -143,16 +250,31 @@ TEST(PluginHost, LoadsManagedHelloCommands) {
   ASSERT_FALSE(host.plugins().empty()) << "Tamias.Hello should register as a loaded plugin";
   bool list_selection = false;
   bool delete_selected = false;
+  bool create_nurbs = false;
   bool hello_plugin = false;
   for (const auto& plugin : host.plugins()) {
-    hello_plugin = hello_plugin || plugin.id.find("HelloPlugin") != std::string::npos;
+    if (plugin.id == "tamias.hello") {
+      hello_plugin = true;
+      EXPECT_EQ(plugin.author, "Tamias");
+      EXPECT_EQ(plugin.version, "1.0.0");
+      EXPECT_EQ(plugin.release_date, "2026-08-25");
+      EXPECT_TRUE(plugin.built_in);
+      EXPECT_FALSE(plugin.homepage_url.empty());
+    }
   }
   for (const auto& cmd : host.commands()) {
     list_selection = list_selection || cmd.id == "hello.list_selection";
     delete_selected = delete_selected || cmd.id == "hello.delete_selected";
+    if (cmd.id == "tamias.nurbs.create") {
+      create_nurbs = true;
+      EXPECT_EQ(cmd.placement.page_id, "home");
+      EXPECT_EQ(cmd.placement.group_id, "draw");
+      EXPECT_TRUE(cmd.placement.checkable);
+    }
     EXPECT_FALSE(cmd.plugin_id.empty());
   }
   EXPECT_TRUE(hello_plugin);
   EXPECT_TRUE(list_selection);
   EXPECT_TRUE(delete_selected);
+  EXPECT_TRUE(create_nurbs);
 }

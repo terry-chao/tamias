@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Tamias.Nurbs</RootNamespace>
+    <AssemblyName>Tamias.Nurbs</AssemblyName>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\plugin-sdk\csharp\Tamias.Api\Tamias.Api.csproj">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
+    <None Include="nurbs.svg" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

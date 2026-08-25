@@ -14,6 +14,7 @@
 #include "entity/entity_grip.h"
 #include "engine/modeling/feature.h"
 #include "host/session.h"
+#include "plugin/plugin_point_input_session.h"
 
 #include <QElapsedTimer>
 #include <QLabel>
@@ -72,12 +73,16 @@ class DocumentViewport final : public QWidget {
   // 会话层：文档 / 命令 / 相机 / 工具 / 选择都在这。
   [[nodiscard]] Session& session() { return *session_; }
   void refresh_after_edit();
+  Result<void> begin_plugin_point_input(
+      PluginPointInputRequest request, PluginHost::PointInputCompletion completion);
+  void cancel_plugin_point_input(std::uint64_t request_id = 0);
 
  signals:
   void tool_mode_changed(ToolMode mode);
   void selection_changed();  // 选中对象变化
   void document_changed();   // 文档内容/参数变化（undo/redo/命令执行后）
   void status_message(const QString& text);  // 状态栏提示（如三维中拒绝画板）
+  void plugin_point_input_changed(bool active);
 
  protected:
   void showEvent(QShowEvent* event) override;
@@ -137,6 +142,7 @@ class DocumentViewport final : public QWidget {
   void fill_grip_overlay(FrameSubmission& frame) const;
 
   std::unique_ptr<Session> session_;
+  PluginPointInputSession plugin_point_input_;
   Document* document_ = nullptr;
   CommandSystem& command_system_;
   TurntableCamera& camera_;
@@ -164,6 +170,7 @@ class DocumentViewport final : public QWidget {
   bool panning_ = false;
   bool mmb_nav_ = false;
   bool box_selecting_ = false;
+  bool plugin_input_press_ = false;
   bool gripping_ = false;
   EntityGrip active_grip_{};
   FeatureModel grip_from_model_{};

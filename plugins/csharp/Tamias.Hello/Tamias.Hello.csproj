@@ -9,5 +9,6 @@
       <Private>false</Private>
       <ExcludeAssets>runtime</ExcludeAssets>
     </ProjectReference>
+    <None Include="hello.svg" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

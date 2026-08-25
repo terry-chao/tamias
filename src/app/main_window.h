@@ -72,6 +72,7 @@ class MainWindow final : public QMainWindow {
   void sync_render_mode_actions();
   void bind_plugin_session();
   void apply_plugin_visibility();
+  void apply_plugin_order();
   const MeshCpu* selected_mesh(Document& document) const;
   const MeshCpu* mesh_for_obj_export(Document& document) const;
   int find_open_document(const QString& path) const;
@@ -100,7 +101,6 @@ class MainWindow final : public QMainWindow {
   QAction* arc_action_ = nullptr;
   QAction* bezier_action_ = nullptr;
   QAction* bspline_action_ = nullptr;
-  QAction* nurbs_action_ = nullptr;
   QAction* rectangle_action_ = nullptr;
   QAction* fillet_action_ = nullptr;
   QAction* chamfer_action_ = nullptr;
@@ -111,8 +111,14 @@ class MainWindow final : public QMainWindow {
   PluginManager plugin_manager_;
   RibbonGroup* plugin_commands_group_ = nullptr;
   struct PluginRibbonButton {
+    std::string command_id;
     std::string plugin_id;
+    std::string page_id;
+    std::string group_id;
+    RibbonGroup* group = nullptr;
     QToolButton* button = nullptr;
+    QAction* action = nullptr;
+    bool in_default_group = false;
   };
   std::vector<PluginRibbonButton> plugin_ribbon_buttons_;
   bool placed_on_primary_ = false;

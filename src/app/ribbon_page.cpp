@@ -41,14 +41,27 @@ RibbonPage::RibbonPage(QWidget* parent) : QWidget(parent) {
 }
 
 RibbonGroup* RibbonPage::add_group(const QString& title) {
+  return add_group(title.trimmed().toCaseFolded(), title);
+}
+
+RibbonGroup* RibbonPage::add_group(const QString& id, const QString& title) {
+  if (RibbonGroup* existing = find_group(id)) {
+    return existing;
+  }
+
   if (last_group_) {
     last_group_->set_separator_visible(true);
   }
   auto* group = new RibbonGroup(title, this);
   group->set_separator_visible(false);
   groups_layout_->insertWidget(groups_layout_->count() - 1, group);
+  groups_by_id_.insert(id, group);
   last_group_ = group;
   return group;
+}
+
+RibbonGroup* RibbonPage::find_group(const QString& id) const {
+  return groups_by_id_.value(id);
 }
 
 }  // namespace tamias

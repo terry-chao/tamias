@@ -18,6 +18,8 @@ build/bin/Debug/
     Tamias.Api.dll
   plugins/
     Tamias.Hello.dll
+    Tamias.Nurbs.dll
+    nurbs.svg
 ```
 
 加载规则（[`PluginLoader.cs`](https://github.com/terry-chao/tamias/blob/main/plugin-sdk/csharp/Tamias.Host/PluginLoader.cs)）：
@@ -34,9 +36,12 @@ build/bin/Debug/
 ## 2. 界面
 
 1. 新建或打开文档（欢迎页没有活动文档，插件命令会失败）。
-2. 切到 Ribbon **插件**。
-3. **管理 → 插件管理** 打开管理器：勾选要在功能区显示的插件，点 **确定** 后才生效（取消不改 Ribbon）。隐藏的插件仍已载入，只是命令按钮不出现。
-4. **插件 → 命令** 里，内置示例 `Tamias.Hello` 提供两条：
+2. 插件命令可声明 Ribbon 位置；`Tamias.Nurbs` 的按钮位于 **开始 → 绘制**，Hello 位于 **插件 → 命令**。
+3. **插件 → 管理 → 插件管理**：
+   - “已安装”页显示 icon、作者、内置标识、版本、发布日期、描述、首页和命令所在栏位；取消勾选会立即停用该插件的所有 Ribbon 命令。
+   - “Ribbon 布局”页选择 page/group 后，用上移/下移调整具体插件图标的左右顺序。
+   - 点 **确定** 后启停与顺序立即生效并持久化；取消不修改。停用不会卸载程序集，只关闭命令入口。
+4. `Tamias.Hello` 提供两条：
 
 | 按钮 | 命令 id | 做什么 |
 |---|---|---|
@@ -44,6 +49,8 @@ build/bin/Debug/
 | **删除所选** | `hello.delete_selected` | 对每个选中 id `dispatch delete_entity`（可撤销） |
 
 没有选择时状态栏提示「未选择对象」。插件 `Log` 也走状态栏（约 8 秒）。
+
+NURBS 按钮启动宿主拾点：左键添加控制点，Enter 或双击完成，Esc 或右键取消。完成后生成的实体与内置实体一样支持权重编辑、撤销/重做和文档保存。
 
 切换文档标签时，主窗口会把 `PluginHost` 绑到当前视口；点按钮前会再绑一次。
 
