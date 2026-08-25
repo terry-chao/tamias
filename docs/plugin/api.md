@@ -32,7 +32,7 @@ public interface IHost
 | `Selection` | 当前选中 id 列表（文档选择顺序） |
 | `Log` | UTF-8 日志；主窗口接到后显示状态栏 |
 | `Dispatch` | 把命令名 + 参数文本交给 C++ `CommandSystem`；失败抛 `InvalidOperationException`（宿主会 `Log` 异常消息） |
-| `AddCommand` | 在 `Load` 时登记 Ribbon 按钮。`RibbonPlacement` 可指定稳定的 page/group id、顺序、图标和可选中状态；缺省为 `plugins/commands` |
+| `AddCommand` | 在 `Load` 时登记 Ribbon 按钮。`RibbonPlacement` 可指定稳定的 page/group id、顺序、图标和可选中状态；缺省为 `home/plugins` |
 | `BeginPointInput` | 非阻塞地启动宿主视口拾点；回调返回世界坐标和可选实体 id。每个视口同时只有一个请求 |
 | `CancelPointInput` | 取消指定请求；切换文档或启动另一交互也会取消旧请求 |
 

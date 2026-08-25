@@ -292,9 +292,9 @@ std::int32_t PluginHost::host_register_command(
   cmd.title = title != nullptr && *title != '\0' ? title : id;
   cmd.tooltip = tooltip != nullptr ? tooltip : "";
   cmd.plugin_id = self->current_plugin_id_;
-  cmd.placement.page_id = page_id != nullptr && *page_id != '\0' ? page_id : "plugins";
-  cmd.placement.group_id =
-      group_id != nullptr && *group_id != '\0' ? group_id : "commands";
+  cmd.placement.page_id = page_id != nullptr ? page_id : "";
+  cmd.placement.group_id = group_id != nullptr ? group_id : "";
+  resolve_ribbon_placement(cmd.placement);
   cmd.placement.icon_path = icon_path != nullptr ? icon_path : "";
   cmd.placement.order = order;
   cmd.placement.checkable = (flags & 1) != 0;

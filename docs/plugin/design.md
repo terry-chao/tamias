@@ -65,7 +65,7 @@ UI / 插件
 
 1. **插件不持有内核对象。** 看到的是 id + 种类 + 名字。要改文档，发命令。
 2. **命令名是公共协议。** `delete_entity`、`set_param` 和工具条用同一套注册表（[`register_commands.cpp`](https://github.com/terry-chao/tamias/blob/main/src/command/register_commands.cpp)）。
-3. **宿主失败不能拖死应用。** 找不到 nethost / `managed/Tamias.Host.dll` 时只打日志，主程序照常开。没有插件页而已。
+3. **宿主失败不能拖死应用。** 找不到 nethost / `managed/Tamias.Host.dll` 时只打日志，主程序照常开。没有插件命令而已。
 
 ABI 版本现在是 `4`。C# `Bootstrap.Initialize` 对不上就拒绝加载。v4 在 v3 的 Ribbon/点输入能力上扩充插件登记 metadata，供管理器展示稳定 id、作者、版本、发布日期、描述、首页、图标和内置标识。
 

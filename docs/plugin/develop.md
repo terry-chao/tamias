@@ -102,7 +102,7 @@ host.AddCommand("my.delete_walls", "删除选中的墙", () =>
 
 ## 3. Ribbon 与视口拾点
 
-命令缺省进入 `plugins/commands`。传入 `RibbonPlacement("home", "draw")` 可加入现有“开始 → 绘制”组；page/group 使用稳定 id，不使用翻译后的标题。
+命令缺省进入 `home/plugins`（开始 → 插件）。传入 `RibbonPlacement("home", "draw")` 可加入现有“开始 → 绘制”组；page/group 使用稳定 id，不使用翻译后的标题。
 
 绘制插件通过非阻塞拾点接口编排，鼠标事件、工作面、吸附和取消仍由宿主管理：
 

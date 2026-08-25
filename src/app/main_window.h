@@ -110,7 +110,6 @@ class MainWindow final : public QMainWindow {
   HandleInspector* handle_inspector_ = nullptr;
   PluginHost plugin_host_;
   PluginManager plugin_manager_;
-  RibbonGroup* plugin_commands_group_ = nullptr;
   struct PluginRibbonButton {
     std::string command_id;
     std::string plugin_id;
@@ -119,7 +118,6 @@ class MainWindow final : public QMainWindow {
     RibbonGroup* group = nullptr;
     QToolButton* button = nullptr;
     QAction* action = nullptr;
-    bool in_default_group = false;
   };
   std::vector<PluginRibbonButton> plugin_ribbon_buttons_;
   bool placed_on_primary_ = false;

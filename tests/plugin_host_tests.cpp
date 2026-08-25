@@ -77,6 +77,23 @@ TEST(CommandArgText, ParsesTypedAndInferredValues) {
   EXPECT_DOUBLE_EQ(std::get<double>((*inferred)["radius"]), 1.5);
 }
 
+TEST(PluginHost, DefaultsRibbonPlacementToHomePlugins) {
+  PluginHost host;
+  const HostApi& api = host.native_api();
+  ASSERT_EQ(register_test_plugin(api, "demo.plugin", "Demo"), 0);
+  ASSERT_EQ(api.register_command(api.context, "demo.hello", "Hello", "", nullptr,
+                                 nullptr, "", 0, 0),
+            0);
+  ASSERT_EQ(api.register_command(api.context, "demo.legacy", "Legacy", "",
+                                 "plugins", "commands", "", 0, 0),
+            0);
+  ASSERT_EQ(host.commands().size(), 2u);
+  EXPECT_EQ(host.commands()[0].placement.page_id, "home");
+  EXPECT_EQ(host.commands()[0].placement.group_id, "plugins");
+  EXPECT_EQ(host.commands()[1].placement.page_id, "home");
+  EXPECT_EQ(host.commands()[1].placement.group_id, "plugins");
+}
+
 TEST(PluginHost, RegisterPluginAssociatesCommands) {
   PluginHost host;
   const HostApi& api = host.native_api();

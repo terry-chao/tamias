@@ -360,6 +360,12 @@ MainWindow::MainWindow(QWidget* parent)
   connect(about_action, &QAction::triggered, this, &MainWindow::open_about);
   addAction(about_action);
 
+  auto* manage_action = new QAction(ribbon_icon(QStringLiteral(":/icons/settings.svg")),
+                                    tr("Plugin Manager"), this);
+  manage_action->setToolTip(tr("Choose which loaded plugins appear on the ribbon"));
+  connect(manage_action, &QAction::triggered, this, &MainWindow::open_plugin_manager);
+  addAction(manage_action);
+
   auto* home_action = new QAction(ribbon_icon(QStringLiteral(":/icons/home.svg")),
                                  tr("Welcome"), this);
   home_action->setToolTip(tr("Back to the welcome page"));
@@ -499,6 +505,10 @@ MainWindow::MainWindow(QWidget* parent)
       home_page->add_group(QStringLiteral("settings"), tr("Settings"));
   setting_group->add_action(settings_action);
 
+  RibbonGroup* plugins_group =
+      home_page->add_group(QStringLiteral("plugins"), tr("Plugins"));
+  plugins_group->add_action(manage_action);
+
   RibbonGroup* help_group = home_page->add_group(QStringLiteral("help"), tr("Help"));
   help_group->add_action(about_action);
 
@@ -536,17 +546,6 @@ MainWindow::MainWindow(QWidget* parent)
     }
     plugin_manager_.set_command_order(std::move(order));
   }
-  RibbonPage* plugins_page = ribbon->add_page(QStringLiteral("plugins"), tr("Plugins"));
-  RibbonGroup* manage_group =
-      plugins_page->add_group(QStringLiteral("manage"), tr("Manage"));
-  auto* manage_action = new QAction(ribbon_icon(QStringLiteral(":/icons/settings.svg")),
-                                    tr("Plugin Manager"), this);
-  manage_action->setToolTip(tr("Choose which loaded plugins appear on the ribbon"));
-  connect(manage_action, &QAction::triggered, this, &MainWindow::open_plugin_manager);
-  manage_group->add_action(manage_action);
-
-  plugin_commands_group_ =
-      plugins_page->add_group(QStringLiteral("commands"), tr("Commands"));
   std::vector<const PluginCommand*> plugin_commands;
   plugin_commands.reserve(plugin_host_.commands().size());
   for (const auto& cmd : plugin_host_.commands()) {
@@ -626,7 +625,6 @@ MainWindow::MainWindow(QWidget* parent)
     item.group = target_group;
     item.button = target_group->add_action(action);
     item.action = action;
-    item.in_default_group = target_group == plugin_commands_group_;
     plugin_ribbon_buttons_.push_back(item);
   }
   apply_plugin_visibility();
@@ -838,7 +836,6 @@ void MainWindow::open_plugin_manager() {
 }
 
 void MainWindow::apply_plugin_visibility() {
-  bool any_default_visible = false;
   for (const auto& item : plugin_ribbon_buttons_) {
     const bool visible = plugin_manager_.is_enabled(item.plugin_id);
     if (!visible && item.action != nullptr && item.action->isChecked()) {
@@ -850,11 +847,6 @@ void MainWindow::apply_plugin_visibility() {
     if (item.button != nullptr) {
       item.button->setVisible(visible);
     }
-    any_default_visible =
-        any_default_visible || (visible && item.in_default_group);
-  }
-  if (plugin_commands_group_ != nullptr) {
-    plugin_commands_group_->setVisible(any_default_visible);
   }
 }
 
