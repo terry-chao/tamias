@@ -41,6 +41,7 @@ class PluginHost {
 
   void bind(Document* document, CommandSystem* command_system, AfterEdit after_edit);
   void unbind() { bind(nullptr, nullptr, {}); }
+  void shutdown();
   void set_point_input_handlers(BeginPointInput begin, CancelPointInput cancel) {
     begin_point_input_ = std::move(begin);
     cancel_point_input_ = std::move(cancel);

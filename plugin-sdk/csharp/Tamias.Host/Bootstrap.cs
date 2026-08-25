@@ -47,6 +47,14 @@ public static class Bootstrap
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int Shutdown()
+    {
+        host_?.Detach();
+        host_ = null;
+        return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int Invoke(IntPtr commandIdUtf8)
     {
         try

@@ -90,7 +90,17 @@ PluginHost::PluginHost() : csharp_(std::make_unique<CsharpRuntime>()) {
   api_.cancel_point_input = &PluginHost::host_cancel_point_input;
 }
 
-PluginHost::~PluginHost() = default;
+PluginHost::~PluginHost() { shutdown(); }
+
+void PluginHost::shutdown() {
+  unbind();
+  begin_point_input_ = {};
+  cancel_point_input_ = {};
+  log_sink_ = {};
+  if (csharp_) {
+    csharp_->shutdown();
+  }
+}
 
 void PluginHost::bind(Document* document, CommandSystem* command_system, AfterEdit after_edit) {
   document_ = document;

@@ -673,6 +673,17 @@ MainWindow::MainWindow(QWidget* parent)
   }
 }
 
+MainWindow::~MainWindow() {
+  if (tabs_ != nullptr) {
+    for (int i = 0; i < tabs_->count(); ++i) {
+      if (auto* vp = qobject_cast<DocumentViewport*>(tabs_->widget(i))) {
+        vp->cancel_plugin_point_input();
+      }
+    }
+  }
+  plugin_host_.shutdown();
+}
+
 void MainWindow::showEvent(QShowEvent* event) {
   QMainWindow::showEvent(event);
   if (placed_on_primary_) {

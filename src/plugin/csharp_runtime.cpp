@@ -52,16 +52,24 @@ std::string to_native(const std::filesystem::path& path) { return path.string();
 
 }  // namespace
 
-CsharpRuntime::~CsharpRuntime() {
+CsharpRuntime::~CsharpRuntime() { shutdown(); }
+
+void CsharpRuntime::shutdown() {
 #ifdef TAMIAS_HAS_NETHOST
-  if (hostfxr_handle_ != nullptr && hostfxr_lib_ != nullptr) {
-    auto close = reinterpret_cast<hostfxr_close_fn>(
-        get_export(static_cast<LibraryHandle>(hostfxr_lib_), "hostfxr_close"));
-    if (close != nullptr) {
-      close(static_cast<hostfxr_handle>(hostfxr_handle_));
-    }
-    hostfxr_handle_ = nullptr;
+  if (shutdown_fn_ != nullptr) {
+    (void)shutdown_fn_();
+    shutdown_fn_ = nullptr;
   }
+  invoke_ = nullptr;
+  init_ = nullptr;
+  point_input_completed_ = nullptr;
+  // CoreCLR cannot be unloaded. hostfxr_close only drops the *context*; the
+  // runtime stays in-process and its GC/finalizer threads then race native
+  // destructors. Native debuggers report that as an unhandled coreclr
+  // exception and never finish the session. Leave hostfxr loaded until
+  // process exit.
+  hostfxr_handle_ = nullptr;
+  hostfxr_lib_ = nullptr;
 #endif
 }
 
@@ -98,8 +106,7 @@ Result<void> CsharpRuntime::start(const std::filesystem::path& managed_dir,
       get_export(lib, "hostfxr_initialize_for_runtime_config"));
   auto get_delegate =
       reinterpret_cast<hostfxr_get_runtime_delegate_fn>(get_export(lib, "hostfxr_get_runtime_delegate"));
-  auto close = reinterpret_cast<hostfxr_close_fn>(get_export(lib, "hostfxr_close"));
-  if (init == nullptr || get_delegate == nullptr || close == nullptr) {
+  if (init == nullptr || get_delegate == nullptr) {
     return Err("hostfxr is missing required exports");
   }
 
@@ -137,6 +144,12 @@ Result<void> CsharpRuntime::start(const std::filesystem::path& managed_dir,
 #else
       "Invoke";
 #endif
+  const char_t* shutdown_name =
+#ifdef _WIN32
+      L"Shutdown";
+#else
+      "Shutdown";
+#endif
   const char_t* point_input_completed_name =
 #ifdef _WIN32
       L"PointInputCompleted";
@@ -153,6 +166,11 @@ Result<void> CsharpRuntime::start(const std::filesystem::path& managed_dir,
                      reinterpret_cast<void**>(&invoke_));
   if (rc != 0 || invoke_ == nullptr) {
     return Err("failed to bind Tamias.Host.Bootstrap.Invoke (" + std::to_string(rc) + ")");
+  }
+  rc = load_assembly(assembly_native.c_str(), type_name, shutdown_name, UNMANAGEDCALLERSONLY_METHOD, nullptr,
+                     reinterpret_cast<void**>(&shutdown_fn_));
+  if (rc != 0 || shutdown_fn_ == nullptr) {
+    return Err("failed to bind Tamias.Host.Bootstrap.Shutdown (" + std::to_string(rc) + ")");
   }
   rc = load_assembly(assembly_native.c_str(), type_name, point_input_completed_name,
                      UNMANAGEDCALLERSONLY_METHOD, nullptr,

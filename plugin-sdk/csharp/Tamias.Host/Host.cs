@@ -10,6 +10,7 @@ sealed class Host : IHost
     readonly Dictionary<ulong, Action<PointInputResult>> pointInputCallbacks_ = [];
     readonly object pointInputLock_ = new();
     ulong nextPointInputRequestId_;
+    bool alive_ = true;
 
     public Host(HostApi api)
     {
@@ -18,8 +19,17 @@ sealed class Host : IHost
 
     public IReadOnlyDictionary<string, Action> Actions => actions_;
 
+    internal void Detach()
+    {
+        alive_ = false;
+    }
+
     public void RegisterPlugin(PluginMetadata metadata)
     {
+        if (!alive_)
+        {
+            return;
+        }
         ArgumentNullException.ThrowIfNull(metadata);
         ArgumentException.ThrowIfNullOrEmpty(metadata.Id);
         var fn = As<HostRegisterPluginFn>(api_.RegisterPlugin);
@@ -62,12 +72,17 @@ sealed class Host : IHost
         }
     }
 
-    public string DocumentName => ReadString(As<HostFillStringFn>(api_.DocumentName));
+    public string DocumentName =>
+        alive_ ? ReadString(As<HostFillStringFn>(api_.DocumentName)) : "";
 
     public IReadOnlyList<EntityInfo> Entities
     {
         get
         {
+            if (!alive_)
+            {
+                return [];
+            }
             var countFn = As<HostCountFn>(api_.EntityCount);
             var idAt = As<HostIdAtFn>(api_.EntityIdAt);
             var kindFn = As<HostEntityStringFn>(api_.EntityKind);
@@ -90,6 +105,10 @@ sealed class Host : IHost
     {
         get
         {
+            if (!alive_)
+            {
+                return [];
+            }
             var countFn = As<HostCountFn>(api_.SelectionCount);
             var idAt = As<HostIdAtFn>(api_.SelectionIdAt);
             var n = countFn(api_.Context);
@@ -107,6 +126,10 @@ sealed class Host : IHost
 
     public void Log(string message)
     {
+        if (!alive_)
+        {
+            return;
+        }
         var fn = As<HostLogFn>(api_.Log);
         var p = Utf8(message);
         try
@@ -121,6 +144,10 @@ sealed class Host : IHost
 
     public void Dispatch(string command, CommandArgs? args = null)
     {
+        if (!alive_)
+        {
+            return;
+        }
         var fn = As<HostDispatchFn>(api_.Dispatch);
         var c = Utf8(command);
         var a = Utf8(args?.ToString() ?? "");
@@ -147,6 +174,10 @@ sealed class Host : IHost
     {
         ArgumentException.ThrowIfNullOrEmpty(id);
         ArgumentNullException.ThrowIfNull(action);
+        if (!alive_)
+        {
+            return;
+        }
         placement ??= new RibbonPlacement();
         var fn = As<HostRegisterCommandFn>(api_.RegisterCommand);
         var idPtr = Utf8(id);
@@ -188,6 +219,10 @@ sealed class Host : IHost
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(callback);
+        if (!alive_)
+        {
+            throw new InvalidOperationException("Host is shutting down");
+        }
 
         ulong requestId;
         lock (pointInputLock_)
@@ -238,6 +273,10 @@ sealed class Host : IHost
 
     public void CancelPointInput(ulong requestId)
     {
+        if (!alive_)
+        {
+            return;
+        }
         var fn = As<HostCancelPointInputFn>(api_.CancelPointInput);
         if (fn(api_.Context, requestId) != 0)
         {
