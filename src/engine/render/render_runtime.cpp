@@ -256,11 +256,18 @@ void RenderThread::stop() {
     thread_.join();
   }
   running_ = false;
+  if (device_) {
+    device_->wait_idle();
+  }
   channels_.clear();
   meshes_.clear();
   textures_.clear();
   texture_asset_to_gpu_.clear();
   default_texture_.reset();
+  default_normal_.reset();
+  ibl_irradiance_.reset();
+  ibl_prefilter_.reset();
+  ibl_brdf_lut_.reset();
   shaded_pipeline_.reset();
   wire_pipeline_.reset();
   line_pipeline_.reset();
@@ -279,7 +286,6 @@ void RenderThread::stop() {
   grid_vs_.reset();
   grid_fs_.reset();
   if (device_) {
-    device_->wait_idle();
     device_.reset();
   }
 }
