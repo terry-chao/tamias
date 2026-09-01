@@ -18,10 +18,12 @@ namespace tamias {
 namespace {
 
 constexpr char kMagic[4] = {'T', 'M', 'A', 'S'};
-constexpr std::uint32_t kFormatVersion = 8;
+constexpr std::uint32_t kFormatVersion = 10;
 constexpr std::uint32_t kMinFormatVersion = 5;
 constexpr std::uint32_t kGripsFormatVersion = 7;
 constexpr std::uint32_t kLocationFormatVersion = 8;
+constexpr std::uint32_t kSrgbTextureFormatVersion = 9;
+constexpr std::uint32_t kOpacityFormatVersion = 10;
 
 constexpr std::uint32_t fourcc(char a, char b, char c, char d) {
   return static_cast<std::uint32_t>(static_cast<std::uint8_t>(a)) |
@@ -414,10 +416,13 @@ Result<void> write_material(BinaryWriter& w, const Material& m) {
   if (auto r = w.write_u64(m.albedo_texture_id); !r) {
     return r;
   }
-  return w.write_u64(m.normal_texture_id);
+  if (auto r = w.write_u64(m.normal_texture_id); !r) {
+    return r;
+  }
+  return w.write_f32(m.opacity);
 }
 
-Result<void> read_material(BinaryReader& r, Material& m) {
+Result<void> read_material(BinaryReader& r, Material& m, std::uint32_t version) {
   auto id = r.read_u64();
   if (!id) {
     return Err(id.error());
@@ -451,6 +456,22 @@ Result<void> read_material(BinaryReader& r, Material& m) {
     return Err(normal.error());
   }
   m.normal_texture_id = *normal;
+  m.opacity = 1.f;
+  if (version >= kOpacityFormatVersion) {
+    auto opacity = r.read_f32();
+    if (!opacity) {
+      return Err(opacity.error());
+    }
+    m.opacity = std::clamp(*opacity, 0.f, 1.f);
+  } else if (m.name == "Glass") {
+    // 旧档玻璃是高亮漫反射贴图，真实感下像白塑料；升级为半透明预设。
+    m.opacity = 0.16f;
+    m.albedo_texture_id = 0;
+    m.normal_texture_id = 0;
+    m.roughness = 0.05f;
+    m.metallic = 0.f;
+    m.base_color = {0.52f, 0.76f, 0.84f};
+  }
   return {};
 }
 
@@ -468,12 +489,14 @@ Result<void> write_texture_asset(BinaryWriter& w, const TextureAsset& t) {
     return r;
   }
   if (!t.rgba.empty()) {
-    return w.write_bytes(t.rgba.data(), t.rgba.size());
+    if (auto r = w.write_bytes(t.rgba.data(), t.rgba.size()); !r) {
+      return r;
+    }
   }
-  return {};
+  return w.write_u8(t.srgb ? 1 : 0);
 }
 
-Result<void> read_texture_asset(BinaryReader& r, TextureAsset& t) {
+Result<void> read_texture_asset(BinaryReader& r, TextureAsset& t, std::uint32_t version) {
   auto id = r.read_u64();
   if (!id) {
     return Err(id.error());
@@ -498,7 +521,17 @@ Result<void> read_texture_asset(BinaryReader& r, TextureAsset& t) {
   }
   t.rgba.resize(static_cast<std::size_t>(*size));
   if (*size > 0) {
-    return r.read_bytes(t.rgba.data(), t.rgba.size());
+    if (auto bytes = r.read_bytes(t.rgba.data(), t.rgba.size()); !bytes) {
+      return Err(bytes.error());
+    }
+  }
+  t.srgb = true;
+  if (version >= kSrgbTextureFormatVersion) {
+    auto flag = r.read_u8();
+    if (!flag) {
+      return Err(flag.error());
+    }
+    t.srgb = *flag != 0;
   }
   return {};
 }
@@ -1033,7 +1066,7 @@ Result<Document> read_document_body(BinaryReader& r) {
   }
   for (std::uint64_t i = 0; i < *material_count; ++i) {
     Material material{};
-    if (auto res = read_material(r, material); !res) {
+    if (auto res = read_material(r, material, kFormatVersion); !res) {
       return Err(res.error());
     }
     document.insert_material(std::move(material));
@@ -1045,7 +1078,7 @@ Result<Document> read_document_body(BinaryReader& r) {
   }
   for (std::uint64_t i = 0; i < *texture_count; ++i) {
     TextureAsset texture{};
-    if (auto res = read_texture_asset(r, texture); !res) {
+    if (auto res = read_texture_asset(r, texture, kFormatVersion); !res) {
       return Err(res.error());
     }
     document.insert_texture(std::move(texture));
@@ -1463,7 +1496,7 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes) 
       materials.reserve(static_cast<std::size_t>(*count));
       for (std::uint64_t m = 0; m < *count; ++m) {
         Material mat{};
-        if (auto res = read_material(chunk_r, mat); !res) {
+        if (auto res = read_material(chunk_r, mat, *version); !res) {
           return Err(res.error());
         }
         materials.push_back(std::move(mat));
@@ -1477,7 +1510,7 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes) 
       textures.reserve(static_cast<std::size_t>(*count));
       for (std::uint64_t t = 0; t < *count; ++t) {
         TextureAsset tex{};
-        if (auto res = read_texture_asset(chunk_r, tex); !res) {
+        if (auto res = read_texture_asset(chunk_r, tex, *version); !res) {
           return Err(res.error());
         }
         textures.push_back(std::move(tex));

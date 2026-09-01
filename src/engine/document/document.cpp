@@ -1,5 +1,6 @@
 #include "engine/document/document.h"
 
+#include "engine/math/math.h"
 #include "entity/entity_grip.h"
 #include "entity/kind_display_color.h"
 
@@ -89,6 +90,40 @@ TextureAsset make_material_texture(Fn&& color_at) {
   return texture;
 }
 
+template <typename HeightFn>
+TextureAsset make_normal_texture(HeightFn&& height_at, float strength) {
+  TextureAsset texture;
+  texture.width = kMaterialTextureSize;
+  texture.height = kMaterialTextureSize;
+  texture.srgb = false;
+  texture.rgba.resize(static_cast<std::size_t>(kMaterialTextureSize) *
+                      kMaterialTextureSize * 4);
+  const auto wrap = [](int v) {
+    const int n = static_cast<int>(kMaterialTextureSize);
+    int r = v % n;
+    if (r < 0) {
+      r += n;
+    }
+    return static_cast<std::uint32_t>(r);
+  };
+  for (std::uint32_t y = 0; y < kMaterialTextureSize; ++y) {
+    for (std::uint32_t x = 0; x < kMaterialTextureSize; ++x) {
+      const float hL = height_at(wrap(static_cast<int>(x) - 1), y);
+      const float hR = height_at(wrap(static_cast<int>(x) + 1), y);
+      const float hD = height_at(x, wrap(static_cast<int>(y) - 1));
+      const float hU = height_at(x, wrap(static_cast<int>(y) + 1));
+      Vec3 n = normalize(Vec3{(hL - hR) * strength, (hD - hU) * strength, 1.f});
+      const std::size_t i =
+          (static_cast<std::size_t>(y) * kMaterialTextureSize + x) * 4;
+      texture.rgba[i + 0] = static_cast<std::uint8_t>((n.x * 0.5f + 0.5f) * 255.f);
+      texture.rgba[i + 1] = static_cast<std::uint8_t>((n.y * 0.5f + 0.5f) * 255.f);
+      texture.rgba[i + 2] = static_cast<std::uint8_t>((n.z * 0.5f + 0.5f) * 255.f);
+      texture.rgba[i + 3] = 255;
+    }
+  }
+  return texture;
+}
+
 }  // namespace
 
 void Document::seed_default_materials() {
@@ -129,16 +164,6 @@ void Document::seed_default_materials() {
         return Vec3{t, t, t};
       })).id;
 
-  const std::uint64_t glass_tex_id =
-      add_texture(make_material_texture([](std::uint32_t x, std::uint32_t y) {
-        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
-        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
-        const float mottling = fbm_uv(u, v, 8, 4);
-        const float grain = material_hash(x, y);
-        const float t = 0.78f + 0.018f * mottling + 0.012f * grain;
-        return Vec3{0.96f * t, 0.99f * t, t};
-      })).id;
-
   const std::uint64_t wood_tex_id =
       add_texture(make_material_texture([](std::uint32_t x, std::uint32_t y) {
         const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
@@ -162,21 +187,53 @@ void Document::seed_default_materials() {
         return Vec3{t, t * 0.995f, t * 0.98f};
       })).id;
 
+  const std::uint64_t concrete_n_id =
+      add_texture(make_normal_texture(
+                      [](std::uint32_t x, std::uint32_t y) {
+                        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
+                        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
+                        return fbm_uv(u, v, 10, 6) * 0.65f + value_noise(u * 64.f, v * 64.f, 64) * 0.35f;
+                      },
+                      4.f))
+          .id;
+  const std::uint64_t wood_n_id =
+      add_texture(make_normal_texture(
+                      [kPi](std::uint32_t x, std::uint32_t y) {
+                        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
+                        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
+                        const float warp = 0.28f * fbm_uv(u, v, 8, 5);
+                        return 0.5f + 0.5f * std::sin(2.f * kPi * (u * 28.f + warp));
+                      },
+                      3.5f))
+          .id;
+  const std::uint64_t steel_n_id =
+      add_texture(make_normal_texture(
+                      [kPi](std::uint32_t x, std::uint32_t y) {
+                        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
+                        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
+                        const float warp = 0.12f * fbm_uv(u, v, 16, 4);
+                        return 0.5f + 0.5f * std::sin(2.f * kPi * (u * 72.f + warp));
+                      },
+                      1.6f))
+          .id;
+
   auto seed = [this](std::string name, Vec3 color, float roughness, float metallic,
-                     std::uint64_t albedo = 0) {
+                     std::uint64_t albedo = 0, std::uint64_t normal = 0, float opacity = 1.f) {
     Material m{};
     m.name = std::move(name);
     m.base_color = color;
     m.roughness = roughness;
     m.metallic = metallic;
+    m.opacity = opacity;
     m.albedo_texture_id = albedo;
+    m.normal_texture_id = normal;
     add_material(std::move(m));
   };
   seed("Default", {0.78f, 0.81f, 0.86f}, 0.9f, 0.0f, default_tex_id);
-  seed("Concrete", {0.72f, 0.66f, 0.56f}, 0.92f, 0.0f, concrete_tex_id);
-  seed("Steel", {0.55f, 0.57f, 0.62f}, 0.4f, 0.9f, steel_tex_id);
-  seed("Glass", {0.80f, 0.88f, 0.90f}, 0.1f, 0.0f, glass_tex_id);
-  seed("Wood", {0.55f, 0.40f, 0.26f}, 0.7f, 0.0f, wood_tex_id);
+  seed("Concrete", {0.72f, 0.66f, 0.56f}, 0.92f, 0.0f, concrete_tex_id, concrete_n_id);
+  seed("Steel", {0.55f, 0.57f, 0.62f}, 0.4f, 0.9f, steel_tex_id, steel_n_id);
+  seed("Glass", {0.52f, 0.76f, 0.84f}, 0.05f, 0.0f, 0, 0, 0.16f);
+  seed("Wood", {0.55f, 0.40f, 0.26f}, 0.7f, 0.0f, wood_tex_id, wood_n_id);
   seed("Plaster", {0.92f, 0.90f, 0.85f}, 0.95f, 0.0f, plaster_tex_id);
 }
 
@@ -375,6 +432,7 @@ std::vector<SceneDrawItem> Document::render_items(const Frustum* frustum) const 
           item.color = m->base_color;
           item.roughness = m->roughness;
           item.metallic = m->metallic;
+          item.opacity = m->opacity;
           item.albedo_texture_id = m->albedo_texture_id;
           item.normal_texture_id = m->normal_texture_id;
         }

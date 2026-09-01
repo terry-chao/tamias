@@ -64,6 +64,7 @@ void BindMaterialCommand::record(SceneGraphDrawContext& ctx) {
   ctx.category_color = category_color;
   ctx.material_roughness = roughness;
   ctx.material_metallic = metallic;
+  ctx.material_opacity = opacity;
   ctx.material_albedo_texture_id = albedo_texture_id;
   ctx.material_normal_texture_id = normal_texture_id;
 }
@@ -143,18 +144,39 @@ void RecordCommands::apply(DrawableNode& node) {
 
   const bool as_lines = ctx_.lines || mesh.line_list;
   const bool use_material = !as_lines && ctx_.mode_value > 1.5f;
+  const bool transmissive = use_material && ctx_.material_opacity < 0.999f;
+  if (ctx_.transparent_pass) {
+    if (!transmissive) {
+      return;
+    }
+  } else if (transmissive) {
+    return;
+  }
 
-  // 绑定 albedo 纹理：真实感且有贴图且已上传 → 实纹理；着色模式只用构件色。
-  Texture* bound = ctx_.default_texture;
+  // 绑定 albedo / normal：真实感且已上传 → 实纹理；着色模式只用构件色。
+  Texture* bound_albedo = ctx_.default_texture;
+  Texture* bound_normal = ctx_.default_normal != nullptr ? ctx_.default_normal : ctx_.default_texture;
   bool has_albedo = false;
-  if (use_material && ctx_.material_albedo_texture_id != 0 &&
-      ctx_.texture_asset_to_gpu != nullptr && ctx_.textures != nullptr) {
-    const auto tex_it = ctx_.texture_asset_to_gpu->find(ctx_.material_albedo_texture_id);
-    if (tex_it != ctx_.texture_asset_to_gpu->end()) {
-      const auto gtex_it = ctx_.textures->find(tex_it->second);
-      if (gtex_it != ctx_.textures->end()) {
-        bound = gtex_it->second.texture.get();
-        has_albedo = true;
+  bool has_normal = false;
+  if (use_material && ctx_.texture_asset_to_gpu != nullptr && ctx_.textures != nullptr) {
+    if (ctx_.material_albedo_texture_id != 0) {
+      const auto tex_it = ctx_.texture_asset_to_gpu->find(ctx_.material_albedo_texture_id);
+      if (tex_it != ctx_.texture_asset_to_gpu->end()) {
+        const auto gtex_it = ctx_.textures->find(tex_it->second);
+        if (gtex_it != ctx_.textures->end()) {
+          bound_albedo = gtex_it->second.texture.get();
+          has_albedo = true;
+        }
+      }
+    }
+    if (ctx_.material_normal_texture_id != 0) {
+      const auto tex_it = ctx_.texture_asset_to_gpu->find(ctx_.material_normal_texture_id);
+      if (tex_it != ctx_.texture_asset_to_gpu->end()) {
+        const auto gtex_it = ctx_.textures->find(tex_it->second);
+        if (gtex_it != ctx_.textures->end()) {
+          bound_normal = gtex_it->second.texture.get();
+          has_normal = true;
+        }
       }
     }
   }
@@ -169,11 +191,14 @@ void RecordCommands::apply(DrawableNode& node) {
              std::to_string(ctx_.material_color.z));
     *ctx_.texture_diag_logged = true;
   }
-  if (bound != nullptr) {
-    ctx_.command_list->set_texture(*bound, 0);
-  }
 
-  if (as_lines) {
+  // Vulkan 的 set_texture 依赖当前 pipeline layout；先绑管线再绑描述符。
+  if (transmissive) {
+    if (ctx_.blend_pipeline == nullptr) {
+      return;
+    }
+    ctx_.command_list->set_pipeline(*ctx_.blend_pipeline);
+  } else if (as_lines) {
     if (ctx_.entity_line_pipeline == nullptr) {
       return;
     }
@@ -191,6 +216,12 @@ void RecordCommands::apply(DrawableNode& node) {
       ctx_.command_list->set_pipeline(*ctx_.shaded_pipeline);
     }
   }
+  if (bound_albedo != nullptr) {
+    ctx_.command_list->set_texture(*bound_albedo, kTextureSlotAlbedo);
+  }
+  if (bound_normal != nullptr) {
+    ctx_.command_list->set_texture(*bound_normal, kTextureSlotNormal);
+  }
 
   const Vec3 color = use_material ? ctx_.material_color : ctx_.category_color;
   PushConstants pc{};
@@ -199,11 +230,11 @@ void RecordCommands::apply(DrawableNode& node) {
   pc.color[0] = color.x;
   pc.color[1] = color.y;
   pc.color[2] = color.z;
-  pc.color[3] = 1.f;
+  pc.color[3] = use_material ? ctx_.material_opacity : 1.f;
   pc.material[0] = use_material ? ctx_.material_roughness : 0.6f;
   pc.material[1] = use_material ? ctx_.material_metallic : 0.f;
   pc.material[2] = has_albedo ? 1.f : 0.f;
-  pc.material[3] = use_material && ctx_.material_normal_texture_id != 0 ? 1.f : 0.f;
+  pc.material[3] = has_normal ? 1.f : 0.f;
   pc.light_dir_selected[0] = 0.45f;
   pc.light_dir_selected[1] = 0.35f;
   pc.light_dir_selected[2] = 0.82f;
@@ -212,6 +243,10 @@ void RecordCommands::apply(DrawableNode& node) {
   pc.eye_pos_mode[1] = ctx_.eye_position.y;
   pc.eye_pos_mode[2] = ctx_.eye_position.z;
   pc.eye_pos_mode[3] = as_lines ? 3.f : ctx_.mode_value;
+  pc.lighting[0] = ctx_.exposure;
+  pc.lighting[1] = ctx_.key_light_intensity;
+  pc.lighting[2] = ctx_.ibl_max_mip;
+  pc.lighting[3] = mesh.has_texcoord ? 1.f : 0.f;
   ctx_.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
   ctx_.command_list->set_vertex_buffer(*mesh.vertex_buffer);
   ctx_.command_list->set_index_buffer(*mesh.index_buffer);
@@ -231,6 +266,7 @@ void bind_item_material(BindMaterialCommand& material, const SceneDrawItem& item
   material.category_color = item.category_color;
   material.roughness = item.roughness;
   material.metallic = item.metallic;
+  material.opacity = item.opacity;
   material.albedo_texture_id = item.albedo_texture_id;
   material.normal_texture_id = item.normal_texture_id;
 }

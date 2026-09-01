@@ -52,6 +52,8 @@ class OpenGLTexture final : public Texture {
   [[nodiscard]] GLuint handle() const { return texture_; }
 
   Result<void> write(std::uint64_t offset, std::span<const std::byte> data) override;
+  Result<void> write_subresource(std::uint32_t mip, std::uint32_t layer,
+                                 std::span<const std::byte> data) override;
 
  private:
   OpenGLDevice* device_ = nullptr;
@@ -75,12 +77,13 @@ class OpenGLShaderModule final : public ShaderModule {
 
 class OpenGLPipeline final : public PipelineState {
  public:
-  OpenGLPipeline(GLuint program, bool wireframe, bool depth_test, bool depth_write,
+  OpenGLPipeline(GLuint program, bool wireframe, bool depth_test, bool depth_write, bool blend,
                  PrimitiveTopology topology)
       : program_(program),
         wireframe_(wireframe),
         depth_test_(depth_test),
         depth_write_(depth_write),
+        blend_(blend),
         topology_(topology) {}
   ~OpenGLPipeline() override {
     if (program_) {
@@ -91,6 +94,7 @@ class OpenGLPipeline final : public PipelineState {
   [[nodiscard]] bool wireframe() const { return wireframe_; }
   [[nodiscard]] bool depth_test() const { return depth_test_; }
   [[nodiscard]] bool depth_write() const { return depth_write_; }
+  [[nodiscard]] bool blend() const { return blend_; }
   [[nodiscard]] PrimitiveTopology topology() const { return topology_; }
 
  private:
@@ -98,6 +102,7 @@ class OpenGLPipeline final : public PipelineState {
   bool wireframe_ = false;
   bool depth_test_ = true;
   bool depth_write_ = true;
+  bool blend_ = false;
   PrimitiveTopology topology_ = PrimitiveTopology::TriangleList;
 };
 
@@ -296,28 +301,87 @@ Result<void> OpenGLTexture::write(std::uint64_t offset, std::span<const std::byt
   if (offset != 0) {
     return Err("OpenGL texture write offset must be 0");
   }
+  return write_subresource(0, 0, data);
+}
+
+GLenum gl_texture_target(const TextureDesc& desc) {
+  return desc.dimension == TextureDesc::Dimension::Cube ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
+}
+
+void gl_texture_formats(const TextureDesc& desc, GLint& internal, GLenum& format, GLenum& type) {
+  switch (desc.format) {
+    case TextureDesc::Format::R8G8B8A8_UNORM:
+      internal = static_cast<GLint>(GL_RGBA8);
+      format = GL_RGBA;
+      type = GL_UNSIGNED_BYTE;
+      break;
+    case TextureDesc::Format::R16G16B16A16_SFLOAT:
+      internal = static_cast<GLint>(GL_RGBA16F);
+      format = GL_RGBA;
+      type = GL_HALF_FLOAT;
+      break;
+    case TextureDesc::Format::R16G16_SFLOAT:
+      internal = static_cast<GLint>(GL_RG16F);
+      format = GL_RG;
+      type = GL_HALF_FLOAT;
+      break;
+    default:
+      internal = static_cast<GLint>(GL_SRGB8_ALPHA8);
+      format = GL_RGBA;
+      type = GL_UNSIGNED_BYTE;
+      break;
+  }
+}
+
+Result<void> OpenGLTexture::write_subresource(std::uint32_t mip, std::uint32_t layer,
+                                              std::span<const std::byte> data) {
   if (!device_) {
     return Err("OpenGL texture has no device");
   }
-  const std::size_t expected = static_cast<std::size_t>(desc_.width) * desc_.height * 4;
+  const std::uint32_t mips = std::max(1u, desc_.mip_levels);
+  const std::uint32_t layers = texture_layer_count(desc_);
+  if (mip >= mips || layer >= layers) {
+    return Err("OpenGL texture subresource out of range");
+  }
+  const std::uint32_t w = texture_mip_extent(desc_.width, mip);
+  const std::uint32_t h = texture_mip_extent(desc_.height, mip);
+  const std::size_t expected =
+      static_cast<std::size_t>(w) * h * texture_bytes_per_pixel(desc_.format);
   if (data.size() < expected) {
     return Err("OpenGL texture write data too small");
   }
   if (auto r = device_->make_current_dummy(); !r) {
     return Err(r.error());
   }
-  gl::BindTexture(GL_TEXTURE_2D, texture_);
-  // albedo 用 sRGB（采样时硬件转线性）；UNORM 留给二期 normal 图（无 sRGB 转换）。
-  const GLint internal = desc_.format == TextureDesc::Format::R8G8B8A8_UNORM
-                             ? static_cast<GLint>(GL_RGBA8)
-                             : static_cast<GLint>(GL_SRGB8_ALPHA8);
-  gl::TexImage2D(GL_TEXTURE_2D, 0, internal, static_cast<GLsizei>(desc_.width),
-                 static_cast<GLsizei>(desc_.height), 0, GL_RGBA, GL_UNSIGNED_BYTE, data.data());
-  gl::TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  gl::TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  gl::TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  gl::TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  gl::TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 8);
+  const GLenum target = gl_texture_target(desc_);
+  gl::BindTexture(target, texture_);
+  GLint internal = 0;
+  GLenum format = GL_RGBA;
+  GLenum type = GL_UNSIGNED_BYTE;
+  gl_texture_formats(desc_, internal, format, type);
+  const GLenum image_target = desc_.dimension == TextureDesc::Dimension::Cube
+                                  ? static_cast<GLenum>(GL_TEXTURE_CUBE_MAP_POSITIVE_X + layer)
+                                  : GL_TEXTURE_2D;
+  gl::TexImage2D(image_target, static_cast<GLint>(mip), internal, static_cast<GLsizei>(w),
+                 static_cast<GLsizei>(h), 0, format, type, data.data());
+  const GLint wrap = desc_.address_mode == TextureDesc::AddressMode::Clamp
+                         ? static_cast<GLint>(GL_CLAMP_TO_EDGE)
+                         : static_cast<GLint>(GL_REPEAT);
+  gl::TexParameteri(target, GL_TEXTURE_WRAP_S, wrap);
+  gl::TexParameteri(target, GL_TEXTURE_WRAP_T, wrap);
+  if (desc_.dimension == TextureDesc::Dimension::Cube) {
+    gl::TexParameteri(target, GL_TEXTURE_WRAP_R, wrap);
+  }
+  gl::TexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  gl::TexParameteri(target, GL_TEXTURE_MIN_FILTER,
+                    mips > 1 ? static_cast<GLint>(GL_LINEAR_MIPMAP_LINEAR)
+                             : static_cast<GLint>(GL_LINEAR));
+  gl::TexParameteri(target, GL_TEXTURE_MAX_LEVEL, static_cast<GLint>(mips - 1));
+  if (desc_.dimension != TextureDesc::Dimension::Cube &&
+      desc_.format != TextureDesc::Format::R16G16B16A16_SFLOAT &&
+      desc_.format != TextureDesc::Format::R16G16_SFLOAT) {
+    gl::TexParameteri(target, GL_TEXTURE_MAX_ANISOTROPY_EXT, 8);
+  }
   device_->release_current();
   return {};
 }
@@ -754,7 +818,7 @@ Result<std::unique_ptr<PipelineState>> OpenGLDevice::create_pipeline(const Pipel
   }
   release_current();
   return std::make_unique<OpenGLPipeline>(program, desc.wireframe, desc.depth_test,
-                                          desc.depth_write, desc.topology);
+                                          desc.depth_write, desc.blend, desc.topology);
 }
 
 OpenGLSwapChain::OpenGLSwapChain(OpenGLDevice* device, SwapChainDesc desc)
@@ -850,6 +914,12 @@ void OpenGLCommandList::set_pipeline(PipelineState& pipeline) {
     gl::Disable(GL_DEPTH_TEST);
   }
   gl::DepthMask(pipeline_->depth_write() ? GL_TRUE : GL_FALSE);
+  if (pipeline_->blend()) {
+    gl::Enable(GL_BLEND);
+    gl::BlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+  } else {
+    gl::Disable(GL_BLEND);
+  }
 }
 
 void OpenGLCommandList::set_vertex_buffer(Buffer& buffer, std::uint64_t offset) {
@@ -869,8 +939,13 @@ void OpenGLCommandList::set_push_constants(std::span<const std::byte> data) {
 }
 
 void OpenGLCommandList::set_texture(Texture& texture, std::uint32_t slot) {
+  auto& tex = static_cast<OpenGLTexture&>(texture);
   gl::ActiveTexture(GL_TEXTURE0 + slot);
-  gl::BindTexture(GL_TEXTURE_2D, static_cast<OpenGLTexture&>(texture).handle());
+  const GLenum target = tex.desc().dimension == TextureDesc::Dimension::Cube ? GL_TEXTURE_CUBE_MAP
+                                                                             : GL_TEXTURE_2D;
+  const GLenum other = target == GL_TEXTURE_CUBE_MAP ? GL_TEXTURE_2D : GL_TEXTURE_CUBE_MAP;
+  gl::BindTexture(other, 0);
+  gl::BindTexture(target, tex.handle());
 }
 
 void OpenGLCommandList::set_viewport(float x, float y, float w, float h, float, float) {

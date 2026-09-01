@@ -65,16 +65,10 @@ class WebGLTexture final : public Texture {
     if (offset != 0) {
       return Err("WebGL texture write offset must be 0");
     }
-    const std::size_t expected =
-        static_cast<std::size_t>(desc_.width) * desc_.height * 4;
-    if (data.size() != expected) {
-      return Err("WebGL texture write size mismatch");
-    }
-    glBindTexture(GL_TEXTURE_2D, texture_);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, static_cast<GLsizei>(desc_.width),
-                    static_cast<GLsizei>(desc_.height), GL_RGBA, GL_UNSIGNED_BYTE, data.data());
-    return {};
+    return write_subresource(0, 0, data);
   }
+  Result<void> write_subresource(std::uint32_t mip, std::uint32_t layer,
+                                 std::span<const std::byte> data) override;
 
  private:
   TextureDesc desc_{};
@@ -97,10 +91,12 @@ class WebGLShaderModule final : public ShaderModule {
 
 class WebGLPipeline final : public PipelineState {
  public:
-  WebGLPipeline(GLuint program, bool depth_test, bool depth_write, PrimitiveTopology topology)
+  WebGLPipeline(GLuint program, bool depth_test, bool depth_write, bool blend,
+                PrimitiveTopology topology)
       : program_(program),
         depth_test_(depth_test),
         depth_write_(depth_write),
+        blend_(blend),
         topology_(topology) {}
   ~WebGLPipeline() override {
     if (program_) {
@@ -110,12 +106,14 @@ class WebGLPipeline final : public PipelineState {
   [[nodiscard]] GLuint program() const { return program_; }
   [[nodiscard]] bool depth_test() const { return depth_test_; }
   [[nodiscard]] bool depth_write() const { return depth_write_; }
+  [[nodiscard]] bool blend() const { return blend_; }
   [[nodiscard]] PrimitiveTopology topology() const { return topology_; }
 
  private:
   GLuint program_ = 0;
   bool depth_test_ = true;
   bool depth_write_ = true;
+  bool blend_ = false;
   PrimitiveTopology topology_ = PrimitiveTopology::TriangleList;
 };
 
@@ -164,8 +162,13 @@ class WebGLCommandList final : public CommandList {
   }
   void set_push_constants(std::span<const std::byte> data) override;
   void set_texture(Texture& texture, std::uint32_t slot = 0) override {
+    auto& tex = static_cast<WebGLTexture&>(texture);
     glActiveTexture(GL_TEXTURE0 + slot);
-    glBindTexture(GL_TEXTURE_2D, static_cast<WebGLTexture&>(texture).handle());
+    const GLenum target =
+        tex.desc().dimension == TextureDesc::Dimension::Cube ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
+    const GLenum other = target == GL_TEXTURE_CUBE_MAP ? GL_TEXTURE_2D : GL_TEXTURE_CUBE_MAP;
+    glBindTexture(other, 0);
+    glBindTexture(target, tex.handle());
   }
   void draw_indexed(const DrawIndexedDesc& desc) override;
   void set_viewport(float x, float y, float w, float h, float, float) override {
@@ -254,6 +257,12 @@ void WebGLCommandList::set_pipeline(PipelineState& pipeline) {
     glDisable(GL_DEPTH_TEST);
   }
   glDepthMask(pipeline_->depth_write() ? GL_TRUE : GL_FALSE);
+  if (pipeline_->blend()) {
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+  } else {
+    glDisable(GL_BLEND);
+  }
 }
 
 void WebGLCommandList::set_push_constants(std::span<const std::byte> data) {
@@ -380,15 +389,79 @@ Result<std::unique_ptr<Texture>> WebGLDevice::create_texture(const TextureDesc& 
   }
   GLuint texture = 0;
   glGenTextures(1, &texture);
-  glBindTexture(GL_TEXTURE_2D, texture);
-  const GLint internal = GL_SRGB8_ALPHA8;
-  glTexImage2D(GL_TEXTURE_2D, 0, internal, static_cast<GLsizei>(desc.width),
-               static_cast<GLsizei>(desc.height), 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  const GLenum target =
+      desc.dimension == TextureDesc::Dimension::Cube ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
+  glBindTexture(target, texture);
+  const GLint wrap = desc.address_mode == TextureDesc::AddressMode::Clamp ? GL_CLAMP_TO_EDGE
+                                                                          : GL_REPEAT;
+  glTexParameteri(target, GL_TEXTURE_WRAP_S, wrap);
+  glTexParameteri(target, GL_TEXTURE_WRAP_T, wrap);
+  if (desc.dimension == TextureDesc::Dimension::Cube) {
+    glTexParameteri(target, GL_TEXTURE_WRAP_R, wrap);
+  }
+  const std::uint32_t mips = std::max(1u, desc.mip_levels);
+  glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(target, GL_TEXTURE_MIN_FILTER, mips > 1 ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
   return std::make_unique<WebGLTexture>(desc, texture);
+}
+
+namespace {
+
+void webgl_texture_formats(const TextureDesc& desc, GLint& internal, GLenum& format, GLenum& type) {
+  switch (desc.format) {
+    case TextureDesc::Format::R8G8B8A8_UNORM:
+      internal = GL_RGBA8;
+      format = GL_RGBA;
+      type = GL_UNSIGNED_BYTE;
+      break;
+    case TextureDesc::Format::R16G16B16A16_SFLOAT:
+      internal = GL_RGBA16F;
+      format = GL_RGBA;
+      type = GL_HALF_FLOAT;
+      break;
+    case TextureDesc::Format::R16G16_SFLOAT:
+      internal = GL_RG16F;
+      format = GL_RG;
+      type = GL_HALF_FLOAT;
+      break;
+    default:
+      internal = GL_SRGB8_ALPHA8;
+      format = GL_RGBA;
+      type = GL_UNSIGNED_BYTE;
+      break;
+  }
+}
+
+}  // namespace
+
+Result<void> WebGLTexture::write_subresource(std::uint32_t mip, std::uint32_t layer,
+                                             std::span<const std::byte> data) {
+  const std::uint32_t mips = std::max(1u, desc_.mip_levels);
+  const std::uint32_t layers = texture_layer_count(desc_);
+  if (mip >= mips || layer >= layers) {
+    return Err("WebGL texture subresource out of range");
+  }
+  const std::uint32_t w = texture_mip_extent(desc_.width, mip);
+  const std::uint32_t h = texture_mip_extent(desc_.height, mip);
+  const std::size_t expected =
+      static_cast<std::size_t>(w) * h * texture_bytes_per_pixel(desc_.format);
+  if (data.size() < expected) {
+    return Err("WebGL texture write size mismatch");
+  }
+  const GLenum target =
+      desc_.dimension == TextureDesc::Dimension::Cube ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
+  glBindTexture(target, texture_);
+  GLint internal = 0;
+  GLenum format = GL_RGBA;
+  GLenum type = GL_UNSIGNED_BYTE;
+  webgl_texture_formats(desc_, internal, format, type);
+  const GLenum image_target = desc_.dimension == TextureDesc::Dimension::Cube
+                                  ? static_cast<GLenum>(GL_TEXTURE_CUBE_MAP_POSITIVE_X + layer)
+                                  : GL_TEXTURE_2D;
+  glTexImage2D(image_target, static_cast<GLint>(mip), internal, static_cast<GLsizei>(w),
+               static_cast<GLsizei>(h), 0, format, type, data.data());
+  glTexParameteri(target, GL_TEXTURE_MAX_LEVEL, static_cast<GLint>(mips - 1));
+  return {};
 }
 
 Result<std::unique_ptr<ShaderModule>> WebGLDevice::create_shader_module(
@@ -451,7 +524,31 @@ Result<std::unique_ptr<PipelineState>> WebGLDevice::create_pipeline(const Pipeli
     glUniform1i(albedo, 0);
     glUseProgram(0);
   }
-  return std::make_unique<WebGLPipeline>(program, desc.depth_test, desc.depth_write,
+  const GLint normal = glGetUniformLocation(program, "normal_tex");
+  if (normal >= 0) {
+    glUseProgram(program);
+    glUniform1i(normal, 1);
+    glUseProgram(0);
+  }
+  const GLint irradiance = glGetUniformLocation(program, "irradiance_tex");
+  if (irradiance >= 0) {
+    glUseProgram(program);
+    glUniform1i(irradiance, 2);
+    glUseProgram(0);
+  }
+  const GLint prefilter = glGetUniformLocation(program, "prefilter_tex");
+  if (prefilter >= 0) {
+    glUseProgram(program);
+    glUniform1i(prefilter, 3);
+    glUseProgram(0);
+  }
+  const GLint brdf = glGetUniformLocation(program, "brdf_lut");
+  if (brdf >= 0) {
+    glUseProgram(program);
+    glUniform1i(brdf, 4);
+    glUseProgram(0);
+  }
+  return std::make_unique<WebGLPipeline>(program, desc.depth_test, desc.depth_write, desc.blend,
                                          desc.topology);
 }
 

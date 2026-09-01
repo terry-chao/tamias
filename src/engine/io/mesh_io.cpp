@@ -347,6 +347,28 @@ Result<MeshCpu> load_glb(const std::filesystem::path& path) {
     }
   }
 
+  std::optional<double> uv_accessor;
+  const auto uv_attr = json.find("\"TEXCOORD_0\"", meshes_pos);
+  if (uv_attr != std::string::npos && uv_attr < pos_attr + 400) {
+    uv_accessor = find_number_after("\"TEXCOORD_0\"", uv_attr);
+  }
+  if (uv_accessor) {
+    std::uint32_t uv_count = 0, uv_comp = 0;
+    std::uint64_t uv_off = 0;
+    int uv_view = -1;
+    if (accessor_info(static_cast<int>(*uv_accessor), uv_count, uv_comp, uv_off, uv_view)) {
+      std::uint64_t uv_view_off = 0, uv_view_len = 0;
+      if (buffer_view_offset(uv_view, uv_view_off, uv_view_len)) {
+        const char* uv_ptr = bin.data() + uv_view_off + uv_off;
+        for (std::uint32_t i = 0; i < std::min(uv_count, pos_count); ++i) {
+          const float* uv = reinterpret_cast<const float*>(uv_ptr + i * sizeof(float) * 2);
+          mesh.vertices[i].uv = {uv[0], uv[1]};
+        }
+        mesh.has_texcoord = uv_count > 0;
+      }
+    }
+  }
+
   std::uint32_t idx_count = 0, idx_comp = 0;
   std::uint64_t idx_off = 0;
   int idx_view = -1;

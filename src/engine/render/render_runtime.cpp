@@ -2,6 +2,8 @@
 
 #include "engine/core/executable_directory.h"
 #include "engine/core/log.h"
+#include "engine/math/math.h"
+#include "engine/render/ibl.h"
 #include "engine/render/scene_graph.h"
 #if defined(TAMIAS_HAS_RHI_WEBGL)
 #include "engine/render/rhi/webgl/webgl_shaders.h"
@@ -159,6 +161,7 @@ Result<GpuMesh> create_gpu_mesh(RHIDevice& device, MeshCpu mesh) {
   gpu.index_count = static_cast<std::uint32_t>(mesh.indices.size());
   gpu.bounds = mesh.bounds;
   gpu.line_list = mesh.line_list;
+  gpu.has_texcoord = mesh.has_texcoord;
   return gpu;
 }
 
@@ -262,6 +265,7 @@ void RenderThread::stop() {
   wire_pipeline_.reset();
   line_pipeline_.reset();
   entity_line_pipeline_.reset();
+  blend_pipeline_.reset();
   sky_pipeline_.reset();
   grid_pipeline_.reset();
   axes_mesh_ = GpuMesh{};
@@ -352,6 +356,7 @@ Result<std::uint64_t> RenderThread::upload_mesh(std::uint64_t asset_id, MeshCpu 
       gpu.index_count = static_cast<std::uint32_t>(mesh.indices.size());
       gpu.bounds = mesh.bounds;
       gpu.line_list = mesh.line_list;
+      gpu.has_texcoord = mesh.has_texcoord;
       const auto id = next_mesh_id_++;
       meshes_.emplace(id, std::move(gpu));
       asset_to_gpu_[asset_id] = id;
@@ -378,7 +383,8 @@ Result<std::uint64_t> RenderThread::upload_texture(std::uint64_t asset_id, Textu
       TextureDesc desc{};
       desc.width = asset.width;
       desc.height = asset.height;
-      desc.format = TextureDesc::Format::R8G8B8A8_SRGB;
+      desc.format = asset.srgb ? TextureDesc::Format::R8G8B8A8_SRGB
+                               : TextureDesc::Format::R8G8B8A8_UNORM;
       desc.usage = TextureDesc::Usage::Sampled;
       auto tex = device_->create_texture(desc);
       if (!tex) {
@@ -436,9 +442,10 @@ void RenderThread::resize_surface(std::uint64_t channel_id, NativeWindowHandle w
 
 Result<void> RenderThread::ensure_pipelines() {
   if (shaded_pipeline_ && wire_pipeline_ && line_pipeline_ && entity_line_pipeline_ &&
-      sky_pipeline_ && grid_pipeline_ &&
+      blend_pipeline_ && sky_pipeline_ && grid_pipeline_ &&
       axes_mesh_.index_buffer && sky_mesh_.index_buffer && grid_mesh_.index_buffer &&
-      preview_line_mesh_.index_buffer && default_texture_) {
+      preview_line_mesh_.index_buffer && default_texture_ && default_normal_ &&
+      ibl_irradiance_ && ibl_prefilter_ && ibl_brdf_lut_) {
     return {};
   }
 
@@ -515,6 +522,15 @@ Result<void> RenderThread::ensure_pipelines() {
   }
   shaded_pipeline_ = std::move(*p0);
   wire_pipeline_ = std::move(*p1);
+
+  PipelineDesc blend = shaded;
+  blend.blend = true;
+  blend.depth_write = false;
+  auto pblend = device_->create_pipeline(blend);
+  if (!pblend) {
+    return Err(pblend.error());
+  }
+  blend_pipeline_ = std::move(*pblend);
 
   // 天空管线（全屏三角形，深度测试关、不写深度）。
   std::vector<std::uint32_t> sky_vs_spirv;
@@ -705,6 +721,86 @@ Result<void> RenderThread::ensure_pipelines() {
     default_texture_ = std::move(*tex);
   }
 
+  if (!default_normal_) {
+    TextureDesc td{};
+    td.width = 1;
+    td.height = 1;
+    td.format = TextureDesc::Format::R8G8B8A8_UNORM;
+    td.usage = TextureDesc::Usage::Sampled;
+    auto tex = device_->create_texture(td);
+    if (!tex) {
+      return Err(tex.error());
+    }
+    const std::byte flat[4] = {std::byte{128}, std::byte{128}, std::byte{255}, std::byte{255}};
+    if (auto w = (*tex)->write(0, std::span<const std::byte>{flat, 4}); !w) {
+      return Err(w.error());
+    }
+    default_normal_ = std::move(*tex);
+  }
+
+  if (!ibl_irradiance_ || !ibl_prefilter_ || !ibl_brdf_lut_) {
+    const IblCpu ibl = bake_studio_ibl();
+    ibl_max_mip_ = ibl.prefilter_mips > 1 ? static_cast<float>(ibl.prefilter_mips - 1) : 1.f;
+
+    auto make_cube_desc = [](std::uint32_t size, std::uint32_t mips) {
+      TextureDesc td{};
+      td.width = size;
+      td.height = size;
+      td.format = TextureDesc::Format::R16G16B16A16_SFLOAT;
+      td.usage = TextureDesc::Usage::Sampled;
+      td.dimension = TextureDesc::Dimension::Cube;
+      td.mip_levels = std::max(1u, mips);
+      td.address_mode = TextureDesc::AddressMode::Clamp;
+      return td;
+    };
+
+    auto irr_tex = device_->create_texture(make_cube_desc(ibl.irradiance_size, 1));
+    if (!irr_tex) {
+      return Err(irr_tex.error());
+    }
+    for (int face = 0; face < 6; ++face) {
+      if (auto w = (*irr_tex)->write_subresource(
+              0, static_cast<std::uint32_t>(face),
+              std::as_bytes(std::span(ibl.irradiance_faces[face])));
+          !w) {
+        return Err(w.error());
+      }
+    }
+    ibl_irradiance_ = std::move(*irr_tex);
+
+    auto pre_tex =
+        device_->create_texture(make_cube_desc(ibl.prefilter_size, ibl.prefilter_mips));
+    if (!pre_tex) {
+      return Err(pre_tex.error());
+    }
+    for (int face = 0; face < 6; ++face) {
+      for (std::uint32_t mip = 0; mip < ibl.prefilter_mips; ++mip) {
+        if (auto w = (*pre_tex)->write_subresource(
+                mip, static_cast<std::uint32_t>(face),
+                std::as_bytes(std::span(ibl.prefilter_faces[face][mip])));
+            !w) {
+          return Err(w.error());
+        }
+      }
+    }
+    ibl_prefilter_ = std::move(*pre_tex);
+
+    TextureDesc lut{};
+    lut.width = ibl.lut_size;
+    lut.height = ibl.lut_size;
+    lut.format = TextureDesc::Format::R16G16_SFLOAT;
+    lut.usage = TextureDesc::Usage::Sampled;
+    lut.address_mode = TextureDesc::AddressMode::Clamp;
+    auto lut_tex = device_->create_texture(lut);
+    if (!lut_tex) {
+      return Err(lut_tex.error());
+    }
+    if (auto w = (*lut_tex)->write(0, std::as_bytes(std::span(ibl.brdf_lut))); !w) {
+      return Err(w.error());
+    }
+    ibl_brdf_lut_ = std::move(*lut_tex);
+  }
+
   return {};
 }
 
@@ -761,9 +857,35 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
   const Mat4 clip = device_->clip_space_correction_matrix();
   const Mat4 view_proj = clip * frame.proj * frame.view;
 
-  // 天空：全屏渐变背景，深度测试关、不写深度。
-  if (sky_pipeline_ && sky_mesh_.index_buffer) {
+  auto bind_mesh_sets = [&]() {
+    if (default_texture_) {
+      channel.command_list->set_texture(*default_texture_, kTextureSlotAlbedo);
+    }
+    if (default_normal_) {
+      channel.command_list->set_texture(*default_normal_, kTextureSlotNormal);
+    }
+    if (ibl_irradiance_) {
+      channel.command_list->set_texture(*ibl_irradiance_, kTextureSlotIblIrradiance);
+    }
+    if (ibl_prefilter_) {
+      channel.command_list->set_texture(*ibl_prefilter_, kTextureSlotIblPrefilter);
+    }
+    if (ibl_brdf_lut_) {
+      channel.command_list->set_texture(*ibl_brdf_lut_, kTextureSlotIblBrdfLut);
+    }
+  };
+  // 天空：采样 IBL cubemap，与模型环境倒影同源。
+  if (sky_pipeline_ && sky_mesh_.index_buffer && ibl_prefilter_) {
+    PushConstants pc{};
+    Mat4 cam_to_world = invert_affine(frame.view);
+    cam_to_world(0, 3) = cam_to_world(1, 3) = cam_to_world(2, 3) = 0.f;
+    pc.model = cam_to_world;
+    pc.color[0] = 1.f / std::max(std::fabs(frame.proj(0, 0)), 1e-4f);
+    pc.color[1] = 1.f / std::max(std::fabs(frame.proj(1, 1)), 1e-4f);
+    pc.lighting[0] = 1.f;
     channel.command_list->set_pipeline(*sky_pipeline_);
+    channel.command_list->set_texture(*ibl_prefilter_, kTextureSlotIblPrefilter);
+    channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
     channel.command_list->set_vertex_buffer(*sky_mesh_.vertex_buffer);
     channel.command_list->set_index_buffer(*sky_mesh_.index_buffer);
     DrawIndexedDesc sd{};
@@ -780,7 +902,7 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     pc.eye_pos_mode[3] = 3.f;
     channel.command_list->set_pipeline(pipeline);
     // 网格 shader 静态引用贴图描述符，即使 mode==3 不采样也须绑定合法资源。
-    channel.command_list->set_texture(*default_texture_, 0);
+    bind_mesh_sets();
     channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
     channel.command_list->set_vertex_buffer(*mesh.vertex_buffer);
     channel.command_list->set_index_buffer(*mesh.index_buffer);
@@ -836,6 +958,12 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
   }
 
   if (channel.scene_root) {
+    // Vulkan 要求先有 pipeline layout 才能 bind descriptor set；mesh.frag 静态引用
+    // 全部 5 个 set（着色模式不采样 IBL 也必须绑合法资源）。
+    if (shaded_pipeline_) {
+      channel.command_list->set_pipeline(*shaded_pipeline_);
+    }
+    bind_mesh_sets();
     std::unordered_set<std::uint64_t> hidden(frame.hidden_node_ids.begin(),
                                              frame.hidden_node_ids.end());
     const Frustum frustum = Frustum::from_view_proj(frame.proj * frame.view);
@@ -849,7 +977,12 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     ctx.shaded_pipeline = shaded_pipeline_.get();
     ctx.wire_pipeline = wire_pipeline_.get();
     ctx.entity_line_pipeline = entity_line_pipeline_.get();
+    ctx.blend_pipeline = blend_pipeline_.get();
     ctx.default_texture = default_texture_.get();
+    ctx.default_normal = default_normal_.get();
+    ctx.exposure = 1.f;
+    ctx.key_light_intensity = 0.45f;
+    ctx.ibl_max_mip = ibl_max_mip_;
     ctx.meshes = &meshes_;
     ctx.asset_to_gpu = &asset_to_gpu_;
     ctx.textures = &textures_;
@@ -857,6 +990,13 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     ctx.texture_diag_logged = &logged_texture_diag_;
     RecordCommands visitor(ctx);
     channel.scene_root->accept(visitor);
+    if (mode_value > 1.5f && blend_pipeline_) {
+      ctx.transparent_pass = true;
+      channel.command_list->set_pipeline(*blend_pipeline_);
+      bind_mesh_sets();
+      RecordCommands trans(ctx);
+      channel.scene_root->accept(trans);
+    }
   }
 
   // 坐标轴（深度测试关，始终可见）。
@@ -873,7 +1013,7 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     const bool has_snap = frame.snap_point.has_value();
     if (has_curve || has_controls || has_points || has_grips || has_snap) {
       channel.command_list->set_pipeline(*line_pipeline_);
-      channel.command_list->set_texture(*default_texture_, 0);
+      bind_mesh_sets();
       channel.command_list->set_vertex_buffer(*preview_line_mesh_.vertex_buffer);
       channel.command_list->set_index_buffer(*preview_line_mesh_.index_buffer);
 

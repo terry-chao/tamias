@@ -31,6 +31,10 @@ class MockTexture : public Texture {
  public:
   const TextureDesc& desc() const override { return desc_; }
   Result<void> write(std::uint64_t, std::span<const std::byte>) override { return {}; }
+  Result<void> write_subresource(std::uint32_t, std::uint32_t,
+                                 std::span<const std::byte>) override {
+    return {};
+  }
   TextureDesc desc_{};
 };
 
@@ -74,6 +78,7 @@ struct Fixture {
   MockPipeline wire;
   MockPipeline entity_line;
   MockTexture default_tex;
+  MockTexture default_normal_tex;
   std::unordered_map<std::uint64_t, GpuMesh> meshes;
   std::unordered_map<std::uint64_t, std::uint64_t> asset_to_gpu;
   std::unordered_map<std::uint64_t, GpuTexture> textures;
@@ -89,6 +94,7 @@ struct Fixture {
     ctx.wire_pipeline = &wire;
     ctx.entity_line_pipeline = &entity_line;
     ctx.default_texture = &default_tex;
+    ctx.default_normal = &default_normal_tex;
     ctx.meshes = &meshes;
     ctx.asset_to_gpu = &asset_to_gpu;
     ctx.textures = &textures;
@@ -158,7 +164,7 @@ TEST(SceneGraph, RecordsDrawWithAccumulatedTransformAndMaterial) {
   ASSERT_EQ(f.cmds.draws.size(), 1u);
   ASSERT_EQ(f.cmds.push_constants.size(), 1u);
   EXPECT_EQ(f.cmds.draws[0].index_count, 6u);
-  EXPECT_EQ(f.cmds.texture_binds, 1);
+  EXPECT_EQ(f.cmds.texture_binds, 2);
   EXPECT_EQ(f.cmds.vertex_binds, 1);
   EXPECT_EQ(f.cmds.index_binds, 1);
   EXPECT_EQ(f.cmds.pipelines.back(), &f.shaded);
@@ -209,6 +215,34 @@ TEST(SceneGraph, ShadedUsesCategoryColorAndIgnoresAlbedo) {
   EXPECT_FLOAT_EQ(pc.material[1], 0.f);
   EXPECT_FLOAT_EQ(pc.material[2], 0.f);  // no albedo in shaded
   EXPECT_FLOAT_EQ(pc.eye_pos_mode[3], 1.f);
+}
+
+TEST(SceneGraph, RealisticGlassDrawnOnlyInTransparentPass) {
+  Fixture f;
+  f.ctx.mode_value = 2.f;
+  f.ctx.blend_pipeline = &f.shaded;
+  f.add_mesh(42, 6);
+
+  auto root = std::make_unique<GroupNode>();
+  auto transform = std::make_unique<TransformNode>();
+  auto state = std::make_unique<StateGroupNode>();
+  auto material = std::make_unique<BindMaterialCommand>();
+  material->color = {0.52f, 0.76f, 0.84f};
+  material->roughness = 0.05f;
+  material->opacity = 0.16f;
+  state->commands.push_back(std::move(material));
+  state->add_child(make_drawable(7, 42));
+  transform->add_child(std::move(state));
+  root->add_child(std::move(transform));
+
+  f.visit(*root);
+  EXPECT_TRUE(f.cmds.draws.empty());
+
+  f.ctx.transparent_pass = true;
+  f.visit(*root);
+  ASSERT_EQ(f.cmds.draws.size(), 1u);
+  ASSERT_EQ(f.cmds.push_constants.size(), 1u);
+  EXPECT_FLOAT_EQ(f.cmds.push_constants[0].color[3], 0.16f);
 }
 
 TEST(SceneGraph, NestedTransformsMultiplyInTraversalOrder) {

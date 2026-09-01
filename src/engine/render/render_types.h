@@ -21,6 +21,7 @@ struct SceneDrawItem {
   Vec3 category_color{0.72f, 0.74f, 0.78f};  // 构件识别色（着色模式，不读材质）
   float roughness = 0.6f;               // PBR：粗糙度
   float metallic = 0.0f;                // PBR：金属度
+  float opacity = 1.0f;                 // <1 = 真实感半透明
   std::uint64_t albedo_texture_id = 0;  // 0 = 无贴图
   std::uint64_t normal_texture_id = 0;
   bool selected = false;
@@ -34,6 +35,7 @@ struct GpuMesh {
   std::uint32_t index_count = 0;
   Aabb bounds{};
   bool line_list = false;
+  bool has_texcoord = false;  // 导入网格带 UV；BRep / 程序化几何走 triplanar
 };
 
 struct GpuTexture {
@@ -44,10 +46,11 @@ struct GpuTexture {
 struct PushConstants {
   Mat4 mvp;
   Mat4 model;
-  float color[4];
+  float color[4];     // rgb = base/category；a = opacity（真实感半透明）
   float material[4];  // x=roughness, y=metallic, z=has_albedo, w=has_normal
   float light_dir_selected[4];
   float eye_pos_mode[4];
+  float lighting[4];  // x=exposure, y=key_intensity, z=ibl_max_mip, w=has_uv
 };
 
 }  // namespace tamias

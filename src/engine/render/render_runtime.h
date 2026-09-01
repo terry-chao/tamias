@@ -117,6 +117,7 @@ class RenderThread {
   std::unique_ptr<PipelineState> wire_pipeline_;
   std::unique_ptr<PipelineState> line_pipeline_;
   std::unique_ptr<PipelineState> entity_line_pipeline_;
+  std::unique_ptr<PipelineState> blend_pipeline_;
   GpuMesh axes_mesh_;
   std::unique_ptr<ShaderModule> sky_vs_;
   std::unique_ptr<ShaderModule> sky_fs_;
@@ -132,6 +133,11 @@ class RenderThread {
   std::unordered_map<std::uint64_t, GpuTexture> textures_;
   std::unordered_map<std::uint64_t, std::uint64_t> texture_asset_to_gpu_;  // asset id -> gpu texture id
   std::unique_ptr<Texture> default_texture_;  // 1x1 白纹理，无贴图物体兜底
+  std::unique_ptr<Texture> default_normal_;   // 1x1 平坦法线
+  std::unique_ptr<Texture> ibl_irradiance_;
+  std::unique_ptr<Texture> ibl_prefilter_;
+  std::unique_ptr<Texture> ibl_brdf_lut_;
+  float ibl_max_mip_ = 4.f;
   bool logged_texture_diag_ = false;  // 只打一次贴图诊断日志
   std::unordered_map<std::uint64_t, ChannelState> channels_;
   std::uint64_t next_mesh_id_ = 1;

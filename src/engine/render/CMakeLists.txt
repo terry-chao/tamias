@@ -1,6 +1,6 @@
 add_subdirectory(rhi)
 
-add_library(tamias_render STATIC render_runtime.cpp scene_graph.cpp)
+add_library(tamias_render STATIC render_runtime.cpp scene_graph.cpp ibl.cpp)
 add_library(tamias::render ALIAS tamias_render)
 target_include_directories(tamias_render PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_compile_definitions(tamias_render PRIVATE

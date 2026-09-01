@@ -13,6 +13,7 @@ layout(std140) uniform PushConstants {
   vec4 material;
   vec4 light_dir_selected;
   vec4 eye_pos_mode;
+  vec4 lighting;
 } pc;
 )GLSL";
 
@@ -46,6 +47,10 @@ inline std::string_view mesh_frag() {
   static const std::string src = std::string("#version 300 es\nprecision highp float;\n") +
                                  std::string(kPushBlock) + R"GLSL(
 uniform sampler2D albedo_tex;
+uniform sampler2D normal_tex;
+uniform samplerCube irradiance_tex;
+uniform samplerCube prefilter_tex;
+uniform sampler2D brdf_lut;
 in vec3 v_normal;
 in vec2 v_uv;
 in float v_selected;
@@ -59,19 +64,68 @@ vec3 shaded_simple(vec3 n, vec3 l, vec3 base) {
   return base * ndotl;
 }
 
-vec3 shaded_realistic(vec3 n, vec3 l, vec3 v, vec3 base, float rough, float metal) {
+vec3 sample_triplanar_albedo(vec3 world_pos, vec3 n) {
+  vec3 wp = world_pos * 2.0;
+  vec3 blend = abs(n);
+  blend = pow(blend, vec3(4.0));
+  blend = blend / max(blend.x + blend.y + blend.z, 1e-6);
+  vec3 cx = texture(albedo_tex, wp.zy).rgb;
+  vec3 cy = texture(albedo_tex, wp.xz).rgb;
+  vec3 cz = texture(albedo_tex, wp.xy).rgb;
+  return cx * blend.x + cy * blend.y + cz * blend.z;
+}
+
+vec3 unpack_normal(vec3 rgb) { return rgb * 2.0 - 1.0; }
+
+vec3 sample_triplanar_normal(vec3 world_pos, vec3 n) {
+  vec3 wp = world_pos * 2.0;
+  vec3 blend = abs(n);
+  blend = pow(blend, vec3(4.0));
+  blend = blend / max(blend.x + blend.y + blend.z, 1e-6);
+  vec3 tx = unpack_normal(texture(normal_tex, wp.zy).xyz);
+  vec3 ty = unpack_normal(texture(normal_tex, wp.xz).xyz);
+  vec3 tz = unpack_normal(texture(normal_tex, wp.xy).xyz);
+  vec3 nx = vec3(tx.z, tx.y, tx.x);
+  vec3 ny = vec3(ty.x, ty.z, ty.y);
+  vec3 nz = vec3(tz.x, tz.y, tz.z);
+  return normalize(n * vec3(blend.z + blend.y, blend.x + blend.z, blend.x + blend.y) +
+                   nx * blend.x + ny * blend.y + nz * blend.z);
+}
+
+vec3 sample_uv_normal(vec3 n, vec3 world_pos, vec2 uv) {
+  vec3 tnormal = unpack_normal(texture(normal_tex, uv).xyz);
+  vec3 dp1 = dFdx(world_pos);
+  vec3 dp2 = dFdy(world_pos);
+  vec2 duv1 = dFdx(uv);
+  vec2 duv2 = dFdy(uv);
+  vec3 dp2perp = cross(dp2, n);
+  vec3 dp1perp = cross(n, dp1);
+  vec3 t = dp2perp * duv1.x + dp1perp * duv2.x;
+  vec3 b = dp2perp * duv1.y + dp1perp * duv2.y;
+  float inv = inversesqrt(max(dot(t, t) * dot(b, b), 1e-8));
+  t *= inv;
+  b *= inv;
+  return normalize(t * tnormal.x + b * tnormal.y + n * tnormal.z);
+}
+
+vec4 shaded_realistic(vec3 n, vec3 l, vec3 v, vec3 base, float rough, float metal, float opacity) {
   const float PI = 3.14159265;
   float ndotl = max(dot(n, l), 0.0);
   float ndotv = max(dot(n, v), 1e-4);
   vec3 h = normalize(l + v);
   float ndoth = max(dot(n, h), 1e-4);
+  float vdoth = max(dot(v, h), 1e-4);
   float roughness = clamp(rough, 0.045, 1.0);
   float alpha = roughness * roughness;
   float alpha2 = alpha * alpha;
   vec3 f0 = mix(vec3(0.04), base, metal);
-  vec3 F = f0 + (vec3(1.0) - f0) * pow(1.0 - ndotv, 5.0);
+  vec3 F = f0 + (vec3(1.0) - f0) * pow(1.0 - vdoth, 5.0);
+  float transmissive = (opacity < 0.999 && metal < 0.5) ? 1.0 : 0.0;
   vec3 kd = base * (1.0 - metal);
-  vec3 diffuse = kd * ndotl * (vec3(1.0) - F);
+  if (transmissive > 0.5) {
+    kd *= opacity;
+  }
+  vec3 diffuse = (kd / PI) * ndotl * (vec3(1.0) - F);
   float denom = ndoth * ndoth * (alpha2 - 1.0) + 1.0;
   float D = alpha2 / (PI * denom * denom);
   float k = (roughness + 1.0) * (roughness + 1.0) / 8.0;
@@ -79,13 +133,26 @@ vec3 shaded_realistic(vec3 n, vec3 l, vec3 v, vec3 base, float rough, float meta
   float gl = ndotl / (ndotl * (1.0 - k) + k);
   float G = gv * gl;
   vec3 specular = (D * G * F) / max(4.0 * ndotv, 1e-4);
-  float hemi = clamp(0.5 * n.y + 0.5, 0.0, 1.0);
-  vec3 env = mix(vec3(0.10, 0.11, 0.12), vec3(0.22, 0.26, 0.32), hemi);
-  vec3 ambient_diffuse = env * kd;
-  vec3 env_spec_color = mix(vec3(0.04), base, metal);
-  vec3 ambient_specular = env * env_spec_color * (0.05 + 0.6 * (1.0 - roughness) * (1.0 - roughness));
-  vec3 color = ambient_diffuse + ambient_specular + diffuse + specular;
-  return color / (color + vec3(0.85));
+  vec3 light_col = vec3(pc.lighting.y);
+  vec3 punctual_diff = diffuse * light_col;
+  vec3 punctual_spec = specular * light_col;
+  vec3 irradiance = texture(irradiance_tex, n).rgb;
+  vec3 R = reflect(-v, n);
+  vec3 prefiltered = textureLod(prefilter_tex, R, roughness * pc.lighting.z).rgb;
+  vec2 env_brdf = texture(brdf_lut, vec2(ndotv, roughness)).rg;
+  vec3 spec_ibl = prefiltered * (f0 * env_brdf.x + env_brdf.y);
+  vec3 diff_ibl = irradiance * kd;
+  vec3 spec = (punctual_spec + spec_ibl) * pc.lighting.x;
+  vec3 diff = (punctual_diff + diff_ibl) * pc.lighting.x;
+  if (transmissive > 0.5) {
+    vec3 ldr_spec = spec / (spec + vec3(0.85));
+    vec3 ldr_diff = diff / (diff + vec3(0.85));
+    float a = clamp(opacity + (1.0 - opacity) * pow(1.0 - ndotv, 5.0), 0.0, 1.0);
+    return vec4(ldr_spec + ldr_diff * a, a);
+  }
+  vec3 color = spec + diff;
+  color = color / (color + vec3(0.85));
+  return vec4(color, 1.0);
 }
 
 void main() {
@@ -110,26 +177,34 @@ void main() {
   if (dot(n, v) < 0.0) {
     discard;
   }
+  if (pc.material.w > 0.5) {
+    n = pc.lighting.w > 0.5 ? sample_uv_normal(n, v_world_pos, v_uv)
+                            : sample_triplanar_normal(v_world_pos, n);
+    n = normalize(n);
+    if (dot(n, v) < 0.0) {
+      n = -n;
+    }
+  }
   vec3 l = normalize(pc.light_dir_selected.xyz);
   vec3 base = pc.color.rgb * v_color;
   if (pc.material.z > 0.5) {
-    vec3 wp = v_world_pos * 2.0;
-    vec3 blend = abs(n);
-    blend = pow(blend, vec3(4.0));
-    blend = blend / max(blend.x + blend.y + blend.z, 1e-6);
-    vec3 cx = texture(albedo_tex, wp.zy).rgb;
-    vec3 cy = texture(albedo_tex, wp.xz).rgb;
-    vec3 cz = texture(albedo_tex, wp.xy).rgb;
-    base = cx * blend.x + cy * blend.y + cz * blend.z;
+    base = pc.lighting.w > 0.5 ? texture(albedo_tex, v_uv).rgb
+                               : sample_triplanar_albedo(v_world_pos, n);
   }
-  vec3 lit = v_mode > 1.5
-                 ? shaded_realistic(n, l, v, base, pc.material.x, pc.material.y)
-                 : shaded_simple(n, l, base);
+  vec3 lit_rgb;
+  float lit_a = 1.0;
+  if (v_mode > 1.5) {
+    vec4 pbr = shaded_realistic(n, l, v, base, pc.material.x, pc.material.y, clamp(pc.color.w, 0.0, 1.0));
+    lit_rgb = pbr.rgb;
+    lit_a = pbr.a;
+  } else {
+    lit_rgb = shaded_simple(n, l, base);
+  }
   if (v_selected > 0.5) {
-    lit = mix(lit, vec3(0.28, 0.62, 1.0), 0.22);
-    lit += vec3(0.03, 0.07, 0.14);
+    lit_rgb = mix(lit_rgb, vec3(0.28, 0.62, 1.0), 0.22);
+    lit_rgb += vec3(0.03, 0.07, 0.14);
   }
-  frag_color = vec4(lit, 1.0);
+  frag_color = vec4(lit_rgb, lit_a);
 }
 )GLSL";
   return src;
@@ -148,15 +223,19 @@ void main() {
 }
 
 inline std::string_view sky_frag() {
-  static const std::string src = R"GLSL(#version 300 es
-precision highp float;
+  static const std::string src = std::string("#version 300 es\nprecision highp float;\n") +
+                                 std::string(kPushBlock) + R"GLSL(
+uniform samplerCube prefilter_tex;
 in vec2 v_uv;
 out vec4 frag_color;
 void main() {
-  vec3 sky_top = vec3(0.14, 0.18, 0.24);
-  vec3 horizon = vec3(0.22, 0.24, 0.28);
-  float t = clamp(v_uv.y, 0.0, 1.0);
-  frag_color = vec4(mix(horizon, sky_top, t), 1.0);
+  vec2 ndc = v_uv * 2.0 - 1.0;
+  vec3 view_dir = normalize(vec3(ndc.x * pc.color.x, ndc.y * pc.color.y, -1.0));
+  vec3 world_dir = mat3(pc.model) * view_dir;
+  vec3 env = textureLod(prefilter_tex, world_dir, 1.2).rgb;
+  env *= pc.lighting.x;
+  env = env / (env + vec3(0.85));
+  frag_color = vec4(env, 1.0);
 }
 )GLSL";
   return src;

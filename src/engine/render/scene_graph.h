@@ -93,7 +93,13 @@ struct SceneGraphDrawContext {
   PipelineState* shaded_pipeline = nullptr;
   PipelineState* wire_pipeline = nullptr;
   PipelineState* entity_line_pipeline = nullptr;
+  PipelineState* blend_pipeline = nullptr;  // 真实感半透明（不写深度）
+  bool transparent_pass = false;            // 第二遍只画 opacity<1 的三角面
   Texture* default_texture = nullptr; // 1x1 白纹理，无贴图物体兜底
+  Texture* default_normal = nullptr;  // 1x1 平坦法线
+  float exposure = 1.f;
+  float key_light_intensity = 0.45f;
+  float ibl_max_mip = 4.f;
 
   std::unordered_map<std::uint64_t, GpuMesh>* meshes = nullptr;
   std::unordered_map<std::uint64_t, std::uint64_t>* asset_to_gpu = nullptr;
@@ -106,6 +112,7 @@ struct SceneGraphDrawContext {
   Vec3 category_color{0.72f, 0.74f, 0.78f};
   float material_roughness = 0.6f;
   float material_metallic = 0.f;
+  float material_opacity = 1.f;
   std::uint64_t material_albedo_texture_id = 0;
   std::uint64_t material_normal_texture_id = 0;
   bool selected = false;
@@ -128,6 +135,7 @@ class BindMaterialCommand final : public StateCommand {
   Vec3 category_color{0.72f, 0.74f, 0.78f};
   float roughness = 0.6f;
   float metallic = 0.f;
+  float opacity = 1.f;
   std::uint64_t albedo_texture_id = 0;
   std::uint64_t normal_texture_id = 0;
 

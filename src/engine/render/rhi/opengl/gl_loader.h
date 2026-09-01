@@ -50,8 +50,14 @@
 #ifndef GL_INFO_LOG_LENGTH
 #define GL_INFO_LOG_LENGTH 0x8B84
 #endif
-#ifndef GL_DEPTH_TEST
-#define GL_DEPTH_TEST 0x0B71
+#ifndef GL_BLEND
+#define GL_BLEND 0x0BE2
+#endif
+#ifndef GL_ONE
+#define GL_ONE 1
+#endif
+#ifndef GL_ONE_MINUS_SRC_ALPHA
+#define GL_ONE_MINUS_SRC_ALPHA 0x0303
 #endif
 #ifndef GL_SCISSOR_TEST
 #define GL_SCISSOR_TEST 0x0C11
@@ -138,6 +144,39 @@
 #ifndef GL_REPEAT
 #define GL_REPEAT 0x2901
 #endif
+#ifndef GL_CLAMP_TO_EDGE
+#define GL_CLAMP_TO_EDGE 0x812F
+#endif
+#ifndef GL_TEXTURE_WRAP_R
+#define GL_TEXTURE_WRAP_R 0x8072
+#endif
+#ifndef GL_TEXTURE_CUBE_MAP
+#define GL_TEXTURE_CUBE_MAP 0x8513
+#endif
+#ifndef GL_TEXTURE_CUBE_MAP_POSITIVE_X
+#define GL_TEXTURE_CUBE_MAP_POSITIVE_X 0x8515
+#endif
+#ifndef GL_LINEAR_MIPMAP_LINEAR
+#define GL_LINEAR_MIPMAP_LINEAR 0x2703
+#endif
+#ifndef GL_TEXTURE_MAX_LEVEL
+#define GL_TEXTURE_MAX_LEVEL 0x813D
+#endif
+#ifndef GL_RGBA16F
+#define GL_RGBA16F 0x881A
+#endif
+#ifndef GL_RG16F
+#define GL_RG16F 0x822F
+#endif
+#ifndef GL_HALF_FLOAT
+#define GL_HALF_FLOAT 0x140B
+#endif
+#ifndef GL_RG
+#define GL_RG 0x8227
+#endif
+#ifndef GL_RGB
+#define GL_RGB 0x1907
+#endif
 
 using GLchar = char;
 using GLsizeiptr = std::ptrdiff_t;
@@ -194,6 +233,7 @@ extern void (*GetProgramInfoLog)(GLuint program, GLsizei bufSize, GLsizei* lengt
 
 extern void (*Enable)(GLenum cap);
 extern void (*Disable)(GLenum cap);
+extern void (*BlendFunc)(GLenum sfactor, GLenum dfactor);
 extern void (*DepthFunc)(GLenum func);
 extern void (*DepthMask)(GLboolean flag);
 extern void (*Clear)(GLbitfield mask);

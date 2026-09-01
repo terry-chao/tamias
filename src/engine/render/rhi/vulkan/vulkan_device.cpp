@@ -63,6 +63,23 @@ struct QueueFamilyIndices {
   [[nodiscard]] bool complete() const { return graphics && present; }
 };
 
+VkFormat vulkan_texture_format(TextureDesc::Format format) {
+  switch (format) {
+    case TextureDesc::Format::R8G8B8A8_UNORM:
+      return VK_FORMAT_R8G8B8A8_UNORM;
+    case TextureDesc::Format::B8G8R8A8_SRGB:
+      return VK_FORMAT_B8G8R8A8_SRGB;
+    case TextureDesc::Format::R16G16B16A16_SFLOAT:
+      return VK_FORMAT_R16G16B16A16_SFLOAT;
+    case TextureDesc::Format::R16G16_SFLOAT:
+      return VK_FORMAT_R16G16_SFLOAT;
+    case TextureDesc::Format::D32_SFLOAT:
+      return VK_FORMAT_D32_SFLOAT;
+    default:
+      return VK_FORMAT_R8G8B8A8_SRGB;
+  }
+}
+
 class VulkanBuffer final : public Buffer {
  public:
   VulkanBuffer(VmaAllocator allocator, VkBuffer buffer, VmaAllocation allocation, BufferDesc desc)
@@ -233,6 +250,8 @@ class VulkanTexture final : public Texture {
   [[nodiscard]] VkDescriptorSet descriptor_set() const { return set_; }
 
   Result<void> write(std::uint64_t offset, std::span<const std::byte> data) override;
+  Result<void> write_subresource(std::uint32_t mip, std::uint32_t layer,
+                                 std::span<const std::byte> data) override;
 
  private:
   VulkanDevice* device_ = nullptr;
@@ -414,6 +433,7 @@ class VulkanDevice final : public RHIDevice {
   VkDescriptorSetLayout descriptor_set_layout_ = VK_NULL_HANDLE;
   VkDescriptorPool descriptor_pool_ = VK_NULL_HANDLE;
   VkSampler default_sampler_ = VK_NULL_HANDLE;
+  VkSampler clamp_sampler_ = VK_NULL_HANDLE;
   std::uint32_t recording_frame_ = 0;
   VulkanCommandList* pending_cmd_ = nullptr;
   VulkanSwapChain* pending_swapchain_ = nullptr;
@@ -906,13 +926,22 @@ Result<void> VulkanDevice::create_descriptor_resources() {
   si.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
   si.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
   si.minLod = 0.f;
-  si.maxLod = VK_LOD_CLAMP_NONE;  // 单 mip 纹理：不 clamp LOD，避免驱动在边界采样出黑
+  si.maxLod = VK_LOD_CLAMP_NONE;
   if (supported.samplerAnisotropy && props.limits.maxSamplerAnisotropy > 1.f) {
     si.anisotropyEnable = VK_TRUE;
     si.maxAnisotropy = (std::min)(8.f, props.limits.maxSamplerAnisotropy);
   }
   if (vkCreateSampler(device_, &si, nullptr, &default_sampler_) != VK_SUCCESS) {
     return Err("sampler create failed");
+  }
+  VkSamplerCreateInfo ci = si;
+  ci.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  ci.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  ci.anisotropyEnable = VK_FALSE;
+  ci.maxAnisotropy = 1.f;
+  if (vkCreateSampler(device_, &ci, nullptr, &clamp_sampler_) != VK_SUCCESS) {
+    return Err("clamp sampler create failed");
   }
   return {};
 }
@@ -962,6 +991,10 @@ void VulkanDevice::destroy() {
   if (descriptor_set_layout_) {
     vkDestroyDescriptorSetLayout(device_, descriptor_set_layout_, nullptr);
     descriptor_set_layout_ = VK_NULL_HANDLE;
+  }
+  if (clamp_sampler_) {
+    vkDestroySampler(device_, clamp_sampler_, nullptr);
+    clamp_sampler_ = VK_NULL_HANDLE;
   }
   if (default_sampler_) {
     vkDestroySampler(device_, default_sampler_, nullptr);
@@ -1043,19 +1076,22 @@ Result<std::unique_ptr<Buffer>> VulkanDevice::create_buffer(const BufferDesc& de
 }
 
 Result<std::unique_ptr<Texture>> VulkanDevice::create_texture(const TextureDesc& desc) {
-  const VkFormat format = desc.format == TextureDesc::Format::R8G8B8A8_UNORM
-                              ? VK_FORMAT_R8G8B8A8_UNORM
-                              : VK_FORMAT_R8G8B8A8_SRGB;
+  const VkFormat format = vulkan_texture_format(desc.format);
+  const std::uint32_t mips = std::max(1u, desc.mip_levels);
+  const std::uint32_t layers = texture_layer_count(desc);
+  const bool cube = desc.dimension == TextureDesc::Dimension::Cube;
 
   VkImageCreateInfo ii{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+  ii.flags = cube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0;
   ii.imageType = VK_IMAGE_TYPE_2D;
   ii.format = format;
-  ii.extent = {desc.width, desc.height, 1};
-  ii.mipLevels = 1;
-  ii.arrayLayers = 1;
+  ii.extent = {std::max(1u, desc.width), std::max(1u, desc.height), 1};
+  ii.mipLevels = mips;
+  ii.arrayLayers = layers;
   ii.samples = VK_SAMPLE_COUNT_1_BIT;
   ii.tiling = VK_IMAGE_TILING_OPTIMAL;
-  ii.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+  ii.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+             VK_IMAGE_USAGE_SAMPLED_BIT;
   ii.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
   VmaAllocationCreateInfo ac{};
   ac.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
@@ -1067,9 +1103,9 @@ Result<std::unique_ptr<Texture>> VulkanDevice::create_texture(const TextureDesc&
 
   VkImageViewCreateInfo vi{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
   vi.image = image;
-  vi.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  vi.viewType = cube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
   vi.format = format;
-  vi.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  vi.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, mips, 0, layers};
   VkImageView view = VK_NULL_HANDLE;
   if (vkCreateImageView(device_, &vi, nullptr, &view) != VK_SUCCESS) {
     vmaDestroyImage(allocator_, image, allocation);
@@ -1089,10 +1125,11 @@ Result<std::unique_ptr<Texture>> VulkanDevice::create_texture(const TextureDesc&
 
   VkDescriptorImageInfo img{};
   img.imageView = view;
-  img.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;  // SAMPLED_IMAGE 不用 sampler 字段
+  img.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
   VkDescriptorImageInfo samp{};
-  samp.sampler = default_sampler_;  // 所有纹理共享同一个采样器
+  samp.sampler = desc.address_mode == TextureDesc::AddressMode::Clamp ? clamp_sampler_
+                                                                     : default_sampler_;
 
   VkWriteDescriptorSet writes[2]{};
   writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1168,10 +1205,23 @@ Result<void> VulkanTexture::write(std::uint64_t offset, std::span<const std::byt
   if (offset != 0) {
     return Err("Vulkan texture write offset must be 0");
   }
+  return write_subresource(0, 0, data);
+}
+
+Result<void> VulkanTexture::write_subresource(std::uint32_t mip, std::uint32_t layer,
+                                              std::span<const std::byte> data) {
   if (!device_) {
     return Err("Vulkan texture has no device");
   }
-  const VkDeviceSize size = static_cast<VkDeviceSize>(desc_.width) * desc_.height * 4;
+  const std::uint32_t mips = std::max(1u, desc_.mip_levels);
+  const std::uint32_t layers = texture_layer_count(desc_);
+  if (mip >= mips || layer >= layers) {
+    return Err("Vulkan texture subresource out of range");
+  }
+  const std::uint32_t w = texture_mip_extent(desc_.width, mip);
+  const std::uint32_t h = texture_mip_extent(desc_.height, mip);
+  const VkDeviceSize size =
+      static_cast<VkDeviceSize>(w) * h * texture_bytes_per_pixel(desc_.format);
   if (data.size() < static_cast<std::size_t>(size)) {
     return Err("Vulkan texture write data too small");
   }
@@ -1184,14 +1234,15 @@ Result<void> VulkanTexture::write(std::uint64_t offset, std::span<const std::byt
   if (!staging) {
     return Err(staging.error());
   }
-  if (auto w = (*staging)->write(0, data); !w) {
-    return Err(w.error());
+  if (auto wr = (*staging)->write(0, data.first(static_cast<std::size_t>(size))); !wr) {
+    return Err(wr.error());
   }
   const VkBuffer staging_handle = static_cast<VulkanBuffer&>(**staging).handle();
   const VkImage image = image_;
-  const VkExtent3D extent{desc_.width, desc_.height, 1};
+  const VkExtent3D extent{w, h, 1};
 
-  auto result = device_->submit_oneshot([&](VkCommandBuffer cmd) {
+  return device_->submit_oneshot([&](VkCommandBuffer cmd) {
+    VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, layer, 1};
     VkImageMemoryBarrier to_dst{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
     to_dst.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     to_dst.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -1200,12 +1251,12 @@ Result<void> VulkanTexture::write(std::uint64_t offset, std::span<const std::byt
     to_dst.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     to_dst.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     to_dst.image = image;
-    to_dst.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    to_dst.subresourceRange = range;
     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
                          0, nullptr, 0, nullptr, 1, &to_dst);
 
     VkBufferImageCopy region{};
-    region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip, layer, 1};
     region.imageExtent = extent;
     vkCmdCopyBufferToImage(cmd, staging_handle, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
                            &region);
@@ -1218,67 +1269,10 @@ Result<void> VulkanTexture::write(std::uint64_t offset, std::span<const std::byt
     to_shader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     to_shader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     to_shader.image = image;
-    to_shader.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    to_shader.subresourceRange = range;
     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                          0, 0, nullptr, 0, nullptr, 1, &to_shader);
   });
-  if (!result) {
-    return result;
-  }
-
-  // ===== TEMP DEBUG: 读回 GPU 图像第一个像素，确认拷贝后图像到底是灰(200)还是黑(0) =====
-  {
-    BufferDesc rb{};
-    rb.size = 4;
-    rb.usage = BufferDesc::Usage::TransferDst;
-    rb.host_visible = true;
-    auto rb_buf = device_->create_buffer(rb);
-    if (rb_buf) {
-      VulkanBuffer& rbv = static_cast<VulkanBuffer&>(**rb_buf);
-      if (auto r = device_->submit_oneshot([&](VkCommandBuffer cmd) {
-            VkImageMemoryBarrier b1{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-            b1.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            b1.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            b1.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-            b1.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-            b1.image = image;
-            b1.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                                 VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &b1);
-            VkBufferImageCopy c{};
-            c.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-            c.imageExtent = {1, 1, 1};
-            vkCmdCopyImageToBuffer(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, rbv.handle(), 1,
-                                   &c);
-            VkImageMemoryBarrier b2{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-            b2.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            b2.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            b2.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-            b2.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-            b2.image = image;
-            b2.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1,
-                                 &b2);
-          });
-           !r) {
-        log_warn("readback submit failed: " + r.error());
-      } else {
-        void* mapped = nullptr;
-        if (vmaMapMemory(device_->allocator(), rbv.allocation(), &mapped) == VK_SUCCESS) {
-          vmaInvalidateAllocation(device_->allocator(), rbv.allocation(), 0, 4);
-          const auto* p = static_cast<const std::uint8_t*>(mapped);
-          log_info("TEXTURE READBACK: " + std::to_string(static_cast<int>(p[0])) + "," +
-                   std::to_string(static_cast<int>(p[1])) + "," +
-                   std::to_string(static_cast<int>(p[2])) + "," +
-                   std::to_string(static_cast<int>(p[3])));
-          vmaUnmapMemory(device_->allocator(), rbv.allocation());
-        }
-      }
-    }
-  }
-
-  return result;
 }
 
 Result<std::unique_ptr<ShaderModule>> VulkanDevice::create_shader_module(
@@ -1361,6 +1355,15 @@ Result<std::unique_ptr<PipelineState>> VulkanDevice::create_pipeline(const Pipel
   VkPipelineColorBlendAttachmentState blend_att{};
   blend_att.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+  if (desc.blend) {
+    blend_att.blendEnable = VK_TRUE;
+    blend_att.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    blend_att.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    blend_att.colorBlendOp = VK_BLEND_OP_ADD;
+    blend_att.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    blend_att.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    blend_att.alphaBlendOp = VK_BLEND_OP_ADD;
+  }
   VkPipelineColorBlendStateCreateInfo cb{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
   cb.attachmentCount = 1;
   cb.pAttachments = &blend_att;
@@ -1379,8 +1382,10 @@ Result<std::unique_ptr<PipelineState>> VulkanDevice::create_pipeline(const Pipel
   layout_ci.pushConstantRangeCount = 1;
   layout_ci.pPushConstantRanges = &push;
   // 所有管线共用同一 descriptor set layout（sky/grid 未用到的 set 无害）。
-  const VkDescriptorSetLayout set_layouts[] = {descriptor_set_layout_};
-  layout_ci.setLayoutCount = 1;
+  const VkDescriptorSetLayout set_layouts[kMeshTextureSetCount] = {
+      descriptor_set_layout_, descriptor_set_layout_, descriptor_set_layout_,
+      descriptor_set_layout_, descriptor_set_layout_};
+  layout_ci.setLayoutCount = kMeshTextureSetCount;
   layout_ci.pSetLayouts = set_layouts;
   VkPipelineLayout layout = VK_NULL_HANDLE;
   if (vkCreatePipelineLayout(device_, &layout_ci, nullptr, &layout) != VK_SUCCESS) {

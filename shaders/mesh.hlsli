@@ -8,6 +8,7 @@ struct PushConstants {
   float4 material;           // x = roughness, y = metallic, z = has_albedo, w = has_normal
   float4 light_dir_selected; // xyz = light dir, w = selected flag
   float4 eye_pos_mode;       // xyz = eye world; w = render mode (mesh) or view distance (grid)
+  float4 lighting;           // x = exposure, y = key intensity, z = ibl max mip, w = has_uv
 };
 
 #if defined(TAMIAS_VULKAN)
@@ -15,15 +16,6 @@ struct PushConstants {
 ConstantBuffer<PushConstants> pc;
 #else
 ConstantBuffer<PushConstants> pc : register(b0);
-#endif
-
-// Albedo 贴图 + 采样器。has_albedo 为 0 时仍须绑定合法资源（运行时用默认白纹理兜底）。
-#if defined(TAMIAS_VULKAN)
-[[vk::binding(0, 0)]] Texture2D albedo_tex;
-[[vk::binding(1, 0)]] SamplerState albedo_samp;
-#else
-Texture2D albedo_tex : register(t0);
-SamplerState albedo_samp : register(s0);
 #endif
 
 struct VsInput {

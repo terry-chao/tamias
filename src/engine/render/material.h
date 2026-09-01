@@ -16,6 +16,7 @@ struct Material {
   Vec3 base_color{0.75f, 0.78f, 0.82f};
   float roughness = 0.6f;
   float metallic = 0.0f;
+  float opacity = 1.0f;                 // <1 = 真实感半透明（玻璃）
   std::uint64_t albedo_texture_id = 0;  // 0 = 无
   std::uint64_t normal_texture_id = 0;
 };
@@ -27,6 +28,7 @@ struct TextureAsset {
   std::uint32_t width = 0;
   std::uint32_t height = 0;
   std::vector<std::uint8_t> rgba;  // RGBA8，size == width * height * 4
+  bool srgb = true;                // false = 线性（法线贴图）
 };
 
 }  // namespace tamias

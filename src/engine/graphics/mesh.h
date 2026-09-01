@@ -19,7 +19,8 @@ struct MeshCpu {
   std::vector<Vertex> vertices;
   std::vector<std::uint32_t> indices;
   Aabb bounds{};
-  bool line_list = false;  // true：索引按 LineList 成对解释，不是三角面
+  bool line_list = false;     // true：索引按 LineList 成对解释，不是三角面
+  bool has_texcoord = false;  // 导入 UV；CAD 离散网格保持 false，着色走 triplanar
 };
 
 inline void recompute_bounds(MeshCpu& mesh) {

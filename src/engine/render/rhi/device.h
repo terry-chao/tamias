@@ -52,7 +52,14 @@ inline bool any(BufferDesc::Usage a, BufferDesc::Usage b) {
 struct TextureDesc {
   std::uint32_t width = 1;
   std::uint32_t height = 1;
-  enum class Format { B8G8R8A8_SRGB, R8G8B8A8_SRGB, R8G8B8A8_UNORM, D32_SFLOAT };
+  enum class Format {
+    B8G8R8A8_SRGB,
+    R8G8B8A8_SRGB,
+    R8G8B8A8_UNORM,
+    D32_SFLOAT,
+    R16G16B16A16_SFLOAT,
+    R16G16_SFLOAT,
+  };
   Format format = Format::B8G8R8A8_SRGB;
   enum class Usage : std::uint32_t {
     ColorAttachment = 1u << 0,
@@ -60,7 +67,39 @@ struct TextureDesc {
     Sampled = 1u << 2,
   };
   Usage usage = Usage::ColorAttachment;
+  enum class Dimension { Tex2D, Cube };
+  Dimension dimension = Dimension::Tex2D;
+  std::uint32_t mip_levels = 1;
+  enum class AddressMode { Repeat, Clamp };
+  AddressMode address_mode = AddressMode::Repeat;
 };
+
+inline constexpr std::uint32_t kTextureSlotAlbedo = 0;
+inline constexpr std::uint32_t kTextureSlotNormal = 1;
+inline constexpr std::uint32_t kTextureSlotIblIrradiance = 2;
+inline constexpr std::uint32_t kTextureSlotIblPrefilter = 3;
+inline constexpr std::uint32_t kTextureSlotIblBrdfLut = 4;
+inline constexpr std::uint32_t kMeshTextureSetCount = 5;
+
+inline std::uint32_t texture_bytes_per_pixel(TextureDesc::Format format) {
+  switch (format) {
+    case TextureDesc::Format::R16G16B16A16_SFLOAT:
+      return 8;
+    case TextureDesc::Format::R16G16_SFLOAT:
+      return 4;
+    default:
+      return 4;
+  }
+}
+
+inline std::uint32_t texture_layer_count(const TextureDesc& desc) {
+  return desc.dimension == TextureDesc::Dimension::Cube ? 6u : 1u;
+}
+
+inline std::uint32_t texture_mip_extent(std::uint32_t base, std::uint32_t mip) {
+  const std::uint32_t shifted = base >> mip;
+  return shifted == 0 ? 1u : shifted;
+}
 
 inline TextureDesc::Usage operator|(TextureDesc::Usage a, TextureDesc::Usage b) {
   return static_cast<TextureDesc::Usage>(static_cast<std::uint32_t>(a) |
@@ -93,6 +132,7 @@ struct PipelineDesc {
   PrimitiveTopology topology = PrimitiveTopology::TriangleList;
   bool depth_test = true;
   bool depth_write = true;
+  bool blend = false;  // ONE / ONE_MINUS_SRC_ALPHA，玻璃等半透明
   bool wireframe = false;
   TextureDesc::Format color_format = TextureDesc::Format::B8G8R8A8_SRGB;
   TextureDesc::Format depth_format = TextureDesc::Format::D32_SFLOAT;
@@ -117,8 +157,11 @@ class Texture {
  public:
   virtual ~Texture() = default;
   [[nodiscard]] virtual const TextureDesc& desc() const = 0;
-  // 上传整个 mip level 0 的像素字节（RGBA8，size == width*height*4）。offset 必须为 0。
+  // 上传 mip0 / layer0。offset 必须为 0。
   virtual Result<void> write(std::uint64_t offset, std::span<const std::byte> data) = 0;
+  // cubemap：layer = face（+X=0 … -Z=5）。2D：layer 必须为 0。
+  virtual Result<void> write_subresource(std::uint32_t mip, std::uint32_t layer,
+                                         std::span<const std::byte> data) = 0;
 };
 
 class ShaderModule {

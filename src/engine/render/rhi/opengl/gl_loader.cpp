@@ -55,6 +55,7 @@ void (*GetProgramInfoLog)(GLuint, GLsizei, GLsizei*, GLchar*) = nullptr;
 
 void (*Enable)(GLenum) = nullptr;
 void (*Disable)(GLenum) = nullptr;
+void (*BlendFunc)(GLenum, GLenum) = nullptr;
 void (*DepthFunc)(GLenum) = nullptr;
 void (*DepthMask)(GLboolean) = nullptr;
 void (*Clear)(GLbitfield) = nullptr;
@@ -128,6 +129,7 @@ bool load_procs() {
   ok = load(GetProgramInfoLog, "glGetProgramInfoLog") && ok;
   ok = load(Enable, "glEnable") && ok;
   ok = load(Disable, "glDisable") && ok;
+  ok = load(BlendFunc, "glBlendFunc") && ok;
   ok = load(DepthFunc, "glDepthFunc") && ok;
   ok = load(DepthMask, "glDepthMask") && ok;
   ok = load(Clear, "glClear") && ok;
