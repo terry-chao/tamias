@@ -182,6 +182,44 @@ TEST(SceneGraph, RecordsDrawWithAccumulatedTransformAndMaterial) {
   EXPECT_FLOAT_EQ(pc.eye_pos_mode[3], 2.f);        // realistic mode
 }
 
+TEST(SceneGraph, RealisticBindsAlbedoAndNormalMaps) {
+  Fixture f;
+  f.ctx.mode_value = 2.f;
+  f.add_mesh(42, 6);
+  GpuTexture gpu_albedo;
+  gpu_albedo.texture = std::make_unique<MockTexture>();
+  f.textures.emplace(1, std::move(gpu_albedo));
+  f.texture_asset_to_gpu[9] = 1;
+  GpuTexture gpu_normal;
+  gpu_normal.texture = std::make_unique<MockTexture>();
+  f.textures.emplace(2, std::move(gpu_normal));
+  f.texture_asset_to_gpu[11] = 2;
+
+  auto root = std::make_unique<GroupNode>();
+  auto transform = std::make_unique<TransformNode>();
+  auto state = std::make_unique<StateGroupNode>();
+  auto material = std::make_unique<BindMaterialCommand>();
+  material->color = {1.f, 0.f, 0.f};
+  material->roughness = 0.2f;
+  material->metallic = 0.9f;
+  material->albedo_texture_id = 9;
+  material->normal_texture_id = 11;
+  state->commands.push_back(std::move(material));
+  state->add_child(make_drawable(7, 42));
+  transform->add_child(std::move(state));
+  root->add_child(std::move(transform));
+
+  f.visit(*root);
+
+  ASSERT_EQ(f.cmds.push_constants.size(), 1u);
+  const PushConstants& pc = f.cmds.push_constants[0];
+  EXPECT_FLOAT_EQ(pc.material[0], 0.2f);
+  EXPECT_FLOAT_EQ(pc.material[1], 0.9f);
+  EXPECT_FLOAT_EQ(pc.material[2], 1.f);  // has_albedo
+  EXPECT_FLOAT_EQ(pc.material[3], 1.f);  // has_normal
+  EXPECT_EQ(f.cmds.texture_binds, 2);
+}
+
 TEST(SceneGraph, ShadedUsesCategoryColorAndIgnoresAlbedo) {
   Fixture f;
   f.add_mesh(42, 6);
@@ -214,6 +252,7 @@ TEST(SceneGraph, ShadedUsesCategoryColorAndIgnoresAlbedo) {
   EXPECT_FLOAT_EQ(pc.material[0], 0.6f);
   EXPECT_FLOAT_EQ(pc.material[1], 0.f);
   EXPECT_FLOAT_EQ(pc.material[2], 0.f);  // no albedo in shaded
+  EXPECT_FLOAT_EQ(pc.material[3], 0.f);  // no normal in shaded
   EXPECT_FLOAT_EQ(pc.eye_pos_mode[3], 1.f);
 }
 

@@ -30,7 +30,7 @@ class PropertyPanel final : public QWidget {
   // 用户提交了一个参数修改（spinbox valueChanged，keyboard tracking 已关）。
   void param_edited(std::uint64_t entity_id, std::uint64_t feature_id,
                     const QString& param_name, double value);
-  // 用户改了材质（下拉选库材质 → 引用；改色/roughness/metallic → 新建自定义材质）。
+  // 用户改了材质（下拉选库材质 → 引用；改色/roughness/metallic/贴图 → 新建自定义材质）。
   void material_edited(std::uint64_t entity_id, Material material);
   void location_edited(std::uint64_t entity_id, std::uint64_t storey_id,
                        double elevation_offset);
@@ -42,7 +42,7 @@ class PropertyPanel final : public QWidget {
                              const QString& param_name);
   // 内置材质使用可翻译显示名；自定义材质保持原名称。
   static QString material_display_name(const std::string& name);
-  // 追加材质编辑区（下拉 / 颜色 / roughness / metallic / albedo 贴图）到 column。
+  // 追加材质编辑区（下拉 / 颜色 / roughness / metallic / albedo / 法线贴图）到 column。
   void add_material_editor(QWidget* parent, QVBoxLayout* column, std::uint64_t entity_id,
                            const Entity* entity, Document* document);
 

@@ -71,8 +71,9 @@ Linux 是 GLX + X11 窗口，逻辑一样。
 ```
 mesh_asset_id → GpuMesh（VBO+IBO）
 albedo_texture_id → GpuTexture，没有就 1×1 白图
+normal_texture_id → GpuTexture，没有就 1×1 平坦法线
 set_pipeline（着色/线框 program）
-set_texture(slot 0)
+set_texture(slot 0 albedo, slot 1 normal, slot 2–4 IBL)
 set_push_constants（MVP、颜色、粗糙度、has_albedo、眼睛…）→ 其实是 UBO binding 0
 set_vertex_buffer / set_index_buffer   ← 只记指针
 draw_indexed(index_count)
@@ -101,16 +102,17 @@ Clip：CPU 的 `perspective` 按 Vulkan 的 Z∈[0,1] 算。OpenGL 要 NDC Z∈[
 
 - `glGenTextures` → `glTexImage2D` 整张 RGBA8
 - albedo 用 `GL_SRGB8_ALPHA8`（采样时硬件转线性）
+- 法线用 `GL_RGBA8` 线性（不要 sRGB，否则法线被 gamma 解码）
 - `GL_LINEAR` + `GL_REPEAT`
 
 画的时候：
 
 ```
-glActiveTexture(GL_TEXTURE0 + slot)   // 现在永远 slot 0
-glBindTexture(GL_TEXTURE_2D, handle)
+glActiveTexture(GL_TEXTURE0 + slot)   // 0=albedo，1=法线，2–4=IBL
+glBindTexture(GL_TEXTURE_2D 或 CUBE_MAP, handle)
 ```
 
-`SceneDrawItem.albedo_texture_id` 有、且已 upload → 绑那张；否则绑默认白纹理。`has_albedo` 写进 UBO：0 则 fragment 用纯 `base_color`。采样是 **triplanar**（世界坐标投到三个平面），不用网格 UV。法线贴图 id 传到常量里了，shader **还没采样**。
+`SceneDrawItem.albedo_texture_id` / `normal_texture_id` 有、且已 upload → 绑那张；否则分别绑 1×1 白纹理和 1×1 平坦法线。`has_albedo` / `has_normal` 写进 UBO：0 则 fragment 用纯 `base_color` / 几何法线。BRep 采样是 **triplanar**（世界坐标投到三个平面）；导入网格带 UV 时走网格 UV。法线贴图线性 UNORM 上传，shader 里 `rgb * 2 - 1` 还原切线法线，再 whiteout blend 或屏幕空间 TBN 转到世界空间，最后交给 PBR。细节见 [管线与 RHI](RENDERING.md#91-法线贴图怎么实现)。
 
 网格 / 轴线即使不采样贴图也会绑白纹理，避免采样器空绑（Vulkan 更硬，GL 这边同样绑上以求两边路径一致）。
 
@@ -124,9 +126,9 @@ Shader：HLSL → SPIR-V。OpenGL 加载 `*.gl.spv`，`glShaderBinary` + `glSpec
 |---|---|
 | OpenGL 是什么 | RHI 后端：4.5 Core，立即模式命令 |
 | 谁给它三角 | `MeshCpu` 上传成 VBO/IBO；清单用 `mesh_asset_id` 查找 |
-| 怎么绑 | 每 draw 绑 VAO + VBO + IBO + program + 纹理0 + UBO |
+| 怎么绑 | 每 draw 绑 VAO + VBO + IBO + program + 纹理 0–4 + UBO |
 | 怎么画 | `glDrawElements`，索引=三角（或线框的三角边） |
-| 纹理谁给 | 文档 `TextureAsset` → upload → `albedo_texture_id` 对上再 `glBindTexture` |
+| 纹理谁给 | 文档 `TextureAsset` → upload → `albedo_texture_id` / `normal_texture_id` 对上再 `glBindTexture` |
 | 它不管什么 | 特征树、OCCT、点选、视锥剔除、合批 |
 
 换 Vulkan 时，上面 `draw_channel` 一行都不用改；变的是 `opengl_device.cpp` 里那些 `gl*` 换成 `vkCmd*`。OpenGL 在项目里就是「同一套绘制剧本的 GL 方言」。

@@ -20,6 +20,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace tamias {
@@ -433,8 +434,68 @@ void PropertyPanel::add_material_editor(QWidget* parent, QVBoxLayout* column,
     combo->setCurrentIndex(selected);
   }
 
-  // 刷新颜色色块 + 数值 spinbox（不触发它们的 valueChanged/clicked 回环）。
-  auto refresh_widgets = [color_button, rough_spin, metal_spin, color_style](const Material& m) {
+  auto texture_label = [](std::uint64_t id) {
+    return id == 0 ? tr("None") : tr("Texture #%1").arg(id);
+  };
+  auto make_texture_row = [this, entity_id, current_sp, document, parent, texture_label](
+                              std::uint64_t Material::* field, bool srgb,
+                              const QString& dialog_title) {
+    auto* button = new QPushButton(texture_label(current_sp.get()->*field), parent);
+    button->setCursor(Qt::PointingHandCursor);
+    auto* clear = new QPushButton(tr("Clear"), parent);
+    clear->setEnabled((current_sp.get()->*field) != 0);
+    connect(button, &QPushButton::clicked, this,
+            [this, entity_id, current_sp, document, button, clear, texture_label, field, srgb,
+             dialog_title](bool) {
+              const QString path = QFileDialog::getOpenFileName(
+                  this, dialog_title, QString(), tr("Images (*.png *.jpg *.jpeg *.bmp)"));
+              if (path.isEmpty()) {
+                return;
+              }
+              QImage image(path);
+              if (image.isNull()) {
+                return;
+              }
+              image = image.convertToFormat(QImage::Format_RGBA8888);
+              TextureAsset asset{};
+              asset.width = static_cast<std::uint32_t>(image.width());
+              asset.height = static_cast<std::uint32_t>(image.height());
+              asset.srgb = srgb;
+              const auto* bits = image.constBits();
+              asset.rgba.assign(bits, bits + image.sizeInBytes());
+              const std::uint64_t tid = document->add_texture(std::move(asset)).id;
+              current_sp.get()->*field = tid;
+              current_sp->id = 0;  // 改贴图 → 新建自定义材质
+              current_sp->name.clear();
+              button->setText(texture_label(tid));
+              clear->setEnabled(true);
+              emit material_edited(entity_id, *current_sp);
+            });
+    connect(clear, &QPushButton::clicked, this,
+            [this, entity_id, current_sp, button, clear, texture_label, field](bool) {
+              current_sp.get()->*field = 0;
+              current_sp->id = 0;
+              current_sp->name.clear();
+              button->setText(texture_label(0));
+              clear->setEnabled(false);
+              emit material_edited(entity_id, *current_sp);
+            });
+    auto* row = new QWidget(parent);
+    auto* layout = new QHBoxLayout(row);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(4);
+    layout->addWidget(button, 1);
+    layout->addWidget(clear);
+    return std::pair{row, std::pair{button, clear}};
+  };
+  const auto albedo_row =
+      make_texture_row(&Material::albedo_texture_id, true, tr("Select albedo texture"));
+  const auto normal_row =
+      make_texture_row(&Material::normal_texture_id, false, tr("Select normal texture"));
+
+  // 刷新颜色色块 + 数值 spinbox + 贴图按钮（不触发它们的 valueChanged/clicked 回环）。
+  auto refresh_widgets = [color_button, rough_spin, metal_spin, color_style, texture_label,
+                          albedo_row, normal_row](const Material& m) {
     const QSignalBlocker b0(color_button);
     const QSignalBlocker b1(rough_spin);
     const QSignalBlocker b2(metal_spin);
@@ -442,6 +503,10 @@ void PropertyPanel::add_material_editor(QWidget* parent, QVBoxLayout* column,
         color_style(QColor::fromRgbF(m.base_color.x, m.base_color.y, m.base_color.z)));
     rough_spin->setValue(m.roughness);
     metal_spin->setValue(m.metallic);
+    albedo_row.second.first->setText(texture_label(m.albedo_texture_id));
+    albedo_row.second.second->setEnabled(m.albedo_texture_id != 0);
+    normal_row.second.first->setText(texture_label(m.normal_texture_id));
+    normal_row.second.second->setEnabled(m.normal_texture_id != 0);
   };
 
   connect(color_button, &QPushButton::clicked, this,
@@ -497,60 +562,8 @@ void PropertyPanel::add_material_editor(QWidget* parent, QVBoxLayout* column,
   form->addRow(tr("Color"), color_button);
   form->addRow(tr("Roughness"), rough_spin);
   form->addRow(tr("Metallic"), metal_spin);
-
-  // Albedo 贴图：选图 → QImage 解码成 RGBA8 → add_texture 入库 → 引用该纹理 id。
-  auto albedo_label = [](std::uint64_t id) {
-    return id == 0 ? tr("None") : tr("Texture #%1").arg(id);
-  };
-  auto* tex_button = new QPushButton(albedo_label(current_sp->albedo_texture_id), parent);
-  tex_button->setCursor(Qt::PointingHandCursor);
-  auto* tex_clear = new QPushButton(tr("Clear"), parent);
-  tex_clear->setEnabled(current_sp->albedo_texture_id != 0);
-
-  connect(tex_button, &QPushButton::clicked, this,
-          [this, entity_id, current_sp, document, tex_button, tex_clear, albedo_label](bool) {
-            const QString path =
-                QFileDialog::getOpenFileName(this, tr("Select albedo texture"), QString(),
-                                             tr("Images (*.png *.jpg *.jpeg *.bmp)"));
-            if (path.isEmpty()) {
-              return;
-            }
-            QImage image(path);
-            if (image.isNull()) {
-              return;
-            }
-            image = image.convertToFormat(QImage::Format_RGBA8888);
-            TextureAsset asset{};
-            asset.width = static_cast<std::uint32_t>(image.width());
-            asset.height = static_cast<std::uint32_t>(image.height());
-            const auto* bits = image.constBits();
-            asset.rgba.assign(bits, bits + image.sizeInBytes());
-            const std::uint64_t tid = document->add_texture(std::move(asset)).id;
-            current_sp->albedo_texture_id = tid;
-            current_sp->id = 0;  // 改贴图 → 新建自定义材质
-            current_sp->name.clear();
-            tex_button->setText(albedo_label(tid));
-            tex_clear->setEnabled(true);
-            emit material_edited(entity_id, *current_sp);
-          });
-
-  connect(tex_clear, &QPushButton::clicked, this,
-          [this, entity_id, current_sp, tex_button, tex_clear, albedo_label](bool) {
-            current_sp->albedo_texture_id = 0;
-            current_sp->id = 0;
-            current_sp->name.clear();
-            tex_button->setText(albedo_label(0));
-            tex_clear->setEnabled(false);
-            emit material_edited(entity_id, *current_sp);
-          });
-
-  auto* tex_row = new QWidget(parent);
-  auto* tex_layout = new QHBoxLayout(tex_row);
-  tex_layout->setContentsMargins(0, 0, 0, 0);
-  tex_layout->setSpacing(4);
-  tex_layout->addWidget(tex_button, 1);
-  tex_layout->addWidget(tex_clear);
-  form->addRow(tr("Albedo texture"), tex_row);
+  form->addRow(tr("Albedo texture"), albedo_row.first);
+  form->addRow(tr("Normal texture"), normal_row.first);
 
   column->addLayout(form);
 }

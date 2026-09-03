@@ -166,7 +166,7 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 | `wire_pipeline_` | 同一套 mesh shader，只把光栅变成线框 |
 | `line_pipeline_` | 线段，不测深度（轴和预览线永远在最前） |
 
-**Push constants**：每画一次物体塞给 shader 的一小包数——MVP 矩阵、模型矩阵、颜色、粗糙度/金属度、有没有贴图、光线方向、是否选中、眼睛位置、显示模式。没有大块 UBO。
+**Push constants**：每画一次物体塞给 shader 的一小包数——MVP 矩阵、模型矩阵、颜色、粗糙度/金属度、有没有 albedo/法线贴图、光线方向、是否选中、眼睛位置、显示模式、IBL mip。没有大块材质 UBO。
 
 ---
 
@@ -187,7 +187,7 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 模型那一圈对每个 `SceneDrawItem`：
 
 1. `mesh_asset_id` → GPU 网格；没有就跳过（还没 upload）。
-2. 有 albedo 贴图且已上传就绑定真纹理，否则绑 1×1 白纹理（Vulkan 描述符不能空绑）。
+2. 有 albedo / 法线贴图且已上传就绑定真纹理，否则分别绑 1×1 白图和 1×1 平坦法线（Vulkan 描述符不能空绑）。
 3. 填 push constants：`mvp = clip × proj × view × 物体世界矩阵`。
 4. `draw_indexed`。
 
@@ -202,16 +202,16 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 | 模式 | mode | 像素上做什么 |
 |---|---|---|
 | 线框 Wireframe | 0 | 深灰线，不打光；选中变橙 |
-| 着色 Shaded | 1 | Lambert：颜色 × 光线点积，简单明暗 |
-| 真实 Realistic | 2 | 简化 PBR（GGX 高光 + 半球天空/地面环境），没有阴影、没有 IBL |
+| 着色 Shaded | 1 | Lambert：构件识别色 × 光线点积，不读材质贴图 |
+| 真实 Realistic | 2 | PBR metallic-roughness：GGX 高光 + 方向光 + split-sum IBL（工作室环境立方体） |
 
 另外 `mode == 3` 给坐标轴/预览线：顶点自带颜色，不打光。
 
 着色和真实都会做一件 CAD 视口常做的事：若三角的几何法线背对相机就 `discard`。这样不用依赖 GPU 的正面判定（Vulkan 翻了 Y 之后绕序很脆），模型内部不容易透出来。
 
-贴图不用网格 UV，用 **triplanar**：把世界坐标投到 XY / YZ / ZX 三个平面采样，按法线混合。墙、盒子、导入的 BRep 都可以贴，哪怕没有展开 UV。`normal_texture_id` 目前只传到常量里，shader **还没采样法线贴图**。
+真实模式里，albedo 和法线贴图默认用 **triplanar**：把世界坐标投到 XY / YZ / ZX 三个平面采样，按几何法线混合。墙、盒子、导入的 BRep 都可以贴，哪怕没有展开 UV。导入网格若带 UV（`has_texcoord`），改走网格 UV。
 
-选中：`selected` 把颜色朝橙色 lerp 45%，不是轮廓描边。
+选中：`selected` 把颜色朝橙色 lerp，不是轮廓描边。
 
 ---
 
@@ -223,14 +223,57 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 
 ```
 实体.material_id
-  → Material（颜色、roughness、metallic、albedo_texture_id）
+  → Material（颜色、roughness、metallic、opacity、albedo_texture_id、normal_texture_id）
     → render_items() 写进 SceneDrawItem
       → 视口 resync_textures() → upload_texture
-        → draw 时 set_texture + push constants
-          → fragment shader 决定最终 RGB
+        → draw 时 set_texture(slot 0 albedo / slot 1 normal) + push constants
+          → fragment shader：先扰动法线，再 PBR 出最终 RGB
 ```
 
-默认材质带 albedo。没有贴图时 `has_albedo=0`，用纯 `base_color`。
+`Material` 是 glTF 式 metallic-roughness：**albedo** 是底色，**roughness / metallic** 是标量（没有独立粗糙度贴图），**法线贴图**只改像素法线，不改网格。没有 albedo 时 `has_albedo=0`，用纯 `base_color`；没有法线贴图时绑 1×1 平坦法线，且 `has_normal=0`，shader 跳过采样。
+
+预设材质（`Document::seed_default_materials`）全部带 PBR 参数和法线贴图。Glass 没有 albedo（靠 `base_color` + 低 roughness + `opacity` 做半透明），其余预设有 albedo。属性面板可改 roughness / metallic，也可另选 albedo / 法线图（法线图按线性 UNORM 入库，`srgb=false`）。
+
+### 9.1 法线贴图怎么实现
+
+法线贴图不是另一套光照，而是 PBR 的输入：它在像素上把几何法线 `n` 扰动成更「凹凸」的 `n'`，然后 GGX / IBL 都用 `n'`。轮廓仍是原网格，侧面看不出真几何。
+
+**生成（CPU）。** 预设贴图不是外挂 PNG。[document.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.cpp) 的 `make_normal_texture` 从一张高度函数做有限差分：
+
+```
+n = normalize( ((hL-hR)*strength, (hD-hU)*strength, 1) )
+RGB = n * 0.5 + 0.5
+```
+
+512×512，线性空间（`TextureAsset.srgb = false`）。Concrete / Wood / Steel 用和 albedo 同源的 FBM / 木纹 / 拉丝高度；Default / Plaster 是细颗粒；Glass 是低频、很弱的起伏。上传时走 `R8G8B8A8_UNORM`，**不要**当 sRGB，否则 GPU 会做 gamma 解码，法线会偏。
+
+**绑定（绘制）。** [scene_graph.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene_graph.cpp) 只在真实模式（`mode > 1.5`）解析贴图：
+
+- slot 0 = albedo，没有则 1×1 白
+- slot 1 = 法线，没有则 1×1 `(128,128,255)`（切线空间 +Z，即「完全平坦」）
+- `pc.material.z = has_albedo`，`pc.material.w = has_normal`
+
+着色模式故意忽略材质贴图，只用构件识别色。
+
+**采样（shader）。** [mesh.frag.hlsl](https://github.com/terry-chao/tamias/blob/main/shaders/mesh.frag.hlsl) 在 `has_normal` 时：
+
+1. `unpack_normal`：`rgb * 2 - 1` 还原切线空间法线。
+2. 无 UV：`sample_triplanar_normal`。三个轴向各采一张切线法线，按 whiteout blend 投到世界轴，再与几何法线按 `|n|` 的 4 次幂混合。这样盒子侧面、顶面都能看到凹凸，且接缝处不会硬切。
+3. 有 UV：`sample_uv_normal`。用屏幕空间偏导 `ddx/ddy(world_pos, uv)` 当场建 TBN，把切线法线转到世界空间。导入 GLB 走这条。
+4. 扰动后若 `n'` 背对视线，翻成朝向相机，避免凹凸把正面像素 discard 掉。
+
+然后才采样 albedo（triplanar 或 UV），把 `(n', albedo, roughness, metallic)` 交给 `shaded_realistic`。
+
+**和 PBR 的关系。** PBR 回答「这块表面怎么反射光」（金属度、粗糙度、环境倒影）；法线贴图回答「这个像素朝哪」。二者不是替代关系：
+
+```
+几何法线 n  +  法线贴图  →  n'
+n' + albedo + roughness + metallic + 方向光 + IBL  →  最终颜色
+```
+
+只有 PBR、没有法线：材质对，但表面太平。只有法线、没有 PBR：有凹凸，但高光/金属/环境都不对。真实模式两条同时开。
+
+IBL 是 split-sum：CPU 烘焙工作室环境立方体 → irradiance / GGX prefilter / BRDF LUT，fragment 用 `n'` 采漫反射、用 `reflect(-v, n')` 采高光。没有阴影、没有自定义 HDRI。
 
 ---
 
@@ -255,10 +298,11 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 这些在 [路线图](ROADMAP.md) 里，**不是漏画**，是还没做：
 
 - 合批 / instancing（大 BIM 的下一道性能命门；视锥一期已落地，二期/三期见 [视锥剔除](FRUSTUM-CULLING.md)）
-- 截面剖切、透明排序、Hidden Line
-- 阴影、AO、完整 IBL
+- 截面剖切、Hidden Line
+- 阴影、AO、自定义 HDRI（工作室 split-sum IBL 已有）
 - 渲染侧场景图（VSG 式节点 + 命令图）——现在每帧展平
 - 多选轮廓、按类型分类着色
+- 粗糙度 / 金属度贴图（现在是每材质一个标量）
 
 拾取 BVH 已经有了，但只给鼠标点选用，**没有**拿来做绘制剔除（三期才复用）。一期剔除走的是每个叶子的 `world_bounds`。
 
@@ -293,10 +337,11 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 | 文件 | 角色 |
 |---|---|
 | [document_viewport.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/document_viewport.cpp) | 相机、提交帧、上传网格、点选 |
-| [document.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.cpp) `render_items()` | 语义树 → 平铺清单（视锥筛选见 [视锥剔除](FRUSTUM-CULLING.md)） |
+| [document.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.cpp) | `render_items()` 展平清单；`seed_default_materials()` 预设 albedo / 法线 / PBR |
 | [render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_types.h) | `SceneDrawItem` / `RenderMode` |
 | [render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.cpp) | 线程、上传、一帧绘制顺序 |
 | [rhi/device.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/device.h) | GPU 抽象 |
 | [rhi/vulkan](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/vulkan/vulkan_device.cpp) / [rhi/opengl](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/opengl/opengl_device.cpp) | 两种实现；OpenGL 细节见 [OpenGL 后端](OPENGL.md)；第三后端方案见 [wgpu 接入](WGPU.md) |
-| [mesh.frag.hlsl](https://github.com/terry-chao/tamias/blob/main/shaders/mesh.frag.hlsl) | 线框 / 着色 / 真实怎么涂色 |
+| [material.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/material.h) | `Material` / `TextureAsset` |
+| [mesh.frag.hlsl](https://github.com/terry-chao/tamias/blob/main/shaders/mesh.frag.hlsl) | 线框 / 着色 / 真实（PBR + 法线采样） |
 | [rhi_backends.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/rhi_backends.cpp) | 启动时登记后端 |

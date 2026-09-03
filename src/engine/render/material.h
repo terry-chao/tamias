@@ -8,8 +8,8 @@
 
 namespace tamias {
 
-// PBR 材质。纯数据（无 OCCT/Qt 依赖），可序列化进 .tdoc。
-// 纹理 id 为 0 表示「无贴图」，此时只用 base_color/roughness/metallic。
+// PBR metallic-roughness 材质。纯数据（无 OCCT/Qt 依赖），可序列化进 .tdoc。
+// 纹理 id 为 0 表示「无贴图」：无 albedo 时用 base_color；无法线时 shader 用几何法线。
 struct Material {
   std::uint64_t id = 0;
   std::string name;

@@ -187,6 +187,15 @@ void Document::seed_default_materials() {
         return Vec3{t, t * 0.995f, t * 0.98f};
       })).id;
 
+  const std::uint64_t default_n_id =
+      add_texture(make_normal_texture(
+                      [](std::uint32_t x, std::uint32_t y) {
+                        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
+                        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
+                        return fbm_uv(u, v, 12, 5) * 0.75f + material_hash(x, y) * 0.25f;
+                      },
+                      1.8f))
+          .id;
   const std::uint64_t concrete_n_id =
       add_texture(make_normal_texture(
                       [](std::uint32_t x, std::uint32_t y) {
@@ -216,6 +225,24 @@ void Document::seed_default_materials() {
                       },
                       1.6f))
           .id;
+  const std::uint64_t plaster_n_id =
+      add_texture(make_normal_texture(
+                      [](std::uint32_t x, std::uint32_t y) {
+                        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
+                        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
+                        return fbm_uv(u, v, 14, 5) * 0.85f + material_hash(x, y) * 0.15f;
+                      },
+                      2.4f))
+          .id;
+  const std::uint64_t glass_n_id =
+      add_texture(make_normal_texture(
+                      [](std::uint32_t x, std::uint32_t y) {
+                        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
+                        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
+                        return fbm_uv(u, v, 3, 3);
+                      },
+                      0.45f))
+          .id;
 
   auto seed = [this](std::string name, Vec3 color, float roughness, float metallic,
                      std::uint64_t albedo = 0, std::uint64_t normal = 0, float opacity = 1.f) {
@@ -229,12 +256,12 @@ void Document::seed_default_materials() {
     m.normal_texture_id = normal;
     add_material(std::move(m));
   };
-  seed("Default", {0.78f, 0.81f, 0.86f}, 0.9f, 0.0f, default_tex_id);
+  seed("Default", {0.78f, 0.81f, 0.86f}, 0.9f, 0.0f, default_tex_id, default_n_id);
   seed("Concrete", {0.72f, 0.66f, 0.56f}, 0.92f, 0.0f, concrete_tex_id, concrete_n_id);
   seed("Steel", {0.55f, 0.57f, 0.62f}, 0.4f, 0.9f, steel_tex_id, steel_n_id);
-  seed("Glass", {0.52f, 0.76f, 0.84f}, 0.05f, 0.0f, 0, 0, 0.16f);
+  seed("Glass", {0.52f, 0.76f, 0.84f}, 0.05f, 0.0f, 0, glass_n_id, 0.16f);
   seed("Wood", {0.55f, 0.40f, 0.26f}, 0.7f, 0.0f, wood_tex_id, wood_n_id);
-  seed("Plaster", {0.92f, 0.90f, 0.85f}, 0.95f, 0.0f, plaster_tex_id);
+  seed("Plaster", {0.92f, 0.90f, 0.85f}, 0.95f, 0.0f, plaster_tex_id, plaster_n_id);
 }
 
 Storey& Document::add_storey(std::string name, double elevation) {

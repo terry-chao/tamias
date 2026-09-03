@@ -407,9 +407,19 @@ TEST(Document, RenderItemsKeepsInvalidBounds) {
 
 TEST(Document, DefaultMaterialsHaveAlbedoTextures) {
   Document doc("materials");
-  ASSERT_EQ(doc.textures().size(), 8u);  // 5 albedo + Concrete/Steel/Wood normals
+  ASSERT_EQ(doc.textures().size(), 11u);  // 5 albedo + 6 normals
   for (const auto& [id, material] : doc.materials()) {
     (void)id;
+    EXPECT_GE(material.roughness, 0.f);
+    EXPECT_LE(material.roughness, 1.f);
+    EXPECT_GE(material.metallic, 0.f);
+    EXPECT_LE(material.metallic, 1.f);
+    EXPECT_NE(material.normal_texture_id, 0u);
+    const TextureAsset* normal = doc.texture(material.normal_texture_id);
+    ASSERT_NE(normal, nullptr);
+    EXPECT_EQ(normal->width, 512u);
+    EXPECT_EQ(normal->height, 512u);
+    EXPECT_FALSE(normal->srgb);
     if (material.name == "Glass") {
       EXPECT_EQ(material.albedo_texture_id, 0u);
       EXPECT_LT(material.opacity, 0.5f);
@@ -422,12 +432,6 @@ TEST(Document, DefaultMaterialsHaveAlbedoTextures) {
     EXPECT_EQ(texture->width, 512u);
     EXPECT_EQ(texture->height, 512u);
     EXPECT_TRUE(texture->srgb);
-    if (material.name == "Concrete" || material.name == "Steel" || material.name == "Wood") {
-      EXPECT_NE(material.normal_texture_id, 0u);
-      const TextureAsset* normal = doc.texture(material.normal_texture_id);
-      ASSERT_NE(normal, nullptr);
-      EXPECT_FALSE(normal->srgb);
-    }
   }
 }
 

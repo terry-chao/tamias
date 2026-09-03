@@ -1266,6 +1266,10 @@ Plugin ID: %4</source>
         <translation>反照率贴图</translation>
     </message>
     <message>
+        <source>Normal texture</source>
+        <translation>法线贴图</translation>
+    </message>
+    <message>
         <source>None</source>
         <translation>无</translation>
     </message>
@@ -1288,6 +1292,10 @@ Plugin ID: %4</source>
     <message>
         <source>Select albedo texture</source>
         <translation>选择反照率贴图</translation>
+    </message>
+    <message>
+        <source>Select normal texture</source>
+        <translation>选择法线贴图</translation>
     </message>
     <message>
         <source>Images (*.png *.jpg *.jpeg *.bmp)</source>

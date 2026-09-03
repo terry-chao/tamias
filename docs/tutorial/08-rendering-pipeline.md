@@ -83,10 +83,10 @@ src/engine/render/rhi/
 | 模式 | 像素上做什么 |
 |---|---|
 | 线框 Wireframe | 深灰线，不打光；选中变橙 |
-| 着色 Shaded | Lambert：颜色 × 光线点积 |
-| 真实 Realistic | 简化 PBR（GGX + 半球环境） |
+| 着色 Shaded | Lambert：构件色 × 光线点积，不读贴图 |
+| 真实 Realistic | PBR（GGX + 方向光 + split-sum IBL） |
 
-材质从文档走到像素：`Material`（颜色/粗糙度/金属度/贴图）→ `render_items()` 写进 item → 视口上传纹理 → draw 时 set_texture + push constants → fragment shader 定最终颜色。贴图用 triplanar（世界坐标投影采样），不用网格 UV。
+材质从文档走到像素：`Material`（颜色/粗糙度/金属度/albedo/法线贴图）→ `render_items()` 写进 item → 视口上传纹理 → draw 时绑 slot 0/1 + push constants → fragment 先扰动法线再 PBR。BRep 用 triplanar（世界坐标投影采样）；导入网格带 UV 则走网格 UV。法线贴图怎么生成、绑定、采样见 [管线与 RHI · 法线贴图](../RENDERING.md#91-法线贴图怎么实现)。
 
 ## 8.8 现在刻意没做的
 
