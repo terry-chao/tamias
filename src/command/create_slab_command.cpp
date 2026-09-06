@@ -20,6 +20,17 @@ CreateSlabCommand::CreateSlabCommand(Document& document, double thickness, doubl
       elevation_(document.bim().storey_elevation(document.bim().active_storey_id()) +
                  elevation) {}
 
+CreateSlabCommand::CreateSlabCommand(Document& document, double thickness, double elevation,
+                                     Vec3 start, Vec3 end)
+    : CreateSlabCommand(document, thickness, elevation) {
+  start.y = static_cast<float>(elevation_);
+  end.y = static_cast<float>(elevation_);
+  start_ = start;
+  end_ = end;
+  has_start_ = true;
+  scripted_ = true;
+}
+
 Result<bool> CreateSlabCommand::on_point(Vec3 point) {
   point.y = static_cast<float>(elevation_);
   if (!has_start_) {

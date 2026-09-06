@@ -29,7 +29,7 @@ UI / 插件
 | 可测试 | `HostApi` 不依赖 CLR，C++ 测试能直接调函数指针 |
 | 内核封闭 | 插件看不到 `TopoDS_Shape`、RHI、特征树内部 |
 
-所以宿主暴露三类窄能力：**读文档的只读快照**、**宿主驱动的交互输入**，以及 **按名字派发命令**。
+所以宿主暴露窄能力：**读文档快照**、**写选择**、**宿主驱动的视口输入**、**宿主 Qt 对话框**，以及 **按名字派发命令**。
 
 ---
 
@@ -37,7 +37,7 @@ UI / 插件
 
 ```
 ┌────────────── C# 插件 (plugins/*.dll) ─────────┐
-│  IPlugin.Load → AddCommand / BeginPointInput      │
+│  IPlugin.Load → AddCommand / BeginPointInput / IUi     │
 ├────────────── Tamias.Host (managed/) ───────────┤
 │  hostfxr 入口 · ALC 加载 · 把 HostApi 包成 IHost │
 ├────────────── C ABI  HostApi  (稳定面) ─────────┤
@@ -51,9 +51,9 @@ UI / 插件
 
 | 方向 | 做什么 | 不做什么 |
 |---|---|---|
-| 对上（C#） | `IHost`：文档名、实体列表、选择、日志、Ribbon、拾点、dispatch | 不暴露 Qt、相机、GPU、OCCT |
+| 对上（C#） | `IHost`：文档名、实体列表、选择读写、日志、Ribbon、拾点/拾对象、宿主对话框、dispatch | 不暴露 Qt 句柄、相机、GPU、OCCT |
 | 对下（C++） | `HostApi` 函数指针；`dispatch` 进 `CommandSystem` | 不让插件持有 `Document*` |
-| 对 UI | 启动时扫插件；命令可进入指定 Ribbon page/group；视口代插件采集点；日志进状态栏 | 不给插件画自定义面板（尚未） |
+| 对 UI | 启动时扫插件；命令可进入指定 Ribbon page/group；视口代插件采集点/对象；`IUi` 由宿主弹出 Qt 对话框；日志进状态栏 | 不给插件自建 HWND / 嵌入 WinForms |
 
 稳定面是 **C ABI**（[`host_api.h`](https://github.com/terry-chao/tamias/blob/main/src/plugin/host_api.h)），不是 C++ 类布局，也不是 C++/CLI。C# 用 P/Invoke 函数指针；以后用 Rust / 纯 C 插件也可以对同一张表。
 
@@ -67,7 +67,7 @@ UI / 插件
 2. **命令名是公共协议。** `delete_entity`、`set_param` 和工具条用同一套注册表（[`register_commands.cpp`](https://github.com/terry-chao/tamias/blob/main/src/command/register_commands.cpp)）。
 3. **宿主失败不能拖死应用。** 找不到 nethost / `managed/Tamias.Host.dll` 时只打日志，主程序照常开。没有插件命令而已。
 
-ABI 版本现在是 `4`。C# `Bootstrap.Initialize` 对不上就拒绝加载。v4 在 v3 的 Ribbon/点输入能力上扩充插件登记 metadata，供管理器展示稳定 id、作者、版本、发布日期、描述、首页、图标和内置标识。
+ABI 版本现在是 `5`。C# `Bootstrap.Initialize` 对不上就拒绝加载。v5 在 v4 的 metadata 上追加：写选择、宿主对话框（消息/输入/表单/文件）、实体拾取与更丰富的点输入预览；创建类命令在参数给齐点列/`origin` 时改为立即 execute。
 
 ---
 
@@ -89,7 +89,7 @@ ABI 版本现在是 `4`。C# `Bootstrap.Initialize` 对不上就拒绝加载。v
 
 插件代码里没有「删节点」；它只点了内核已经会的那颗按钮。
 
-插件绘制采用两段式流程：先由 `BeginPointInput` 让宿主采集并预览输入，再由完成回调 dispatch 一个非交互文档命令。这样 C# 能编排控制点，同时 Qt、拾取和撤销边界仍由宿主控制。
+插件绘制采用两段式流程：先由 `BeginPointInput` / `BeginEntityInput` 让宿主采集并预览输入（可先用 `IUi.ShowForm` 填尺寸），再由完成回调 `Dispatch` 或 `HostDraw` 发一条给齐参数的文档命令。Qt、拾取和撤销边界仍由宿主控制。给齐 `p:points` / `v:origin` 时，`create_wall` / `create_box` / `create_line` 等不再武装交互工具，而是立刻 execute。
 
 ---
 

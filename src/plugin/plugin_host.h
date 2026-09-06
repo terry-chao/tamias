@@ -26,6 +26,8 @@ class PluginHost {
  public:
   using LogSink = std::function<void(std::string_view)>;
   using AfterEdit = std::function<void()>;
+  using ShowDialog = std::function<std::int32_t(std::int32_t kind, std::int32_t buttons,
+                                                std::string_view spec, std::string& out)>;
   using PointInputCompletion = std::function<void(std::vector<PluginPickPoint>, bool)>;
   using BeginPointInput =
       std::function<Result<void>(PluginPointInputRequest, PointInputCompletion)>;
@@ -46,6 +48,8 @@ class PluginHost {
     begin_point_input_ = std::move(begin);
     cancel_point_input_ = std::move(cancel);
   }
+  void set_selection_changed(AfterEdit changed) { selection_changed_ = std::move(changed); }
+  void set_dialog_handler(ShowDialog handler) { show_dialog_ = std::move(handler); }
 
   // Load Tamias.Host.dll from <exe>/managed and plugins from <exe>/plugins.
   Result<void> load();
@@ -78,8 +82,12 @@ class PluginHost {
   static std::int32_t host_begin_point_input(
       void* context, std::uint64_t request_id, std::int32_t min_points,
       std::int32_t max_points, std::int32_t flags, float work_plane_y,
-      std::int32_t preview_kind, const char* preview_curve_kind);
+      std::int32_t preview_kind, const char* preview_curve_kind, const char* filter_kind);
   static std::int32_t host_cancel_point_input(void* context, std::uint64_t request_id);
+  static std::int32_t host_set_selection(void* context, const std::uint64_t* ids,
+                                         std::int32_t count);
+  static std::int32_t host_show_dialog(void* context, std::int32_t kind, std::int32_t buttons,
+                                       const char* spec_utf8, char* out_utf8, std::int32_t cap);
 
   void emit_log(std::int32_t level, std::string_view message);
   [[nodiscard]] std::vector<std::uint64_t> entity_ids() const;
@@ -90,6 +98,8 @@ class PluginHost {
   AfterEdit after_edit_;
   BeginPointInput begin_point_input_;
   CancelPointInput cancel_point_input_;
+  AfterEdit selection_changed_;
+  ShowDialog show_dialog_;
   LogSink log_sink_;
   std::vector<PluginCommand> registered_;
   std::vector<PluginInfo> plugins_;

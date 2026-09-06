@@ -24,7 +24,7 @@ public static class Bootstrap
         try
         {
             var api = Marshal.PtrToStructure<HostApi>(apiPtr);
-            if (api.AbiVersion != 4)
+            if (api.AbiVersion != 5)
             {
                 return -2;
             }

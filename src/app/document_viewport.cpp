@@ -7,6 +7,7 @@
 #include "engine/math/grid.h"
 #include "engine/modeling/curve_geom.h"
 #include "engine/modeling/feature.h"
+#include "entity/entity.h"
 #include "entity/entity_grip.h"
 
 #if defined(TAMIAS_HAS_RHI_OPENGL)
@@ -561,13 +562,33 @@ void DocumentViewport::submit_current_frame() {
     frame.preview_control_polyline = controls;
     frame.preview_points = controls;
     if (controls.size() >= 2 && plugin_point_input_.preview_kind() != 0) {
-      const std::string& kind = plugin_point_input_.preview_curve_kind();
-      if (kind == "nurbs") {
-        frame.preview_polyline = sample_nurbs(controls, {});
-      } else if (kind == "bspline") {
-        frame.preview_polyline = sample_bspline(controls);
-      } else if (kind == "bezier") {
-        frame.preview_polyline = sample_bezier(controls);
+      const int kind = plugin_point_input_.preview_kind();
+      const std::string& curve = plugin_point_input_.preview_curve_kind();
+      if (kind == 1) {
+        if (curve == "nurbs") {
+          frame.preview_polyline = sample_nurbs(controls, {});
+        } else if (curve == "bspline") {
+          frame.preview_polyline = sample_bspline(controls);
+        } else if (curve == "bezier") {
+          frame.preview_polyline = sample_bezier(controls);
+        } else {
+          frame.preview_polyline = controls;
+        }
+      } else if (kind == 2 || kind == 7) {
+        frame.preview_polyline = {controls.front(), controls.back()};
+      } else if (kind == 3) {
+        frame.preview_polyline = controls;
+      } else if (kind == 4 || kind == 8) {
+        frame.preview_polyline = sample_rect_xz(controls.front(), controls.back());
+      } else if (kind == 5) {
+        frame.preview_polyline =
+            sample_circle_xz(controls.front(), length(controls.back() - controls.front()));
+      } else if (kind == 6) {
+        if (controls.size() >= 3) {
+          frame.preview_polyline = sample_arc_3pt(controls[0], controls[1], controls.back());
+        } else {
+          frame.preview_polyline = {controls.front(), controls.back()};
+        }
       } else {
         frame.preview_polyline = controls;
       }
@@ -631,6 +652,18 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
             })) {
           picked = hit->node_id;
           point = ray.origin + ray.direction * hit->t;
+        }
+      }
+      if (plugin_point_input_.entities_only()) {
+        if (picked == 0) {
+          return;
+        }
+        const std::string& filter = plugin_point_input_.filter_kind();
+        if (!filter.empty()) {
+          const Entity* entity = document_->entity(picked);
+          if (entity == nullptr || entity_kind_name(entity->kind()) != filter) {
+            return;
+          }
         }
       }
       plugin_point_input_.add_point({point, picked});
@@ -1102,6 +1135,11 @@ void DocumentViewport::refresh_after_edit() {
   rebuild_bvh();
   request_redraw();
   emit document_changed();
+  emit selection_changed();
+}
+
+void DocumentViewport::notify_selection_changed() {
+  request_redraw();
   emit selection_changed();
 }
 

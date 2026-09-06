@@ -844,7 +844,50 @@ TEST(CommandSystem, DispatchCreateWallUndoRedo) {
   EXPECT_EQ(doc.meshes().size(), 1u);
 }
 
-TEST(CommandSystem, DispatchCreateSlabTwoCorners) {
+TEST(CommandSystem, DispatchCreateWallFromPoints) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document doc("scripted-wall");
+  CommandArgs args = {
+      {"thickness", 0.2},
+      {"height", 3.0},
+      {"points", std::vector<Vec3>{{0.f, 0.f, 0.f}, {4.f, 0.f, 0.f}}},
+  };
+  auto r = system.dispatch(doc, "create_wall", args);
+  ASSERT_TRUE(r) << r.error();
+  EXPECT_FALSE(system.has_pending());
+  EXPECT_EQ(doc.entities().size(), 1u);
+}
+
+TEST(CommandSystem, DispatchCreateBoxFromOrigin) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document doc("scripted-box");
+  CommandArgs args = {{"origin", Vec3{1.f, 0.f, 2.f}}};
+  auto r = system.dispatch(doc, "create_box", args);
+  ASSERT_TRUE(r) << r.error();
+  EXPECT_FALSE(system.has_pending());
+  EXPECT_EQ(doc.entities().size(), 1u);
+}
+
+TEST(CommandSystem, DispatchCreateLineFromPoints) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document doc("scripted-line");
+  CommandArgs args = {
+      {"points", std::vector<Vec3>{{0.f, 0.f, 0.f}, {1.f, 0.f, 1.f}}},
+  };
+  auto r = system.dispatch(doc, "create_line", args);
+  ASSERT_TRUE(r) << r.error();
+  EXPECT_FALSE(system.has_pending());
+  EXPECT_EQ(doc.entities().size(), 1u);
+}
   CommandRegistry registry;
   register_commands(registry);
   CommandSystem system(registry);

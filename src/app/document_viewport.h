@@ -73,6 +73,7 @@ class DocumentViewport final : public QWidget {
   // 会话层：文档 / 命令 / 相机 / 工具 / 选择都在这。
   [[nodiscard]] Session& session() { return *session_; }
   void refresh_after_edit();
+  void notify_selection_changed();
   Result<void> begin_plugin_point_input(
       PluginPointInputRequest request, PluginHost::PointInputCompletion completion);
   void cancel_plugin_point_input(std::uint64_t request_id = 0);

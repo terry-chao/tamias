@@ -32,6 +32,44 @@ enum class EntityKind : std::uint8_t {
   Nurbs = 15,
 };
 
+[[nodiscard]] inline const char* entity_kind_name(EntityKind kind) {
+  switch (kind) {
+    case EntityKind::Wall:
+      return "Wall";
+    case EntityKind::Box:
+      return "Box";
+    case EntityKind::Cylinder:
+      return "Cylinder";
+    case EntityKind::Beam:
+      return "Beam";
+    case EntityKind::Column:
+      return "Column";
+    case EntityKind::Slab:
+      return "Slab";
+    case EntityKind::Door:
+      return "Door";
+    case EntityKind::Window:
+      return "Window";
+    case EntityKind::Line:
+      return "Line";
+    case EntityKind::Polyline:
+      return "Polyline";
+    case EntityKind::Circle:
+      return "Circle";
+    case EntityKind::Arc:
+      return "Arc";
+    case EntityKind::Bezier:
+      return "Bezier";
+    case EntityKind::Rectangle:
+      return "Rectangle";
+    case EntityKind::BSpline:
+      return "BSpline";
+    case EntityKind::Nurbs:
+      return "Nurbs";
+  }
+  return "Unknown";
+}
+
 // 领域实体基类：参数化对象，持有特征树（造型配方）+ 放置 + 网格引用。
 // SceneNode 是内部 render/select 单元，实体语义包裹它（entity id == scene node id）。
 // 造型信息（几何生成）委托 createGeom 抽象（IGeometryBuilder），本类保持内核无关。

@@ -10,6 +10,15 @@ CreateWallCommand::CreateWallCommand(Document& document, double thickness, doubl
       height_(height),
       elevation_(document.bim().storey_elevation(document.bim().active_storey_id())) {}
 
+CreateWallCommand::CreateWallCommand(Document& document, double thickness, double height,
+                                     Vec3 start, Vec3 end)
+    : CreateWallCommand(document, thickness, height) {
+  start_ = start;
+  end_ = end;
+  has_start_ = true;
+  scripted_ = true;
+}
+
 Result<bool> CreateWallCommand::on_point(Vec3 point) {
   if (!has_start_) {
     start_ = point;

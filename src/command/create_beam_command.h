@@ -9,8 +9,9 @@ namespace tamias {
 class CreateBeamCommand final : public Command {
  public:
   CreateBeamCommand(Document& document, double width, double depth);
+  CreateBeamCommand(Document& document, double width, double depth, Vec3 start, Vec3 end);
 
-  [[nodiscard]] bool interactive() const override { return true; }
+  [[nodiscard]] bool interactive() const override { return !scripted_; }
   [[nodiscard]] Result<bool> on_point(Vec3 point) override;
   [[nodiscard]] bool has_start() const override { return has_start_; }
   [[nodiscard]] Vec3 start() const override { return start_; }
@@ -26,6 +27,7 @@ class CreateBeamCommand final : public Command {
   double width_ = 0.3;
   double depth_ = 0.5;
   bool has_start_ = false;
+  bool scripted_ = false;
   Vec3 start_{};
   Vec3 end_{};
   MeshAsset mesh_{};

@@ -5,7 +5,7 @@
 
 当前内容：
 
-- `csharp/Tamias.Hello/` — C# 示例插件（实现 `IPlugin`，注册两条 Ribbon 命令）
+- `csharp/Tamias.Hello/` — C# 示例插件（实现 `IPlugin`：选择、宿主对话框、脚本化建墙、视口拾对象）
 - `csharp/Tamias.Nurbs/` — 视口拾点示例；把 NURBS 命令注入 `home/draw`，
   收集控制点后 dispatch 通用 `create_curve`
 

@@ -3,6 +3,7 @@
 #include "command/command.h"
 #include "engine/document/document.h"
 
+#include <utility>
 #include <vector>
 
 namespace tamias {
@@ -13,8 +14,9 @@ enum class SketchKind { Line, Polyline, Circle, Arc, Bezier, Rectangle, BSpline 
 class CreateSketchCommand final : public Command {
  public:
   CreateSketchCommand(Document& document, SketchKind kind);
+  CreateSketchCommand(Document& document, SketchKind kind, std::vector<Vec3> points);
 
-  [[nodiscard]] bool interactive() const override { return true; }
+  [[nodiscard]] bool interactive() const override { return !scripted_; }
   [[nodiscard]] Result<bool> on_point(Vec3 point) override;
   [[nodiscard]] bool has_start() const override { return !points_.empty(); }
   [[nodiscard]] Vec3 start() const override { return points_.empty() ? Vec3{} : points_.front(); }
@@ -37,6 +39,7 @@ class CreateSketchCommand final : public Command {
 
   Document* document_ = nullptr;
   SketchKind kind_ = SketchKind::Line;
+  bool scripted_ = false;
   std::vector<Vec3> points_;
   MeshAsset mesh_{};
   std::unique_ptr<Entity> entity_;

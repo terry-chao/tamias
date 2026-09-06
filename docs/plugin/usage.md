@@ -41,14 +41,17 @@ build/bin/Debug/
    - “已安装”页显示 icon、作者、内置标识、版本、发布日期、描述、首页和命令所在栏位；取消勾选会立即停用该插件的所有 Ribbon 命令。
    - “Ribbon 布局”页选择 page/group 后，用上移/下移调整具体插件图标的左右顺序。
    - 点 **确定** 后启停与顺序立即生效并持久化；取消不修改。停用不会卸载程序集，只关闭命令入口。
-4. `Tamias.Hello` 提供两条：
+4. `Tamias.Hello` 提供：
 
 | 按钮 | 命令 id | 做什么 |
 |---|---|---|
 | **列出选择** | `hello.list_selection` | 把当前选择写到状态栏：`#id 种类 名字` |
 | **删除所选** | `hello.delete_selected` | 对每个选中 id `dispatch delete_entity`（可撤销） |
+| **关于示例** | `hello.about` | 弹出当前文档摘要对话框 |
+| **创建墙** | `hello.create_wall` | 表单填厚度/高度，视口点两点后建墙 |
+| **拾取对象** | `hello.pick_entities` | 视口点选对象，Enter 后写入选择 |
 
-没有选择时状态栏提示「未选择对象」。插件 `Log` 也走状态栏（约 8 秒）。
+没有选择时状态栏提示「未选择对象」。插件 `Log` 也走状态栏（约 8 秒）。对话框由宿主弹出，不要在插件里自建窗口。
 
 NURBS 按钮启动宿主拾点：左键添加控制点，Enter 或双击完成，Esc 或右键取消。完成后生成的实体与内置实体一样支持权重编辑、撤销/重做和文档保存。
 
@@ -74,6 +77,6 @@ NURBS 按钮启动宿主拾点：左键添加控制点，Enter 或双击完成�
 
 ## 4. 示例插件在做什么
 
-[`HelloPlugin.cs`](https://github.com/terry-chao/tamias/blob/main/plugins/csharp/Tamias.Hello/HelloPlugin.cs) 是最小范本：`Load` 里 `AddCommand` 两次，回调里只读 `Selection` / `Entities`，或 `Dispatch`。没有自定义窗口、没有直接改 `Document`。
+[`HelloPlugin.cs`](https://github.com/terry-chao/tamias/blob/main/plugins/csharp/Tamias.Hello/HelloPlugin.cs) 是最小范本：`Load` 里 `AddCommand`，回调里读 `Selection` / `Entities`、弹 `IUi` 对话框、视口拾点后 `HostDraw.Wall`，或 `Dispatch`。不直接改 `Document`，也不自建窗口。
 
 下一篇：[宿主功能](api.md)（能调哪些 API、能发哪些命令）。要写自己的 DLL，见[开发插件](develop.md)。

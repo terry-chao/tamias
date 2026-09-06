@@ -7,6 +7,15 @@ namespace tamias {
 CreateBeamCommand::CreateBeamCommand(Document& document, double width, double depth)
     : document_(&document), width_(width), depth_(depth) {}
 
+CreateBeamCommand::CreateBeamCommand(Document& document, double width, double depth, Vec3 start,
+                                     Vec3 end)
+    : CreateBeamCommand(document, width, depth) {
+  start_ = start;
+  end_ = end;
+  has_start_ = true;
+  scripted_ = true;
+}
+
 Result<bool> CreateBeamCommand::on_point(Vec3 point) {
   if (!has_start_) {
     start_ = point;

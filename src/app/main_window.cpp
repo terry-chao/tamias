@@ -14,6 +14,7 @@
 #include "plugin/plugin_host.h"
 #include "plugin/plugin_manager.h"
 #include "plugin_manager_dialog.h"
+#include "plugin_prompt_dialog.h"
 #include "property_panel.h"
 #include "ribbon_bar.h"
 #include "ribbon_group.h"
@@ -52,6 +53,7 @@
 #include <QVector>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -530,6 +532,10 @@ MainWindow::MainWindow(QWidget* parent)
   plugin_host_.set_log_sink([this](std::string_view msg) {
     statusBar()->showMessage(QString::fromUtf8(msg.data(), static_cast<int>(msg.size())), 8000);
   });
+  plugin_host_.set_dialog_handler(
+      [this](std::int32_t kind, std::int32_t buttons, std::string_view spec, std::string& out) {
+        return show_plugin_dialog(this, kind, buttons, spec, out);
+      });
   if (auto loaded = plugin_host_.load(); !loaded) {
     log_warn(loaded.error());
     statusBar()->showMessage(QString::fromStdString(loaded.error()), 8000);
@@ -1322,9 +1328,11 @@ void MainWindow::bind_plugin_session() {
   if (vp == nullptr) {
     plugin_host_.unbind();
     plugin_host_.set_point_input_handlers({}, {});
+    plugin_host_.set_selection_changed({});
     return;
   }
   plugin_host_.bind(&vp->document(), &vp->command_system(), [vp] { vp->refresh_after_edit(); });
+  plugin_host_.set_selection_changed([vp] { vp->notify_selection_changed(); });
   plugin_host_.set_point_input_handlers(
       [vp](PluginPointInputRequest request,
            PluginHost::PointInputCompletion completion) {

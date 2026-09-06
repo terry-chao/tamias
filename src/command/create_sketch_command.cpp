@@ -19,6 +19,10 @@ bool nearly_same(Vec3 a, Vec3 b) { return length(a - b) < 1e-4f; }
 CreateSketchCommand::CreateSketchCommand(Document& document, SketchKind kind)
     : document_(&document), kind_(kind) {}
 
+CreateSketchCommand::CreateSketchCommand(Document& document, SketchKind kind,
+                                         std::vector<Vec3> points)
+    : document_(&document), kind_(kind), scripted_(true), points_(std::move(points)) {}
+
 bool CreateSketchCommand::open_ended() const {
   switch (kind_) {
     case SketchKind::Polyline:

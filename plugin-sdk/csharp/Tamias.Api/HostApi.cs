@@ -54,10 +54,23 @@ public delegate int HostBeginPointInputFn(
     int flags,
     float workPlaneY,
     int previewKind,
-    IntPtr previewCurveKindUtf8);
+    IntPtr previewCurveKindUtf8,
+    IntPtr filterKindUtf8);
 
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 public delegate int HostCancelPointInputFn(IntPtr context, ulong requestId);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+public delegate int HostSetSelectionFn(IntPtr context, IntPtr ids, int count);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+public delegate int HostShowDialogFn(
+    IntPtr context,
+    int kind,
+    int buttons,
+    IntPtr specUtf8,
+    IntPtr outUtf8,
+    int cap);
 
 [StructLayout(LayoutKind.Sequential)]
 public struct HostApi
@@ -77,4 +90,6 @@ public struct HostApi
     public IntPtr RegisterPlugin;
     public IntPtr BeginPointInput;
     public IntPtr CancelPointInput;
+    public IntPtr SetSelection;
+    public IntPtr ShowDialog;
 }

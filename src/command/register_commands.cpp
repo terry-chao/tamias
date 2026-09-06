@@ -15,6 +15,9 @@
 #include "command/set_material_command.h"
 #include "bim/wall_size.h"
 
+#include <memory>
+#include <optional>
+
 namespace tamias {
 namespace {
 
@@ -53,6 +56,43 @@ std::vector<double> arg_doubles(const CommandArgs& args, const std::string& name
              : std::vector<double>{};
 }
 
+std::optional<Vec3> arg_vec3(const CommandArgs& args, const std::string& name) {
+  const auto it = args.find(name);
+  if (it != args.end() && std::holds_alternative<Vec3>(it->second)) {
+    return std::get<Vec3>(it->second);
+  }
+  return std::nullopt;
+}
+
+std::vector<Vec3> placement_points(const CommandArgs& args) {
+  auto points = arg_points(args, "points");
+  if (points.empty()) {
+    if (auto origin = arg_vec3(args, "origin")) {
+      points.push_back(*origin);
+    }
+  }
+  return points;
+}
+
+std::unique_ptr<CreatePrimitiveCommand> make_primitive(Document& doc, PrimitiveKind kind,
+                                                       const CommandArgs& args) {
+  auto points = placement_points(args);
+  const auto host_id = static_cast<std::uint64_t>(arg_int(args, "host_id", 0));
+  if (!points.empty()) {
+    return std::make_unique<CreatePrimitiveCommand>(doc, kind, points[0], host_id);
+  }
+  return std::make_unique<CreatePrimitiveCommand>(doc, kind);
+}
+
+std::unique_ptr<CreateSketchCommand> make_sketch(Document& doc, SketchKind kind,
+                                                 const CommandArgs& args) {
+  auto points = arg_points(args, "points");
+  if (!points.empty()) {
+    return std::make_unique<CreateSketchCommand>(doc, kind, std::move(points));
+  }
+  return std::make_unique<CreateSketchCommand>(doc, kind);
+}
+
 CurveKind curve_kind_from_name(const std::string& name) {
   if (name == "polyline") {
     return CurveKind::Polyline;
@@ -85,76 +125,77 @@ void register_commands(CommandRegistry& registry) {
   });
 
   registry.register_command("create_wall", [](Document& doc, const CommandArgs& args) {
-    return std::make_unique<CreateWallCommand>(
-        doc, arg_double(args, "thickness", kDefaultWallThickness),
-        arg_double(args, "height", kDefaultWallHeight));
+    const double thickness = arg_double(args, "thickness", kDefaultWallThickness);
+    const double height = arg_double(args, "height", kDefaultWallHeight);
+    auto points = arg_points(args, "points");
+    if (points.size() >= 2) {
+      return std::make_unique<CreateWallCommand>(doc, thickness, height, points[0], points[1]);
+    }
+    return std::make_unique<CreateWallCommand>(doc, thickness, height);
   });
 
   registry.register_command("create_beam", [](Document& doc, const CommandArgs& args) {
-    return std::make_unique<CreateBeamCommand>(doc, arg_double(args, "width", 0.3),
-                                               arg_double(args, "depth", 0.5));
+    const double width = arg_double(args, "width", 0.3);
+    const double depth = arg_double(args, "depth", 0.5);
+    auto points = arg_points(args, "points");
+    if (points.size() >= 2) {
+      return std::make_unique<CreateBeamCommand>(doc, width, depth, points[0], points[1]);
+    }
+    return std::make_unique<CreateBeamCommand>(doc, width, depth);
   });
 
   registry.register_command("create_box", [](Document& doc, const CommandArgs& args) {
-    (void)args;
-    return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Box);
+    return make_primitive(doc, PrimitiveKind::Box, args);
   });
 
   registry.register_command("create_cylinder", [](Document& doc, const CommandArgs& args) {
-    (void)args;
-    return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Cylinder);
+    return make_primitive(doc, PrimitiveKind::Cylinder, args);
   });
 
   registry.register_command("create_column", [](Document& doc, const CommandArgs& args) {
-    (void)args;
-    return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Column);
+    return make_primitive(doc, PrimitiveKind::Column, args);
   });
 
   registry.register_command("create_slab", [](Document& doc, const CommandArgs& args) {
     const double default_offset =
         doc.bim().active_storey_id() == 0 ? kDefaultWallHeight : 0.0;
-    return std::make_unique<CreateSlabCommand>(
-        doc, arg_double(args, "thickness", 0.2),
-        arg_double(args, "elevation", default_offset));
+    const double thickness = arg_double(args, "thickness", 0.2);
+    const double elevation = arg_double(args, "elevation", default_offset);
+    auto points = arg_points(args, "points");
+    if (points.size() >= 2) {
+      return std::make_unique<CreateSlabCommand>(doc, thickness, elevation, points[0], points[1]);
+    }
+    return std::make_unique<CreateSlabCommand>(doc, thickness, elevation);
   });
 
   registry.register_command("create_door", [](Document& doc, const CommandArgs& args) {
-    (void)args;
-    return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Door);
+    return make_primitive(doc, PrimitiveKind::Door, args);
   });
 
   registry.register_command("create_window", [](Document& doc, const CommandArgs& args) {
-    (void)args;
-    return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Window);
+    return make_primitive(doc, PrimitiveKind::Window, args);
   });
 
   registry.register_command("create_line", [](Document& doc, const CommandArgs& args) {
-    (void)args;
-    return std::make_unique<CreateSketchCommand>(doc, SketchKind::Line);
+    return make_sketch(doc, SketchKind::Line, args);
   });
   registry.register_command("create_polyline", [](Document& doc, const CommandArgs& args) {
-    (void)args;
-    return std::make_unique<CreateSketchCommand>(doc, SketchKind::Polyline);
+    return make_sketch(doc, SketchKind::Polyline, args);
   });
   registry.register_command("create_circle", [](Document& doc, const CommandArgs& args) {
-    (void)args;
-    return std::make_unique<CreateSketchCommand>(doc, SketchKind::Circle);
+    return make_sketch(doc, SketchKind::Circle, args);
   });
   registry.register_command("create_arc", [](Document& doc, const CommandArgs& args) {
-    (void)args;
-    return std::make_unique<CreateSketchCommand>(doc, SketchKind::Arc);
+    return make_sketch(doc, SketchKind::Arc, args);
   });
   registry.register_command("create_bezier", [](Document& doc, const CommandArgs& args) {
-    (void)args;
-    return std::make_unique<CreateSketchCommand>(doc, SketchKind::Bezier);
+    return make_sketch(doc, SketchKind::Bezier, args);
   });
   registry.register_command("create_rectangle", [](Document& doc, const CommandArgs& args) {
-    (void)args;
-    return std::make_unique<CreateSketchCommand>(doc, SketchKind::Rectangle);
+    return make_sketch(doc, SketchKind::Rectangle, args);
   });
   registry.register_command("create_bspline", [](Document& doc, const CommandArgs& args) {
-    (void)args;
-    return std::make_unique<CreateSketchCommand>(doc, SketchKind::BSpline);
+    return make_sketch(doc, SketchKind::BSpline, args);
   });
   registry.register_command("create_curve", [](Document& doc, const CommandArgs& args) {
     CurveDefinition definition;

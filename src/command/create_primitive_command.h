@@ -15,8 +15,10 @@ enum class PrimitiveKind { Box, Cylinder, Column, Door, Window };
 class CreatePrimitiveCommand final : public Command {
  public:
   CreatePrimitiveCommand(Document& document, PrimitiveKind kind);
+  CreatePrimitiveCommand(Document& document, PrimitiveKind kind, Vec3 position,
+                         std::uint64_t host_id = 0);
 
-  [[nodiscard]] bool interactive() const override { return true; }
+  [[nodiscard]] bool interactive() const override { return !scripted_; }
   [[nodiscard]] Result<bool> on_point(Vec3 point) override;
   [[nodiscard]] Result<bool> on_pick(Vec3 point, std::uint64_t picked_entity_id) override;
   [[nodiscard]] float work_plane_y() const override { return work_plane_y_; }
@@ -31,6 +33,7 @@ class CreatePrimitiveCommand final : public Command {
   Document* document_ = nullptr;
   PrimitiveKind kind_ = PrimitiveKind::Box;
   float work_plane_y_ = 0.f;
+  bool scripted_ = false;
   Vec3 position_{};
   std::uint64_t host_id_ = 0;
   MeshAsset mesh_{};

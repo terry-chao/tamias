@@ -6,6 +6,7 @@
 #include "plugin/plugin_point_input_request.h"
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace tamias {
@@ -22,11 +23,13 @@ class PluginPointInputSession {
   [[nodiscard]] bool accepts_confirm() const;
   [[nodiscard]] bool grid_snap() const;
   [[nodiscard]] bool pick_entities() const;
+  [[nodiscard]] bool entities_only() const;
   [[nodiscard]] float work_plane_y() const { return request_.work_plane_y; }
   [[nodiscard]] int preview_kind() const { return request_.preview_kind; }
   [[nodiscard]] const std::string& preview_curve_kind() const {
     return request_.preview_curve_kind;
   }
+  [[nodiscard]] const std::string& filter_kind() const { return request_.filter_kind; }
   [[nodiscard]] const std::vector<PluginPickPoint>& points() const { return points_; }
 
  private:

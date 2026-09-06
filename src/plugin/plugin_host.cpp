@@ -32,44 +32,6 @@ constexpr std::int32_t kLogError = 2;
   return copy;
 }
 
-[[nodiscard]] const char* entity_kind_name(EntityKind kind) {
-  switch (kind) {
-    case EntityKind::Wall:
-      return "Wall";
-    case EntityKind::Box:
-      return "Box";
-    case EntityKind::Cylinder:
-      return "Cylinder";
-    case EntityKind::Beam:
-      return "Beam";
-    case EntityKind::Column:
-      return "Column";
-    case EntityKind::Slab:
-      return "Slab";
-    case EntityKind::Door:
-      return "Door";
-    case EntityKind::Window:
-      return "Window";
-    case EntityKind::Line:
-      return "Line";
-    case EntityKind::Polyline:
-      return "Polyline";
-    case EntityKind::Circle:
-      return "Circle";
-    case EntityKind::Arc:
-      return "Arc";
-    case EntityKind::Bezier:
-      return "Bezier";
-    case EntityKind::Rectangle:
-      return "Rectangle";
-    case EntityKind::BSpline:
-      return "BSpline";
-    case EntityKind::Nurbs:
-      return "Nurbs";
-  }
-  return "Unknown";
-}
-
 }  // namespace
 
 PluginHost::PluginHost() : csharp_(std::make_unique<CsharpRuntime>()) {
@@ -88,6 +50,8 @@ PluginHost::PluginHost() : csharp_(std::make_unique<CsharpRuntime>()) {
   api_.register_plugin = &PluginHost::host_register_plugin;
   api_.begin_point_input = &PluginHost::host_begin_point_input;
   api_.cancel_point_input = &PluginHost::host_cancel_point_input;
+  api_.set_selection = &PluginHost::host_set_selection;
+  api_.show_dialog = &PluginHost::host_show_dialog;
 }
 
 PluginHost::~PluginHost() { shutdown(); }
@@ -96,6 +60,8 @@ void PluginHost::shutdown() {
   unbind();
   begin_point_input_ = {};
   cancel_point_input_ = {};
+  selection_changed_ = {};
+  show_dialog_ = {};
   log_sink_ = {};
   if (csharp_) {
     csharp_->shutdown();
@@ -320,7 +286,7 @@ std::int32_t PluginHost::host_register_command(
 std::int32_t PluginHost::host_begin_point_input(
     void* context, std::uint64_t request_id, std::int32_t min_points,
     std::int32_t max_points, std::int32_t flags, float work_plane_y,
-    std::int32_t preview_kind, const char* preview_curve_kind) {
+    std::int32_t preview_kind, const char* preview_curve_kind, const char* filter_kind) {
   auto* self = static_cast<PluginHost*>(context);
   if (!self->begin_point_input_ || request_id == 0 || min_points < 0 ||
       (max_points > 0 && max_points < min_points)) {
@@ -335,6 +301,7 @@ std::int32_t PluginHost::host_begin_point_input(
   request.preview_kind = preview_kind;
   request.preview_curve_kind =
       preview_curve_kind != nullptr ? preview_curve_kind : "";
+  request.filter_kind = filter_kind != nullptr ? filter_kind : "";
   auto started = self->begin_point_input_(
       std::move(request),
       [self, request_id](std::vector<PluginPickPoint> points, bool cancelled) {
@@ -365,6 +332,37 @@ std::int32_t PluginHost::host_cancel_point_input(void* context,
   }
   self->cancel_point_input_(request_id);
   return 0;
+}
+
+std::int32_t PluginHost::host_set_selection(void* context, const std::uint64_t* ids,
+                                            std::int32_t count) {
+  auto* self = static_cast<PluginHost*>(context);
+  if (self->document_ == nullptr || count < 0 || (count > 0 && ids == nullptr)) {
+    return -1;
+  }
+  self->document_->clear_selection();
+  for (std::int32_t i = 0; i < count; ++i) {
+    self->document_->select(ids[static_cast<std::size_t>(i)]);
+  }
+  if (self->selection_changed_) {
+    self->selection_changed_();
+  }
+  return 0;
+}
+
+std::int32_t PluginHost::host_show_dialog(void* context, std::int32_t kind, std::int32_t buttons,
+                                          const char* spec_utf8, char* out_utf8,
+                                          std::int32_t cap) {
+  auto* self = static_cast<PluginHost*>(context);
+  if (!self->show_dialog_) {
+    return -1;
+  }
+  std::string out;
+  const auto status = self->show_dialog_(kind, buttons, spec_utf8 != nullptr ? spec_utf8 : "", out);
+  if (status == 0 && out_utf8 != nullptr && cap > 0) {
+    fill_utf8(out, out_utf8, cap);
+  }
+  return status;
 }
 
 }  // namespace tamias

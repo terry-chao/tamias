@@ -1,6 +1,6 @@
 # 插件：宿主功能
 
-> 插件能做的事 = **`IHost` 只读查询 + 日志 + Ribbon 命令 + 宿主视口拾点 + `Dispatch` 内核命令**。没有相机、文件对话框、自定义 Qt 面板、也没有几何内核句柄。
+> 插件能做的事 = **`IHost` 查询/写选择 + 日志 + Ribbon 命令 + 宿主视口拾点/拾对象 + 宿主对话框 + `Dispatch` 内核命令**。没有相机、GPU、自定义 Qt 句柄，也没有几何内核指针。
 
 C# 契约在 [`plugin-sdk/csharp/Tamias.Api/`](https://github.com/terry-chao/tamias/tree/main/plugin-sdk/csharp/Tamias.Api)。C ABI 在 [`host_api.h`](https://github.com/terry-chao/tamias/blob/main/src/plugin/host_api.h)，布局必须与 [`HostApi.cs`](https://github.com/terry-chao/tamias/blob/main/plugin-sdk/csharp/Tamias.Api/HostApi.cs) 一致。
 
@@ -16,11 +16,15 @@ public interface IHost
     string DocumentName { get; }
     IReadOnlyList<EntityInfo> Entities { get; }
     IReadOnlyList<ulong> Selection { get; }
+    IUi Ui { get; }
     void Log(string message);
     void Dispatch(string command, CommandArgs? args = null);
     void AddCommand(string id, string title, Action action, string? tooltip = null,
                     RibbonPlacement? placement = null);
+    void SetSelection(IEnumerable<ulong> ids);
+    void ClearSelection();
     ulong BeginPointInput(PointInputOptions options, Action<PointInputResult> completed);
+    ulong BeginEntityInput(EntityInputOptions options, Action<EntityInputResult> completed);
     void CancelPointInput(ulong requestId);
 }
 ```
@@ -30,20 +34,44 @@ public interface IHost
 | `DocumentName` | 当前绑定文档的名字；无文档时为空 |
 | `Entities` | 全部实体：`Id` / `Kind` / `Name`。id 升序。种类是字符串解析成 `EntityKind`（`Wall`…`Nurbs`，解析失败为 `Unknown`） |
 | `Selection` | 当前选中 id 列表（文档选择顺序） |
+| `SetSelection` / `ClearSelection` | 写入选择并刷新属性面板；无效 id 会被跳过 |
+| `Ui` | 宿主 Qt 对话框：消息、字符串/数字、多字段表单、打开/保存文件。窗口由 Tamias 弹出，插件不要自建 HWND |
 | `Log` | UTF-8 日志；主窗口接到后显示状态栏 |
 | `Dispatch` | 把命令名 + 参数文本交给 C++ `CommandSystem`；失败抛 `InvalidOperationException`（宿主会 `Log` 异常消息） |
 | `AddCommand` | 在 `Load` 时登记 Ribbon 按钮。`RibbonPlacement` 可指定稳定的 page/group id、顺序、图标和可选中状态；缺省为 `home/plugins` |
-| `BeginPointInput` | 非阻塞地启动宿主视口拾点；回调返回世界坐标和可选实体 id。每个视口同时只有一个请求 |
+| `BeginPointInput` | 非阻塞地启动宿主视口拾点；可预览线/墙/圆等。回调返回世界坐标和可选实体 id |
+| `BeginEntityInput` | 只接受点中的实体（可按 `FilterKind` 过滤）；漏点忽略，重复 id 忽略 |
 | `CancelPointInput` | 取消指定请求；切换文档或启动另一交互也会取消旧请求 |
 
 `EntityInfo`：`(ulong Id, EntityKind Kind, string Name)`。  
 `EntityKind`：`Unknown = -1`，其余与 C++ `EntityKind` 同序（Wall=0 … Nurbs=15）。
 
-没有活动文档时：实体/选择为空，`Dispatch` 失败（「no active document」）。
+没有活动文档时：实体/选择为空，`Dispatch` / `SetSelection` 失败（「no active document」/ -1）。
 
 ---
 
-## 2. `CommandArgs` 与参数文本
+## 2. 对话框 `IUi`
+
+窗口一律由宿主用 Qt 弹出，外观跟软件其余对话框一致。
+
+```csharp
+host.Ui.ShowMessage("摘要", $"实体 {host.Entities.Count}");
+if (host.Ui.PromptNumber("高度", "数值 (m)", 3, 0.1, 50) is double h) { ... }
+
+var form = new PromptForm { Title = "创建墙" }
+    .AddNumber("thickness", "厚度 (m)", 0.2, 0.01, 5)
+    .AddNumber("height", "高度 (m)", 3, 0.1, 50);
+if (host.Ui.ShowForm(form)) {
+    var t = form.Number("thickness");
+}
+var path = host.Ui.OpenFile("打开", "IFC (*.ifc);;All (*.*)");
+```
+
+`ShowMessage` 的 `DialogButtons`：`Ok` / `OkCancel` / `YesNo` / `YesNoCancel`，返回 `DialogResult`。输入类 API 取消时返回 `null` / `false`。
+
+---
+
+## 3. `CommandArgs` 与参数文本
 
 C# 用链式 setter，序列化成一段文本再过 ABI：
 
@@ -62,59 +90,54 @@ C# 用链式 setter，序列化成一段文本再过 ABI：
 
 ---
 
-## 3. 可 `Dispatch` 的内核命令
+## 4. 可 `Dispatch` 的内核命令
 
 与工具条同一张表（[`register_commands.cpp`](https://github.com/terry-chao/tamias/blob/main/src/command/register_commands.cpp)）。
 
-### 3.1 立刻执行（适合脚本）
+### 4.1 立刻执行（适合脚本 / 插件绘制）
 
-这些 `interactive() == false`，`dispatch` 成功就会 `execute` 并压栈，视口随后 `refresh_after_edit`。
+这些在参数给齐时 `interactive() == false`，`dispatch` 成功就会 `execute` 并压栈。
 
 | 命令 | 主要参数 | 说明 |
 |---|---|---|
 | `delete_entity` | `i:entity_id` | 删一个实体 |
 | `set_param` | `i:entity_id`、`i:feature_id`、`s:param_name`、`d:value` | 改特征参数并重算 |
-| `fillet` | `i:entity_id`、`d:radius`（默认 0.1）、`i:edge` | 追加圆角特征 |
-| `chamfer` | `i:entity_id`、`d:distance`（默认 0.1）、`i:edge` | 追加倒角特征 |
-| `boolean` | `i:a`、`i:b`、`i:operation` | 布尔；`operation` 与 `BooleanOp` 整型一致 |
-| `set_material` | `i:entity_id`，以及 `i:material_id`、`s:name`、`v:base_color`、`d:roughness`、`d:metallic`、贴图 id 等 | 赋材质 |
-| `create_curve` | `s:curve_kind`、`p:points`、可选 `a:weights`、`i:degree` | 从完整定义创建 Line/Polyline/Bezier/B-spline/NURBS |
+| `fillet` / `chamfer` | `i:entity_id`、半径或距离、`i:edge` | 追加圆角 / 倒角 |
+| `boolean` | `i:a`、`i:b`、`i:operation` | 布尔 |
+| `set_material` | `i:entity_id` 及材质字段 | 赋材质 |
+| `create_curve` | `s:curve_kind`、`p:points` | Line/Polyline/Bezier/B-spline/NURBS |
+| `create_wall` | `p:points`（2 点）、`d:thickness`、`d:height` | 给齐两点则立即建墙 |
+| `create_beam` | `p:points`（2 点）、`d:width`、`d:depth` | 给齐两点则立即建梁 |
+| `create_slab` | `p:points`（2 对角）、`d:thickness`、`d:elevation` | 给齐两点则立即建板 |
+| `create_box` / `create_cylinder` / `create_column` | `v:origin` 或 `p:points`（1 点） | 给齐原点则立即放置 |
+| `create_door` / `create_window` | 同上，可选 `i:host_id` | 可贴宿主墙 |
+| `create_line` / `create_polyline` / `create_circle` / `create_arc` / `create_rectangle` / `create_bezier` / `create_bspline` | `p:points` | 点数够则立即生成草图 |
+
+C# 也可走扩展方法 [`HostDraw`](https://github.com/terry-chao/tamias/blob/main/plugin-sdk/csharp/Tamias.Api/HostDraw.cs)：`host.Wall(a, b, 0.2, 3)`、`host.Box(origin)`、`host.Line(a, b)`。
+
+不给点时，上述 `create_*` 仍是交互式：dispatch 只武装工具，和 Ribbon 按钮一样要在视口点。
 
 示例：
 
 ```csharp
 host.Dispatch("delete_entity", new CommandArgs().SetInt("entity_id", (long)id));
-host.Dispatch("set_param", new CommandArgs()
-    .SetInt("entity_id", (long)id)
-    .SetInt("feature_id", 1)
-    .SetString("param_name", "height")
-    .SetDouble("value", 3.2));
+host.Wall(result.Points[0], result.Points[1], thickness: 0.2, height: 3);
 ```
-
-### 3.2 交互式（dispatch 只「武装」工具）
-
-`create_wall` / `create_beam` / `create_box` / `create_cylinder` / `create_column` / `create_slab` / `create_door` / `create_window` 以及草图类 `create_line`、`create_polyline`、`create_circle`、`create_arc`、`create_bezier`、`create_rectangle`、`create_bspline` 在 C++ 里仍是交互命令。新插件应优先用 `BeginPointInput` 收集输入，再 dispatch 非交互文档命令。
-
-部分创建命令接受默认尺寸，但仍然要拾取：
-
-| 命令 | 可选参数 |
-|---|---|
-| `create_wall` | `d:thickness`、`d:height` |
-| `create_beam` | `d:width`、`d:depth` |
-| `create_slab` | `d:thickness`、`d:elevation` |
-
-`BeginPointInput` 由宿主处理工作面、网格吸附、实体拾取、Enter/双击确认和 Esc/右键取消；C# 不接触 Qt 事件。NURBS 示例见 `plugins/csharp/Tamias.Nurbs`。
 
 未知命令名：`CommandSystem: unknown command '…'`。
 
+`BeginPointInput` 的 `PreviewKind`：`None` / `Curve` / `Line` / `Polyline` / `Rectangle` / `Circle` / `Arc` / `Wall` / `Slab`。曲线预览仍可用 `PreviewCurveKind`（`nurbs` / `bspline` / `bezier`）。
+
 ---
 
-## 4. C ABI（给对照实现用）
+## 5. C ABI（给对照实现用）
 
-`HostApi`：`abi_version`（int32，现为 4）+ `context` + 函数指针。x64 上 int32 后有 padding，C# `LayoutKind.Sequential` 与之对齐。
+`HostApi`：`abi_version`（int32，现为 5）+ `context` + 函数指针。x64 上 int32 后有 padding，C# `LayoutKind.Sequential` 与之对齐。**只在表尾追加字段并升版本**，不要在中间插。
 
-指针约定：字符串 UTF-8；填缓冲的函数写入 `cap-1` 字节并补 `'\0'`，返回写入长度；查询失败返回 -1；`dispatch` / `register_command` / `register_plugin` 成功 0、失败 -1。`register_plugin` 在 `Load` 每个 `IPlugin` 之前提交完整 metadata；之后的 `register_command` 记在该插件名下。
+v5 追加：`begin_point_input` 末尾 `filter_kind`；`set_selection`；`show_dialog`。
 
-调用约定：Cdecl（Win x64 实际只有一种）。C# 委托标了 `CallingConvention.Cdecl`；`Bootstrap.Initialize` / `Invoke` / `PointInputCompleted` 为 `[UnmanagedCallersOnly]`。视口点以 POD 数组回调，回调发生在 UI 线程。
+指针约定：字符串 UTF-8；填缓冲的函数写入 `cap-1` 字节并补 `'\0'`，返回写入长度；查询失败返回 -1；`dispatch` / `register_command` / `register_plugin` / `set_selection` 成功 0、失败 -1。`show_dialog`：输入类成功 0、取消 1、失败 -1；消息框返回按钮（1=Ok, 2=Cancel, 3=Yes, 4=No）。
+
+调用约定：Cdecl。C# 委托标了 `CallingConvention.Cdecl`；`Bootstrap.Initialize` / `Invoke` / `PointInputCompleted` 为 `[UnmanagedCallersOnly]`。视口点以 POD 数组回调，回调发生在 UI 线程。
 
 下一篇：[开发插件](develop.md)

@@ -9,8 +9,9 @@ namespace tamias {
 class CreateWallCommand final : public Command {
  public:
   CreateWallCommand(Document& document, double thickness, double height);
+  CreateWallCommand(Document& document, double thickness, double height, Vec3 start, Vec3 end);
 
-  [[nodiscard]] bool interactive() const override { return true; }
+  [[nodiscard]] bool interactive() const override { return !scripted_; }
   [[nodiscard]] Result<bool> on_point(Vec3 point) override;
   [[nodiscard]] bool has_start() const override { return has_start_; }
   [[nodiscard]] Vec3 start() const override { return start_; }
@@ -30,6 +31,7 @@ class CreateWallCommand final : public Command {
   double height_ = 3.0;
   double elevation_ = 0.0;
   bool has_start_ = false;
+  bool scripted_ = false;
   Vec3 start_{};
   Vec3 end_{};
   MeshAsset mesh_{};

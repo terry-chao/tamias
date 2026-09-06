@@ -17,6 +17,14 @@ CreatePrimitiveCommand::CreatePrimitiveCommand(Document& document, PrimitiveKind
   }
 }
 
+CreatePrimitiveCommand::CreatePrimitiveCommand(Document& document, PrimitiveKind kind,
+                                               Vec3 position, std::uint64_t host_id)
+    : CreatePrimitiveCommand(document, kind) {
+  position_ = position;
+  host_id_ = host_id;
+  scripted_ = true;
+}
+
 Result<bool> CreatePrimitiveCommand::on_point(Vec3 point) { return on_pick(point, 0); }
 
 Result<bool> CreatePrimitiveCommand::on_pick(Vec3 point, std::uint64_t picked_entity_id) {

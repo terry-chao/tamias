@@ -104,21 +104,39 @@ host.AddCommand("my.delete_walls", "删除选中的墙", () =>
 
 命令缺省进入 `home/plugins`（开始 → 插件）。传入 `RibbonPlacement("home", "draw")` 可加入现有“开始 → 绘制”组；page/group 使用稳定 id，不使用翻译后的标题。
 
-绘制插件通过非阻塞拾点接口编排，鼠标事件、工作面、吸附和取消仍由宿主管理：
+绘制插件通过非阻塞拾点接口编排，鼠标事件、工作面、吸附和取消仍由宿主管理。尺寸可先用 `IUi.ShowForm` 询问：
 
 ```csharp
+var form = new PromptForm { Title = "创建墙" }
+    .AddNumber("thickness", "厚度 (m)", 0.2, 0.01, 5)
+    .AddNumber("height", "高度 (m)", 3, 0.1, 50);
+if (!host.Ui.ShowForm(form)) {
+    return;
+}
 host.BeginPointInput(new PointInputOptions {
     MinPoints = 2,
-    MaxPoints = 0,
-    AllowConfirm = true,
+    MaxPoints = 2,
     GridSnap = true,
-    PreviewKind = PointInputPreviewKind.Curve,
-    PreviewCurveKind = "nurbs",
+    PreviewKind = PointInputPreviewKind.Wall,
 }, result => {
     if (!result.Cancelled) {
-        host.Dispatch("create_curve", new CommandArgs()
-            .SetString("curve_kind", "nurbs")
-            .SetPoints("points", result.Points));
+        host.Wall(result.Points[0], result.Points[1],
+                  form.Number("thickness"), form.Number("height"));
+    }
+});
+```
+
+拾对象：
+
+```csharp
+host.BeginEntityInput(new EntityInputOptions {
+    MinCount = 1,
+    MaxCount = 0,
+    AllowConfirm = true,
+    FilterKind = EntityKind.Wall,
+}, result => {
+    if (!result.Cancelled) {
+        host.SetSelection(result.EntityIds);
     }
 });
 ```
@@ -132,7 +150,7 @@ host.BeginPointInput(new PointInputOptions {
 - 插件异常会被 `Bootstrap.Invoke` 吃掉并 `Log` 到状态栏，不会崩进程。
 - 可以在 Visual Studio / Rider 里对 `tamias.exe` 附加进程，断点打在插件工程（需 pdb 和 DLL 一起放到 `plugins/`）。
 - 改 C# 后重新 publish 再重启；hostfxr 不会热重载 ALC（加载上下文 `isCollectible: false`）。
-- 只测参数解析和 `HostApi` 派发、不启动 CLR：`tamias_tests --gtest_filter=CommandArgText*:PluginHost*`。
+- 只测参数解析和 `HostApi` 派发、不启动 CLR：`tamias_tests --gtest_filter=CommandArgText*:PluginHost*`。整套测试怎么跑、还缺什么，见 [测试](../TESTING.md)。
 
 C++ 侧入口：[`PluginHost`](https://github.com/terry-chao/tamias/blob/main/src/plugin/plugin_host.h) 的 `load` / `invoke` / `dispatch`；CLR 在 [`csharp_runtime.cpp`](https://github.com/terry-chao/tamias/blob/main/src/plugin/csharp_runtime.cpp)（`Tamias.Host.Bootstrap.Initialize` / `Invoke`）。
 
@@ -142,13 +160,13 @@ C++ 侧入口：[`PluginHost`](https://github.com/terry-chao/tamias/blob/main/sr
 
 | 想做 | 现状 |
 |---|---|
-| 自定义属性页 / Dock | 没有 UI API |
-| 自己订阅 Qt 鼠标事件 | 使用 `BeginPointInput`，插件不接触 Qt |
+| 自建 WinForms/WPF 窗口、Dock | 用 `IUi`（消息/表单/文件框），窗口由宿主 Qt 弹出 |
+| 自己订阅 Qt 鼠标事件 | 使用 `BeginPointInput` / `BeginEntityInput` |
 | 读特征树、网格、变换矩阵 | `EntityInfo` 只有 id / 种类 / 名字 |
-| 开文件、改相机 | 没有 |
-| 在插件里 new 实体对象 | 必须 `Dispatch` |
+| 改相机 | 没有 |
+| 在插件里 new 实体对象 | 必须 `Dispatch` 或 `HostDraw` |
 | 依赖另一份 `Tamias.Api.dll` | ALC 强制用宿主那份；不要把 API 拷进 `plugins/` |
 
-这些要加的话，先扩 `HostApi` 并 **把 `kHostApiVersion` 加一**，C# `HostApi` 结构体同步改。不要在 v4 表中间插字段。
+这些要加的话，先扩 `HostApi` 并 **把 `kHostApiVersion` 加一**，C# `HostApi` 结构体同步改。不要在 v5 表中间插字段。
 
 设计背景见[设计理念](design.md)。

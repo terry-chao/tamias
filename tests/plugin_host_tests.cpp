@@ -7,12 +7,14 @@
 #include "plugin/plugin_host.h"
 #include "plugin/plugin_manager.h"
 #include "plugin/plugin_point_input_session.h"
+#include "plugin/plugin_prompt_spec.h"
 
 #include <gtest/gtest.h>
 
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <utility>
 #include <variant>
@@ -97,10 +99,12 @@ TEST(PluginHost, DefaultsRibbonPlacementToHomePlugins) {
 TEST(PluginHost, RegisterPluginAssociatesCommands) {
   PluginHost host;
   const HostApi& api = host.native_api();
-  EXPECT_EQ(api.abi_version, 4);
+  EXPECT_EQ(api.abi_version, 5);
   ASSERT_NE(api.register_plugin, nullptr);
   ASSERT_NE(api.begin_point_input, nullptr);
   ASSERT_NE(api.cancel_point_input, nullptr);
+  ASSERT_NE(api.set_selection, nullptr);
+  ASSERT_NE(api.show_dialog, nullptr);
   ASSERT_EQ(register_test_plugin(api, "demo.plugin", "Demo"), 0);
   ASSERT_EQ(api.register_command(api.context, "demo.hello", "Hello", "tip",
                                  "home", "draw", "demo.svg", 42, 1),
@@ -221,6 +225,36 @@ TEST(PluginPointInputSession, ConfirmsAndCancelsWithoutQt) {
   EXPECT_TRUE(cancelled);
 }
 
+TEST(PluginPointInputSession, EntitiesOnlySkipsMissAndDuplicates) {
+  PluginPointInputSession input;
+  PluginPointInputRequest request;
+  request.request_id = 9;
+  request.min_points = 1;
+  request.max_points = 2;
+  request.flags = PluginPointInputRequest::kEntitiesOnly;
+
+  bool called = false;
+  std::vector<PluginPickPoint> completed;
+  ASSERT_TRUE(input.begin(
+      request, [&](std::vector<PluginPickPoint> points, bool cancelled) {
+        called = true;
+        EXPECT_FALSE(cancelled);
+        completed = std::move(points);
+      }));
+  EXPECT_TRUE(input.entities_only());
+  EXPECT_TRUE(input.pick_entities());
+  input.add_point({{1.f, 0.f, 2.f}, 0});
+  EXPECT_FALSE(called);
+  input.add_point({{1.f, 0.f, 2.f}, 4});
+  input.add_point({{3.f, 0.f, 4.f}, 4});
+  EXPECT_FALSE(called);
+  input.add_point({{5.f, 0.f, 6.f}, 7});
+  EXPECT_TRUE(called);
+  ASSERT_EQ(completed.size(), 2u);
+  EXPECT_EQ(completed[0].entity_id, 4u);
+  EXPECT_EQ(completed[1].entity_id, 7u);
+}
+
 TEST(PluginHost, HostApiSelectionAndDispatch) {
   CommandRegistry registry;
   register_commands(registry);
@@ -257,6 +291,55 @@ TEST(PluginHost, HostApiSelectionAndDispatch) {
   EXPECT_TRUE(doc.entities().empty());
 }
 
+TEST(PluginHost, SetSelectionAndShowDialog) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document doc("plugin-ui");
+  const auto id = add_wall_entity(doc, {0.f, 0.f, 0.f}, {4.f, 0.f, 0.f});
+
+  PluginHost host;
+  int selection_events = 0;
+  host.bind(&doc, &system, {});
+  host.set_selection_changed([&] { ++selection_events; });
+  host.set_dialog_handler([](std::int32_t kind, std::int32_t, std::string_view spec,
+                             std::string& out) {
+    EXPECT_EQ(kind, 1);
+    EXPECT_NE(spec.find("Rename"), std::string_view::npos);
+    out = "Wall A";
+    return 0;
+  });
+
+  const HostApi& api = host.native_api();
+  const std::uint64_t ids[] = {id};
+  ASSERT_EQ(api.set_selection(api.context, ids, 1), 0);
+  EXPECT_EQ(selection_events, 1);
+  ASSERT_EQ(doc.selected_ids().size(), 1u);
+  EXPECT_EQ(doc.selected_ids()[0], id);
+  ASSERT_EQ(api.set_selection(api.context, nullptr, 0), 0);
+  EXPECT_TRUE(doc.selected_ids().empty());
+
+  char buf[64];
+  ASSERT_EQ(api.show_dialog(api.context, 1, 0, "T|Rename\nL|Name\nV|Wall", buf, 64), 0);
+  EXPECT_STREQ(buf, "Wall A");
+}
+
+TEST(PluginPromptSpec, ParsesFormAndValues) {
+  auto spec = parse_plugin_prompt_spec(
+      "T|Create Wall\nF|n|thickness|Thickness|0.2|0.01|10\nF|s|name|Name|Wall\nF|b|snap|Snap|1\n");
+  ASSERT_TRUE(spec) << spec.error();
+  EXPECT_EQ(spec->title, "Create Wall");
+  ASSERT_EQ(spec->fields.size(), 3u);
+  EXPECT_DOUBLE_EQ(spec->fields[0].number, 0.2);
+  EXPECT_EQ(spec->fields[1].text, "Wall");
+  EXPECT_TRUE(spec->fields[2].flag);
+  spec->fields[0].number = 0.25;
+  spec->fields[1].text = "Wall A";
+  spec->fields[2].flag = false;
+  EXPECT_EQ(serialize_plugin_form_values(*spec), "n:thickness=0.25;s:name=Wall A;b:snap=0");
+}
+
 TEST(PluginHost, LoadsManagedHelloCommands) {
   PluginHost host;
   auto loaded = host.load();
@@ -269,12 +352,14 @@ TEST(PluginHost, LoadsManagedHelloCommands) {
   bool delete_selected = false;
   bool create_nurbs = false;
   bool hello_plugin = false;
+  bool create_wall = false;
+  bool pick_entities = false;
   for (const auto& plugin : host.plugins()) {
     if (plugin.id == "tamias.hello") {
       hello_plugin = true;
       EXPECT_EQ(plugin.author, "Tamias");
-      EXPECT_EQ(plugin.version, "1.0.0");
-      EXPECT_EQ(plugin.release_date, "2026-08-25");
+      EXPECT_EQ(plugin.version, "1.1.0");
+      EXPECT_EQ(plugin.release_date, "2026-09-06");
       EXPECT_TRUE(plugin.built_in);
       EXPECT_FALSE(plugin.homepage_url.empty());
     }
@@ -282,6 +367,8 @@ TEST(PluginHost, LoadsManagedHelloCommands) {
   for (const auto& cmd : host.commands()) {
     list_selection = list_selection || cmd.id == "hello.list_selection";
     delete_selected = delete_selected || cmd.id == "hello.delete_selected";
+    create_wall = create_wall || cmd.id == "hello.create_wall";
+    pick_entities = pick_entities || cmd.id == "hello.pick_entities";
     if (cmd.id == "tamias.nurbs.create") {
       create_nurbs = true;
       EXPECT_EQ(cmd.placement.page_id, "home");
@@ -293,5 +380,7 @@ TEST(PluginHost, LoadsManagedHelloCommands) {
   EXPECT_TRUE(hello_plugin);
   EXPECT_TRUE(list_selection);
   EXPECT_TRUE(delete_selected);
+  EXPECT_TRUE(create_wall);
+  EXPECT_TRUE(pick_entities);
   EXPECT_TRUE(create_nurbs);
 }

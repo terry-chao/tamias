@@ -3,7 +3,7 @@ using Tamias.Api;
 
 namespace Tamias.Host;
 
-sealed class Host : IHost
+sealed class Host : IHost, IUi
 {
     readonly HostApi api_;
     readonly Dictionary<string, Action> actions_ = new(StringComparer.Ordinal);
@@ -124,6 +124,8 @@ sealed class Host : IHost
         }
     }
 
+    public IUi Ui => this;
+
     public void Log(string message)
     {
         if (!alive_)
@@ -215,6 +217,111 @@ sealed class Host : IHost
         actions_[id] = action;
     }
 
+    public void SetSelection(IEnumerable<ulong> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        if (!alive_)
+        {
+            return;
+        }
+        var list = ids as ulong[] ?? ids.ToArray();
+        var fn = As<HostSetSelectionFn>(api_.SetSelection);
+        if (list.Length == 0)
+        {
+            if (fn(api_.Context, IntPtr.Zero, 0) != 0)
+            {
+                throw new InvalidOperationException("Host failed to clear selection");
+            }
+            return;
+        }
+        var ptr = Marshal.AllocCoTaskMem(checked(sizeof(ulong) * list.Length));
+        try
+        {
+            for (var i = 0; i < list.Length; ++i)
+            {
+                Marshal.WriteInt64(ptr, i * sizeof(long), unchecked((long)list[i]));
+            }
+            if (fn(api_.Context, ptr, list.Length) != 0)
+            {
+                throw new InvalidOperationException("Host failed to set selection");
+            }
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(ptr);
+        }
+    }
+
+    public void ClearSelection() => SetSelection([]);
+
+    public DialogResult ShowMessage(string title, string message, DialogButtons buttons = DialogButtons.Ok)
+    {
+        var status = ShowDialog((int)PluginDialogKind.Message, (int)buttons, Spec(("T", title), ("V", message)), out _);
+        return status < 0 ? DialogResult.None : (DialogResult)status;
+    }
+
+    public string? PromptString(string title, string label, string defaultValue = "")
+    {
+        var status = ShowDialog(
+            (int)PluginDialogKind.PromptString,
+            0,
+            Spec(("T", title), ("L", label), ("V", defaultValue)),
+            out var value);
+        return status == 0 ? value : null;
+    }
+
+    public double? PromptNumber(string title, string label, double defaultValue = 0, double? min = null, double? max = null)
+    {
+        var parts = new List<(string Tag, string Value)>
+        {
+            ("T", title),
+            ("L", label),
+            ("V", defaultValue.ToString("G17", System.Globalization.CultureInfo.InvariantCulture)),
+        };
+        if (min.HasValue)
+        {
+            parts.Add(("MIN", min.Value.ToString("G17", System.Globalization.CultureInfo.InvariantCulture)));
+        }
+        if (max.HasValue)
+        {
+            parts.Add(("MAX", max.Value.ToString("G17", System.Globalization.CultureInfo.InvariantCulture)));
+        }
+        var status = ShowDialog((int)PluginDialogKind.PromptNumber, 0, Spec(parts.ToArray()), out var value);
+        if (status != 0)
+        {
+            return null;
+        }
+        return double.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    public bool ShowForm(PromptForm form)
+    {
+        ArgumentNullException.ThrowIfNull(form);
+        var status = ShowDialog((int)PluginDialogKind.Form, 0, form.ToSpec(), out var value);
+        if (status != 0)
+        {
+            return false;
+        }
+        form.ApplyResult(value);
+        return true;
+    }
+
+    public string? OpenFile(string title, string filter)
+    {
+        var status = ShowDialog((int)PluginDialogKind.OpenFile, 0, Spec(("T", title), ("FILTER", filter)), out var value);
+        return status == 0 ? value : null;
+    }
+
+    public string? SaveFile(string title, string filter, string? defaultName = null)
+    {
+        var status = ShowDialog(
+            (int)PluginDialogKind.SaveFile,
+            0,
+            Spec(("T", title), ("FILTER", filter), ("NAME", defaultName ?? "")),
+            out var value);
+        return status == 0 ? value : null;
+    }
+
     public ulong BeginPointInput(PointInputOptions options, Action<PointInputResult> callback)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -236,6 +343,7 @@ sealed class Host : IHost
         }
 
         var curveKindPtr = Utf8(options.PreviewCurveKind ?? "");
+        var filterKindPtr = Utf8(FilterName(options.FilterKind));
         try
         {
             var fn = As<HostBeginPointInputFn>(api_.BeginPointInput);
@@ -247,7 +355,8 @@ sealed class Host : IHost
                     options.Flags,
                     options.WorkPlaneY,
                     (int)options.PreviewKind,
-                    curveKindPtr) != 0)
+                    curveKindPtr,
+                    filterKindPtr) != 0)
             {
                 lock (pointInputLock_)
                 {
@@ -267,8 +376,25 @@ sealed class Host : IHost
         finally
         {
             Marshal.FreeCoTaskMem(curveKindPtr);
+            Marshal.FreeCoTaskMem(filterKindPtr);
         }
         return requestId;
+    }
+
+    public ulong BeginEntityInput(EntityInputOptions options, Action<EntityInputResult> callback)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(callback);
+        return BeginPointInput(
+            new PointInputOptions
+            {
+                MinPoints = options.MinCount,
+                MaxPoints = options.MaxCount,
+                AllowConfirm = options.AllowConfirm || options.MaxCount == 0,
+                EntitiesOnly = true,
+                FilterKind = options.FilterKind,
+            },
+            result => callback(new EntityInputResult(result.Points, result.Cancelled)));
     }
 
     public void CancelPointInput(ulong requestId)
@@ -343,5 +469,53 @@ sealed class Host : IHost
     static EntityKind ParseKind(string name)
     {
         return Enum.TryParse<EntityKind>(name, ignoreCase: true, out var kind) ? kind : EntityKind.Unknown;
+    }
+
+    int ShowDialog(int kind, int buttons, string spec, out string value)
+    {
+        value = "";
+        if (!alive_)
+        {
+            return -1;
+        }
+        var fn = As<HostShowDialogFn>(api_.ShowDialog);
+        var specPtr = Utf8(spec);
+        const int cap = 4096;
+        var outPtr = Marshal.AllocCoTaskMem(cap);
+        try
+        {
+            var status = fn(api_.Context, kind, buttons, specPtr, outPtr, cap);
+            if (status == 0)
+            {
+                value = Marshal.PtrToStringUTF8(outPtr) ?? "";
+            }
+            return status;
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(specPtr);
+            Marshal.FreeCoTaskMem(outPtr);
+        }
+    }
+
+    static string Spec(params (string Tag, string Value)[] parts)
+    {
+        return string.Join('\n', parts.Select(part =>
+            part.Tag + "|" + (part.Value ?? "").Replace('|', ' ').Replace('\n', '\u001e')));
+    }
+
+    static string FilterName(EntityKind? kind)
+    {
+        return kind is null or EntityKind.Unknown ? "" : kind.Value.ToString();
+    }
+
+    enum PluginDialogKind
+    {
+        Message = 0,
+        PromptString = 1,
+        PromptNumber = 2,
+        OpenFile = 3,
+        SaveFile = 4,
+        Form = 5,
     }
 }

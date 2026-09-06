@@ -4,9 +4,10 @@
 
 namespace tamias {
 
-inline constexpr int kHostApiVersion = 4;
+inline constexpr int kHostApiVersion = 5;
 
 // C ABI for C# / native plugins. Layout must match plugin-sdk/csharp/Tamias.Api/HostApi.cs.
+// Append fields only; bump kHostApiVersion when the layout changes.
 struct HostApi {
   std::int32_t abi_version = kHostApiVersion;
   void* context = nullptr;
@@ -33,8 +34,14 @@ struct HostApi {
                                     std::int32_t min_points, std::int32_t max_points,
                                     std::int32_t flags, float work_plane_y,
                                     std::int32_t preview_kind,
-                                    const char* preview_curve_kind) = nullptr;
+                                    const char* preview_curve_kind,
+                                    const char* filter_kind) = nullptr;
   std::int32_t (*cancel_point_input)(void* context, std::uint64_t request_id) = nullptr;
+  std::int32_t (*set_selection)(void* context, const std::uint64_t* ids,
+                                std::int32_t count) = nullptr;
+  std::int32_t (*show_dialog)(void* context, std::int32_t kind, std::int32_t buttons,
+                              const char* spec_utf8, char* out_utf8,
+                              std::int32_t cap) = nullptr;
 };
 
 }  // namespace tamias

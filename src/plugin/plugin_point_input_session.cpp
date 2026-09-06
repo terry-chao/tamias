@@ -13,6 +13,9 @@ Result<void> PluginPointInputSession::begin(
       (request.max_points > 0 && request.max_points < request.min_points)) {
     return Err("invalid point input request");
   }
+  if ((request.flags & PluginPointInputRequest::kEntitiesOnly) != 0) {
+    request.flags |= PluginPointInputRequest::kPickEntities;
+  }
   cancel();
   request_ = std::move(request);
   completion_ = std::move(completion);
@@ -23,6 +26,16 @@ Result<void> PluginPointInputSession::begin(
 void PluginPointInputSession::add_point(PluginPickPoint point) {
   if (!active()) {
     return;
+  }
+  if (entities_only()) {
+    if (point.entity_id == 0) {
+      return;
+    }
+    for (const auto& existing : points_) {
+      if (existing.entity_id == point.entity_id) {
+        return;
+      }
+    }
   }
   points_.push_back(point);
   if (request_.max_points > 0 &&
@@ -55,6 +68,10 @@ bool PluginPointInputSession::grid_snap() const {
 
 bool PluginPointInputSession::pick_entities() const {
   return active() && (request_.flags & PluginPointInputRequest::kPickEntities) != 0;
+}
+
+bool PluginPointInputSession::entities_only() const {
+  return active() && (request_.flags & PluginPointInputRequest::kEntitiesOnly) != 0;
 }
 
 void PluginPointInputSession::finish(bool cancelled) {
