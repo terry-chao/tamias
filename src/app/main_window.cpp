@@ -27,7 +27,6 @@
 #include "settings_dialog.h"
 #include "timing_panel.h"
 #include "engine/profile/timing_scope.h"
-#include "engine/profile/timing_session.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -59,7 +58,6 @@
 #include <QSignalBlocker>
 #include <QSize>
 #include <QStatusBar>
-#include <QTimer>
 #include <QToolButton>
 #include <QVector>
 #include <QVBoxLayout>
@@ -531,9 +529,6 @@ MainWindow::MainWindow(QWidget* parent)
   timing_record_action_->setToolTip(tr("Start recording, then stop to inspect the timeline"));
   addAction(timing_record_action_);
 
-  timing_status_timer_ = new QTimer(this);
-  timing_status_timer_->setInterval(100);
-  connect(timing_status_timer_, &QTimer::timeout, this, &MainWindow::refresh_timing_status);
   connect(timing_record_action_, &QAction::toggled, this, [this](bool checked) {
     if (checked) {
       timing_dock_->show();
@@ -548,10 +543,6 @@ MainWindow::MainWindow(QWidget* parent)
     if (recording) {
       timing_dock_->show();
       timing_dock_->raise();
-      timing_status_timer_->start();
-    } else {
-      timing_status_timer_->stop();
-      refresh_timing_status();
     }
   });
 
@@ -688,9 +679,6 @@ MainWindow::MainWindow(QWidget* parent)
   panels_group->add_action(handle_toggle);
   panels_group->add_action(render_scene_toggle);
   panels_group->add_action(timing_toggle);
-
-  RibbonGroup* timing_group = view_page->add_group(QStringLiteral("timing"), tr("Timing"));
-  timing_group->add_action(timing_record_action_);
 
   RibbonGroup* workspace_group =
       view_page->add_group(QStringLiteral("workspace"), tr("Workspace"));
@@ -1754,24 +1742,6 @@ void MainWindow::dump_render_scene_debug() {
   debug.replace_extension(".debug");
   statusBar()->showMessage(
       tr("Wrote %1 and %2").arg(path_to_qstring(inspect), path_to_qstring(debug)), 8000);
-}
-
-void MainWindow::refresh_timing_status() {
-  auto& session = TimingSession::instance();
-  const std::uint64_t us = session.elapsed_us();
-  QString elapsed;
-  if (us >= 1'000'000) {
-    elapsed = QString::number(static_cast<double>(us) / 1'000'000.0, 'f', 2) + QStringLiteral(" s");
-  } else if (us >= 1000) {
-    elapsed = QString::number(static_cast<double>(us) / 1000.0, 'f', 2) + QStringLiteral(" ms");
-  } else {
-    elapsed = QString::number(us) + QStringLiteral(" us");
-  }
-  if (session.is_recording()) {
-    statusBar()->showMessage(tr("Recording %1").arg(elapsed));
-  } else if (us > 0) {
-    statusBar()->showMessage(tr("Timing %1").arg(elapsed), 8000);
-  }
 }
 
 void MainWindow::frame_all() {

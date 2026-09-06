@@ -1032,14 +1032,6 @@ Meshes / textures: %2
         <source>Start recording, then stop to inspect the timeline</source>
         <translation>点录制，操作模型，再点停止查看时间线</translation>
     </message>
-    <message>
-        <source>Recording %1</source>
-        <translation>正在录制 %1</translation>
-    </message>
-    <message>
-        <source>Timing %1</source>
-        <translation>计时 %1</translation>
-    </message>
 </context>
 <context>
     <name>tamias::RenderSceneInspector</name>

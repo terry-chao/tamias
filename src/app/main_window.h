@@ -21,7 +21,6 @@ class QActionGroup;
 class QCloseEvent;
 class QDockWidget;
 class QToolButton;
-class QTimer;
 
 namespace tamias {
 
@@ -56,7 +55,6 @@ class MainWindow final : public QMainWindow {
   void refresh_handle_inspector();
   void refresh_render_scene_inspector();
   void dump_render_scene_debug();
-  void refresh_timing_status();
 
  private:
   void showEvent(QShowEvent* event) override;
@@ -125,7 +123,6 @@ class MainWindow final : public QMainWindow {
   TimingPanel* timing_panel_ = nullptr;
   QDockWidget* timing_dock_ = nullptr;
   QAction* timing_record_action_ = nullptr;
-  QTimer* timing_status_timer_ = nullptr;
   PluginHost plugin_host_;
   PluginManager plugin_manager_;
   struct PluginRibbonButton {

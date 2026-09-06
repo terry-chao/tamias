@@ -7,7 +7,6 @@
 #include <QAbstractItemView>
 #include <QApplication>
 #include <QColor>
-#include <QDockWidget>
 #include <QFileDialog>
 #include <QFont>
 #include <QFrame>
@@ -110,61 +109,103 @@ QString category_label(const TimingPanel& panel, TimingCategory category) {
 }
 
 QString panel_stylesheet(bool dark) {
-  const char* chip =
+  const QString chips = QStringLiteral(
       "QToolButton#timingChipCommand, QToolButton#timingChipModeling, QToolButton#timingChipRender {"
-      "  padding: 3px 10px; border-radius: 11px;";
+      "  padding: 4px 12px; border-radius: 11px; border: none;"
+      "}"
+      "QToolButton#timingChipCommand::menu-indicator,"
+      "QToolButton#timingChipModeling::menu-indicator,"
+      "QToolButton#timingChipRender::menu-indicator { image: none; width: 0; }");
   if (dark) {
     return QStringLiteral(
                "QWidget#timingToolbar { background: #2b2d30; border-bottom: 1px solid #3c3f41; }"
                "QToolButton#timingRecord {"
-               "  padding: 4px 14px; border-radius: 14px; font-weight: 600;"
-               "  border: 1px solid #e14c4c; color: #e14c4c; background: transparent;"
+               "  padding: 4px 14px; border-radius: 14px; font-weight: 600; border: none;"
+               "  color: #f28b82; background: rgba(225, 76, 76, 28);"
                "}"
-               "QToolButton#timingRecord:hover { background: rgba(225, 76, 76, 40); }"
-               "QToolButton#timingRecord:checked {"
-               "  background: #c62828; color: #ffffff; border-color: #c62828;"
+               "QToolButton#timingRecord::menu-indicator { image: none; width: 0; }"
+               "QToolButton#timingRecord:hover { background: rgba(225, 76, 76, 48); }"
+               "QToolButton#timingRecord:checked,"
+               "QToolButton#timingRecord:checked:hover,"
+               "QToolButton#timingRecord:checked:pressed {"
+               "  border: none; background: #c62828; color: #ffffff;"
                "}"
                "QLabel#timingStatus { color: #9aa0a6; font-weight: 600; }"
                "QLabel#timingElapsed { color: #e8eaed; font-weight: 600; font-size: 15px; }"
                "%1"
-               "  border: 1px solid #4a4d52; color: #dcdcdc; background: transparent;"
+               "QToolButton#timingChipCommand, QToolButton#timingChipModeling, QToolButton#timingChipRender {"
+               "  background: transparent; color: #dcdcdc;"
                "}"
-               "QToolButton#timingChipCommand:checked { background: rgba(47,125,222,70); border-color: #2f7dde; color: #fff; }"
-               "QToolButton#timingChipModeling:checked { background: rgba(214,126,44,70); border-color: #d67e2c; color: #fff; }"
-               "QToolButton#timingChipRender:checked { background: rgba(46,160,110,70); border-color: #2ea06e; color: #fff; }"
+               "QToolButton#timingChipCommand:hover { background: rgba(47,125,222,36); }"
+               "QToolButton#timingChipModeling:hover { background: rgba(214,126,44,36); }"
+               "QToolButton#timingChipRender:hover { background: rgba(46,160,110,36); }"
+               "QToolButton#timingChipCommand:checked,"
+               "QToolButton#timingChipCommand:checked:hover,"
+               "QToolButton#timingChipCommand:checked:pressed {"
+               "  border: none; background: #2f4f7a; color: #ffffff;"
+               "}"
+               "QToolButton#timingChipModeling:checked,"
+               "QToolButton#timingChipModeling:checked:hover,"
+               "QToolButton#timingChipModeling:checked:pressed {"
+               "  border: none; background: #7a4a22; color: #ffffff;"
+               "}"
+               "QToolButton#timingChipRender:checked,"
+               "QToolButton#timingChipRender:checked:hover,"
+               "QToolButton#timingChipRender:checked:pressed {"
+               "  border: none; background: #2a6a4c; color: #ffffff;"
+               "}"
                "QToolButton#timingTool {"
                "  padding: 4px 10px; border-radius: 4px; border: none; color: #dcdcdc;"
                "  background: transparent;"
                "}"
                "QToolButton#timingTool:hover { background: #3c3f41; }"
                "QToolButton#timingTool:disabled { color: #6b6e74; }")
-        .arg(QLatin1String(chip));
+        .arg(chips);
   }
   return QStringLiteral(
              "QWidget#timingToolbar { background: #f4f5f7; border-bottom: 1px solid #d9dce1; }"
              "QToolButton#timingRecord {"
-             "  padding: 4px 14px; border-radius: 14px; font-weight: 600;"
-             "  border: 1px solid #c62828; color: #c62828; background: transparent;"
+             "  padding: 4px 14px; border-radius: 14px; font-weight: 600; border: none;"
+             "  color: #c62828; background: #fdeaea;"
              "}"
-             "QToolButton#timingRecord:hover { background: rgba(198, 40, 40, 24); }"
-             "QToolButton#timingRecord:checked {"
-             "  background: #c62828; color: #ffffff; border-color: #c62828;"
+             "QToolButton#timingRecord::menu-indicator { image: none; width: 0; }"
+             "QToolButton#timingRecord:hover { background: #f8d7d7; }"
+             "QToolButton#timingRecord:checked,"
+             "QToolButton#timingRecord:checked:hover,"
+             "QToolButton#timingRecord:checked:pressed {"
+             "  border: none; background: #c62828; color: #ffffff;"
              "}"
              "QLabel#timingStatus { color: #5f6368; font-weight: 600; }"
              "QLabel#timingElapsed { color: #202124; font-weight: 600; font-size: 15px; }"
              "%1"
-             "  border: 1px solid #dadce0; color: #3c4043; background: transparent;"
+             "QToolButton#timingChipCommand, QToolButton#timingChipModeling, QToolButton#timingChipRender {"
+             "  background: transparent; color: #3c4043;"
              "}"
-             "QToolButton#timingChipCommand:checked { background: rgba(47,125,222,36); border-color: #2f7dde; }"
-             "QToolButton#timingChipModeling:checked { background: rgba(214,126,44,36); border-color: #d67e2c; }"
-             "QToolButton#timingChipRender:checked { background: rgba(46,160,110,36); border-color: #2ea06e; }"
+             "QToolButton#timingChipCommand:hover { background: rgba(47,125,222,16); }"
+             "QToolButton#timingChipModeling:hover { background: rgba(214,126,44,16); }"
+             "QToolButton#timingChipRender:hover { background: rgba(46,160,110,16); }"
+             "QToolButton#timingChipCommand:checked,"
+             "QToolButton#timingChipCommand:checked:hover,"
+             "QToolButton#timingChipCommand:checked:pressed {"
+             "  border: none; background: #d7e6f8; color: #1a56b8;"
+             "}"
+             "QToolButton#timingChipModeling:checked,"
+             "QToolButton#timingChipModeling:checked:hover,"
+             "QToolButton#timingChipModeling:checked:pressed {"
+             "  border: none; background: #f6e1c8; color: #9a4e12;"
+             "}"
+             "QToolButton#timingChipRender:checked,"
+             "QToolButton#timingChipRender:checked:hover,"
+             "QToolButton#timingChipRender:checked:pressed {"
+             "  border: none; background: #d3efe3; color: #1b6b48;"
+             "}"
              "QToolButton#timingTool {"
              "  padding: 4px 10px; border-radius: 4px; border: none; color: #3c4043;"
              "  background: transparent;"
              "}"
              "QToolButton#timingTool:hover { background: #e8eaed; }"
              "QToolButton#timingTool:disabled { color: #9aa0a6; }")
-      .arg(QLatin1String(chip));
+      .arg(chips);
 }
 
 }  // namespace
@@ -183,6 +224,8 @@ TimingPanel::TimingPanel(QWidget* parent) : QWidget(parent) {
   record_ = new QToolButton(toolbar);
   record_->setObjectName(QStringLiteral("timingRecord"));
   record_->setCheckable(true);
+  record_->setAutoRaise(true);
+  record_->setAttribute(Qt::WA_StyledBackground, true);
   record_->setCursor(Qt::PointingHandCursor);
   record_->setFocusPolicy(Qt::NoFocus);
   record_->setToolButtonStyle(Qt::ToolButtonTextOnly);
@@ -281,6 +324,8 @@ QToolButton* TimingPanel::make_chip(const QString& text, const QString& name) {
   auto* chip = new QToolButton(this);
   chip->setObjectName(name);
   chip->setCheckable(true);
+  chip->setAutoRaise(true);
+  chip->setAttribute(Qt::WA_StyledBackground, true);
   chip->setText(text);
   chip->setCursor(Qt::PointingHandCursor);
   chip->setFocusPolicy(Qt::NoFocus);
@@ -390,16 +435,6 @@ void TimingPanel::update_header() {
     status_->setText(tr("Stopped"));
   } else {
     status_->setText(tr("Ready"));
-  }
-
-  QString title = tr("Timing");
-  if (session.is_recording()) {
-    title = tr("Timing — Recording %1").arg(format_elapsed(elapsed));
-  } else if (elapsed > 0) {
-    title = tr("Timing — %1").arg(format_elapsed(elapsed));
-  }
-  if (auto* dock = qobject_cast<QDockWidget*>(parentWidget())) {
-    dock->setWindowTitle(title);
   }
   update_actions();
 }
