@@ -6,18 +6,23 @@
   "cmake.buildPreset": "debug",
   "cmake.buildBeforeRun": true,
   "cmake.saveBeforeBuild": true,
-  "cmake.outputLogEncoding": "gbk",
+  "cmake.outputLogEncoding": "auto",
   "cmake.environment": {
     "VSLANG": "1033",
     "PreferredUILang": "en-US",
     "VCPKG_ROOT": "C:\\dev\\vcpkg",
     "VCPKG_INSTALLATION_ROOT": "C:\\dev\\vcpkg"
   },
+  "cmake.buildEnvironment": {
+    "VSLANG": "1033",
+    "PreferredUILang": "en-US"
+  },
   "terminal.integrated.env.windows": {
     "PATH": "C:\\dev\\emsdk;C:\\dev\\emsdk\\upstream\\emscripten;${env:PATH}"
   },
 
   "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+  "C_Cpp.default.intelliSenseMode": "windows-msvc-x64",
   "C_Cpp.default.cppStandard": "c++23",
   "dotnet.preferCSharpExtension": true,
   "dotnet.defaultSolution": "disable"

@@ -1,4 +1,8 @@
 cmake_minimum_required(VERSION 3.24)
+# 本机 VC 只有 2052\clui.dll，VSLANG=1033 不会变成英文 "Note: including file:"。
+if(WIN32)
+  set(ENV{VSLANG} "1033")
+endif()
 project(tamias VERSION 0.1.0 LANGUAGES C CXX)
 
 if(NOT EMSCRIPTEN AND NOT WIN32 AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -13,6 +17,19 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if(MSVC)
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
   add_compile_options(/utf-8 /MP /FS /W4 /permissive- /EHsc)
+  # CMake 把 CMAKE_CL_SHOWINCLUDES_PREFIX 按控制台 ACP 写入 ninja。
+  # CMake Tools 里 cl /utf-8 吐出的是 UTF-8「注意: 包含文件:  」。
+  # 下面这串是把那段 UTF-8 当 GBK 解开后的字形，写进 ninja 的字节才是 UTF-8。
+  if(CMAKE_GENERATOR MATCHES "Ninja")
+    set(_tamias_showinc "娉ㄦ剰: 鍖呭惈鏂囦欢:  ")
+    unset(CMAKE_CL_SHOWINCLUDES_PREFIX)
+    set(CMAKE_CL_SHOWINCLUDES_PREFIX "${_tamias_showinc}" CACHE STRING
+      "ACP-mojibake of UTF-8 注意: 包含文件:  (two spaces after colon)" FORCE)
+    set(CMAKE_CL_SHOWINCLUDES_PREFIX "${_tamias_showinc}")
+    set(CMAKE_C_CL_SHOWINCLUDES_PREFIX "${_tamias_showinc}")
+    set(CMAKE_CXX_CL_SHOWINCLUDES_PREFIX "${_tamias_showinc}")
+    unset(_tamias_showinc)
+  endif()
   # CMake 4 leaves CMAKE_<LANG>_FLAGS_<CONFIG> empty; vcpkg also blanks
   # CMAKE_MSVC_DEBUG_INFORMATION_FORMAT. RelWithDebInfo then has no /Zi or
   # /DEBUG, so Cursor/cppvsdbg breakpoints show "no debug info".
