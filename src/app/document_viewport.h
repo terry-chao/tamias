@@ -23,6 +23,7 @@
 #include <QWidget>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -75,6 +76,8 @@ class DocumentViewport final : public QWidget {
   [[nodiscard]] Session& session() { return *session_; }
   void refresh_after_edit();
   void notify_selection_changed();
+  void set_debug_overlay(std::optional<Aabb> aabb, std::optional<std::uint64_t> isolate_node);
+  void set_debug_vertex(std::optional<DebugVertexOverlay> vertex);
   Result<void> begin_plugin_point_input(
       PluginPointInputRequest request, PluginHost::PointInputCompletion completion);
   void cancel_plugin_point_input(std::uint64_t request_id = 0);
@@ -141,8 +144,9 @@ class DocumentViewport final : public QWidget {
   [[nodiscard]] bool pick_grip_at(const QPoint& pos, EntityGrip& out) const;
   void apply_grip_at(const QPoint& pos);
   void commit_grip_drag();
+  void clear_grip_preview();
   void fill_grip_overlay(FrameSubmission& frame) const;
-
+  void fill_debug_overlay(FrameSubmission& frame) const;
   std::unique_ptr<Session> session_;
   PluginPointInputSession plugin_point_input_;
   Document* document_ = nullptr;
@@ -178,6 +182,11 @@ class DocumentViewport final : public QWidget {
   FeatureModel grip_from_model_{};
   Mat4 grip_from_transform_ = Mat4::identity();
   Vec3 grip_from_world_{};
+  FeatureModel grip_to_model_{};
+  Mat4 grip_to_transform_ = Mat4::identity();
+  std::vector<Vec3> grip_preview_polyline_;
+  std::vector<Vec3> grip_preview_points_;
+  bool grip_preview_valid_ = false;
   BoxSelectOverlay* box_select_overlay_ = nullptr;
   bool alive_ = true;
   bool has_cursor_ = false;
@@ -191,6 +200,9 @@ class DocumentViewport final : public QWidget {
   bool plan_view_ = false;
   float persp_yaw_ = 0.785398163f;
   float persp_pitch_ = 0.35f;
+  std::optional<Aabb> debug_aabb_;
+  std::optional<std::uint64_t> debug_isolate_node_;
+  std::optional<DebugVertexOverlay> debug_vertex_;
 };
 
 }  // namespace tamias

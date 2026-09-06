@@ -7,6 +7,7 @@
 #include "engine/math/grid.h"
 #include "engine/modeling/curve_geom.h"
 #include "engine/modeling/feature.h"
+#include "engine/profile/timing_scope.h"
 #include "entity/entity.h"
 #include "entity/entity_grip.h"
 
@@ -34,6 +35,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <utility>
 
 #if defined(_WIN32)
@@ -523,6 +525,7 @@ void DocumentViewport::ensure_channel() {
 void DocumentViewport::rebuild_bvh() { bvh_.build(*document_); }
 
 void DocumentViewport::submit_current_frame() {
+  TimingScope scope("submit_current_frame", TimingCategory::Render);
   if (!alive_) {
     return;
   }
@@ -569,6 +572,13 @@ void DocumentViewport::submit_current_frame() {
     }
   }
   frame.hidden_node_ids = std::move(hidden);
+  if (debug_isolate_node_) {
+    for (const auto& item : frame.items) {
+      if (item.node_id != *debug_isolate_node_) {
+        frame.hidden_node_ids.push_back(item.node_id);
+      }
+    }
+  }
   frame.scene_generation = document_->scene().generation();
   frame.scene_dirty_ids = document_->scene().dirty_since(last_submitted_scene_generation_);
   last_submitted_scene_generation_ = frame.scene_generation;
@@ -626,6 +636,7 @@ void DocumentViewport::submit_current_frame() {
     frame.snap_point = cursor;
   }
   fill_grip_overlay(frame);
+  fill_debug_overlay(frame);
   channel_->submit(std::move(frame));
 }
 
@@ -739,6 +750,7 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
         grip_from_model_ = entity->model;
         grip_from_transform_ = entity->local_transform;
         grip_from_world_ = grip.world;
+        clear_grip_preview();
         return;
       }
     }
@@ -1736,6 +1748,14 @@ bool DocumentViewport::pick_grip_at(const QPoint& pos, EntityGrip& out) const {
   return hit;
 }
 
+void DocumentViewport::clear_grip_preview() {
+  grip_preview_polyline_.clear();
+  grip_preview_points_.clear();
+  grip_to_model_ = {};
+  grip_to_transform_ = Mat4::identity();
+  grip_preview_valid_ = false;
+}
+
 void DocumentViewport::apply_grip_at(const QPoint& pos) {
   Entity* entity = document_->entity(active_grip_.entity_id);
   if (entity == nullptr) {
@@ -1743,84 +1763,126 @@ void DocumentViewport::apply_grip_at(const QPoint& pos) {
   }
   Vec3 p = snapped_ground_position(pos);
   p.y = grip_from_world_.y;
-  // Always reshape from the press-time snapshot. Canonical corner indices
-  // remap after a rebuild; applying incrementally would pin the wrong opposite
+  // Preview on a clone. Live document stays at the press-time shape until drop;
+  // createGeom / EditEntityGripCommand run once in commit_grip_drag.
+  // Always reshape from the press-time snapshot: canonical corner indices remap
+  // after a rebuild, and applying incrementally would pin the wrong opposite
   // once the dragged corner crosses through it.
-  const FeatureModel last_model = entity->model;
-  const Mat4 last_xf = entity->local_transform;
-  entity->model = grip_from_model_;
-  entity->local_transform = grip_from_transform_;
-  if (!apply_entity_grip(*entity, active_grip_.index, p)) {
-    entity->model = last_model;
-    entity->local_transform = last_xf;
-    sync_entity_grips(*entity);
+  std::unique_ptr<Entity> preview = entity->clone();
+  preview->model = grip_from_model_;
+  preview->local_transform = grip_from_transform_;
+  if (!apply_entity_grip(*preview, active_grip_.index, p)) {
     return;
   }
-  if (auto r = rebuild_entity_mesh(*document_, entity->id); !r) {
-    entity->model = grip_from_model_;
-    entity->local_transform = grip_from_transform_;
-    sync_entity_grips(*entity);
-    (void)rebuild_entity_mesh(*document_, entity->id);
-    log_error(r.error());
-    return;
+  grip_to_model_ = preview->model;
+  grip_to_transform_ = preview->local_transform;
+  grip_preview_polyline_ = tamias::grip_preview_polyline(*preview);
+  grip_preview_points_.clear();
+  for (const EntityGrip& g : collect_entity_grips(*preview)) {
+    grip_preview_points_.push_back(g.world);
   }
-  if (render_thread_) {
-    if (const MeshAsset* asset = document_->mesh(entity->mesh_asset_id)) {
-      if (auto gpu = render_thread_->upload_mesh(asset->id, asset->cpu); !gpu) {
-        log_error(gpu.error());
-      }
-    }
-  }
+  grip_preview_valid_ = true;
   request_redraw();
 }
 
 void DocumentViewport::commit_grip_drag() {
   Entity* entity = document_->entity(active_grip_.entity_id);
-  if (entity == nullptr) {
+  if (entity == nullptr || !grip_preview_valid_) {
+    clear_grip_preview();
     return;
   }
-  const std::vector<EntityGrip> now = collect_entity_grips(*entity);
   Vec3 to_world = grip_from_world_;
   if (active_grip_.index >= 0 &&
-      active_grip_.index < static_cast<int>(now.size())) {
-    to_world = now[static_cast<std::size_t>(active_grip_.index)].world;
+      active_grip_.index < static_cast<int>(grip_preview_points_.size())) {
+    to_world = grip_preview_points_[static_cast<std::size_t>(active_grip_.index)];
   }
   if (length(to_world - grip_from_world_) < 1e-4f) {
+    clear_grip_preview();
     return;
   }
   auto command = std::make_unique<EditEntityGripCommand>(
-      *document_, entity->id, grip_from_model_, grip_from_transform_, entity->model,
-      entity->local_transform);
+      *document_, entity->id, grip_from_model_, grip_from_transform_, grip_to_model_,
+      grip_to_transform_);
+  {
+    TimingScope scope("edit_entity_grip", TimingCategory::Command);
+    if (auto r = command->execute(); !r) {
+      log_error(r.error());
+      clear_grip_preview();
+      return;
+    }
+  }
   command_system_.push_executed(std::move(command));
+  resync_all_meshes();
   rebuild_bvh();
+  clear_grip_preview();
   emit document_changed();
+  request_redraw();
 }
 
 void DocumentViewport::fill_grip_overlay(FrameSubmission& frame) const {
   if (session_->tool_mode() != ToolMode::None || document_ == nullptr) {
     return;
   }
+  if (gripping_ && grip_preview_polyline_.size() >= 2) {
+    frame.preview_polyline = grip_preview_polyline_;
+  }
   for (const std::uint64_t id : document_->selected_ids()) {
     const Entity* entity = document_->entity(id);
     if (entity == nullptr) {
       continue;
     }
-    const std::vector<EntityGrip> grips = collect_entity_grips(*entity);
-    if (grips.empty()) {
+    std::vector<Vec3> worlds;
+    if (gripping_ && id == active_grip_.entity_id && !grip_preview_points_.empty()) {
+      worlds = grip_preview_points_;
+    } else {
+      for (const EntityGrip& g : collect_entity_grips(*entity)) {
+        worlds.push_back(g.world);
+      }
+    }
+    if (worlds.empty()) {
       continue;
     }
     if ((entity->kind() == EntityKind::Bezier || entity->kind() == EntityKind::BSpline ||
          entity->kind() == EntityKind::Nurbs) &&
         frame.preview_control_polyline.empty()) {
-      frame.preview_control_polyline.reserve(grips.size());
-      for (const EntityGrip& g : grips) {
-        frame.preview_control_polyline.push_back(g.world);
-      }
+      frame.preview_control_polyline = worlds;
     }
-    for (const EntityGrip& g : grips) {
-      frame.grip_points.push_back(g.world);
+    for (const Vec3& p : worlds) {
+      frame.grip_points.push_back(p);
     }
   }
+}
+
+void DocumentViewport::set_debug_overlay(std::optional<Aabb> aabb,
+                                         std::optional<std::uint64_t> isolate_node) {
+  debug_aabb_ = std::move(aabb);
+  debug_isolate_node_ = isolate_node;
+  request_redraw();
+}
+
+void DocumentViewport::set_debug_vertex(std::optional<DebugVertexOverlay> vertex) {
+  debug_vertex_ = std::move(vertex);
+  request_redraw();
+}
+
+void DocumentViewport::fill_debug_overlay(FrameSubmission& frame) const {
+  if (debug_aabb_ && debug_aabb_->valid()) {
+    const Aabb& box = *debug_aabb_;
+    const Vec3 c[8] = {
+        {box.min.x, box.min.y, box.min.z}, {box.max.x, box.min.y, box.min.z},
+        {box.min.x, box.max.y, box.min.z}, {box.max.x, box.max.y, box.min.z},
+        {box.min.x, box.min.y, box.max.z}, {box.max.x, box.min.y, box.max.z},
+        {box.min.x, box.max.y, box.max.z}, {box.max.x, box.max.y, box.max.z},
+    };
+    const int edges[12][2] = {{0, 1}, {1, 3}, {3, 2}, {2, 0}, {4, 5}, {5, 7},
+                              {7, 6}, {6, 4}, {0, 4}, {1, 5}, {2, 6}, {3, 7}};
+    frame.debug_line_segments.reserve(24);
+    for (const auto& e : edges) {
+      frame.debug_line_segments.push_back(c[e[0]]);
+      frame.debug_line_segments.push_back(c[e[1]]);
+    }
+  }
+  frame.debug_vertex = debug_vertex_;
 }
 
 }  // namespace tamias

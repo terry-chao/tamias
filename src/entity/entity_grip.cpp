@@ -379,4 +379,48 @@ bool apply_entity_grip(Entity& entity, int index, Vec3 world) {
   return ok;
 }
 
+std::vector<Vec3> grip_preview_polyline(const Entity& entity) {
+  const std::vector<EntityGrip> grips = collect_entity_grips(entity);
+  std::vector<Vec3> pts;
+  pts.reserve(grips.size() + 1);
+  for (const EntityGrip& g : grips) {
+    pts.push_back(g.world);
+  }
+  if (pts.size() < 2) {
+    return {};
+  }
+  switch (entity.kind()) {
+    case EntityKind::Circle:
+    case EntityKind::Cylinder:
+      return sample_circle_xz(pts[0], length(pts[1] - pts[0]));
+    case EntityKind::Arc:
+      if (pts.size() >= 3) {
+        return sample_arc_3pt(pts[0], pts[1], pts[2]);
+      }
+      return pts;
+    case EntityKind::Bezier:
+      return sample_bezier(pts);
+    case EntityKind::BSpline: {
+      const Feature* out = entity.model.output_feature();
+      return sample_bspline(pts, out != nullptr ? spline_degree(entity.model, *out) : 0);
+    }
+    case EntityKind::Nurbs: {
+      const Feature* out = entity.model.output_feature();
+      if (out == nullptr) {
+        return sample_nurbs(pts, {});
+      }
+      return sample_nurbs(pts, nurbs_weights(entity.model, *out),
+                          spline_degree(entity.model, *out));
+    }
+    case EntityKind::Rectangle:
+    case EntityKind::Box:
+    case EntityKind::Slab:
+    case EntityKind::Column:
+      pts.push_back(pts.front());
+      return pts;
+    default:
+      return pts;
+  }
+}
+
 }  // namespace tamias

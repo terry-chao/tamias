@@ -5,6 +5,7 @@
 #include "engine/graphics/mesh.h"
 #include "engine/math/camera.h"
 #include "engine/render/material.h"
+#include "engine/render/debug_vertex_overlay.h"
 #include "engine/render/render_types.h"
 
 #include <atomic>
@@ -43,6 +44,8 @@ struct FrameSubmission {
   std::vector<Vec3> preview_points;            // 控制点标记
   std::vector<Vec3> grip_points;               // 选中实体的夹点
   std::optional<Vec3> snap_point;              // 网格交点捕捉标记
+  std::vector<Vec3> debug_line_segments;       // 调试 AABB 等，成对线段
+  std::optional<DebugVertexOverlay> debug_vertex;  // 检查器点选的网格顶点
   float clear_color[4] = {0.14f, 0.18f, 0.24f, 1.f};
 };
 

@@ -1314,6 +1314,31 @@ TEST(EntityGrip, BoxCornerMovesAloneThenRebuilds) {
   ASSERT_TRUE(mesh) << mesh.error();
 }
 
+TEST(EntityGrip, PreviewPolylineFollowsCornerWithoutCreateGeom) {
+  BoxEntity box({0.f, 0.f, 0.f});
+  auto grips = collect_entity_grips(box);
+  ASSERT_EQ(grips.size(), 4u);
+  const Vec3 target{1.4f, 0.f, 1.1f};
+  ASSERT_TRUE(apply_entity_grip(box, 2, target));
+  const auto preview = grip_preview_polyline(box);
+  ASSERT_GE(preview.size(), 4u);
+  bool saw_target = false;
+  for (const Vec3& p : preview) {
+    if (length(p - target) < 1e-3f) {
+      saw_target = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(saw_target);
+
+  LineEntity line({0.f, 0.f, 0.f}, {2.f, 0.f, 0.f});
+  ASSERT_TRUE(apply_entity_grip(line, 1, {4.f, 0.f, 1.f}));
+  const auto line_preview = grip_preview_polyline(line);
+  ASSERT_EQ(line_preview.size(), 2u);
+  EXPECT_NEAR(line_preview[1].x, 4.f, 1e-4f);
+  EXPECT_NEAR(line_preview[1].z, 1.f, 1e-4f);
+}
+
 TEST(EntityGrip, EditCommandUndo) {
   Document doc("grip-undo");
   LineEntity line({0.f, 0.f, 0.f}, {2.f, 0.f, 0.f});
