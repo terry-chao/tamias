@@ -18,8 +18,10 @@ add_executable(tamias
   plugin_manager_dialog.cpp
   plugin_prompt_dialog.cpp
   about_dialog.cpp
+  pin_result_dialog.cpp
   document_viewport.cpp
   box_select_overlay.cpp
+  golden_test_runner.cpp
   handle_inspector.cpp
   property_panel.cpp
   view_cube_widget.cpp

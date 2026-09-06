@@ -6,6 +6,7 @@ add_library(tamias_render STATIC
   ibl.cpp
   render_scene.cpp
   render_scene_io.cpp
+  render_scene_golden.cpp
 )
 add_library(tamias::render ALIAS tamias_render)
 target_include_directories(tamias_render PUBLIC ${CMAKE_SOURCE_DIR}/src)

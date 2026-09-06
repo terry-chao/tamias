@@ -8,6 +8,36 @@
 
 ---
 
+## 这个工具在调试什么
+
+**不是**断点调试器，也**不是**查 GPU / shader。Pin / Export 冻住的是：**这一帧交给渲染器的那份 CPU 货单**——有哪些网格、每条 draw 用什么材质/贴图、相机在哪。
+
+屏幕上一个盒子，背后其实是两段活：
+
+1. **建模**（`.tdoc`）：墙、布尔、OCCT 求值 → 三角网
+2. **渲染**：把三角网上 GPU 画出来
+
+Pin 卡在中间：建模已经算完、GPU 还没上场。它回答的问题是：
+
+> 「程序到底打算画什么？」而不是「像素为什么是这个颜色？」
+
+典型用途：
+
+| 你怀疑的问题 | Pin 能不能帮上 |
+|---|---|
+| 盒子三角数不对、缺面、包围盒飞了 | 能。inspect 里看 `meshes` / `tris` / `aabb` |
+| 颜色、贴图、金属度烘焙错了 | 能。看 item 的 color / albedo / normal |
+| draw list 少了构件、多了隐藏物体 | 能。看 `items=` |
+| 改完渲染代码，场景内容偷偷变了 | 能。digest 金样会红 |
+| shader、深度、光照、锯齿 | **不能。** 用 RenderDoc |
+| 墙连接、特征树、布尔求值错 | **不能直接查。** 继续用 `.tdoc` |
+
+所以它调试的是 **CPU 侧场景烘焙 / 展平**（`render_items()` 的输出），外加把「这一版输出」锁进测试，防止以后无声回归。
+
+手工怎么走见 [调试步骤](#调试步骤)。
+
+---
+
 ## 0. 和 `.tdoc` 怎么选
 
 | | `.tdoc` | `.trscn` |
@@ -25,13 +55,125 @@
 
 ## 1. 怎么用
 
+### Export 和 Pin 怎么选
+
+| | **Export Render Scene** | **Pin Render Scene for Tests** |
+|---|---|---|
+| 入口 | Home → File → Export | Home → File → Pin（`Ctrl+Shift+P`） |
+| 写到哪 | 你选的任意 `.trscn` | 固定 `assets/samples/render/<name>/` |
+| 用途 | 临时复现：写盘并立刻打开只读快照 | 入库金样，gtest 会扫 |
+| 会不会改当前文档路径 | 否 | 否（Save 仍写原来的 `.tdoc`） |
+
+日常建模继续用 `.tdoc`。某一帧看起来不对、想固定网格和相机再查，再 Export / Pin。
+
 ### 桌面：导出
 
 1. 打开 `.tdoc` / STEP / OBJ 等，把视口转到要留下的角度和着色模式（线框 / 着色 / 真实感）。
 2. 功能区 **Home → File → Export Render Scene**。
-3. 存成 `某个名字.trscn`。
+3. 选一个文件名（`某个名字.trscn`）。
 
-导出成功后弹出 inspect 文本（网格数、贴图数、`digest=`、每条 draw item）。这是调试摘要，文件本身已经写到磁盘。
+写盘后**立刻在新标签打开**这份快照：相机和着色模式从文件恢复，状态栏写 `read-only draw list`。原来的 `.tdoc` 标签还在，Save 仍写原来的文档。状态栏会带 `digest=`。
+
+### 桌面：钉进测试（Pin）
+
+调试到「这一帧就是对的」之后：**Home → File → Pin Render Scene for Tests**（`Ctrl+Shift+P`）。
+
+1. 起一个英文夹具名（字母开头，只含字母数字 `-` `_`），例如 `box`。
+2. 写入仓库 `assets/samples/render/<name>/`：
+   - `scene.trscn`
+   - `scene.meta.json`（digest、条数；测试读这个，不要把哈希写进 C++）
+   - `scene.inspect.txt`
+3. 写完立刻再 load 一遍，digest 对不上会失败。
+4. **不会**改当前文档路径（Save 仍写原来的 `.tdoc` / `.trscn`）。
+5. 写完立刻跑 `tamias_tests --gtest_filter=RenderSceneGolden*`。旁边没有 `tamias_tests.exe` 时，先调 `scripts/build-tests.ps1` 按当前配置（Debug / RelWithDebInfo / Release）编出来。结果接在 inspect 对话框后面。
+
+已有同名夹具会问是否覆盖。不要把金样存到 `build\bin\...`。
+
+`ScansRepositoryFixtures` 只收录同时有 `scene.trscn` 和 `scene.meta.json` 的子目录。只有裸 `.trscn` 会被忽略；仓库里还没有任何完整夹具时这条 skip，不算失败。`IncompleteRepoFixturesAreRejected` 会把这种半成品夹具标红，避免扫描 skip 造成假绿。
+
+### Pin 之后怎么看数据
+
+Pin **不会**再打开一个数据调试器。三个文件就是你能看的全部：
+
+| 文件 | 干什么 |
+|---|---|
+| `scene.trscn` | 二进制快照。用软件 **Open** 打开，眼睛看那一帧长什么样 |
+| `scene.inspect.txt` | 人读的摘要：网格数、三角数、每条 item 的 aabb / 颜色 / 贴图 id |
+| `scene.meta.json` | 给测试用的数字：`digest`、`items`、`meshes`。不是给人逐顶点翻的 |
+
+**看画面：** File → Open → `assets/samples/render/box/scene.trscn`。和 Pin 当时一样就对了。
+
+**看数字：** 打开同目录的 `scene.inspect.txt`。例如：
+
+```
+meshes=1  textures=2  items=1  tris=12  digest=413df9fb7b89430f
+item node=1 mesh=1 tris=12 aabb=(-0.5,0,-0.5)-(0.5,1,0.5) color=(0.72,0.66,0.56)
+```
+
+对照你的预期：该有 1 个盒子 → `items=1`、`tris=12`；盒子该在原点附近 → aabb 大约 `(-0.5,0,-0.5)-(0.5,1,0.5)`。条数不对、aabb 飞了、缺 albedo，问题就在这份货单里。
+
+**看有没有悄悄变：** Pin 写完会自动跑 `RenderSceneGolden*`，输出在同一个对话框里。也可以自己跑 `tamias_tests --gtest_filter=RenderSceneGolden*`。测试重读 `scene.trscn`，再算 digest，和 json 里记下的比。红了再打开 inspect，看是条数变了还是网格变了。
+
+没有「逐顶点 / 逐像素」面板。要查 shader 用 RenderDoc；要查墙怎么连用原来的 `.tdoc`。
+
+### 调试步骤
+
+Pin 卡在 `render_items()` 之后、`upload_mesh` 之前，用来锁「这一帧 CPU 侧该画什么」。不是 RenderDoc，也不是 `.tdoc`。
+
+**1. 桌面里复现**
+
+打开模型（`.tdoc` / STEP / OBJ），转到要锁的视角和着色模式（线框 / 着色 / 真实感）。确认这一帧就是你要对照的状态。
+
+**2. Export：写盘并打开快照**
+
+Home → File → **Export Render Scene**，选一个文件名。写完立刻在新标签打开这份 `.trscn`，不用再走 File → Open。
+
+- 原来的 `.tdoc` 标签还在
+- 快照相机会恢复，状态栏写 `read-only draw list`
+- 打开后不再走特征树 / OCCT；画面还错，问题在渲染；画面对了，问题在建模 / 烘焙之前
+
+**3. 看对了再 Pin 入库**
+
+`Ctrl+Shift+P`（或 Home → File → **Pin Render Scene for Tests**），夹具名例如 `box`。状态栏会显示 `Pinned golden ... digest=...`。
+
+**4. 对照 inspect 文本**
+
+例如 `assets/samples/render/box/scene.inspect.txt`：
+
+```
+meshes=1  textures=2  items=1  tris=12  digest=413df9fb7b89430f
+view mode=1  size=2004x1242
+item node=1 mesh=1 tris=12 aabb=(-0.5,0,-0.5)-(0.5,1,0.5)
+```
+
+先看：item 条数对不对、aabb 是否离谱、贴图 id 是否被引用、digest 是否和上次一样。
+
+**5. 跑金样测试（无窗口、无 GPU）**
+
+```
+cmd /c "call `"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat`" && cmake --build --preset debug --target tamias_tests"
+.\build\bin\Debug\tamias_tests.exe --gtest_filter=RenderSceneGolden*
+```
+
+Windows 终端必须先 `vcvars64.bat` 再编，见仓库 `.cursor/rules/windows-msvc-build.mdc`。
+
+**6. digest 变了怎么判**
+
+| 情况 | 做法 |
+|---|---|
+| 你故意改了烘焙 / 着色 | 再 Pin 覆盖金样 |
+| 没改场景，digest 却变了 | 查回归，不要改哈希函数去凑绿 |
+| 只改了相机 | digest **不含**相机，测试不会因转视角红 |
+
+按层定位（对应下面 [§2](#2-卡在管线哪)）：
+
+| 现象 | 查哪一层 |
+|---|---|
+| Pin 绿、屏幕仍错 | GPU / shader / RHI（用 RenderDoc） |
+| 打开 `.trscn` 就错 | 烘焙、材质、draw item |
+| 打开 `.tdoc` 错、打开 `.trscn` 对 | 特征求值 / 网格生成 |
+
+现在自动化只锁到「这份场景会提交这些 draw」，没有像素级 PNG 对比。Web 打开 `.trscn` 仍是人眼看。
 
 ### 桌面：打开与保存
 
@@ -66,7 +208,7 @@ cmake --build --preset wasm-serve
                         → GPU / RenderDoc
 ```
 
-打开快照后 `render_items()` 走快照清单（保留粗糙度、金属度、贴图 id），只同步选中态。水合时用 `replace_textures` 换掉文档构造函数种下的默认材质贴图，避免把 10 张 512² 默认纹理全部 upload。
+打开快照后 `render_items()` 走快照清单（保留粗糙度、金属度、贴图 id），只同步选中态。水合时用 `replace_textures` 换掉文档构造函数种下的默认材质贴图，避免把 10 张 512² 默认纹理全部 upload。按层排查见上面 [调试步骤](#调试步骤) 第 6 步。
 
 Windows 上路径一律 UTF-8（`path_to_utf8` / `qstring_to_path`）。不要用 `QString::toStdString()` 再塞进 `std::filesystem::path`，中文目录会抛 `std::system_error`。
 
@@ -115,29 +257,16 @@ cmd /c "call `"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliar
 
 Windows 终端必须先 `vcvars64.bat` 再编，见仓库 `.cursor/rules/windows-msvc-build.mdc`。
 
-### 推荐：桌面导出 → 仓库金样 → 断言 digest
+### 推荐：Pin → 仓库金样 → 扫描测试
 
-手工拼 `handmade_scene()` 适合测 IO。**锁真实模型**用导出的 `.trscn`，测试里不必再走 OCCT / 特征树。
+手工拼 `handmade_scene()` 适合测 IO。**锁真实模型**用 Pin，测试里不必再走 OCCT / 特征树，也不用手写一条 `TEST`。桌面里怎么走到 Pin，见 [调试步骤](#调试步骤)。
 
 1. 桌面打开模型，转到要锁住的视角和着色模式。
-2. **Export Render Scene**，把文件放进仓库，例如 `assets/samples/box.trscn`（和 IFC 样例一样，测试里用 `TAMIAS_SOURCE_DIR`）。
-3. 测试里加载金样，比 digest / 条数，必要时再 mock 录制一遍：
+2. **Pin Render Scene for Tests**，夹具名例如 `box`。
+3. 提交 `assets/samples/render/box/`（`scene.trscn` + sidecar）。
+4. `tamias_tests --gtest_filter=RenderSceneGolden*`：digest 对 sidecar、hydrate 条数、Mock draw 次数。
 
-```cpp
-TEST(RenderSceneGolden, BoxSnapshot) {
-  const auto path =
-      std::filesystem::path(TAMIAS_SOURCE_DIR) / "assets" / "samples" / "box.trscn";
-  auto scene = load_render_scene(path);
-  ASSERT_TRUE(scene) << scene.error();
-  EXPECT_EQ(render_scene_digest(*scene), "把导出对话框里那行 digest= 粘过来");
-  EXPECT_FALSE(scene->items.empty());
-
-  Document doc = document_from_render_scene(*scene);
-  EXPECT_EQ(doc.render_items().size(), scene->items.size());
-}
-```
-
-导出弹窗里的 inspect 文本就有 `digest=`。烘焙或着色改了、digest 对不上，不是文件坏了，是场景内容变了：要么更新金样，要么查回归。
+digest 变了：不是文件坏了，是场景内容变了。故意改烘焙就再 Pin 覆盖；没改却变了就查回归。**不要**改哈希函数去凑绿。
 
 ### 三层分别锁什么
 

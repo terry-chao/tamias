@@ -12,7 +12,15 @@ Tamias 的自动化测试几乎全是 **GoogleTest 可执行文件 `tamias_tests
 
 ### Windows
 
-终端里的 `cl` 没有标准库路径，必须先 `vcvars64.bat`，再编再测：
+终端里的 `cl` 没有标准库路径，必须先 `vcvars64.bat`，再编再测。仓库脚本会包一层（默认 Debug，编完跑 `RenderSceneGolden*`）：
+
+```
+.\scripts\build-tests.cmd
+.\scripts\build-tests.cmd -BuildOnly
+.\scripts\build-tests.cmd -Preset relwithdebinfo
+```
+
+或手写：
 
 ```
 cmd /c "call `"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat`" && cmake --build --preset debug --target tamias_tests"
@@ -98,7 +106,7 @@ CMake 用 `gtest_discover_tests(... DISCOVERY_MODE PRE_TEST)`，并给 OCCT DLL 
 | **实体 / 命令** | 墙/盒子/线/板/圆/贝塞尔/B 样条/多段线/NURBS/梁/柱/圆柱/门/弧/矩形/楼层/`set_location`/`set_material`/`chamfer` 的 dispatch + 撤销；布尔 Fuse/Common/Cut | — |
 | **造型 / OCCT** | tessellate box、改参数重求值、fillet 增面、chamfer 出网格、布尔并/交/差 | 求值器失败路径、特征依赖环、内核错误信息几乎没有断言 |
 | **BIM** | 宿主对齐、墙改通知窗、关系 roundtrip、IFC **空间树**、`create_storey` / `set_location` | IfcGeom **几何导入未接线**，无几何 IFC 测试；轴网、多楼层工作流很薄 |
-| **渲染 CPU** | 场景图录制、`.trscn`、IBL 烘焙尺寸 | 无仓库金样 `.trscn` |
+| **渲染 CPU** | 场景图录制、`.trscn` IO、Pin 扫描金样（digest / hydrate / Mock draw） | 像素级 PNG 金样未做 |
 | **RHI / GPU** | 仅 `RenderConfig.OpenGlDoesNotShare`（线程共享策略） | **Vulkan / OpenGL / WebGL 设备、shader 编译、离屏像素全部未测** |
 | **宿主 Session** | dispatch / undo / 选择 / reset / `HostEvent` 监听、`CameraController` | 与壳的手势对齐（Qt 按钮映射）未测 |
 | **插件 C++** | HostApi、Ribbon 排序、点选会话、表单 spec | 对话框真正弹出、多视口、失败日志未测 |
@@ -123,7 +131,7 @@ CMake 用 `gtest_discover_tests(... DISCOVERY_MODE PRE_TEST)`，并给 OCCT DLL 
 ### 渲染与视觉
 
 5. **没有像素级回归。** Mock RHI 能证明「会提交这些 draw」，不能证明「屏幕上长什么样」。离屏 PNG + 金样图后置，见 [RENDER-SCENE.md](RENDER-SCENE.md)。
-6. **没有 `.trscn` 金样入库。** 文档推荐 `assets/samples/*.trscn` + digest，仓库里还没有这些文件。
+6. **Pin 金样目录约定已落地。** 完整夹具是 `assets/samples/render/<name>/{scene.trscn,scene.meta.json}`；裸 `.trscn` 不算金样。像素对比仍未做。
 7. **三个 RHI 后端都没有设备测试。** 创建 swapchain / 上传网格 / 编译 shader / `draw_channel` 真实路径未覆盖。WebGL 线框降级成实体着色也无人断言。
 
 ### 格式与造型
@@ -242,18 +250,14 @@ EXPECT_FALSE(mesh->indices.empty());
 
 ### 7.6 `.trscn` 金样（无 GPU，现在就能做）
 
-这是渲染回归的**第一层**，做法在 [RENDER-SCENE.md §4](RENDER-SCENE.md#4-结合自动化测试) 已经写过。补测三步：
+这是渲染回归的**第一层**，做法在 [RENDER-SCENE.md §4](RENDER-SCENE.md#4-结合自动化测试)。手工调试顺序见 [调试步骤](RENDER-SCENE.md#调试步骤)。应用里 **Pin Render Scene for Tests** 把当前视口写到 `assets/samples/render/<name>/`（`scene.trscn` + `scene.meta.json`）。gtest `RenderSceneGolden.ScansRepositoryFixtures` 扫这个目录：digest、hydrate、Mock draw。没有夹具时 skip。
 
-1. 桌面打开一个盒子，固定相机和着色模式，**Export Render Scene**。
-2. 文件放进 `assets/samples/box.trscn`，把 inspect 里的 `digest=` 抄进测试。
-3. `load_render_scene` → `EXPECT_EQ(render_scene_digest(*scene), "…")` → 可选 Mock 录制 draw 次数。
-
-着色或烘焙改了导致 digest 变：更新金样，不要改哈希函数去凑绿。Web 打开 `.trscn` 仍是人眼，不要假装进了 gtest。
+着色或烘焙改了导致 digest 变：再 Pin 覆盖金样，不要改哈希函数去凑绿。Web 打开 `.trscn` 仍是人眼，不要假装进了 gtest。
 
 ### 7.7 GPU / 像素（分三层，别一步到位）
 
 ```
-① .trscn digest + Mock draw     ← 已有 / 金样待入库
+① .trscn digest + Mock draw     ← 已有（Pin → assets/samples/render/）
 ② 真设备：create + upload + 一帧不崩
 ③ 离屏 readback → PNG 金样     ← 要先给 RHI 加读回
 ```
@@ -308,7 +312,7 @@ C++ 已经测 HostApi 和（可选）加载 Hello。C# 侧缺的是**文本协�
 
 1. `command_dispatch_tests.cpp`（缺的命令 + chamfer + 布尔 1/2）——纯仿现有，当天能绿。
 2. `camera_controller_tests.cpp` + Session listener。
-3. 导出 `box.trscn` 入库 + digest 测试。
+3. 桌面 **Pin Render Scene for Tests** 入库（`assets/samples/render/<name>/`），跑 `RenderSceneGolden*`。
 4. 最小 `.glb` + 一个 `.brep` 盒子。
 5. C# `CommandArgs` xUnit（与 C++ 样例同源）。
 6. CI 跑 `ctest`（先 Linux 或本机自托管）。

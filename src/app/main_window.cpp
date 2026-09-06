@@ -7,6 +7,8 @@
 #include "engine/document/document_io.h"
 #include "entity/box_entity.h"
 #include "engine/io/mesh_io.h"
+#include "engine/render/render_scene_golden.h"
+#include "golden_test_runner.h"
 #include "mesh_thumbnail.h"
 #include "engine/modeling/occt_shape_ops.h"
 #include "engine/modeling/shape_ops.h"
@@ -15,6 +17,7 @@
 #include "plugin/plugin_manager.h"
 #include "plugin_manager_dialog.h"
 #include "plugin_prompt_dialog.h"
+#include "pin_result_dialog.h"
 #include "property_panel.h"
 #include "qt_path.h"
 #include "ribbon_bar.h"
@@ -40,7 +43,9 @@
 #include <QFontDatabase>
 #include <QIcon>
 #include <QImage>
+#include <QInputDialog>
 #include <QKeySequence>
+#include <QLineEdit>
 #include <QAbstractButton>
 #include <QMessageBox>
 #include <QPainter>
@@ -54,10 +59,12 @@
 #include <QVector>
 #include <QVBoxLayout>
 #include <QWidget>
+
+#include <cstdint>
+#include <filesystem>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
-#include <cstdint>
 
 namespace tamias {
 namespace {
@@ -107,7 +114,7 @@ MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent), plugin_manager_(plugin_host_) {
   setWindowTitle("Tamias");
   setWindowIcon(QIcon(QStringLiteral(":/branding/logo.png")));
-  resize(1600, 1000);
+  resize(1800, 1000);
   center_on_primary_screen(this);
 
   recent_.load();
@@ -177,9 +184,17 @@ MainWindow::MainWindow(QWidget* parent)
   auto* export_render_action = new QAction(ribbon_icon(QStringLiteral(":/icons/save_as.svg")),
                                            tr("Export Render Scene"), this);
   export_render_action->setToolTip(
-      tr("Dump cooked meshes and draw items to a .trscn file for render debugging"));
+      tr("Write the current view to a .trscn and open it as a read-only snapshot"));
   connect(export_render_action, &QAction::triggered, this, &MainWindow::export_render_scene);
   addAction(export_render_action);
+
+  auto* pin_render_action = new QAction(ribbon_icon(QStringLiteral(":/icons/save_as.svg")),
+                                        tr("Pin Render Scene for Tests"), this);
+  pin_render_action->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+P")));
+  pin_render_action->setToolTip(
+      tr("Write the current view to assets/samples/render/<name>/ and run RenderSceneGolden*"));
+  connect(pin_render_action, &QAction::triggered, this, &MainWindow::pin_render_scene_golden);
+  addAction(pin_render_action);
 
   auto* frame_all_action = new QAction(ribbon_icon(QStringLiteral(":/icons/frame_all.svg")),
                                       tr("Fit All"), this);
@@ -480,6 +495,7 @@ MainWindow::MainWindow(QWidget* parent)
   file_group->add_action(save_action);
   file_group->add_action(save_as_action);
   file_group->add_action(export_render_action);
+  file_group->add_action(pin_render_action);
 
   RibbonGroup* draw_group = home_page->add_group(QStringLiteral("draw"), tr("Draw"));
   draw_group->add_action(line_action_);
@@ -1206,7 +1222,104 @@ bool MainWindow::export_render_scene() {
   if (path.isEmpty()) {
     return false;
   }
-  return write_render_scene_document(path, true);
+  QString out_path = path;
+  if (!is_trscn_path(out_path)) {
+    out_path += QStringLiteral(".trscn");
+  }
+  const QString abs_path = QFileInfo(out_path).absoluteFilePath();
+  const RenderScene scene = vp->document().capture_render_scene(vp->capture_render_scene_view());
+  if (auto r = save_render_scene(qstring_to_path(abs_path), scene); !r) {
+    QMessageBox::critical(this, tr("Export"), QString::fromStdString(r.error()));
+    return false;
+  }
+  statusBar()->showMessage(
+      tr("Exported %1  digest=%2")
+          .arg(abs_path, QString::fromStdString(render_scene_digest(scene))),
+      8000);
+  if (const int existing = find_open_document(abs_path); existing >= 0) {
+    if (auto* w = tabs_->widget(existing)) {
+      tabs_->removeTab(existing);
+      delete w;
+    }
+  }
+  return open_path(abs_path);
+}
+
+bool MainWindow::pin_render_scene_golden() {
+  auto* vp = current_viewport();
+  if (!vp) {
+    QMessageBox::information(this, tr("Pin"), tr("Open a document first."));
+    return false;
+  }
+
+  const std::filesystem::path source_dir{TAMIAS_SOURCE_DIR};
+  const auto root = render_scene_golden_root(source_dir);
+  if (!std::filesystem::exists(source_dir)) {
+    QMessageBox::warning(this, tr("Pin"),
+                         tr("Source tree not found. Pin is for a local checkout:\n%1")
+                             .arg(QString::fromUtf8(TAMIAS_SOURCE_DIR)));
+    return false;
+  }
+
+  QString suggested = QString::fromStdString(
+      suggest_render_scene_golden_slug(vp->document().name()));
+  bool ok = false;
+  const QString slug_q = QInputDialog::getText(
+      this, tr("Pin Render Scene for Tests"),
+      tr("Fixture name (letters, digits, '-' '_'; saved under assets/samples/render/):"),
+      QLineEdit::Normal, suggested, &ok);
+  if (!ok || slug_q.trimmed().isEmpty()) {
+    return false;
+  }
+  const std::string slug = slug_q.trimmed().toStdString();
+  if (!is_render_scene_golden_slug(slug)) {
+    QMessageBox::warning(
+        this, tr("Pin"),
+        tr("Name must start with a letter and use only A–Z, a–z, 0–9, '-' or '_'."));
+    return false;
+  }
+
+  const auto dir = root / slug;
+  bool overwrite = false;
+  std::error_code ec;
+  if (std::filesystem::exists(dir / "scene.trscn", ec)) {
+    const auto answer = QMessageBox::question(
+        this, tr("Pin"),
+        tr("Golden \"%1\" already exists.\nOverwrite scene.trscn and sidecar files?")
+            .arg(QString::fromStdString(slug)),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (answer != QMessageBox::Yes) {
+      return false;
+    }
+    overwrite = true;
+  }
+
+  const RenderScene scene = vp->document().capture_render_scene(vp->capture_render_scene_view());
+  auto meta = save_render_scene_golden(root, slug, scene, overwrite);
+  if (!meta) {
+    QMessageBox::critical(this, tr("Pin"), QString::fromStdString(meta.error()));
+    return false;
+  }
+
+  const QString dir_q = path_to_qstring(dir);
+
+  const GoldenTestRun tests = run_render_scene_golden_tests(source_dir, this);
+
+  QString inspect = QString::fromStdString(inspect_render_scene(scene));
+  inspect += QStringLiteral("\nwritten to: ");
+  inspect += dir_q;
+  inspect += QStringLiteral("\n\n--- RenderSceneGolden* ---\n");
+  inspect += tests.log;
+
+  if (tests.ok) {
+    statusBar()->showMessage(
+        tr("Pinned golden %1  digest=%2").arg(dir_q, QString::fromStdString(meta->digest)), 8000);
+  } else {
+    statusBar()->showMessage(tr("Pinned %1 but RenderSceneGolden* failed").arg(dir_q), 12000);
+  }
+  PinResultDialog dlg(scene, dir_q, inspect, tests, this);
+  dlg.exec();
+  return true;
 }
 
 bool MainWindow::write_render_scene_document(const QString& path, bool show_inspect) {

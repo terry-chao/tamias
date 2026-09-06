@@ -403,8 +403,8 @@
     </message>
     <message>
         <location filename="../src/app/main_window.cpp"/>
-        <source>Dump cooked meshes and draw items to a .trscn file for render debugging</source>
-        <translation>把已烘焙网格和绘制项导出为 .trscn，用于渲染调试</translation>
+        <source>Write the current view to a .trscn and open it as a read-only snapshot</source>
+        <translation>把当前视口写成 .trscn 并立刻打开只读快照</translation>
     </message>
     <message>
         <location filename="../src/app/main_window.cpp"/>
@@ -415,6 +415,11 @@
         <location filename="../src/app/main_window.cpp"/>
         <source>Render Scene (*.trscn)</source>
         <translation>渲染场景 (*.trscn)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp"/>
+        <source>Exported %1  digest=%2</source>
+        <translation>已导出 %1  digest=%2</translation>
     </message>
     <message>
         <location filename="../src/app/main_window.cpp"/>
@@ -430,6 +435,55 @@
         <location filename="../src/app/main_window.cpp"/>
         <source>Loaded render scene %1 (read-only draw list)</source>
         <translation>已加载渲染场景 %1（只读绘制清单）</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp"/>
+        <source>Pin Render Scene for Tests</source>
+        <translation>钉进测试</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp"/>
+        <source>Write the current view to assets/samples/render/&lt;name&gt;/ for golden tests</source>
+        <translation>把当前视图写入 assets/samples/render/&lt;name&gt;/，作为金样测试</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp"/>
+        <source>Pin</source>
+        <translation>钉入</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp"/>
+        <source>Source tree not found. Pin is for a local checkout:
+%1</source>
+        <translation>找不到源码目录。钉入仅适用于本地检出：
+%1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp"/>
+        <source>Fixture name (letters, digits, '-' '_'; saved under assets/samples/render/):</source>
+        <translation>夹具名（字母数字、'-'、'_'；保存到 assets/samples/render/）：</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp"/>
+        <source>Name must start with a letter and use only A–Z, a–z, 0–9, '-' or '_'.</source>
+        <translation>名称必须以字母开头，且只能包含 A–Z、a–z、0–9、'-' 或 '_'。</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp"/>
+        <source>Golden "%1" already exists.
+Overwrite scene.trscn and sidecar files?</source>
+        <translation>金样“%1”已存在。
+是否覆盖 scene.trscn 及附属文件？</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp"/>
+        <source>Pinned golden %1  digest=%2</source>
+        <translation>已钉入金样 %1  digest=%2</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp"/>
+        <source>Render scene pinned</source>
+        <translation>渲染场景已钉入</translation>
     </message>
     <message>
         <location filename="../src/app/main_window.cpp" line="134"/>

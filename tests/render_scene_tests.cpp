@@ -2,6 +2,7 @@
 #include "engine/core/fs_utf8.h"
 #include "engine/io/mesh_io.h"
 #include "engine/render/render_scene.h"
+#include "engine/render/render_scene_golden.h"
 #include "engine/render/scene_graph.h"
 
 #include <gtest/gtest.h>
@@ -453,6 +454,134 @@ TEST(RenderSceneIo, RejectsBadMagic) {
   const std::uint8_t junk[] = {'T', 'M', 'A', 'S', 1, 0, 0, 0};
   auto loaded = deserialize_render_scene(junk);
   EXPECT_FALSE(loaded);
+}
+
+TEST(RenderSceneGolden, PinWritesSidecarAndRoundTrips) {
+  const auto root = std::filesystem::temp_directory_path() / "tamias_golden_pin";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  const RenderScene original = handmade_scene();
+  auto meta = save_render_scene_golden(root, "box", original, false);
+  ASSERT_TRUE(meta) << meta.error();
+  EXPECT_EQ(meta->name, "box");
+  EXPECT_EQ(meta->digest, render_scene_digest(original));
+  EXPECT_EQ(meta->items, 1u);
+  EXPECT_EQ(meta->textures, 1u);
+
+  auto loaded_meta = load_render_scene_golden_meta(root / "box");
+  ASSERT_TRUE(loaded_meta) << loaded_meta.error();
+  EXPECT_EQ(loaded_meta->digest, meta->digest);
+
+  auto exists = save_render_scene_golden(root, "box", original, false);
+  EXPECT_FALSE(exists);
+
+  auto again = save_render_scene_golden(root, "box", original, true);
+  ASSERT_TRUE(again) << again.error();
+  EXPECT_EQ(again->digest, meta->digest);
+
+  std::filesystem::remove_all(root, ec);
+}
+
+TEST(RenderSceneGolden, RefreshSidecarFromExistingTrscn) {
+  const auto root = std::filesystem::temp_directory_path() / "tamias_golden_refresh";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  const RenderScene original = handmade_scene();
+  auto meta = save_render_scene_golden(root, "box", original, false);
+  ASSERT_TRUE(meta) << meta.error();
+
+  const auto dir = root / "box";
+  std::filesystem::remove(dir / "scene.meta.json", ec);
+  std::filesystem::remove(dir / "scene.inspect.txt", ec);
+  EXPECT_TRUE(list_render_scene_goldens(root).empty());
+
+  auto refreshed = refresh_render_scene_golden_sidecar(dir);
+  ASSERT_TRUE(refreshed) << refreshed.error();
+  EXPECT_EQ(refreshed->digest, meta->digest);
+  EXPECT_EQ(refreshed->items, meta->items);
+
+  const auto listed = list_render_scene_goldens(root);
+  ASSERT_EQ(listed.size(), 1u);
+  auto loaded_meta = load_render_scene_golden_meta(listed[0]);
+  ASSERT_TRUE(loaded_meta) << loaded_meta.error();
+  EXPECT_EQ(loaded_meta->digest, meta->digest);
+
+  std::filesystem::remove_all(root, ec);
+}
+
+TEST(RenderSceneGolden, IncompleteRepoFixturesAreRejected) {
+  const auto root = render_scene_golden_root(TAMIAS_SOURCE_DIR);
+  std::error_code ec;
+  if (!std::filesystem::is_directory(root, ec)) {
+    return;
+  }
+  for (const auto& entry : std::filesystem::directory_iterator(root, ec)) {
+    if (ec || !entry.is_directory()) {
+      continue;
+    }
+    const auto trscn = entry.path() / "scene.trscn";
+    const auto meta = entry.path() / "scene.meta.json";
+    if (std::filesystem::is_regular_file(trscn, ec) && !ec &&
+        !std::filesystem::is_regular_file(meta, ec)) {
+      ADD_FAILURE() << "incomplete golden (missing scene.meta.json): "
+                    << path_to_utf8(entry.path())
+                    << " — Pin again so sidecar is written beside scene.trscn";
+    }
+  }
+}
+
+TEST(RenderSceneGolden, ScansRepositoryFixtures) {
+  const auto root = render_scene_golden_root(TAMIAS_SOURCE_DIR);
+  const auto dirs = list_render_scene_goldens(root);
+  if (dirs.empty()) {
+    GTEST_SKIP() << "no goldens in " << path_to_utf8(root);
+  }
+  for (const auto& dir : dirs) {
+    SCOPED_TRACE(path_to_utf8(dir));
+    auto meta = load_render_scene_golden_meta(dir);
+    ASSERT_TRUE(meta) << meta.error();
+    auto scene = load_render_scene(dir / "scene.trscn");
+    ASSERT_TRUE(scene) << scene.error();
+    EXPECT_EQ(render_scene_digest(*scene), meta->digest);
+    EXPECT_EQ(scene->items.size(), meta->items);
+    EXPECT_EQ(scene->meshes.size(), meta->meshes);
+    EXPECT_EQ(scene->textures.size(), meta->textures);
+    EXPECT_EQ(static_cast<int>(scene->view.mode), meta->mode);
+
+    Document doc = document_from_render_scene(*scene);
+    EXPECT_EQ(doc.render_items().size(), scene->items.size());
+
+    Fixture f;
+    for (const auto& [id, mesh] : scene->meshes) {
+      f.add_mesh(id, static_cast<std::uint32_t>(mesh.indices.size()));
+    }
+    std::uint64_t gpu_tex = 1;
+    for (const auto& item : scene->items) {
+      for (std::uint64_t tex_id : {item.albedo_texture_id, item.normal_texture_id}) {
+        if (tex_id == 0 || f.texture_asset_to_gpu.contains(tex_id)) {
+          continue;
+        }
+        GpuTexture gpu;
+        gpu.texture = std::make_unique<MockTexture>();
+        f.textures.emplace(gpu_tex, std::move(gpu));
+        f.texture_asset_to_gpu[tex_id] = gpu_tex;
+        ++gpu_tex;
+      }
+    }
+    auto graph = build_scene_graph(scene->items);
+    f.visit(*graph);
+    EXPECT_EQ(f.cmds.draws.size(), scene->items.size());
+  }
+}
+
+TEST(RenderSceneGolden, RejectsBadSlug) {
+  EXPECT_FALSE(is_render_scene_golden_slug(""));
+  EXPECT_FALSE(is_render_scene_golden_slug("1box"));
+  EXPECT_FALSE(is_render_scene_golden_slug("box.trscn"));
+  EXPECT_TRUE(is_render_scene_golden_slug("box"));
+  EXPECT_TRUE(is_render_scene_golden_slug("wall-corner"));
+  EXPECT_EQ(suggest_render_scene_golden_slug(""), "scene");
+  EXPECT_EQ(suggest_render_scene_golden_slug("12box"), "s12box");
 }
 
 }  // namespace tamias

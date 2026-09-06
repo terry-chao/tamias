@@ -8,4 +8,4 @@
 - [浏览器 WebGPU](../WGPU.md) —— WASM 查看器的 RHI（桌面不做 wgpu-native）
 - [Web 查看器](../WEB.md) —— 引擎 WASM + React 壳
 - [视锥剔除](../FRUSTUM-CULLING.md) —— 屏外不发 draw（一期已落地）
-- [渲染场景快照](../RENDER-SCENE.md) —— `.trscn`：烤好的 CPU 场景，给调试和测试
+- [渲染场景快照](../RENDER-SCENE.md) —— `.trscn`：烤好的 CPU 场景，给调试和测试（[调试步骤](../RENDER-SCENE.md#调试步骤)）

@@ -71,6 +71,7 @@ class MainWindow final : public QMainWindow {
   bool write_tdoc_document(const QString& path);
   bool write_render_scene_document(const QString& path, bool show_inspect);
   bool export_render_scene();
+  bool pin_render_scene_golden();
   void notify_save_success(const QString& path);
   void set_render_mode(RenderMode mode);
   void sync_render_mode_actions();
