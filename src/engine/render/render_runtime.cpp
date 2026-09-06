@@ -8,6 +8,9 @@
 #if defined(TAMIAS_HAS_RHI_WEBGL)
 #include "engine/render/rhi/webgl/webgl_shaders.h"
 #endif
+#if defined(TAMIAS_HAS_RHI_WEBGPU)
+#include "engine/render/rhi/webgpu/webgpu_shaders.h"
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -460,9 +463,12 @@ Result<void> RenderThread::ensure_pipelines() {
   std::vector<std::uint32_t> fs_spirv;
   std::string vs_glsl;
   std::string fs_glsl;
+  std::string vs_wgsl;
+  std::string fs_wgsl;
 
   const bool opengl = device_->backend() == GraphicsBackend::OpenGL;
   const bool webgl = device_->backend() == GraphicsBackend::WebGL;
+  const bool webgpu = device_->backend() == GraphicsBackend::WebGPU;
 
   ShaderModuleDesc vs_desc{};
   vs_desc.stage = ShaderStage::Vertex;
@@ -481,6 +487,17 @@ Result<void> RenderThread::ensure_pipelines() {
     fs_desc.glsl = std::span<const char>(fs_glsl.data(), fs_glsl.size());
 #else
     return Err("WebGL shaders were not compiled into this binary");
+#endif
+  } else if (webgpu) {
+#if defined(TAMIAS_HAS_RHI_WEBGPU)
+    vs_wgsl.assign(webgpu_shaders::mesh_vert());
+    fs_wgsl.assign(webgpu_shaders::mesh_frag());
+    vs_desc.language = ShaderLanguage::Wgsl;
+    vs_desc.wgsl = std::span<const char>(vs_wgsl.data(), vs_wgsl.size());
+    fs_desc.language = ShaderLanguage::Wgsl;
+    fs_desc.wgsl = std::span<const char>(fs_wgsl.data(), fs_wgsl.size());
+#else
+    return Err("WebGPU shaders were not compiled into this binary");
 #endif
   } else {
     const char* vs_name = opengl ? "mesh.vert.gl.spv" : "mesh.vert.spv";
@@ -543,6 +560,8 @@ Result<void> RenderThread::ensure_pipelines() {
   std::vector<std::uint32_t> sky_fs_spirv;
   std::string sky_vs_glsl;
   std::string sky_fs_glsl;
+  std::string sky_vs_wgsl;
+  std::string sky_fs_wgsl;
   ShaderModuleDesc sky_vs_desc{};
   sky_vs_desc.stage = ShaderStage::Vertex;
   sky_vs_desc.entry = "main";
@@ -559,6 +578,17 @@ Result<void> RenderThread::ensure_pipelines() {
     sky_fs_desc.glsl = std::span<const char>(sky_fs_glsl.data(), sky_fs_glsl.size());
 #else
     return Err("WebGL shaders were not compiled into this binary");
+#endif
+  } else if (webgpu) {
+#if defined(TAMIAS_HAS_RHI_WEBGPU)
+    sky_vs_wgsl.assign(webgpu_shaders::sky_vert());
+    sky_fs_wgsl.assign(webgpu_shaders::sky_frag());
+    sky_vs_desc.language = ShaderLanguage::Wgsl;
+    sky_vs_desc.wgsl = std::span<const char>(sky_vs_wgsl.data(), sky_vs_wgsl.size());
+    sky_fs_desc.language = ShaderLanguage::Wgsl;
+    sky_fs_desc.wgsl = std::span<const char>(sky_fs_wgsl.data(), sky_fs_wgsl.size());
+#else
+    return Err("WebGPU shaders were not compiled into this binary");
 #endif
   } else {
     const char* sky_vs_name = opengl ? "sky.vert.gl.spv" : "sky.vert.spv";
@@ -605,6 +635,8 @@ Result<void> RenderThread::ensure_pipelines() {
   std::vector<std::uint32_t> grid_fs_spirv;
   std::string grid_vs_glsl;
   std::string grid_fs_glsl;
+  std::string grid_vs_wgsl;
+  std::string grid_fs_wgsl;
   ShaderModuleDesc grid_vs_desc{};
   grid_vs_desc.stage = ShaderStage::Vertex;
   grid_vs_desc.entry = "main";
@@ -621,6 +653,17 @@ Result<void> RenderThread::ensure_pipelines() {
     grid_fs_desc.glsl = std::span<const char>(grid_fs_glsl.data(), grid_fs_glsl.size());
 #else
     return Err("WebGL shaders were not compiled into this binary");
+#endif
+  } else if (webgpu) {
+#if defined(TAMIAS_HAS_RHI_WEBGPU)
+    grid_vs_wgsl.assign(webgpu_shaders::grid_vert());
+    grid_fs_wgsl.assign(webgpu_shaders::grid_frag());
+    grid_vs_desc.language = ShaderLanguage::Wgsl;
+    grid_vs_desc.wgsl = std::span<const char>(grid_vs_wgsl.data(), grid_vs_wgsl.size());
+    grid_fs_desc.language = ShaderLanguage::Wgsl;
+    grid_fs_desc.wgsl = std::span<const char>(grid_fs_wgsl.data(), grid_fs_wgsl.size());
+#else
+    return Err("WebGPU shaders were not compiled into this binary");
 #endif
   } else {
     const char* grid_vs_name = opengl ? "grid.vert.gl.spv" : "grid.vert.spv";

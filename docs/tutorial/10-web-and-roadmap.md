@@ -1,6 +1,6 @@
 # 第 10 章　Web 与路线图：未来在哪里，接着学什么
 
-> 本章目标：知道 Tamias 的另外两条产品线（Web 查看器、wgpu 后端）和里程碑规划，拿到属于你自己的进阶学习路径。
+> 本章目标：知道 Tamias 的 Web 查看器（浏览器 WebGPU）和里程碑规划，拿到属于你自己的进阶学习路径。
 
 ## 10.1 第二条产品线：引擎 WASM + Web 查看器
 
@@ -9,22 +9,22 @@
 ```
 Web UI (web/index.html, React)
   → ViewerHost（相机、文件、提交帧）
-    → Document / io（与桌面同一套 .tdoc / OBJ）
+    → Document / io（与桌面同一套 .tdoc / .trscn / OBJ）
       → RenderThread（synchronous，主线程 pump）
-        → WebGL2 RHI（GLES 3）
+        → WebGPU RHI（emdawnwebgpu）
 ```
 
-`src/engine` 不 include Qt，所以能被复用；丢掉的只是 `src/app`。阶段 1 已落地：浏览器能打开 `.tdoc` / `.obj` 并旋转查看。详见 [Web 查看器](../WEB.md)。
+`src/engine` 不 include Qt，所以能被复用；丢掉的只是 `src/app`。阶段 1 已落地：浏览器能打开 `.tdoc` / `.trscn` / `.obj` 并旋转查看。详见 [Web 查看器](../WEB.md)、[渲染场景快照](../RENDER-SCENE.md)。
 
-## 10.2 第三渲染后端：wgpu（方案已定）
+## 10.2 浏览器 WebGPU（不是桌面 wgpu-native）
 
-wgpu（WebGPU 的一种桌面实现）要成为 RHI 的**第三个翻译官**，而不是替换 RHI 抽象：
+WebGPU 是 WASM 查看器的 RHI 翻译官，不是第三套桌面后端：
 
 ```
-draw_channel → RHIDevice 动词 → wgpu 后端（encoder / bind group / queue / present）
+draw_channel → RHIDevice 动词 → rhi/webgpu（encoder / bind group / queue / present）
 ```
 
-`draw_channel`、场景、OCCT 一行不改。方案要点：常量走 uniform buffer、shader 吃 SPIR-V、线框用 native `POLYGON_MODE_LINE`。详见 [wgpu 接入](../WGPU.md)。
+`draw_channel`、场景、OCCT 一行不改。常量走 uniform buffer，着色器是 WGSL。桌面继续 Vulkan + OpenGL。详见 [浏览器 WebGPU](../WGPU.md)。
 
 ## 10.3 里程碑：主线 P1–P4
 
@@ -75,7 +75,7 @@ draw_channel → RHIDevice 动词 → wgpu 后端（encoder / bind group / queue
 ## 延伸阅读
 
 - [Web 查看器](../WEB.md)：WASM 阶段划分与构建
-- [wgpu 接入](../WGPU.md)：第三后端方案
+- [浏览器 WebGPU](../WGPU.md)：WASM RHI，不是桌面 wgpu-native
 - [路线图](../ROADMAP.md)：完整规划与已决定事项
 
 教程结束。需要查词时，回到[术语速查](glossary.md)。

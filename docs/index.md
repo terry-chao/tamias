@@ -2,7 +2,7 @@
 
 跨 MCAD / BIM 的**几何查看 + 参数化编辑内核**。
 
-- **Qt** 做桌面壳，自研 RHI（Vulkan 主 / OpenGL 副 / WebGL2 浏览器）；[wgpu 第三桌面后端](WGPU.md) 方案已定、代码未落地；[引擎 WASM + Web 查看器](WEB.md) 阶段 0/1 已落地
+- **Qt** 做桌面壳，自研 RHI（Vulkan 主 / OpenGL 副）；浏览器查看器走 [引擎 WASM + WebGPU](WEB.md)（[WebGPU 后端](WGPU.md)）；[WebGL2](WEB.md) 仍可作 WASM 可选回退
 - **OCCT** 提供 BRep 几何内核
 - **特征树 + 求值器** 做参数化编辑：改参数 → 重算 → 渲染
 
@@ -30,7 +30,7 @@
 第 7 章 命令与撤销 ───────── 一切编辑都是命令
 第 8 章 渲染管线 ★ ───────── 网格 → GPU → 像素
 第 9 章 BIM 业务层 ───────── 建筑语义与门窗宿主
-第 10 章 Web 与路线图 ────── WASM、wgpu、进阶路径
+第 10 章 Web 与路线图 ────── WASM、浏览器 WebGPU、进阶路径
 ```
 
 每章都写了「学什么 + 正文 + 动手练习 + 延伸阅读」，并直接链到下面的模块文档。看不懂模块文档时，先回到教程对应章节。
@@ -58,6 +58,8 @@
 | **BIM** | 楼层、轴网、墙梁板柱宿主、关联关系、当前标高 | [BIM 业务层](BIM.md)、[关联关系](bim/relations.md) |
 | **场景图** | 语义树、变换、包围盒、展平 draw list | [总述](scene/index.md)、[语义树](SCENE-GRAPH.md) |
 | **造型** | 特征树、求值、MCAD 深路径；内核插件口 | [特征树求值器](FEATURE-TREE-EVALUATOR.md)、[MCAD 管线](MCAD-PIPELINE.md)、[几何边界](ISHAPE-OPS.md) |
-| **渲染** | 一帧怎么画、Vulkan/OpenGL/WebGL、屏外不画 | [管线与 RHI](RENDERING.md)、[视锥、NDC 与屏幕](NDC.md)、[OpenGL 后端](OPENGL.md)、[wgpu 接入](WGPU.md)、[Web 查看器](WEB.md)、[视锥剔除](FRUSTUM-CULLING.md) |
+| **渲染** | 一帧怎么画、Vulkan/OpenGL/WebGPU、屏外不画 | [管线与 RHI](RENDERING.md)、[视锥、NDC 与屏幕](NDC.md)、[OpenGL 后端](OPENGL.md)、[浏览器 WebGPU](WGPU.md)、[Web 查看器](WEB.md)、[视锥剔除](FRUSTUM-CULLING.md)、[渲染场景快照](RENDER-SCENE.md)、[超大规模三角](MASSIVE-GEOMETRY.md) |
 
-RHI 抽象写在 [渲染管线](RENDERING.md) 第 5 节；OpenGL 落地见 [OpenGL 后端](OPENGL.md)；第三后端方案见 [wgpu 接入](WGPU.md)。产品定位见 [MCAD 与 BIM](DECISION-MCAD-BIM.md)。
+RHI 抽象写在 [渲染管线](RENDERING.md) 第 5 节；OpenGL 落地见 [OpenGL 后端](OPENGL.md)；浏览器 WebGPU 见 [WebGPU 后端](WGPU.md)。产品定位见 [MCAD 与 BIM](DECISION-MCAD-BIM.md)。
+
+怎么验证改动有没有把内核弄坏：[测试](TESTING.md)（`tamias_tests` / `ctest`、覆盖了什么、缺什么）。

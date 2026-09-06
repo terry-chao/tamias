@@ -8,6 +8,7 @@ enum class GraphicsBackend : std::uint8_t {
   Vulkan = 0,
   OpenGL = 1,
   WebGL = 2,
+  WebGPU = 3,
 };
 
 [[nodiscard]] inline const char* to_string(GraphicsBackend backend) {
@@ -18,6 +19,8 @@ enum class GraphicsBackend : std::uint8_t {
       return "OpenGL";
     case GraphicsBackend::WebGL:
       return "WebGL";
+    case GraphicsBackend::WebGPU:
+      return "WebGPU";
   }
   return "Unknown";
 }

@@ -3,7 +3,12 @@
 #include "engine/core/log.h"
 #include "engine/document/document_io.h"
 #include "engine/io/mesh_io.h"
+#if defined(TAMIAS_HAS_RHI_WEBGPU)
+#include "engine/render/rhi/webgpu/webgpu_backend.h"
+#endif
+#if defined(TAMIAS_HAS_RHI_WEBGL)
 #include "engine/render/rhi/webgl/webgl_backend.h"
+#endif
 #include "host/command_arg_text.h"
 
 #include <algorithm>
@@ -59,9 +64,16 @@ Result<void> ViewerHost::start(const char* canvas_selector) {
   if (canvas_selector != nullptr && canvas_selector[0] != '\0') {
     canvas_selector_ = canvas_selector;
   }
-  register_webgl_backend();
   RenderDeviceConfig config{};
+#if defined(TAMIAS_HAS_RHI_WEBGPU)
+  register_webgpu_backend();
+  config.backend = GraphicsBackend::WebGPU;
+#elif defined(TAMIAS_HAS_RHI_WEBGL)
+  register_webgl_backend();
   config.backend = GraphicsBackend::WebGL;
+#else
+  return Err("no WASM RHI backend was compiled");
+#endif
   config.enable_validation = false;
   config.synchronous = true;
   render_thread_ = std::make_shared<RenderThread>(config);

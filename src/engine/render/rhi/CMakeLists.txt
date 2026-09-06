@@ -15,3 +15,7 @@ endif()
 if(TAMIAS_ENABLE_WEBGL_BACKEND)
   add_subdirectory(webgl)
 endif()
+
+if(TAMIAS_ENABLE_WEBGPU_BACKEND)
+  add_subdirectory(webgpu)
+endif()

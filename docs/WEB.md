@@ -1,11 +1,11 @@
 # 引擎 WASM + Web 查看器
 
-> **状态：阶段 0/1 已落地。** 桌面仍是 Qt 壳；浏览器走另一条产品线：无 Qt 的引擎交叉编译到 WebAssembly，新 Web UI 画在 HTML canvas 上。第三桌面后端 [wgpu](WGPU.md) 与这条线独立。
+> **状态：阶段 0/1 已落地。** 桌面仍是 Qt 壳；浏览器走另一条产品线：无 Qt 的引擎交叉编译到 WebAssembly，新 Web UI 画在 HTML canvas 上。图形默认 [WebGPU](WGPU.md)（`rhi/webgpu`）。桌面不做 wgpu-native。
 
 实现入口：
 
 - 契约：[`native_window_handle.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/core/native_window_handle.h)、[`document_io.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document_io.h)、[`mesh_io.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/io/mesh_io.h)
-- RHI：[`src/engine/render/rhi/webgl/`](https://github.com/terry-chao/tamias/tree/main/src/engine/render/rhi/webgl)
+- RHI：[`src/engine/render/rhi/webgpu/`](https://github.com/terry-chao/tamias/tree/main/src/engine/render/rhi/webgpu)（默认）；可选 [`src/engine/render/rhi/webgl/`](https://github.com/terry-chao/tamias/tree/main/src/engine/render/rhi/webgl)
 - 宿主：[`ViewerHost`](https://github.com/terry-chao/tamias/blob/main/src/wasm/viewer_host.h) + [`web/index.html`](https://github.com/terry-chao/tamias/blob/main/web/index.html)
 
 ---
@@ -23,7 +23,7 @@ Qt 6 官方支持 WebAssembly，但 Tamias 桌面视口绑的是 HWND / X11、`A
 | 阶段 | 目标 | 已做 / 未做 |
 |---|---|---|
 | **0. 契约** | 非 Qt 宿主能喂窗口和字节 | ✅ `NativeWindowHandle.canvas_selector`；`load_document_bytes` / `load_obj_bytes` |
-| **1. 查看器** | 浏览器打开 `.tdoc` / `.obj` 能转 | ✅ WebGL2 RHI、同步 `RenderThread::pump`、Vite + React + TS 单页 |
+| **1. 查看器** | 浏览器打开 `.tdoc` / `.trscn` / `.obj` 能转 | ✅ WebGPU RHI、同步 `RenderThread::pump`、Vite + React + TS 单页 |
 | **2. 轻编辑** | 选中、夹点、撤销 | ❌ `CommandSystem` 尚未 embind |
 | **3. 建模** | 浏览器里布尔 / 拉伸 | ❌ OCCT 未进 WASM |
 | **4. BIM** | IFC 浏览 | ❌ 仍走桌面 / 将来服务端 |
@@ -40,11 +40,11 @@ Web UI (web/, Vite + React + TypeScript)
     ▼
 ViewerHost          相机、文件、提交 FrameSubmission
     ▼
-Document / io       与桌面同一套 .tdoc / OBJ
+Document / io       与桌面同一套 .tdoc / .trscn / OBJ
     ▼
 RenderThread        synchronous=true，主线程 pump()
     ▼
-WebGL2 RHI          GLES 3，绑 #viewport
+WebGPU RHI          emdawnwebgpu，绑 #viewport
 ```
 
 描边层是新写的；Document / 命令模型 / `draw_channel` 剧本与桌面相同。
@@ -61,6 +61,7 @@ WebGL2 RHI          GLES 3，绑 #viewport
 |---|---|
 | `load_document_bytes` | 完整 `.tdoc`（magic + chunk），不设 `Document::path` |
 | `load_document` | 读盘后转调上面，并写入 path |
+| `deserialize_render_scene` / `document_from_render_scene` | 内存 `.trscn`（烤好的网格 + draw list + 相机），见 [渲染场景快照](RENDER-SCENE.md) |
 | `load_obj_bytes` | 内存 OBJ（`v` / `vn` / `f`，无 MTL） |
 | `load_mesh_bytes` | 按扩展名分派；阶段 1 只接 `.obj` |
 
@@ -70,7 +71,7 @@ WebGL2 RHI          GLES 3，绑 #viewport
 
 ## 4. 阶段 1 查看器
 
-**图形。** `GraphicsBackend::WebGL`。实现藏在 `rhi/webgl`，对外仍是 `device.h`。着色器是内嵌 GLSL ES 3.00（`webgl_shaders.h`），不走 DXC / SPIR-V。Clip 校正与桌面 OpenGL 相同（Z 从 `[0,1]` 映到 `[-1,1]`）。WebGL 没有 `glPolygonMode`，线框模式先画成实体着色。
+**图形。** 默认 `GraphicsBackend::WebGPU`。实现藏在 `rhi/webgpu`，对外仍是 `device.h`。着色器是内嵌 WGSL（`webgpu_shaders.h`），不走 DXC / SPIR-V。Clip 校正与 Vulkan 相同（翻 Y，Z ∈ [0, 1]）。标准 WebGPU 没有 polygon mode，线框模式先走片元 `mode` 分支。可选回退：`TAMIAS_ENABLE_WEBGL_BACKEND` 编 `rhi/webgl`（GLSL ES 3.00）。详见 [浏览器 WebGPU](WGPU.md)。
 
 **线程。** `RenderDeviceConfig.synchronous = true` 时不建 `std::thread`。上传和 `pump()` 都在调用线程跑，避开 SharedArrayBuffer / COOP-COEP。
 
@@ -91,7 +92,7 @@ WebGL2 RHI          GLES 3，绑 #viewport
 
 | 项 | 桌面 | 浏览器查看器 |
 |---|---|---|
-| Configure Preset | `msvc` | `wasm`（Emscripten WebGL viewer） |
+| Configure Preset | `msvc` | `wasm`（Emscripten WebGPU viewer） |
 | Build Preset | `debug` | `wasm-serve` 编译并开 http://localhost:3000；`wasm-stop` 停预览 |
 | Launch Target | `tamias` | `tamias_viewer` |
 
@@ -107,7 +108,7 @@ cmake --build --preset wasm-stop
 
 或 `powershell -File scripts/wasm.ps1`。产物在 `build/wasm/bin/`。
 
-浏览器里：中键旋转，右键平移，滚轮缩放。顶栏打开 `.tdoc` 或 `.obj`。没有文件时画演示立方体。
+浏览器里：中键旋转，右键平移，滚轮缩放。顶栏打开 `.tdoc`、`.trscn` 或 `.obj`。没有文件时画演示立方体。`.trscn` 的含义见 [渲染场景快照](RENDER-SCENE.md)。
 
 wasm 构建会自动构建 `web/`（首次若缺少 `node_modules` 会先跑 `npm ci`），
 把 Vite 产物 `index.html` + `assets/` 拷到 `build/wasm/bin/`。
@@ -123,7 +124,8 @@ wasm 构建会自动构建 `web/`（首次若缺少 `node_modules` 会先跑 `np
 |---|---|---|
 | `TAMIAS_ENABLE_VULKAN_BACKEND` | ON | OFF |
 | `TAMIAS_ENABLE_OPENGL_BACKEND` | ON | OFF |
-| `TAMIAS_ENABLE_WEBGL_BACKEND` | OFF | ON |
+| `TAMIAS_ENABLE_WEBGL_BACKEND` | OFF | OFF（可选回退） |
+| `TAMIAS_ENABLE_WEBGPU_BACKEND` | OFF | ON |
 | `TAMIAS_ENABLE_OCCT` | ON | OFF |
 | `TAMIAS_BUILD_TESTS` | ON | OFF |
 

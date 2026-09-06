@@ -41,7 +41,7 @@
     },
     {
       "name": "wasm",
-      "displayName": "Emscripten WebGL viewer",
+      "displayName": "Emscripten WebGPU viewer",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/wasm",
       "toolchainFile": "C:/dev/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
@@ -61,7 +61,8 @@
         "VCPKG_MANIFEST_MODE": "OFF",
         "TAMIAS_ENABLE_VULKAN_BACKEND": "OFF",
         "TAMIAS_ENABLE_OPENGL_BACKEND": "OFF",
-        "TAMIAS_ENABLE_WEBGL_BACKEND": "ON",
+        "TAMIAS_ENABLE_WEBGL_BACKEND": "OFF",
+        "TAMIAS_ENABLE_WEBGPU_BACKEND": "ON",
         "TAMIAS_ENABLE_OCCT": "OFF",
         "TAMIAS_BUILD_TESTS": "OFF",
         "TAMIAS_USE_FETCHCONTENT": "OFF"

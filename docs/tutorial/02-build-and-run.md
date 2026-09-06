@@ -52,19 +52,21 @@ ctest --test-dir build -C RelWithDebInfo --output-on-failure   # 3. 跑测试
 |---|---|---|
 | `TAMIAS_ENABLE_VULKAN_BACKEND` | ON | 编不编 Vulkan 渲染后端 |
 | `TAMIAS_ENABLE_OPENGL_BACKEND` | ON | 编不编 OpenGL 后端 |
-| `TAMIAS_ENABLE_WEBGL_BACKEND` | OFF（WASM 时 ON） | 编不编浏览器 WebGL 后端 |
+| `TAMIAS_ENABLE_WEBGL_BACKEND` | OFF（WASM 可选回退） | 编不编浏览器 WebGL 后端 |
+| `TAMIAS_ENABLE_WEBGPU_BACKEND` | OFF（WASM 时 ON） | 编不编浏览器 WebGPU 后端 |
 | `TAMIAS_ENABLE_OCCT` | ON | 编不编几何内核（WASM 时 OFF） |
 | `TAMIAS_BUILD_TESTS` | ON | 编不编单元测试 |
 
 ## 2.6 动手练习
 
 1. 完成一次完整构建并启动 Tamias（能打开窗口就算过关）。
-2. 运行 `ctest`，看有几个测试通过。测试文件在 [`tests`](https://github.com/terry-chao/tamias/tree/main/tests)。
+2. 运行 `ctest`，看有几个测试通过。测试文件在 [`tests`](https://github.com/terry-chao/tamias/tree/main/tests)。覆盖范围与缺口见 [测试](../TESTING.md)。
 3. 试着把 `TAMIAS_ENABLE_OPENGL_BACKEND=OFF` 配置一次，再在设置里观察：OpenGL 选项是不是消失了？
 
 ## 延伸阅读
 
 - [BUILD.md](https://github.com/terry-chao/tamias/blob/main/BUILD.md)：完整构建指南（含 MSI 打包）
+- [测试](../TESTING.md)：`tamias_tests` 怎么跑、测了哪一层、哪些还没有
 - [CMakePresets.json](https://github.com/terry-chao/tamias/blob/main/CMakePresets.json)：所有预设定义
 - [vcpkg.json](https://github.com/terry-chao/tamias/blob/main/vcpkg.json)：依赖清单（可以看到 OCCT 被钉在 7.9.3）
 

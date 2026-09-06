@@ -9,7 +9,6 @@ target_link_libraries(tamias_viewer
     tamias::math
     tamias::graphics
     tamias::rhi
-    tamias::rhi_webgl
     tamias::render
     tamias::io
     tamias::document
@@ -17,11 +16,17 @@ target_link_libraries(tamias_viewer
     tamias::modeling
     tamias::host
 )
-target_compile_definitions(tamias_viewer PRIVATE TAMIAS_HAS_RHI_WEBGL=1)
+if(TARGET tamias::rhi_webgpu)
+  target_link_libraries(tamias_viewer PRIVATE tamias::rhi_webgpu)
+  target_compile_definitions(tamias_viewer PRIVATE TAMIAS_HAS_RHI_WEBGPU=1)
+endif()
+if(TARGET tamias::rhi_webgl)
+  target_link_libraries(tamias_viewer PRIVATE tamias::rhi_webgl)
+  target_compile_definitions(tamias_viewer PRIVATE TAMIAS_HAS_RHI_WEBGL=1)
+endif()
 target_compile_options(tamias_viewer PRIVATE -fexceptions)
 target_link_options(tamias_viewer PRIVATE
-  "SHELL:-sUSE_WEBGL2=1"
-  "SHELL:-sFULL_ES3=1"
+  "SHELL:-sASYNCIFY=1"
   "SHELL:-sALLOW_MEMORY_GROWTH=1"
   "SHELL:-sINITIAL_MEMORY=67108864"
   "SHELL:-sDISABLE_EXCEPTION_CATCHING=0"

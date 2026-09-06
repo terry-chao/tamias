@@ -53,8 +53,8 @@ src/engine/render/rhi/
   device.h          抽象：建缓冲/纹理/管线、draw_indexed、present
   vulkan/           主后端
   opengl/           副后端（兼容老卡）
-  webgl/            浏览器后端
-  wgpu/             方案（代码未落地，第 10 章）
+  webgl/            浏览器可选回退
+  webgpu/           浏览器默认后端
 ```
 
 可以想成：导演只说「画这个网格」，翻译官分别说俄语（Vulkan）和英语（OpenGL）。两套差异被藏在 `clip_space_correction_matrix()`（NDC 约定不同）和各自的 shader 变体里。
@@ -104,5 +104,6 @@ src/engine/render/rhi/
 - [视锥、NDC 与屏幕](../NDC.md)：坐标变换深讲
 - [OpenGL 后端](../OPENGL.md)：绑缓冲、画三角、贴图的具体代码
 - [视锥剔除](../FRUSTUM-CULLING.md)：屏外不发 draw
+- [渲染场景快照](../RENDER-SCENE.md)：`.trscn` 冻住烤好的场景，给调试和测试
 
 下一章：[BIM 业务层](09-bim-layer.md)

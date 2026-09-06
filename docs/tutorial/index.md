@@ -49,9 +49,9 @@
 | [5. 几何与造型](05-geometry-and-modeling.md) | 三角网 / BRep / 特征树、OCCT 求值 | [特征树求值器](../FEATURE-TREE-EVALUATOR.md)、[几何边界](../ISHAPE-OPS.md) |
 | [6. 文档与场景](06-document-and-scene.md) | Document、SceneNode、Entity、`.tdoc` | [语义树](../SCENE-GRAPH.md) |
 | [7. 命令与撤销](07-commands-and-undo.md) | Command 接口、命令注册、交互命令 | [命令](../APP.md)（入口）、[插件系列](../plugin/index.md) |
-| [8. 渲染管线](08-rendering-pipeline.md) | 一帧的数据流、RHI、NDC、显示模式 | [管线与 RHI](../RENDERING.md)、[NDC](../NDC.md)、[OpenGL](../OPENGL.md) |
+| [8. 渲染管线](08-rendering-pipeline.md) | 一帧的数据流、RHI、NDC、显示模式 | [管线与 RHI](../RENDERING.md)、[NDC](../NDC.md)、[OpenGL](../OPENGL.md)、[渲染场景快照](../RENDER-SCENE.md) |
 | [9. BIM 业务层](09-bim-layer.md) | 建筑语义、门窗宿主、IFC | [BIM 业务层](../BIM.md)、[关联关系](../bim/relations.md) |
-| [10. Web 与路线图](10-web-and-roadmap.md) | WASM 查看器、wgpu、P1–P4、进阶路径 | [Web 查看器](../WEB.md)、[wgpu](../WGPU.md)、[路线图](../ROADMAP.md) |
+| [10. Web 与路线图](10-web-and-roadmap.md) | WASM 查看器、浏览器 WebGPU、P1–P4、进阶路径 | [Web 查看器](../WEB.md)、[WebGPU](../WGPU.md)、[路线图](../ROADMAP.md) |
 | [术语速查](glossary.md) | 出现过的名词一句话解释 | — |
 
 ## 怎么用这份教程

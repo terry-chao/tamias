@@ -55,8 +55,8 @@ struct RenderDeviceConfig {
 
   [[nodiscard]] bool shares_execution_thread_with(const RenderDeviceConfig& other) const {
     return backend != GraphicsBackend::OpenGL && backend != GraphicsBackend::WebGL &&
-           !synchronous && !other.synchronous && backend == other.backend &&
-           enable_validation == other.enable_validation;
+           backend != GraphicsBackend::WebGPU && !synchronous && !other.synchronous &&
+           backend == other.backend && enable_validation == other.enable_validation;
   }
 };
 

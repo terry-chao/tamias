@@ -27,6 +27,7 @@
 | **OCCT**（第 1 章） | Open CASCADE Technology，几何内核：BRep、布尔、离散化 |
 | **push constants**（第 8 章） | 每画一次物体塞给 shader 的一小包数据（MVP、颜色等） |
 | **RHI**（第 8 章） | Rendering Hardware Interface：把绘制代码和 Vulkan/OpenGL 隔离的抽象层 |
+| **`.trscn`**（第 8 章） | 渲染场景快照：烤好的网格 + draw list + 相机，给调试和测试，不是工作文档 |
 | **Scene（语义树）**（第 6 章） | 域无关的父子树：谁是谁的孩子、变换、包围盒 |
 | **SceneNode**（第 6 章） | 语义树的一个节点：parent / local + world transform / mesh_asset_id |
 | **tessellate**（第 5 章） | 离散化：把精确 BRep 变成 GPU 能画的三角网 |
@@ -34,7 +35,7 @@
 | **triplanar（三平面贴图）**（第 8 章） | 用世界坐标往三个平面投影采样贴图，不需要 UV |
 | **VBO / IBO**（第 8 章） | 顶点缓冲 / 索引缓冲：GPU 里的网格数据 |
 | **WASM**（第 10 章） | WebAssembly：C++ 编译到浏览器运行的字节码 |
-| **wgpu**（第 10 章） | WebGPU 的桌面实现，计划成为第三个 RHI 后端 |
+| **wgpu / WebGPU**（第 10 章） | 浏览器里的 GPU API；Tamias 用 Emscripten emdawnwebgpu 做成 WASM RHI，**不是**桌面 wgpu-native |
 | **Z-up / Y-up**（第 5 章） | 坐标约定：OCCT 是 Z 朝上，Tamias 视口是 Y 朝上，出网前要转换 |
 | **拓扑命名**（第 5 章） | 让「给这条边倒角」在参数变化后仍然指向同一条边的难题（路线图 P3） |
 | **插件宿主**（第 3、7 章） | 用 hostfxr 加载 C# DLL；插件只读文档快照，改模型必须 `Dispatch` 已有命令 |

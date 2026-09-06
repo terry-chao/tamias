@@ -1,0 +1,11 @@
+if(NOT EMSCRIPTEN)
+  message(FATAL_ERROR "tamias_rhi_webgpu requires Emscripten")
+endif()
+
+add_library(tamias_rhi_webgpu STATIC webgpu_device.cpp)
+add_library(tamias::rhi_webgpu ALIAS tamias_rhi_webgpu)
+target_include_directories(tamias_rhi_webgpu PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tamias_rhi_webgpu PUBLIC tamias::rhi tamias::graphics)
+target_compile_definitions(tamias_rhi_webgpu PUBLIC TAMIAS_HAS_RHI_WEBGPU=1)
+target_compile_options(tamias_rhi_webgpu PUBLIC "SHELL:--use-port=emdawnwebgpu")
+target_link_options(tamias_rhi_webgpu PUBLIC "SHELL:--use-port=emdawnwebgpu")
