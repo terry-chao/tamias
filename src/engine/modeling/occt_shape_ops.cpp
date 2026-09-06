@@ -1,5 +1,6 @@
 #include "occt_shape_ops.h"
 
+#include "engine/core/fs_utf8.h"
 #include "engine/core/log.h"
 
 #include <BRep_Builder.hxx>
@@ -28,7 +29,6 @@
 #include <gp_Trsf.hxx>
 
 #include <algorithm>
-#include <cctype>
 
 namespace tamias {
 namespace {
@@ -36,10 +36,7 @@ namespace {
 constexpr Vec3 kDefaultCadColor{0.75f, 0.78f, 0.82f};
 
 std::string lower_ext(const std::filesystem::path& path) {
-  std::string ext = path.extension().string();
-  std::transform(ext.begin(), ext.end(), ext.begin(),
-                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-  return ext;
+  return path_extension_lower(path);
 }
 
 bool lookup_color(const Handle(XCAFDoc_ColorTool)& colors, const TopoDS_Shape& shape,
@@ -245,6 +242,7 @@ class OcctShapeOps final : public IShapeOps {
   [[nodiscard]] Result<std::unique_ptr<Shape>> read_file(
       const std::filesystem::path& path) const override {
     const std::string ext = lower_ext(path);
+    const std::string native = path_to_utf8(path);
     if (ext == ".step" || ext == ".stp") {
       Handle(TDocStd_Document) doc = new_xcaf_document();
       if (doc.IsNull()) {
@@ -253,16 +251,16 @@ class OcctShapeOps final : public IShapeOps {
       STEPCAFControl_Reader reader;
       reader.SetColorMode(true);
       reader.SetNameMode(true);
-      if (reader.ReadFile(path.string().c_str()) != IFSelect_RetDone) {
-        return Err("STEPCAFControl_Reader::ReadFile failed: " + path.string());
+      if (reader.ReadFile(native.c_str()) != IFSelect_RetDone) {
+        return Err("STEPCAFControl_Reader::ReadFile failed: " + native);
       }
       if (!reader.Transfer(doc)) {
-        return Err("STEPCAFControl_Reader::Transfer failed: " + path.string());
+        return Err("STEPCAFControl_Reader::Transfer failed: " + native);
       }
       Handle(XCAFDoc_ShapeTool) shapes = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
       TopoDS_Shape shape = compound_free_shapes(shapes);
       if (shape.IsNull()) {
-        return Err("OCCT produced an empty shape: " + path.string());
+        return Err("OCCT produced an empty shape: " + native);
       }
       return std::unique_ptr<Shape>(std::make_unique<OcctShape>(std::move(shape), doc));
     }
@@ -274,27 +272,27 @@ class OcctShapeOps final : public IShapeOps {
       IGESCAFControl_Reader reader;
       reader.SetColorMode(true);
       reader.SetNameMode(true);
-      if (reader.ReadFile(path.string().c_str()) != IFSelect_RetDone) {
-        return Err("IGESCAFControl_Reader::ReadFile failed: " + path.string());
+      if (reader.ReadFile(native.c_str()) != IFSelect_RetDone) {
+        return Err("IGESCAFControl_Reader::ReadFile failed: " + native);
       }
       if (!reader.Transfer(doc)) {
-        return Err("IGESCAFControl_Reader::Transfer failed: " + path.string());
+        return Err("IGESCAFControl_Reader::Transfer failed: " + native);
       }
       Handle(XCAFDoc_ShapeTool) shapes = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
       TopoDS_Shape shape = compound_free_shapes(shapes);
       if (shape.IsNull()) {
-        return Err("OCCT produced an empty shape: " + path.string());
+        return Err("OCCT produced an empty shape: " + native);
       }
       return std::unique_ptr<Shape>(std::make_unique<OcctShape>(std::move(shape), doc));
     }
     if (ext == ".brep") {
       TopoDS_Shape shape;
       BRep_Builder builder;
-      if (!BRepTools::Read(shape, path.string().c_str(), builder)) {
-        return Err("BRepTools::Read failed: " + path.string());
+      if (!BRepTools::Read(shape, native.c_str(), builder)) {
+        return Err("BRepTools::Read failed: " + native);
       }
       if (shape.IsNull()) {
-        return Err("OCCT produced an empty shape: " + path.string());
+        return Err("OCCT produced an empty shape: " + native);
       }
       return std::unique_ptr<Shape>(
           std::make_unique<OcctShape>(std::move(shape), Handle(TDocStd_Document){}));

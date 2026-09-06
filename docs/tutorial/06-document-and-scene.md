@@ -72,6 +72,8 @@ META / MESH / SCEN / VIEW / FEAT / MATL / TEXT / RELA
 
 `FEAT` 存特征树（配方），`SCEN` 存语义树，`RELA` 存 BIM 关联关系。因为配方能序列化，所以保存再打开后，**还能继续改参数**——这是它和「导出 OBJ」的本质区别。
 
+调试渲染、锁住某一帧的网格和相机，用 `.trscn`，不是往 `.tdoc` 里再塞一遍三角。见 [渲染场景快照](../RENDER-SCENE.md)。
+
 ## 6.6 动手练习
 
 1. 读 [`scene.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/document/scene.h) 全文，回答：`children` 为什么是缓存？
@@ -82,6 +84,6 @@ META / MESH / SCEN / VIEW / FEAT / MATL / TEXT / RELA
 
 - [语义树](../SCENE-GRAPH.md)：和 OCCT 场景图的对照、展平细节
 - [场景图总述](../scene/index.md)：语义树 / 展平列表 / 渲染场景图三块怎么分
-- [路线图](../ROADMAP.md) 第 1 节：格式分工（`.tdoc` vs IFC vs STEP）
+- [路线图](../ROADMAP.md) 第 1 节：格式分工（`.tdoc` vs IFC vs STEP vs `.trscn`）
 
 下一章：[命令与撤销](07-commands-and-undo.md)

@@ -4,12 +4,14 @@
 #include "engine/document/mesh_asset.h"
 #include "engine/document/scene.h"
 #include "entity/entity.h"
-#include "engine/render/render_types.h"
 #include "engine/render/material.h"
+#include "engine/render/render_scene.h"
+#include "engine/render/render_types.h"
 
 #include <algorithm>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -145,6 +147,14 @@ class Document {
   [[nodiscard]] const std::unordered_map<std::uint64_t, TextureAsset>& textures() const {
     return textures_;
   }
+  // 打开渲染快照时换成快照里的贴图，丢掉默认材质的 512² 纹理。
+  void replace_textures(std::unordered_map<std::uint64_t, TextureAsset> textures) {
+    textures_ = std::move(textures);
+    next_texture_id_ = 1;
+    for (const auto& [id, _] : textures_) {
+      next_texture_id_ = std::max(next_texture_id_, id + 1);
+    }
+  }
   [[nodiscard]] std::uint64_t next_texture_id() const { return next_texture_id_; }
   void set_next_texture_id(std::uint64_t id) {
     next_texture_id_ = std::max<std::uint64_t>(1, id);
@@ -155,6 +165,7 @@ class Document {
     meshes_.clear();
     entities_.clear();
     bim_.clear();
+    render_snapshot_.reset();
     next_mesh_id_ = 1;
   }
 
@@ -252,7 +263,15 @@ class Document {
 
   // ===== 渲染快照（app 不再遍历 SceneNode）=====
   // 传入 frustum 时丢掉世界包围盒完全在视锥外的叶子；nullptr 保持全量清单。
+  // 打开 .trscn 后这份清单来自快照（烤好的材质/矩阵），不再从语义树重展平。
   [[nodiscard]] std::vector<SceneDrawItem> render_items(const Frustum* frustum = nullptr) const;
+
+  [[nodiscard]] RenderScene capture_render_scene(RenderScene::View view,
+                                                const Frustum* frustum = nullptr) const;
+  void set_render_snapshot(RenderScene scene);
+  [[nodiscard]] const RenderScene* render_snapshot() const {
+    return render_snapshot_ ? &*render_snapshot_ : nullptr;
+  }
 
   // ===== 导入网格（无实体，如 STEP/OBJ/glTF）=====
   std::uint64_t add_import_mesh(std::string name, MeshCpu mesh, Mat4 transform, Vec3 color);
@@ -299,10 +318,13 @@ class Document {
   std::unordered_map<std::uint64_t, std::unique_ptr<Entity>> entities_;
   std::unordered_map<std::uint64_t, Material> materials_;
   std::unordered_map<std::uint64_t, TextureAsset> textures_;
+  std::optional<RenderScene> render_snapshot_;
   std::uint64_t next_mesh_id_ = 1;
   std::uint64_t next_material_id_ = 1;
   std::uint64_t next_texture_id_ = 1;
   bool dirty_ = false;
 };
+
+Document document_from_render_scene(RenderScene scene);
 
 }  // namespace tamias

@@ -16,6 +16,7 @@
 #include "plugin_manager_dialog.h"
 #include "plugin_prompt_dialog.h"
 #include "property_panel.h"
+#include "qt_path.h"
 #include "ribbon_bar.h"
 #include "ribbon_group.h"
 #include "ribbon_page.h"
@@ -53,10 +54,10 @@
 #include <QVector>
 #include <QVBoxLayout>
 #include <QWidget>
-#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <cstdint>
 
 namespace tamias {
 namespace {
@@ -172,6 +173,13 @@ MainWindow::MainWindow(QWidget* parent)
   save_as_action->setToolTip(tr("Save the document to a new file"));
   connect(save_as_action, &QAction::triggered, this, &MainWindow::save_file_as);
   addAction(save_as_action);
+
+  auto* export_render_action = new QAction(ribbon_icon(QStringLiteral(":/icons/save_as.svg")),
+                                           tr("Export Render Scene"), this);
+  export_render_action->setToolTip(
+      tr("Dump cooked meshes and draw items to a .trscn file for render debugging"));
+  connect(export_render_action, &QAction::triggered, this, &MainWindow::export_render_scene);
+  addAction(export_render_action);
 
   auto* frame_all_action = new QAction(ribbon_icon(QStringLiteral(":/icons/frame_all.svg")),
                                       tr("Fit All"), this);
@@ -471,6 +479,7 @@ MainWindow::MainWindow(QWidget* parent)
   file_group->add_action(open_action);
   file_group->add_action(save_action);
   file_group->add_action(save_as_action);
+  file_group->add_action(export_render_action);
 
   RibbonGroup* draw_group = home_page->add_group(QStringLiteral("draw"), tr("Draw"));
   draw_group->add_action(line_action_);
@@ -762,7 +771,7 @@ void MainWindow::refresh_home() {
     if (auto* vp = qobject_cast<DocumentViewport*>(tabs_->widget(i))) {
       const auto& path = vp->document().path();
       if (!path.empty()) {
-        item.path = QString::fromStdString(path.string());
+        item.path = path_to_qstring(path);
       }
     }
     open_items.push_back(item);
@@ -784,7 +793,7 @@ int MainWindow::find_open_document(const QString& path) const {
     if (doc_path.empty()) {
       continue;
     }
-    if (QFileInfo(QString::fromStdString(doc_path.string())).absoluteFilePath() == abs) {
+    if (QFileInfo(path_to_qstring(doc_path)).absoluteFilePath() == abs) {
       return i;
     }
   }
@@ -965,7 +974,44 @@ bool MainWindow::open_path(const QString& path) {
     return false;
   }
 
-  const auto file = std::filesystem::path(info.absoluteFilePath().toStdString());
+  const auto file = qstring_to_path(info.absoluteFilePath());
+
+  if (is_render_scene_path(file)) {
+    auto loaded = load_render_scene(file);
+    if (!loaded) {
+      QMessageBox::critical(this, tr("Open"), QString::fromStdString(loaded.error()));
+      return false;
+    }
+    ViewportState vp_storage;
+    vp_storage.target = loaded->view.target;
+    vp_storage.distance = loaded->view.view_distance;
+    vp_storage.yaw = loaded->view.yaw;
+    vp_storage.pitch = loaded->view.pitch;
+    vp_storage.fovy = loaded->view.fovy;
+    vp_storage.znear = loaded->view.znear;
+    vp_storage.zfar = loaded->view.zfar;
+    vp_storage.render_mode = static_cast<ViewRenderMode>(loaded->view.mode);
+    auto document = std::make_shared<Document>(document_from_render_scene(std::move(*loaded)));
+    document->set_path(file);
+    document->set_name(path_to_utf8(file.filename()));
+    add_document_tab(document, &vp_storage);
+
+    const MeshCpu* thumb_mesh = nullptr;
+    if (!document->meshes().empty()) {
+      thumb_mesh = &document->meshes().begin()->second.cpu;
+    }
+    if (thumb_mesh) {
+      const QImage thumb = render_mesh_thumbnail(*thumb_mesh);
+      const QString thumb_path = save_mesh_thumbnail(info.absoluteFilePath(), thumb);
+      recent_.add(info.absoluteFilePath(), thumb_path);
+    } else {
+      recent_.add(info.absoluteFilePath(), QString());
+    }
+    refresh_home();
+    statusBar()->showMessage(
+        tr("Loaded render scene %1 (read-only draw list)").arg(info.absoluteFilePath()), 5000);
+    return true;
+  }
 
   if (is_tdoc_document_path(file)) {
     auto loaded = load_document(file);
@@ -979,7 +1025,7 @@ bool MainWindow::open_path(const QString& path) {
     // Prefer the on-disk filename so tabs/recent show .tdoc even if an older
     // file still has an imported .obj name in META.
     document->set_path(file);
-    document->set_name(file.filename().string());
+    document->set_name(path_to_utf8(file.filename()));
     add_document_tab(document, has_viewport ? &vp_storage : nullptr);
 
     const MeshCpu* thumb_mesh = nullptr;
@@ -1042,12 +1088,12 @@ bool MainWindow::open_path(const QString& path) {
     QMessageBox::critical(this, tr("Open"), QString::fromStdString(mesh.error()));
     return false;
   }
-  auto document = std::make_shared<Document>(file.filename().string());
+  auto document = std::make_shared<Document>(path_to_utf8(file.filename()));
   document->set_path(file);
   const bool has_colors = mesh_has_vertex_colors(*mesh);
   const Vec3 color = has_colors ? Vec3{1.f, 1.f, 1.f} : Vec3{0.75f, 0.78f, 0.82f};
   const std::uint64_t mesh_id =
-      document->add_import_mesh(file.filename().string(), std::move(*mesh), Mat4::identity(),
+      document->add_import_mesh(path_to_utf8(file.filename()), std::move(*mesh), Mat4::identity(),
                                 color);
   add_document_tab(document);
 
@@ -1062,8 +1108,9 @@ bool MainWindow::open_path(const QString& path) {
 
 void MainWindow::open_file() {
   const QString filters =
-      tr("All Supported (*.tdoc *.gltf *.glb *.obj *.step *.stp *.iges *.igs *.brep *.ifc);;"
+      tr("All Supported (*.tdoc *.trscn *.gltf *.glb *.obj *.step *.stp *.iges *.igs *.brep *.ifc);;"
          "Tamias (*.tdoc);;"
+         "Render Scene (*.trscn);;"
          "Meshes (*.gltf *.glb *.obj);;"
          "CAD (*.step *.stp *.iges *.igs *.brep);;"
          "IFC (*.ifc);;"
@@ -1082,6 +1129,10 @@ bool MainWindow::is_obj_path(const QString& path) {
 
 bool MainWindow::is_tdoc_path(const QString& path) {
   return QFileInfo(path).suffix().compare(QStringLiteral("tdoc"), Qt::CaseInsensitive) == 0;
+}
+
+bool MainWindow::is_trscn_path(const QString& path) {
+  return QFileInfo(path).suffix().compare(QStringLiteral("trscn"), Qt::CaseInsensitive) == 0;
 }
 
 const MeshCpu* MainWindow::selected_mesh(Document& document) const {
@@ -1117,14 +1168,14 @@ bool MainWindow::write_selected_mesh(const QString& path) {
     out_path += QStringLiteral(".obj");
   }
   const QString abs_path = QFileInfo(out_path).absoluteFilePath();
-  const auto file = std::filesystem::path(abs_path.toStdString());
+  const auto file = qstring_to_path(abs_path);
   if (auto r = save_mesh_file(file, *mesh); !r) {
     QMessageBox::critical(this, tr("Save"), QString::fromStdString(r.error()));
     return false;
   }
 
   document.set_path(file);
-  document.set_name(file.filename().string());
+  document.set_name(path_to_utf8(file.filename()));
   if (const int index = tabs_->indexOf(vp); index >= 0) {
     tabs_->setTabText(index, QString::fromStdString(document.name()));
   }
@@ -1134,6 +1185,75 @@ bool MainWindow::write_selected_mesh(const QString& path) {
   recent_.add(abs_path, thumb_path);
   refresh_home();
   notify_save_success(abs_path);
+  return true;
+}
+
+bool MainWindow::export_render_scene() {
+  auto* vp = current_viewport();
+  if (!vp) {
+    QMessageBox::information(this, tr("Export"), tr("Open a document first."));
+    return false;
+  }
+  QString suggested = QString::fromStdString(vp->document().name());
+  if (suggested.isEmpty()) {
+    suggested = QStringLiteral("scene");
+  }
+  if (!is_trscn_path(suggested)) {
+    suggested = QFileInfo(suggested).completeBaseName() + QStringLiteral(".trscn");
+  }
+  const QString path = QFileDialog::getSaveFileName(
+      this, tr("Export Render Scene"), suggested, tr("Render Scene (*.trscn)"));
+  if (path.isEmpty()) {
+    return false;
+  }
+  return write_render_scene_document(path, true);
+}
+
+bool MainWindow::write_render_scene_document(const QString& path, bool show_inspect) {
+  auto* vp = current_viewport();
+  if (!vp) {
+    QMessageBox::information(this, tr("Export"), tr("Open a document first."));
+    return false;
+  }
+  QString out_path = path;
+  if (!is_trscn_path(out_path)) {
+    out_path += QStringLiteral(".trscn");
+  }
+  const QString abs_path = QFileInfo(out_path).absoluteFilePath();
+  const auto file = qstring_to_path(abs_path);
+  Document& document = vp->document();
+  const RenderScene scene = document.capture_render_scene(vp->capture_render_scene_view());
+  if (auto r = save_render_scene(file, scene); !r) {
+    QMessageBox::critical(this, show_inspect ? tr("Export") : tr("Save"),
+                          QString::fromStdString(r.error()));
+    return false;
+  }
+  document.set_path(file);
+  document.set_name(path_to_utf8(file.filename()));
+  document.set_render_snapshot(scene);
+  document.clear_dirty();
+  if (const int index = tabs_->indexOf(vp); index >= 0) {
+    tabs_->setTabText(index, QString::fromStdString(document.name()));
+  }
+  statusBar()->showMessage(tr("Wrote render scene: %1").arg(abs_path), 8000);
+  if (!show_inspect) {
+    notify_save_success(abs_path);
+    return true;
+  }
+
+  QDialog dlg(this);
+  dlg.setWindowTitle(tr("Render scene exported"));
+  dlg.resize(640, 400);
+  auto* layout = new QVBoxLayout(&dlg);
+  auto* edit = new QPlainTextEdit(&dlg);
+  edit->setReadOnly(true);
+  edit->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+  edit->setPlainText(QString::fromStdString(inspect_render_scene(scene)));
+  layout->addWidget(edit);
+  auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok, &dlg);
+  QObject::connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  layout->addWidget(buttons);
+  dlg.exec();
   return true;
 }
 
@@ -1149,11 +1269,11 @@ bool MainWindow::write_tdoc_document(const QString& path) {
     out_path += QStringLiteral(".tdoc");
   }
   const QString abs_path = QFileInfo(out_path).absoluteFilePath();
-  const auto file = std::filesystem::path(abs_path.toStdString());
+  const auto file = qstring_to_path(abs_path);
   // Update identity before serialize so META stores the .tdoc name, not the
   // imported .obj/.step source name.
   document.set_path(file);
-  document.set_name(file.filename().string());
+  document.set_name(path_to_utf8(file.filename()));
   const ViewportState viewport = vp->capture_viewport_state();
   if (auto r = save_document(file, document, viewport); !r) {
     QMessageBox::critical(this, tr("Save"), QString::fromStdString(r.error()));
@@ -1193,11 +1313,14 @@ bool MainWindow::save_file() {
     return false;
   }
 
-  // Save always writes the whole scene as .tdoc. Imported .obj/.step paths are
-  // not overwritten — prompt Save As so the project file is created explicitly.
+  // Save .tdoc in place. Opened .trscn snapshots write back as render scenes.
+  // Imported .obj/.step paths are not overwritten — prompt Save As.
   const auto& doc_path = vp->document().path();
-  if (!doc_path.empty() && is_tdoc_path(QString::fromStdString(doc_path.string()))) {
-    return write_tdoc_document(QString::fromStdString(doc_path.string()));
+  if (!doc_path.empty() && is_tdoc_path(path_to_qstring(doc_path))) {
+    return write_tdoc_document(path_to_qstring(doc_path));
+  }
+  if (!doc_path.empty() && is_trscn_path(path_to_qstring(doc_path))) {
+    return write_render_scene_document(path_to_qstring(doc_path), false);
   }
   return save_file_as();
 }
@@ -1211,13 +1334,20 @@ bool MainWindow::save_file_as() {
 
   QString suggested;
   const auto& doc_path = vp->document().path();
+  const bool snapshot = vp->document().render_snapshot() != nullptr;
   if (!doc_path.empty()) {
-    QFileInfo info(QString::fromStdString(doc_path.string()));
-    suggested = info.absolutePath() + QLatin1Char('/') + info.completeBaseName() +
-                QStringLiteral(".tdoc");
+    QFileInfo info(path_to_qstring(doc_path));
+    const QString ext = snapshot || is_trscn_path(info.fileName())
+                            ? QStringLiteral(".trscn")
+                            : QStringLiteral(".tdoc");
+    suggested = info.absolutePath() + QLatin1Char('/') + info.completeBaseName() + ext;
   } else {
     suggested = QString::fromStdString(vp->document().name());
-    if (!is_tdoc_path(suggested) && !is_obj_path(suggested)) {
+    if (snapshot) {
+      if (!is_trscn_path(suggested)) {
+        suggested = QFileInfo(suggested).completeBaseName() + QStringLiteral(".trscn");
+      }
+    } else if (!is_tdoc_path(suggested) && !is_obj_path(suggested)) {
       suggested += QStringLiteral(".tdoc");
     } else if (is_obj_path(suggested)) {
       suggested = QFileInfo(suggested).completeBaseName() + QStringLiteral(".tdoc");
@@ -1226,13 +1356,16 @@ bool MainWindow::save_file_as() {
 
   const QString path = QFileDialog::getSaveFileName(
       this, tr("Save As"), suggested,
-      tr("Tamias Document (*.tdoc);;OBJ Mesh Export (*.obj)"));
+      tr("Tamias Document (*.tdoc);;Render Scene (*.trscn);;OBJ Mesh Export (*.obj)"));
   if (path.isEmpty()) {
     return false;
   }
   if (is_obj_path(path) ||
       (!is_tdoc_path(path) && path.endsWith(QStringLiteral(".obj"), Qt::CaseInsensitive))) {
     return write_selected_mesh(path);
+  }
+  if (is_trscn_path(path)) {
+    return write_render_scene_document(path, false);
   }
   return write_tdoc_document(path);
 }

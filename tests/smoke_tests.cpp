@@ -644,6 +644,9 @@ TEST(RenderConfig, OpenGlDoesNotShare) {
   RenderDeviceConfig v0{GraphicsBackend::Vulkan, true};
   RenderDeviceConfig v1{GraphicsBackend::Vulkan, true};
   EXPECT_TRUE(v0.shares_execution_thread_with(v1));
+  RenderDeviceConfig w0{GraphicsBackend::WebGPU, false};
+  RenderDeviceConfig w1{GraphicsBackend::WebGPU, false};
+  EXPECT_FALSE(w0.shares_execution_thread_with(w1));
 }
 
 TEST(Occt, TessellateBox) {
@@ -888,6 +891,8 @@ TEST(CommandSystem, DispatchCreateLineFromPoints) {
   EXPECT_FALSE(system.has_pending());
   EXPECT_EQ(doc.entities().size(), 1u);
 }
+
+TEST(CommandSystem, DispatchCreateSlabTwoCorners) {
   CommandRegistry registry;
   register_commands(registry);
   CommandSystem system(registry);

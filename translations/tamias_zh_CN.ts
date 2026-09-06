@@ -397,6 +397,41 @@
         <translation>将文档另存为新文件</translation>
     </message>
     <message>
+        <location filename="../src/app/main_window.cpp"/>
+        <source>Export Render Scene</source>
+        <translation>导出渲染场景</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp"/>
+        <source>Dump cooked meshes and draw items to a .trscn file for render debugging</source>
+        <translation>把已烘焙网格和绘制项导出为 .trscn，用于渲染调试</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp"/>
+        <source>Export</source>
+        <translation>导出</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp"/>
+        <source>Render Scene (*.trscn)</source>
+        <translation>渲染场景 (*.trscn)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp"/>
+        <source>Render scene exported</source>
+        <translation>渲染场景已导出</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp"/>
+        <source>Wrote render scene: %1</source>
+        <translation>已写入渲染场景：%1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp"/>
+        <source>Loaded render scene %1 (read-only draw list)</source>
+        <translation>已加载渲染场景 %1（只读绘制清单）</translation>
+    </message>
+    <message>
         <location filename="../src/app/main_window.cpp" line="134"/>
         <source>Wall</source>
         <translation>墙</translation>
@@ -591,8 +626,8 @@
     </message>
     <message>
         <location filename="../src/app/main_window.cpp" line="601"/>
-        <source>All Supported (*.tdoc *.gltf *.glb *.obj *.step *.stp *.iges *.igs *.brep);;Tamias (*.tdoc);;Meshes (*.gltf *.glb *.obj);;CAD (*.step *.stp *.iges *.igs *.brep);;glTF (*.gltf *.glb);;OBJ (*.obj);;STEP (*.step *.stp);;IGES (*.iges *.igs);;BREP (*.brep)</source>
-        <translation>全部支持 (*.tdoc *.gltf *.glb *.obj *.step *.stp *.iges *.igs *.brep);;Tamias (*.tdoc);;网格 (*.gltf *.glb *.obj);;CAD (*.step *.stp *.iges *.igs *.brep);;glTF (*.gltf *.glb);;OBJ (*.obj);;STEP (*.step *.stp);;IGES (*.iges *.igs);;BREP (*.brep)</translation>
+        <source>All Supported (*.tdoc *.trscn *.gltf *.glb *.obj *.step *.stp *.iges *.igs *.brep *.ifc);;Tamias (*.tdoc);;Render Scene (*.trscn);;Meshes (*.gltf *.glb *.obj);;CAD (*.step *.stp *.iges *.igs *.brep);;IFC (*.ifc);;glTF (*.gltf *.glb);;OBJ (*.obj);;STEP (*.step *.stp);;IGES (*.iges *.igs);;BREP (*.brep)</source>
+        <translation>全部支持 (*.tdoc *.trscn *.gltf *.glb *.obj *.step *.stp *.iges *.igs *.brep *.ifc);;Tamias (*.tdoc);;渲染场景 (*.trscn);;网格 (*.gltf *.glb *.obj);;CAD (*.step *.stp *.iges *.igs *.brep);;IFC (*.ifc);;glTF (*.gltf *.glb);;OBJ (*.obj);;STEP (*.step *.stp);;IGES (*.iges *.igs);;BREP (*.brep)</translation>
     </message>
     <message>
         <location filename="../src/app/main_window.cpp" line="651"/>
@@ -613,8 +648,8 @@
     </message>
     <message>
         <location filename="../src/app/main_window.cpp" line="770"/>
-        <source>Tamias Document (*.tdoc);;OBJ Mesh Export (*.obj)</source>
-        <translation>Tamias 文档 (*.tdoc);;OBJ 网格导出 (*.obj)</translation>
+        <source>Tamias Document (*.tdoc);;Render Scene (*.trscn);;OBJ Mesh Export (*.obj)</source>
+        <translation>Tamias 文档 (*.tdoc);;渲染场景 (*.trscn);;OBJ 网格导出 (*.obj)</translation>
     </message>
     <message>
         <location filename="../src/app/main_window.cpp" line="212"/>

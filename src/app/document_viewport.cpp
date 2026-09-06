@@ -185,6 +185,30 @@ ViewportState DocumentViewport::capture_viewport_state() const {
   return state;
 }
 
+RenderScene::View DocumentViewport::capture_render_scene_view() const {
+  RenderScene::View view;
+  const qreal dpr = devicePixelRatioF();
+  const int sw = surface_ != nullptr ? surface_->width() : std::max(1, width());
+  const int sh = surface_ != nullptr ? surface_->height() : std::max(1, height());
+  view.width = static_cast<std::uint32_t>(std::max(1, static_cast<int>(sw * dpr)));
+  view.height = static_cast<std::uint32_t>(std::max(1, static_cast<int>(sh * dpr)));
+  const float aspect =
+      static_cast<float>(view.width) / static_cast<float>(std::max(1u, view.height));
+  view.view = camera_.view_matrix();
+  view.proj = camera_.proj_matrix(aspect);
+  view.eye_position = camera_.eye_position();
+  view.target = camera_.target();
+  view.view_distance = camera_.distance();
+  view.yaw = camera_.yaw();
+  view.pitch = camera_.pitch();
+  view.fovy = camera_.fovy();
+  view.znear = camera_.znear();
+  view.zfar = camera_.zfar();
+  view.mode = mode_;
+  view.orthographic = camera_.orthographic();
+  return view;
+}
+
 void DocumentViewport::apply_viewport_state(const ViewportState& state) {
   stop_view_animation();
   camera_.set_target(state.target);

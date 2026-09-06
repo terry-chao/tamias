@@ -167,10 +167,10 @@ export default function App() {
         </div>
         <div className="actions">
           <label className="btn">
-            打开 .tdoc / .obj
+            打开 .tdoc / .trscn / .obj
             <input
               type="file"
-              accept=".tdoc,.obj"
+              accept=".tdoc,.trscn,.obj"
               hidden
               onChange={(event) => {
                 const file = event.target.files?.[0];

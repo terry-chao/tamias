@@ -22,6 +22,8 @@ $env:Path = "$env:VULKAN_SDK\Bin;C:\Qt\6.11.1\msvc2022_64\bin;$env:Path"
 cmake --preset msvc
 cmake --build --preset relwithdebinfo --parallel
 ctest --test-dir build -C RelWithDebInfo --output-on-failure
+# or: ctest --preset msvc-relwithdebinfo
+# what is tested / missing: docs/TESTING.md
 & .\build\bin\RelWithDebInfo\tamias.exe
 ```
 

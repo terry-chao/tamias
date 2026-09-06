@@ -69,6 +69,8 @@ class MainWindow final : public QMainWindow {
   void sync_create_tool_actions(ToolMode mode);
   bool write_selected_mesh(const QString& path);
   bool write_tdoc_document(const QString& path);
+  bool write_render_scene_document(const QString& path, bool show_inspect);
+  bool export_render_scene();
   void notify_save_success(const QString& path);
   void set_render_mode(RenderMode mode);
   void sync_render_mode_actions();
@@ -81,6 +83,7 @@ class MainWindow final : public QMainWindow {
   DocumentViewport* current_viewport() const;
   static bool is_obj_path(const QString& path);
   static bool is_tdoc_path(const QString& path);
+  static bool is_trscn_path(const QString& path);
 
   QStackedWidget* stack_ = nullptr;
   HomePage* home_ = nullptr;

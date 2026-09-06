@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 
 namespace tamias {
 
@@ -435,6 +436,21 @@ void Document::insert_entity(std::unique_ptr<Entity> entity) {
 }
 
 std::vector<SceneDrawItem> Document::render_items(const Frustum* frustum) const {
+  if (render_snapshot_) {
+    std::vector<SceneDrawItem> items;
+    items.reserve(render_snapshot_->items.size());
+    for (SceneDrawItem item : render_snapshot_->items) {
+      if (const SceneNode* n = scene_.find(item.node_id)) {
+        item.selected = n->selected;
+      }
+      if (frustum != nullptr && item.bounds.valid() && !frustum->intersects(item.bounds)) {
+        continue;
+      }
+      items.push_back(std::move(item));
+    }
+    return items;
+  }
+
   std::vector<SceneDrawItem> items;
   items.reserve(scene_.nodes().size());
   for (const auto& node : scene_.nodes()) {
@@ -475,6 +491,55 @@ std::vector<SceneDrawItem> Document::render_items(const Frustum* frustum) const 
     items.push_back(item);
   }
   return items;
+}
+
+RenderScene Document::capture_render_scene(RenderScene::View view, const Frustum* frustum) const {
+  std::unordered_map<std::uint64_t, MeshCpu> meshes;
+  for (const auto& [id, asset] : meshes_) {
+    meshes.emplace(id, asset.cpu);
+  }
+  if (render_snapshot_) {
+    for (const auto& [id, mesh] : render_snapshot_->meshes) {
+      meshes.emplace(id, mesh);
+    }
+  }
+  std::unordered_map<std::uint64_t, TextureAsset> textures;
+  for (const auto& [id, tex] : textures_) {
+    textures.emplace(id, tex);
+  }
+  if (render_snapshot_) {
+    for (const auto& [id, tex] : render_snapshot_->textures) {
+      textures.emplace(id, tex);
+    }
+  }
+  return bake_render_scene(render_items(frustum), meshes, std::move(view), name_, textures);
+}
+
+void Document::set_render_snapshot(RenderScene scene) { render_snapshot_ = std::move(scene); }
+
+Document document_from_render_scene(RenderScene scene) {
+  Document doc(scene.source.empty() ? "Render snapshot" : scene.source);
+  for (auto& [id, mesh] : scene.meshes) {
+    MeshAsset asset{};
+    asset.id = id;
+    asset.name = "mesh-" + std::to_string(id);
+    asset.cpu = mesh;
+    doc.insert_mesh(std::move(asset));
+  }
+  for (const auto& item : scene.items) {
+    SceneNode node{};
+    node.id = item.node_id;
+    node.name = "node-" + std::to_string(item.node_id);
+    node.mesh_asset_id = item.mesh_asset_id;
+    node.local_transform = item.transform;
+    node.color = item.color;
+    node.selected = item.selected;
+    doc.scene().insert_node(std::move(node));
+  }
+  doc.replace_textures(scene.textures);
+  doc.recompute_scene();
+  doc.set_render_snapshot(std::move(scene));
+  return doc;
 }
 
 std::uint64_t Document::add_import_mesh(std::string name, MeshCpu mesh, Mat4 transform,

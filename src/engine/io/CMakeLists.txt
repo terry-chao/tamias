@@ -1,5 +1,6 @@
 add_library(tamias_io STATIC
   binary_archive.cpp
+  mesh_binary.cpp
   mesh_io.cpp
 )
 add_library(tamias::io ALIAS tamias_io)

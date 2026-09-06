@@ -1,5 +1,6 @@
 #include "mesh_io.h"
 
+#include "engine/core/fs_utf8.h"
 #include "engine/core/log.h"
 
 #if !defined(__EMSCRIPTEN__)
@@ -533,7 +534,7 @@ Result<MeshCpu> load_obj(const std::filesystem::path& path) {
 #if defined(__EMSCRIPTEN__)
   std::ifstream in(path, std::ios::binary);
   if (!in) {
-    return Err("failed to open OBJ: " + path.string());
+    return Err("failed to open OBJ: " + path_to_utf8(path));
   }
   in.seekg(0, std::ios::end);
   const auto size = static_cast<std::size_t>(in.tellg());
@@ -542,7 +543,7 @@ Result<MeshCpu> load_obj(const std::filesystem::path& path) {
   if (size > 0) {
     in.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size));
     if (!in) {
-      return Err("failed to read OBJ: " + path.string());
+      return Err("failed to read OBJ: " + path_to_utf8(path));
     }
   }
   return load_obj_bytes(bytes);
@@ -612,10 +613,7 @@ Result<MeshCpu> load_obj(const std::filesystem::path& path) {
 }
 
 Result<MeshCpu> load_gltf(const std::filesystem::path& path) {
-  auto ext = path.extension().string();
-  for (char& c : ext) {
-    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-  }
+  const auto ext = path_extension_lower(path);
   if (ext == ".glb") {
     return load_glb(path);
   }
@@ -623,10 +621,7 @@ Result<MeshCpu> load_gltf(const std::filesystem::path& path) {
 }
 
 Result<MeshCpu> load_mesh_file(const std::filesystem::path& path) {
-  auto ext = path.extension().string();
-  for (char& c : ext) {
-    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-  }
+  const auto ext = path_extension_lower(path);
   if (ext == ".obj") {
     return load_obj(path);
   }
@@ -646,7 +641,7 @@ Result<void> save_obj(const std::filesystem::path& path, const MeshCpu& mesh) {
 
   std::ofstream out(path);
   if (!out) {
-    return Err("failed to open file for writing: " + path.string());
+    return Err("failed to open file for writing: " + path_to_utf8(path));
   }
 
   out << "# Tamias OBJ export\n";
@@ -675,16 +670,13 @@ Result<void> save_obj(const std::filesystem::path& path, const MeshCpu& mesh) {
         << i2 << '/' << i2 << '/' << i2 << '\n';
   }
   if (!out) {
-    return Err("failed while writing OBJ: " + path.string());
+    return Err("failed while writing OBJ: " + path_to_utf8(path));
   }
   return {};
 }
 
 Result<void> save_mesh_file(const std::filesystem::path& path, const MeshCpu& mesh) {
-  auto ext = path.extension().string();
-  for (char& c : ext) {
-    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-  }
+  const auto ext = path_extension_lower(path);
   if (ext == ".obj") {
     return save_obj(path, mesh);
   }

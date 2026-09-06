@@ -3,6 +3,7 @@
 #include "engine/core/log.h"
 #include "engine/document/document_io.h"
 #include "engine/io/mesh_io.h"
+#include "engine/render/render_scene.h"
 #if defined(TAMIAS_HAS_RHI_WEBGPU)
 #include "engine/render/rhi/webgpu/webgpu_backend.h"
 #endif
@@ -109,6 +110,7 @@ void ViewerHost::upload_document() {
 
 Result<void> ViewerHost::load_bytes(std::string_view name, std::span<const std::uint8_t> bytes) {
   const auto ext = lower_ext(name);
+  mode_ = RenderMode::Shaded;
   if (ext == ".tdoc") {
     auto loaded = load_document_bytes(bytes);
     if (!loaded) {
@@ -125,6 +127,24 @@ Result<void> ViewerHost::load_bytes(std::string_view name, std::span<const std::
     } else {
       session_->camera().frame_aabb(session_->document().bounds());
     }
+  } else if (ext == ".trscn") {
+    auto loaded = deserialize_render_scene(bytes);
+    if (!loaded) {
+      status_ = loaded.error();
+      return Err(loaded.error());
+    }
+    const RenderScene::View view = loaded->view;
+    session_->reset_document(
+        std::make_shared<Document>(document_from_render_scene(std::move(*loaded))));
+    auto& cam = session_->camera().camera();
+    cam.set_target(view.target);
+    cam.set_distance(view.view_distance);
+    cam.set_yaw_pitch(view.yaw, view.pitch);
+    cam.set_fovy(view.fovy);
+    cam.set_znear(view.znear);
+    cam.set_zfar(view.zfar);
+    cam.set_orthographic(view.orthographic);
+    mode_ = view.mode;
   } else if (ext == ".obj") {
     auto mesh = load_obj_bytes(std::as_bytes(bytes));
     if (!mesh) {
@@ -136,10 +156,11 @@ Result<void> ViewerHost::load_bytes(std::string_view name, std::span<const std::
                                          {0.75f, 0.78f, 0.82f});
     session_->camera().frame_aabb(session_->document().bounds());
   } else {
-    status_ = "unsupported type (use .tdoc or .obj)";
+    status_ = "unsupported type (use .tdoc, .trscn or .obj)";
     return Err(status_);
   }
   loaded_ = true;
+  last_submitted_scene_generation_ = 0;
   upload_document();
   status_ = std::string(name);
   return {};
@@ -205,7 +226,7 @@ void ViewerHost::render() {
   frame.proj = cam.proj_matrix(aspect);
   frame.eye_position = cam.eye_position();
   frame.view_distance = cam.distance();
-  frame.mode = RenderMode::Shaded;
+  frame.mode = mode_;
   frame.items = session_->document().render_items();
   frame.scene_generation = session_->document().scene().generation();
   frame.scene_dirty_ids = session_->document().scene().dirty_since(last_submitted_scene_generation_);

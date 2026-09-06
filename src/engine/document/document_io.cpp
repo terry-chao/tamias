@@ -3,8 +3,10 @@
 #include "bim/line_location.h"
 #include "bim/point_location.h"
 #include "bim/surface_location.h"
+#include "engine/core/fs_utf8.h"
 #include "engine/graphics/mesh.h"
 #include "engine/io/binary_archive.h"
+#include "engine/io/mesh_binary.h"
 #include "entity/entity_grip.h"
 
 #include <algorithm>
@@ -41,26 +43,6 @@ constexpr std::uint32_t kChunkMatl = fourcc('M', 'A', 'T', 'L');
 constexpr std::uint32_t kChunkTex = fourcc('T', 'E', 'X', 'T');
 constexpr std::uint32_t kChunkRela = fourcc('R', 'E', 'L', 'A');
 constexpr std::uint32_t kChunkStry = fourcc('S', 'T', 'R', 'Y');
-
-Result<void> write_vec2(BinaryWriter& w, const Vec2& v) {
-  if (auto r = w.write_f32(v.x); !r) {
-    return r;
-  }
-  return w.write_f32(v.y);
-}
-
-Result<void> read_vec2(BinaryReader& r, Vec2& v) {
-  auto x = r.read_f32();
-  if (!x) {
-    return Err(x.error());
-  }
-  auto y = r.read_f32();
-  if (!y) {
-    return Err(y.error());
-  }
-  v = {*x, *y};
-  return {};
-}
 
 Result<void> write_vec3(BinaryWriter& w, const Vec3& v) {
   if (auto r = w.write_f32(v.x); !r) {
@@ -203,90 +185,6 @@ Result<void> read_aabb(BinaryReader& r, Aabb& box) {
     return res;
   }
   return read_vec3(r, box.max);
-}
-
-Result<void> write_vertex(BinaryWriter& w, const Vertex& v) {
-  if (auto r = write_vec3(w, v.position); !r) {
-    return r;
-  }
-  if (auto r = write_vec3(w, v.normal); !r) {
-    return r;
-  }
-  if (auto r = write_vec2(w, v.uv); !r) {
-    return r;
-  }
-  return write_vec3(w, v.color);
-}
-
-Result<void> read_vertex(BinaryReader& r, Vertex& v) {
-  if (auto res = read_vec3(r, v.position); !res) {
-    return res;
-  }
-  if (auto res = read_vec3(r, v.normal); !res) {
-    return res;
-  }
-  if (auto res = read_vec2(r, v.uv); !res) {
-    return res;
-  }
-  return read_vec3(r, v.color);
-}
-
-Result<void> write_mesh_cpu(BinaryWriter& w, const MeshCpu& mesh) {
-  if (auto r = w.write_u64(static_cast<std::uint64_t>(mesh.vertices.size())); !r) {
-    return r;
-  }
-  for (const auto& v : mesh.vertices) {
-    if (auto r = write_vertex(w, v); !r) {
-      return r;
-    }
-  }
-  if (auto r = w.write_u64(static_cast<std::uint64_t>(mesh.indices.size())); !r) {
-    return r;
-  }
-  for (std::uint32_t idx : mesh.indices) {
-    if (auto r = w.write_u32(idx); !r) {
-      return r;
-    }
-  }
-  return write_aabb(w, mesh.bounds);
-}
-
-Result<void> read_mesh_cpu(BinaryReader& r, MeshCpu& mesh) {
-  auto vert_count = r.read_u64();
-  if (!vert_count) {
-    return Err(vert_count.error());
-  }
-  if (*vert_count > r.remaining()) {
-    return Err("document_io: vertex count too large");
-  }
-  mesh.vertices.resize(static_cast<std::size_t>(*vert_count));
-  for (auto& v : mesh.vertices) {
-    if (auto res = read_vertex(r, v); !res) {
-      return res;
-    }
-  }
-  auto index_count = r.read_u64();
-  if (!index_count) {
-    return Err(index_count.error());
-  }
-  if (*index_count > r.remaining()) {
-    return Err("document_io: index count too large");
-  }
-  mesh.indices.resize(static_cast<std::size_t>(*index_count));
-  for (auto& idx : mesh.indices) {
-    auto v = r.read_u32();
-    if (!v) {
-      return Err(v.error());
-    }
-    idx = *v;
-  }
-  if (auto res = read_aabb(r, mesh.bounds); !res) {
-    return res;
-  }
-  if (!mesh.bounds.valid()) {
-    recompute_bounds(mesh);
-  }
-  return {};
 }
 
 Result<void> write_mesh_asset(BinaryWriter& w, const MeshAsset& asset) {
@@ -1159,11 +1057,7 @@ Result<Document> deserialize_document(std::span<const std::uint8_t> bytes) {
 }
 
 bool is_tdoc_document_path(const std::filesystem::path& path) {
-  auto ext = path.extension().string();
-  for (char& c : ext) {
-    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-  }
-  return ext == ".tdoc";
+  return path_extension_lower(path) == ".tdoc";
 }
 
 Result<void> save_document(const std::filesystem::path& path, const Document& document,
@@ -1341,13 +1235,13 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
 
   std::ofstream out(path, std::ios::binary | std::ios::trunc);
   if (!out) {
-    return Err("Failed to open file for writing: " + path.string());
+    return Err("Failed to open file for writing: " + path_to_utf8(path));
   }
   const auto& bytes = file.data();
   out.write(reinterpret_cast<const char*>(bytes.data()),
             static_cast<std::streamsize>(bytes.size()));
   if (!out) {
-    return Err("Failed to write document: " + path.string());
+    return Err("Failed to write document: " + path_to_utf8(path));
   }
   return {};
 }
@@ -1606,7 +1500,7 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes) 
 Result<LoadedDocument> load_document(const std::filesystem::path& path) {
   std::ifstream in(path, std::ios::binary);
   if (!in) {
-    return Err("Failed to open file: " + path.string());
+    return Err("Failed to open file: " + path_to_utf8(path));
   }
   in.seekg(0, std::ios::end);
   const auto file_size = static_cast<std::size_t>(in.tellg());
@@ -1615,7 +1509,7 @@ Result<LoadedDocument> load_document(const std::filesystem::path& path) {
   if (file_size > 0) {
     in.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(file_size));
     if (!in) {
-      return Err("Failed to read file: " + path.string());
+      return Err("Failed to read file: " + path_to_utf8(path));
     }
   }
   auto loaded = load_document_bytes(bytes);

@@ -29,6 +29,7 @@ markdown_extensions:
 # 导航按路线图分层（见 ROADMAP §2）；BIM 夹在客户端与场景图之间
 nav:
   - 首页: index.md
+  - 测试: TESTING.md
   - 入门教程:
       - tutorial/index.md
       - 1. 认识 Tamias: tutorial/01-what-is-tamias.md
@@ -72,3 +73,4 @@ nav:
       - wgpu 接入: WGPU.md
       - Web 查看器: WEB.md
       - 视锥剔除: FRUSTUM-CULLING.md
+      - 渲染场景快照: RENDER-SCENE.md

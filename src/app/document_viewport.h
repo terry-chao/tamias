@@ -48,6 +48,7 @@ class DocumentViewport final : public QWidget {
   void isolate_selected();
   void show_all_visible();
   [[nodiscard]] ViewportState capture_viewport_state() const;
+  [[nodiscard]] RenderScene::View capture_render_scene_view() const;
   void apply_viewport_state(const ViewportState& state);
   // 设置当前创建工具（None / Wall / Box / Cylinder）。
   void set_tool(ToolMode mode);

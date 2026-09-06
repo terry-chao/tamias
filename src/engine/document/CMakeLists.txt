@@ -15,6 +15,7 @@ target_link_libraries(tamias_document
     tamias::math
     tamias::graphics
     tamias::io
+    tamias::render
     tamias::modeling
     tamias::entity
 )

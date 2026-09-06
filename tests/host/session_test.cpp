@@ -1,11 +1,14 @@
 #include "command/command_system.h"
 #include "engine/document/document.h"
+#include "host/host_event.h"
 #include "host/session.h"
 
 #include <gtest/gtest.h>
 
 #include <cstdint>
 #include <memory>
+#include <string_view>
+#include <vector>
 
 namespace tamias {
 namespace {
@@ -64,6 +67,27 @@ TEST(SessionTest, ToolMode) {
   EXPECT_EQ(session.tool_mode(), ToolMode::Wall);
   session.set_tool(ToolMode::None);
   EXPECT_EQ(session.tool_mode(), ToolMode::None);
+}
+
+TEST(SessionTest, ListenerSeesSelectionToolAndUndo) {
+  register_commands(command_registry());
+  Session session(make_doc());
+  std::vector<HostEvent> events;
+  session.set_listener([&](HostEvent event, std::string_view) { events.push_back(event); });
+
+  session.set_tool(ToolMode::Wall);
+  ASSERT_EQ(events.size(), 1u);
+  EXPECT_EQ(events.back(), HostEvent::ToolChanged);
+
+  ASSERT_TRUE(session.dispatch("create_box", {}));
+  auto done = session.command_system().feed_point(Vec3{0.f, 0.f, 0.f});
+  ASSERT_TRUE(done && *done);
+  const std::uint64_t id = session.document().entities().begin()->first;
+  session.select(id);
+  EXPECT_EQ(events.back(), HostEvent::SelectionChanged);
+
+  session.undo();
+  EXPECT_EQ(events.back(), HostEvent::DocumentChanged);
 }
 
 TEST(SessionTest, ResetDocumentClearsCommandStack) {

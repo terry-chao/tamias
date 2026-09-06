@@ -25,6 +25,7 @@
 | 格式 | 角色 | 谁负责 |
 |---|---|---|
 | `.tdoc` | **内部工作文档**：语义树 + **特征树（参数化几何）** + 材质 + 视图/会话状态 | 现状：自有 `src/io`（`binary_archive` 整文件）；**后期改为 LevelDB** |
+| `.trscn` | **渲染调试快照**：已烤好的网格 + draw list + 相机 + 被引用贴图；给复现和测试，不是工作文档 | 自有 `render_scene` IO，见 [渲染场景快照](RENDER-SCENE.md) |
 | `.ifc` | **导入源 / 导出出口**（建筑交换格式） | IfcOpenShell（读 + 写） |
 | `.step/.iges/.brep` | 导入/导出（MCAD，BRep） | OCCT |
 | `.obj/.glb` | 导入/导出（通用 mesh） | 自有 loader |
@@ -64,7 +65,7 @@
 | BIM 业务层 | [BIM.md](BIM.md) |
 | 场景图 | [总述](scene/index.md)、[语义树](SCENE-GRAPH.md) |
 | 造型 | [FEATURE-TREE-EVALUATOR.md](FEATURE-TREE-EVALUATOR.md)、[MCAD-PIPELINE.md](MCAD-PIPELINE.md)、[ISHAPE-OPS.md](ISHAPE-OPS.md)（几何边界） |
-| 渲染（含 RHI） | [RENDERING.md](RENDERING.md)、[NDC.md](NDC.md)、[OPENGL.md](OPENGL.md)、[WGPU.md](WGPU.md)（第三桌面后端方案）、[WEB.md](WEB.md)（引擎 WASM 查看器）、[FRUSTUM-CULLING.md](FRUSTUM-CULLING.md) |
+| 渲染（含 RHI） | [RENDERING.md](RENDERING.md)、[NDC.md](NDC.md)、[OPENGL.md](OPENGL.md)、[WGPU.md](WGPU.md)（浏览器 WebGPU）、[WEB.md](WEB.md)（引擎 WASM 查看器）、[FRUSTUM-CULLING.md](FRUSTUM-CULLING.md)、[RENDER-SCENE.md](RENDER-SCENE.md)（`.trscn` 快照） |
 
 两个最容易误解的点：
 
@@ -142,7 +143,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 4. **透明度。** 玻璃/幕墙。不透明先画、透明按深度排序、per-material blend 状态。
 5. **选择/高亮/分类着色。** 现在是单 `selected` 单色高亮。升级：多选、轮廓高亮、按 IFC 类型/系统/专业分类着色（Appearance Profiler）。
 6. **显示模式补全。** realistic 接 PBR + 光照 + 阴影 + AO；补 Hidden Line（隐藏线）模式。
-7. **双后端对齐。** Vulkan 和 OpenGL 两套管线行为一致是持续成本点——材质 UBO 布局、纹理格式、clip 语义、instancing。shader 是 HLSL→SPIR-V，GL 端要走 SPIR-V 或另编 GLSL。第三后端 [wgpu](WGPU.md) 按同一套 RHI 动词接入，**不**把 bind group / WGSL 抬到抽象层；代码未落地。
+7. **双后端对齐。** Vulkan 和 OpenGL 两套管线行为一致是持续成本点——材质 UBO 布局、纹理格式、clip 语义、instancing。shader 是 HLSL→SPIR-V，GL 端要走 SPIR-V 或另编 GLSL。浏览器 [WebGPU](WGPU.md) 按同一套 RHI 动词接入，**不**把 bind group / WGSL 抬到抽象层；桌面不做 wgpu-native。
 
 ---
 
@@ -181,7 +182,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 |---|---|
 | **材质/纹理** | RHI 真 texture/UBO/sampler，双后端，glTF PBR 基础（编辑预览也需要它） |
 | **IFC 导入** | IfcParse 空间树已通。下一步：语义树 + 特征树/网格 + 材质映射（对齐 P 线）；几何走 IfcGeom + 同一份 OCCT 7.9.3 |
-| **大模型渲染** | 视锥剔除 + 按 mesh/材质合批/instancing + 不透明/透明排序 + 渐进加载 |
+| **大模型渲染** | 视锥剔除 + 按 mesh/材质合批/instancing + 不透明/透明排序 + 渐进加载。亿级三角的完整方案见 [超大规模三角](MASSIVE-GEOMETRY.md)（G0 仪表 → G1 合批 → G2 剔除 → G3 自适应离散 → G4 驻留 → G5 meshlet → G6 indirect） |
 | **截面/分类着色/选择** | 截面裁剪 + Appearance Profiler + 轮廓/多选 |
 | **属性面板/大纲树/测量** | 编辑的交互配套 |
 | **导出 IFC** | 编辑后交付，**现在成了刚需**（原 M12「可选」改为「必做」） |

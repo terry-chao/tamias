@@ -273,7 +273,7 @@ Tamias 渲染 (render_runtime)     OCCT 渲染 (V3d_Viewer + OpenGl 驱动)
 |---|---|---|
 | **highlight / selection** | 点中墙、高亮整层，交互刚需 | `SceneDrawItem.selected` 字段已留位，渲染侧未消费 |
 | **z-layer 抽象** | 轴网/标高/标注/剖切框这些 overlay，别再布尔硬编码 | `FrameSubmission` 里 `show_axes/show_grid/show_preview_line` + 单独 pipeline 是当前笨办法 |
-| **空间索引 + 实例化** | BIM 规模（几万构件）的剔除与合批 | 视锥一期已落地，见 [视锥剔除](FRUSTUM-CULLING.md)；合批 / BVH 视锥仍缺。加速结构不是场景图 |
+| **空间索引 + 实例化** | BIM 规模（几万构件）的剔除与合批 | 视锥一期已落地，见 [视锥剔除](FRUSTUM-CULLING.md)；合批 / BVH 视锥仍缺。加速结构不是场景图。亿级三角见 [超大规模三角](MASSIVE-GEOMETRY.md) |
 | **按楼层/类别可见性** | 「只看结构柱」「关掉 MEP」 | [BIM 业务层](BIM.md) 查出 id，渲染侧只收可见性标志 |
 
 **最重要的提醒**：最后两项（空间索引、实例化）补的是**渲染侧加速结构（八叉树/BVH + 实例表）**，不是「把语义树搬进渲染」。语义树永远留在 `Scene` / Document，渲染永远只拿展平结果。
@@ -293,6 +293,7 @@ Tamias 渲染 (render_runtime)     OCCT 渲染 (V3d_Viewer + OpenGl 驱动)
 - [render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.h) / [render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.cpp) —— 留存树 + `draw_channel` 增量同步与录制
 - [scene_graph_tests.cpp](https://github.com/terry-chao/tamias/blob/main/tests/scene_graph_tests.cpp) —— 脏标记与增量同步的单测
 - [视锥剔除](FRUSTUM-CULLING.md) —— 展平时丢掉屏外叶子；二期语义树剪枝；三期复用拾取 BVH
+- [超大规模三角](MASSIVE-GEOMETRY.md) —— 亿级三角的虚拟离散流水线（合批 / LOD / 驻留）
 - [render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_types.h) —— 展平结果 `SceneDrawItem`
 - [render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.h) —— 半留存渲染侧
 - [occt_shape_ops.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt_shape_ops.cpp) —— BRep → 三角网（渲染侧数据来源）

@@ -1,5 +1,6 @@
 #include "bim/ifc_spatial_tree.h"
 
+#include "engine/core/fs_utf8.h"
 #include "ifcparse/IfcException.h"
 #include "ifcparse/IfcFile.h"
 
@@ -14,11 +15,6 @@
 
 namespace tamias {
 namespace {
-
-std::string path_utf8(const std::filesystem::path& path) {
-  const auto u8 = path.u8string();
-  return std::string(u8.begin(), u8.end());
-}
 
 const char* open_status_text(IfcParse::file_open_status status) {
   switch (status.value()) {
@@ -126,23 +122,23 @@ void dump_entity(std::ostringstream& out, IfcUtil::IfcBaseEntity* entity, int in
 
 Result<std::string> format_ifc_spatial_tree(const std::filesystem::path& path) {
   if (!std::filesystem::exists(path)) {
-    return Err("IFC file not found: " + path_utf8(path));
+    return Err("IFC file not found: " + path_to_utf8(path));
   }
 
-  IfcParse::IfcFile file(path_utf8(path));
+  IfcParse::IfcFile file(path_to_utf8(path));
   if (!file.good()) {
     return Err(std::string("IfcOpenShell failed to parse IFC (") + open_status_text(file.good()) +
-               "): " + path_utf8(path));
+               "): " + path_to_utf8(path));
   }
 
   auto projects = file.instances_by_type("IfcProject");
   if (!projects || projects->size() == 0) {
-    return Err("IFC has no IfcProject: " + path_utf8(path));
+    return Err("IFC has no IfcProject: " + path_to_utf8(path));
   }
 
   std::ostringstream out;
   out << "schema  " << (file.schema() ? file.schema()->name() : "?") << '\n';
-  out << "file    " << path.filename().string() << '\n';
+  out << "file    " << path_to_utf8(path.filename()) << '\n';
   out << "tree\n";
 
   std::unordered_set<std::uint32_t> visited;
