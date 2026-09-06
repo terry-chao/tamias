@@ -443,8 +443,8 @@
     </message>
     <message>
         <location filename="../src/app/main_window.cpp"/>
-        <source>Write the current view to assets/samples/render/&lt;name&gt;/ for golden tests</source>
-        <translation>把当前视图写入 assets/samples/render/&lt;name&gt;/，作为金样测试</translation>
+        <source>Write the current view to assets/samples/render/&lt;name&gt;/ and run RenderSceneGolden*</source>
+        <translation>把当前视图写入 assets/samples/render/&lt;name&gt;/，并跑 RenderSceneGolden*</translation>
     </message>
     <message>
         <location filename="../src/app/main_window.cpp"/>
@@ -972,6 +972,283 @@ Click an object to select it, or use a create tool</source>
         <source>Help</source>
         <translation>帮助</translation>
     </message>
+    <message>
+        <source>Render Scene</source>
+        <translation>渲染场景</translation>
+    </message>
+    <message>
+        <source>Visual debug of the cooked draw list: meshes, textures, AABB overlay</source>
+        <translation>可视化调试已烘焙的绘制清单：网格、贴图、包围盒</translation>
+    </message>
+    <message>
+        <source>Vertex %1  world %2  n %3  uv (%4, %5)  color %6</source>
+        <translation>顶点 %1  世界坐标 %2  法线 %3  uv (%4, %5)  颜色 %6</translation>
+    </message>
+    <message>
+        <source>Scene saved, but debug dump failed:
+%1</source>
+        <translation>场景已保存，但调试文件写出失败：
+%1</translation>
+    </message>
+    <message>
+        <source>Full dump: %1
+Meshes / textures: %2
+
+</source>
+        <translation>全量 dump：%1
+网格 / 贴图：%2
+
+</translation>
+    </message>
+    <message>
+        <source>Write render-scene debug files</source>
+        <translation>写出渲染场景调试文件</translation>
+    </message>
+    <message>
+        <source>Wrote %1 and %2</source>
+        <translation>已写出 %1 和 %2</translation>
+    </message>
+    <message>
+        <source>Pinned %1 but RenderSceneGolden* failed</source>
+        <translation>已钉入 %1，但 RenderSceneGolden* 失败</translation>
+    </message>
+    <message>
+        <source>Timing</source>
+        <translation>时间测试</translation>
+    </message>
+    <message>
+        <source>Show the timing timeline</source>
+        <translation>显示时间测试时间线</translation>
+    </message>
+    <message>
+        <source>Record</source>
+        <translation>录制</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>停止</translation>
+    </message>
+    <message>
+        <source>Start recording, then stop to inspect the timeline</source>
+        <translation>点录制，操作模型，再点停止查看时间线</translation>
+    </message>
+    <message>
+        <source>Recording %1</source>
+        <translation>正在录制 %1</translation>
+    </message>
+    <message>
+        <source>Timing %1</source>
+        <translation>计时 %1</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::RenderSceneInspector</name>
+    <message>
+        <source>Write debug files…</source>
+        <translation>写出调试文件…</translation>
+    </message>
+    <message>
+        <source>Dump inspect.txt, OBJ meshes, and PPM textures next to the scene</source>
+        <translation>在场景旁写出 inspect.txt、OBJ 网格和 PPM 贴图</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>刷新</translation>
+    </message>
+    <message>
+        <source>Open a .trscn, or capture the current view.</source>
+        <translation>打开 .trscn，或刷新以捕获当前视口。</translation>
+    </message>
+    <message>
+        <source>Scene</source>
+        <translation>场景</translation>
+    </message>
+    <message>
+        <source>Draws</source>
+        <translation>绘制清单</translation>
+    </message>
+    <message>
+        <source>#</source>
+        <translation>#</translation>
+    </message>
+    <message>
+        <source>Node</source>
+        <translation>节点</translation>
+    </message>
+    <message>
+        <source>Tris</source>
+        <translation>三角</translation>
+    </message>
+    <message>
+        <source>Color</source>
+        <translation>颜色</translation>
+    </message>
+    <message>
+        <source>Albedo</source>
+        <translation>反照率</translation>
+    </message>
+    <message>
+        <source>Selected draw</source>
+        <translation>选中的绘制</translation>
+    </message>
+    <message>
+        <source>Isolate this draw</source>
+        <translation>隔离此条</translation>
+    </message>
+    <message>
+        <source>Mesh</source>
+        <translation>网格</translation>
+    </message>
+    <message>
+        <source>Flags</source>
+        <translation>标记</translation>
+    </message>
+    <message>
+        <source>AABB</source>
+        <translation>包围盒</translation>
+    </message>
+    <message>
+        <source>Translation</source>
+        <translation>平移</translation>
+    </message>
+    <message>
+        <source>PBR</source>
+        <translation>PBR</translation>
+    </message>
+    <message>
+        <source>Transform</source>
+        <translation>变换</translation>
+    </message>
+    <message>
+        <source>Base</source>
+        <translation>基色</translation>
+    </message>
+    <message>
+        <source>Category</source>
+        <translation>类别色</translation>
+    </message>
+    <message>
+        <source>Position</source>
+        <translation>位置</translation>
+    </message>
+    <message>
+        <source>Normal</source>
+        <translation>法线</translation>
+    </message>
+    <message>
+        <source>UV</source>
+        <translation>UV</translation>
+    </message>
+    <message>
+        <source>Vertices</source>
+        <translation>顶点</translation>
+    </message>
+    <message>
+        <source>Vertices (%1)</source>
+        <translation>顶点（%1）</translation>
+    </message>
+    <message>
+        <source>Mesh %1 is not in this scene</source>
+        <translation>网格 %1 不在此场景中</translation>
+    </message>
+    <message>
+        <source>Dump</source>
+        <translation>全文</translation>
+    </message>
+    <message>
+        <source>Wireframe</source>
+        <translation>线框</translation>
+    </message>
+    <message>
+        <source>Shaded</source>
+        <translation>着色</translation>
+    </message>
+    <message>
+        <source>Realistic</source>
+        <translation>真实感</translation>
+    </message>
+    <message>
+        <source>%1  ·  %2×%3</source>
+        <translation>%1  ·  %2×%3</translation>
+    </message>
+    <message>
+        <source>%1 draws · %2 meshes · %3 textures · %4 tris</source>
+        <translation>%1 条绘制 · %2 个网格 · %3 张贴图 · %4 三角</translation>
+    </message>
+    <message>
+        <source>digest  %1</source>
+        <translation>digest  %1</translation>
+    </message>
+    <message>
+        <source>eye %1
+target %2
+distance %3</source>
+        <translation>眼睛 %1
+目标 %2
+距离 %3</translation>
+    </message>
+    <message>
+        <source>id %1  ·  %2 verts  ·  %3 tris</source>
+        <translation>id %1  ·  %2 顶点  ·  %3 三角</translation>
+    </message>
+    <message>
+        <source>selected</source>
+        <translation>选中</translation>
+    </message>
+    <message>
+        <source>lines</source>
+        <translation>线框</translation>
+    </message>
+    <message>
+        <source>uv</source>
+        <translation>UV</translation>
+    </message>
+    <message>
+        <source>none</source>
+        <translation>无</translation>
+    </message>
+    <message>
+        <source>roughness %1  ·  metallic %2  ·  opacity %3</source>
+        <translation>粗糙度 %1  · 金属度 %2  · 不透明度 %3</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>无</translation>
+    </message>
+    <message>
+        <source>Missing</source>
+        <translation>缺失</translation>
+    </message>
+    <message>
+        <source>%1  #%2</source>
+        <translation>%1  #%2</translation>
+    </message>
+    <message>
+        <source>%1  #%2
+%3×%4  %5</source>
+        <translation>%1  #%2
+%3×%4  %5</translation>
+    </message>
+    <message>
+        <source>sRGB</source>
+        <translation>sRGB</translation>
+    </message>
+    <message>
+        <source>linear</source>
+        <translation>线性</translation>
+    </message>
+    <message>
+        <source>No pixels</source>
+        <translation>无像素</translation>
+    </message>
+    <message>
+        <source>Click a row to mark that vertex in the viewport.</source>
+        <translation>点击一行，在视口中标出该顶点。</translation>
+    </message>
+    <message>
+        <source>Magenta diamond: position  ·  RGB axes: XYZ  ·  Cyan arrow: normal  ·  Red/green ticks: UV (length = value)  ·  Inner diamond: vertex color</source>
+        <translation>洋红菱形：位置  ·  RGB 短轴：XYZ  · 青色箭头：法线  · 红/绿刻度：UV（长度=数值）  · 内侧菱形：顶点色</translation>
+    </message>
 </context>
 <context>
     <name>tamias::PluginManagerDialog</name>
@@ -1436,6 +1713,174 @@ Plugin ID: %4</source>
     <message>
         <source>Built with</source>
         <translation>使用的技术</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::TimingPanel</name>
+    <message>
+        <source>Record</source>
+        <translation>录制</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>停止</translation>
+    </message>
+    <message>
+        <source>Fit</source>
+        <translation>适应</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>清除</translation>
+    </message>
+    <message>
+        <source>Export</source>
+        <translation>导出</translation>
+    </message>
+    <message>
+        <source>Start recording, then stop to inspect the timeline</source>
+        <translation>点录制，操作模型，再点停止查看时间线</translation>
+    </message>
+    <message>
+        <source>Ready</source>
+        <translation>就绪</translation>
+    </message>
+    <message>
+        <source>Recording</source>
+        <translation>录制中</translation>
+    </message>
+    <message>
+        <source>Stopped</source>
+        <translation>已停止</translation>
+    </message>
+    <message>
+        <source>Command</source>
+        <translation>命令</translation>
+    </message>
+    <message>
+        <source>Modeling</source>
+        <translation>建模</translation>
+    </message>
+    <message>
+        <source>Render</source>
+        <translation>渲染</translation>
+    </message>
+    <message>
+        <source>UI</source>
+        <translation>界面</translation>
+    </message>
+    <message>
+        <source>Include viewport frame submits (noisy while orbiting)</source>
+        <translation>包含视口提交帧（旋转视图时会很密）</translation>
+    </message>
+    <message>
+        <source>Fit the timeline to this session</source>
+        <translation>把时间线缩放到本会话</translation>
+    </message>
+    <message>
+        <source>Save the session as XML</source>
+        <translation>将本会话存为 XML</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>名称</translation>
+    </message>
+    <message>
+        <source>Total</source>
+        <translation>合计</translation>
+    </message>
+    <message>
+        <source>Self</source>
+        <translation>自身</translation>
+    </message>
+    <message>
+        <source>Time including nested calls</source>
+        <translation>含所有子调用的时间</translation>
+    </message>
+    <message>
+        <source>Time in this scope excluding children</source>
+        <translation>不含子调用（本段代码自己的时间）</translation>
+    </message>
+    <message>
+        <source>%</source>
+        <translation>%</translation>
+    </message>
+    <message>
+        <source>Export timing XML</source>
+        <translation>导出计时 XML</translation>
+    </message>
+    <message>
+        <source>Timing report (*.xml);;All files (*.*)</source>
+        <translation>计时报告 (*.xml);;所有文件 (*.*)</translation>
+    </message>
+    <message>
+        <source>Export failed</source>
+        <translation>导出失败</translation>
+    </message>
+    <message>
+        <source>Timing</source>
+        <translation>时间测试</translation>
+    </message>
+    <message>
+        <source>Timing — Recording %1</source>
+        <translation>时间测试 — 录制中 %1</translation>
+    </message>
+    <message>
+        <source>Timing — %1</source>
+        <translation>时间测试 — %1</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::TimingTimelineWidget</name>
+    <message>
+        <source>Command</source>
+        <translation>命令</translation>
+    </message>
+    <message>
+        <source>Modeling</source>
+        <translation>建模</translation>
+    </message>
+    <message>
+        <source>Render</source>
+        <translation>渲染</translation>
+    </message>
+    <message>
+        <source>UI</source>
+        <translation>界面</translation>
+    </message>
+    <message>
+        <source>Recording — perform a command</source>
+        <translation>正在录制 — 请执行一条命令</translation>
+    </message>
+    <message>
+        <source>No session yet</source>
+        <translation>还没有会话</translation>
+    </message>
+    <message>
+        <source>Record, do some work, then stop.
+Nested calls stack downward like a flame graph.
+The call tree lists Total (with children) and Self (this scope only).
+Wheel zooms, drag pans, double-click a bar to focus.</source>
+        <translation>点录制，做一些操作，再点停止。
+嵌套调用会向下叠成火焰图。
+下方调用树列出合计（含子调用）和自身（本段代码）。
+滚轮缩放，拖动平移，双击色条聚焦。</translation>
+    </message>
+    <message>
+        <source>Parent on top, children below</source>
+        <translation>上层是父调用，下层是子调用</translation>
+    </message>
+    <message>
+        <source>inside %1</source>
+        <translation>位于 %1 内</translation>
+    </message>
+    <message>
+        <source>Total</source>
+        <translation>合计</translation>
+    </message>
+    <message>
+        <source>Self</source>
+        <translation>自身</translation>
     </message>
 </context>
 </TS>

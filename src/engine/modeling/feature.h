@@ -43,6 +43,42 @@ inline bool is_sketch_feature(FeatureKind kind) {
   }
 }
 
+inline const char* feature_kind_name(FeatureKind kind) {
+  switch (kind) {
+    case FeatureKind::RectProfile:
+      return "RectProfile";
+    case FeatureKind::Extrude:
+      return "Extrude";
+    case FeatureKind::CircleProfile:
+      return "CircleProfile";
+    case FeatureKind::Boolean:
+      return "Boolean";
+    case FeatureKind::Fillet:
+      return "Fillet";
+    case FeatureKind::Chamfer:
+      return "Chamfer";
+    case FeatureKind::Line:
+      return "Line";
+    case FeatureKind::Polyline:
+      return "Polyline";
+    case FeatureKind::CircleWire:
+      return "CircleWire";
+    case FeatureKind::Arc:
+      return "Arc";
+    case FeatureKind::Bezier:
+      return "Bezier";
+    case FeatureKind::RectWire:
+      return "RectWire";
+    case FeatureKind::BSpline:
+      return "BSpline";
+    case FeatureKind::Nurbs:
+      return "Nurbs";
+    case FeatureKind::PolygonProfile:
+      return "PolygonProfile";
+  }
+  return "Feature";
+}
+
 // 布尔运算类型（存成 Boolean 特征的 operation 参数）。
 enum class BooleanOp : std::uint8_t { Fuse = 0, Common = 1, Cut = 2 };
 

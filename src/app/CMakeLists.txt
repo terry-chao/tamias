@@ -19,11 +19,14 @@ add_executable(tamias
   plugin_prompt_dialog.cpp
   about_dialog.cpp
   pin_result_dialog.cpp
+  render_scene_inspector.cpp
   document_viewport.cpp
   box_select_overlay.cpp
   golden_test_runner.cpp
   handle_inspector.cpp
   property_panel.cpp
+  timing_panel.cpp
+  timing_timeline_widget.cpp
   view_cube_widget.cpp
   viewport_tool_strip.cpp
   rhi_backends.cpp

@@ -23,6 +23,7 @@
 #include <span>
 #include <string>
 #include <unordered_set>
+#include <utility>
 
 namespace tamias {
 
@@ -1060,7 +1061,10 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     const bool has_points = !frame.preview_points.empty();
     const bool has_grips = !frame.grip_points.empty();
     const bool has_snap = frame.snap_point.has_value();
-    if (has_curve || has_controls || has_points || has_grips || has_snap) {
+    const bool has_debug = frame.debug_line_segments.size() >= 2;
+    const bool has_vertex = frame.debug_vertex.has_value();
+    if (has_curve || has_controls || has_points || has_grips || has_snap || has_debug ||
+        has_vertex) {
       channel.command_list->set_pipeline(*line_pipeline_);
       bind_mesh_sets();
       channel.command_list->set_vertex_buffer(*preview_line_mesh_.vertex_buffer);
@@ -1171,6 +1175,54 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
       if (has_snap) {
         const Vec3 p = *frame.snap_point;
         draw_cross(p, marker_half(p), 0.35f, 0.95f, 0.55f);
+      }
+      if (has_debug) {
+        for (std::size_t i = 0; i + 1 < frame.debug_line_segments.size(); i += 2) {
+          draw_segment(frame.debug_line_segments[i], frame.debug_line_segments[i + 1], 1.00f,
+                       0.92f, 0.18f);
+        }
+      }
+      if (has_vertex) {
+        const DebugVertexOverlay& v = *frame.debug_vertex;
+        const Vec3 p = v.world;
+        const float half = marker_half(p) * 1.35f;
+        auto basis_from_normal = [](Vec3 n) {
+          const Vec3 nn = normalize(n);
+          const Vec3 ref = std::fabs(nn.y) < 0.9f ? Vec3{0.f, 1.f, 0.f} : Vec3{1.f, 0.f, 0.f};
+          const Vec3 t = normalize(cross(ref, nn));
+          const Vec3 b = cross(nn, t);
+          return std::pair<Vec3, Vec3>{t, b};
+        };
+        const auto [tangent, bitangent] = basis_from_normal(v.normal);
+        // 位置：洋红菱形 + RGB 短轴，和夹点/包围盒区分开。
+        draw_diamond(p, half, 1.00f, 0.22f, 0.85f);
+        draw_segment(p, p + Vec3{half, 0.f, 0.f}, 1.00f, 0.25f, 0.25f);
+        draw_segment(p, p + Vec3{0.f, half, 0.f}, 0.25f, 1.00f, 0.30f);
+        draw_segment(p, p + Vec3{0.f, 0.f, half}, 0.30f, 0.45f, 1.00f);
+        // 顶点色：内侧小菱形。
+        const float cr = std::clamp(v.color.x, 0.f, 1.f);
+        const float cg = std::clamp(v.color.y, 0.f, 1.f);
+        const float cb = std::clamp(v.color.z, 0.f, 1.f);
+        draw_diamond(p, half * 0.45f, cr, cg, cb);
+        // 法线：青色箭头。
+        const Vec3 n = normalize(v.normal);
+        if (length(n) > 1e-4f) {
+          const float nlen = half * 4.2f;
+          const Vec3 tip = p + n * nlen;
+          draw_segment(p, tip, 0.20f, 0.95f, 1.00f);
+          const Vec3 back = tip - n * (nlen * 0.18f);
+          draw_segment(tip, back + tangent * (nlen * 0.10f), 0.20f, 0.95f, 1.00f);
+          draw_segment(tip, back - tangent * (nlen * 0.10f), 0.20f, 0.95f, 1.00f);
+        }
+        // UV：切平面上红(U)/绿(V)刻度，长度随 uv 分量变长。
+        const float u = std::clamp(v.uv.x, 0.f, 2.f);
+        const float vv = std::clamp(v.uv.y, 0.f, 2.f);
+        const float u_len = half * (0.55f + 1.15f * u);
+        const float v_len = half * (0.55f + 1.15f * vv);
+        draw_segment(p, p + tangent * u_len, 1.00f, 0.18f, 0.18f);
+        draw_segment(p, p + bitangent * v_len, 0.18f, 1.00f, 0.28f);
+        const Vec3 uv_color_pos = p + tangent * (half * 0.35f) + bitangent * (half * 0.35f);
+        draw_square(uv_color_pos, half * 0.22f, u * 0.5f, vv * 0.5f, 0.15f);
       }
     }
   }

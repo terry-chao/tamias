@@ -41,5 +41,6 @@
     <file alias="view_3d.svg">../../assets/icons/view_3d.svg</file>
     <file alias="visibility.svg">../../assets/icons/visibility.svg</file>
     <file alias="storey.svg">../../assets/icons/storey.svg</file>
+    <file alias="timing.svg">../../assets/icons/timing.svg</file>
   </qresource>
 </RCC>

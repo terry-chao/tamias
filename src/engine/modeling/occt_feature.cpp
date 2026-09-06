@@ -1,6 +1,7 @@
 #include "occt_feature.h"
 
 #include "engine/modeling/curve_geom.h"
+#include "engine/profile/timing_scope.h"
 
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
@@ -88,14 +89,35 @@ TopoDS_Edge nth_edge(const TopoDS_Shape& shape, int index) {
   return TopoDS_Edge();
 }
 
+const char* feature_scope_name(const FeatureModel& model, const Feature& f) {
+  if (f.kind == FeatureKind::Boolean) {
+    const int op = static_cast<int>(model.param(f.id, "operation", 0.0));
+    switch (op) {
+      case 1:
+        return "Boolean Common";
+      case 2:
+        return "Boolean Cut";
+      case 0:
+      default:
+        return "Boolean Fuse";
+    }
+  }
+  return feature_kind_name(f.kind);
+}
+
 // 简化的 BRep → 三角网（无 XCAF 颜色逻辑；与 occt_shape_ops 的 tessellate 职责不同）。
 Result<MeshCpu> tessellate_shape(const TopoDS_Shape& shape, double deflection) {
-  BRepMesh_IncrementalMesh mesher(shape, deflection, Standard_False, 0.5, Standard_True);
-  mesher.Perform();
-  if (!mesher.IsDone()) {
-    return Err("tessellate: BRepMesh failed");
+  TAMIAS_TIMING_SCOPE("tessellate_shape", TimingCategory::Modeling);
+  {
+    TAMIAS_TIMING_SCOPE("BRepMesh", TimingCategory::Modeling);
+    BRepMesh_IncrementalMesh mesher(shape, deflection, Standard_False, 0.5, Standard_True);
+    mesher.Perform();
+    if (!mesher.IsDone()) {
+      return Err("tessellate: BRepMesh failed");
+    }
   }
 
+  TAMIAS_TIMING_SCOPE("extract_triangles", TimingCategory::Modeling);
   MeshCpu mesh;
   for (TopExp_Explorer exp(shape, TopAbs_FACE); exp.More(); exp.Next()) {
     const TopoDS_Face face = TopoDS::Face(exp.Current());
@@ -182,11 +204,13 @@ static Result<MeshCpu> evaluate_feature_model_impl(const FeatureModel& model,
                                                   double linear_deflection) {
   const Feature* out = model.output_feature();
   if (out != nullptr && is_sketch_feature(out->kind)) {
+    TAMIAS_TIMING_SCOPE(feature_kind_name(out->kind), TimingCategory::Modeling);
     return mesh_from_sketch_feature(model, *out);
   }
 
   std::unordered_map<std::uint64_t, TopoDS_Shape> shapes;
   for (const auto& f : model.features()) {
+    TAMIAS_TIMING_SCOPE(feature_scope_name(model, f), TimingCategory::Modeling);
     TopoDS_Shape s;
     switch (f.kind) {
       case FeatureKind::RectProfile: {
@@ -310,6 +334,7 @@ static Result<MeshCpu> evaluate_feature_model_impl(const FeatureModel& model,
 }
 
 Result<MeshCpu> evaluate_feature_model(const FeatureModel& model, double linear_deflection) {
+  TAMIAS_TIMING_SCOPE("evaluate_feature_model", TimingCategory::Modeling);
   try {
     return evaluate_feature_model_impl(model, linear_deflection);
   } catch (const Standard_Failure& e) {

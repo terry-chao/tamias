@@ -229,7 +229,7 @@ Result<RenderSceneGoldenMeta> refresh_render_scene_golden_sidecar(const std::fil
   }
   const std::string slug = path_to_utf8(dir.filename());
   auto meta = make_render_scene_golden_meta(slug, *loaded);
-  if (auto r = write_text_file(dir / kInspectFile, inspect_render_scene(*loaded)); !r) {
+  if (auto r = write_render_scene_debug_files(dir / kInspectFile, dir / "debug", *loaded); !r) {
     return Err(r.error());
   }
   if (auto r = write_text_file(dir / kMetaFile, meta_to_json(meta)); !r) {
@@ -258,7 +258,7 @@ Result<RenderSceneGoldenMeta> save_render_scene_golden(const std::filesystem::pa
     return Err(r.error());
   }
   auto meta = make_render_scene_golden_meta(std::string(slug), scene);
-  if (auto r = write_text_file(dir / kInspectFile, inspect_render_scene(scene)); !r) {
+  if (auto r = write_render_scene_debug_files(dir / kInspectFile, dir / "debug", scene); !r) {
     return Err(r.error());
   }
   if (auto r = write_text_file(dir / kMetaFile, meta_to_json(meta)); !r) {

@@ -13,6 +13,7 @@
 #include "engine/modeling/occt_shape_ops.h"
 #include "engine/modeling/shape_ops.h"
 #include "handle_inspector.h"
+#include "render_scene_inspector.h"
 #include "plugin/plugin_host.h"
 #include "plugin/plugin_manager.h"
 #include "plugin_manager_dialog.h"
@@ -24,6 +25,9 @@
 #include "ribbon_group.h"
 #include "ribbon_page.h"
 #include "settings_dialog.h"
+#include "timing_panel.h"
+#include "engine/profile/timing_scope.h"
+#include "engine/profile/timing_session.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -55,6 +59,7 @@
 #include <QSignalBlocker>
 #include <QSize>
 #include <QStatusBar>
+#include <QTimer>
 #include <QToolButton>
 #include <QVector>
 #include <QVBoxLayout>
@@ -62,6 +67,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -141,6 +147,7 @@ MainWindow::MainWindow(QWidget* parent)
     sync_render_mode_actions();
     refresh_property_panel();
     refresh_handle_inspector();
+    refresh_render_scene_inspector();
     bind_plugin_session();
   });
   connect(home_, &HomePage::openRequested, this, &MainWindow::open_file);
@@ -484,6 +491,136 @@ MainWindow::MainWindow(QWidget* parent)
   handle_toggle->setToolTip(tr("Inspect the selected component's document handle"));
   addAction(handle_toggle);
 
+  render_scene_inspector_ = new RenderSceneInspector(this);
+  render_scene_inspector_->setMinimumWidth(360);
+  render_scene_dock_ = new QDockWidget(tr("Render Scene"), this);
+  render_scene_dock_->setObjectName(QStringLiteral("renderSceneDock"));
+  render_scene_dock_->setWidget(render_scene_inspector_);
+  render_scene_dock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+  render_scene_dock_->setMinimumWidth(360);
+  addDockWidget(Qt::LeftDockWidgetArea, render_scene_dock_);
+  render_scene_dock_->hide();
+  auto* render_scene_toggle = render_scene_dock_->toggleViewAction();
+  render_scene_toggle->setText(tr("Render Scene"));
+  render_scene_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/shaded.svg")));
+  render_scene_toggle->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+I")));
+  render_scene_toggle->setToolTip(
+      tr("Visual debug of the cooked draw list: meshes, textures, AABB overlay"));
+  addAction(render_scene_toggle);
+
+  timing_panel_ = new TimingPanel(this);
+  timing_panel_->setMinimumWidth(360);
+  timing_dock_ = new QDockWidget(tr("Timing"), this);
+  timing_dock_->setObjectName(QStringLiteral("timingDock"));
+  timing_dock_->setWidget(timing_panel_);
+  timing_dock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea |
+                                Qt::BottomDockWidgetArea);
+  timing_dock_->setMinimumWidth(360);
+  addDockWidget(Qt::BottomDockWidgetArea, timing_dock_);
+  timing_dock_->hide();
+  auto* timing_toggle = timing_dock_->toggleViewAction();
+  timing_toggle->setText(tr("Timing"));
+  timing_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/timing.svg")));
+  timing_toggle->setToolTip(tr("Show the timing timeline"));
+  addAction(timing_toggle);
+
+  timing_record_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/timing.svg")),
+                                      tr("Record"), this);
+  timing_record_action_->setCheckable(true);
+  timing_record_action_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+T")));
+  timing_record_action_->setToolTip(tr("Start recording, then stop to inspect the timeline"));
+  addAction(timing_record_action_);
+
+  timing_status_timer_ = new QTimer(this);
+  timing_status_timer_->setInterval(100);
+  connect(timing_status_timer_, &QTimer::timeout, this, &MainWindow::refresh_timing_status);
+  connect(timing_record_action_, &QAction::toggled, this, [this](bool checked) {
+    if (checked) {
+      timing_dock_->show();
+      timing_dock_->raise();
+    }
+    timing_panel_->set_recording(checked);
+  });
+  connect(timing_panel_, &TimingPanel::recording_changed, this, [this](bool recording) {
+    QSignalBlocker block(timing_record_action_);
+    timing_record_action_->setChecked(recording);
+    timing_record_action_->setText(recording ? tr("Stop") : tr("Record"));
+    if (recording) {
+      timing_dock_->show();
+      timing_dock_->raise();
+      timing_status_timer_->start();
+    } else {
+      timing_status_timer_->stop();
+      refresh_timing_status();
+    }
+  });
+
+  auto clear_render_debug = [this] {
+    if (auto* vp = current_viewport()) {
+      vp->set_debug_overlay(std::nullopt, std::nullopt);
+      vp->set_debug_vertex(std::nullopt);
+    }
+  };
+  auto render_scene_open = [this] {
+    return render_scene_dock_ != nullptr && render_scene_dock_->isVisible();
+  };
+  connect(render_scene_inspector_, &RenderSceneInspector::overlay_requested, this,
+          [this, render_scene_open](Aabb box, quint64 node_id, bool isolate) {
+            if (!render_scene_open()) {
+              return;
+            }
+            if (auto* vp = current_viewport()) {
+              vp->set_debug_overlay(box, isolate ? std::optional<std::uint64_t>{node_id}
+                                                 : std::nullopt);
+            }
+          });
+  connect(render_scene_inspector_, &RenderSceneInspector::overlay_cleared, this,
+          [clear_render_debug] { clear_render_debug(); });
+  connect(render_scene_inspector_, &RenderSceneInspector::vertex_overlay_requested, this,
+          [this, render_scene_open](const DebugVertexOverlay& vertex) {
+            if (!render_scene_open()) {
+              return;
+            }
+            if (auto* vp = current_viewport()) {
+              vp->set_debug_vertex(vertex);
+            }
+            statusBar()->showMessage(
+                tr("Vertex %1  world %2  n %3  uv (%4, %5)  color %6")
+                    .arg(vertex.index)
+                    .arg(QStringLiteral("(%1, %2, %3)")
+                             .arg(vertex.world.x, 0, 'g', 5)
+                             .arg(vertex.world.y, 0, 'g', 5)
+                             .arg(vertex.world.z, 0, 'g', 5))
+                    .arg(QStringLiteral("(%1, %2, %3)")
+                             .arg(vertex.normal.x, 0, 'g', 4)
+                             .arg(vertex.normal.y, 0, 'g', 4)
+                             .arg(vertex.normal.z, 0, 'g', 4))
+                    .arg(vertex.uv.x, 0, 'g', 4)
+                    .arg(vertex.uv.y, 0, 'g', 4)
+                    .arg(QStringLiteral("(%1, %2, %3)")
+                             .arg(vertex.color.x, 0, 'g', 3)
+                             .arg(vertex.color.y, 0, 'g', 3)
+                             .arg(vertex.color.z, 0, 'g', 3)),
+                8000);
+          });
+  connect(render_scene_inspector_, &RenderSceneInspector::vertex_overlay_cleared, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->set_debug_vertex(std::nullopt);
+    }
+  });
+  connect(render_scene_inspector_, &RenderSceneInspector::dump_requested, this,
+          &MainWindow::dump_render_scene_debug);
+  connect(render_scene_inspector_, &RenderSceneInspector::refresh_requested, this,
+          &MainWindow::refresh_render_scene_inspector);
+  connect(render_scene_dock_, &QDockWidget::visibilityChanged, this,
+          [this, clear_render_debug](bool visible) {
+            if (visible) {
+              refresh_render_scene_inspector();
+            } else {
+              clear_render_debug();
+            }
+          });
+
   auto* ribbon = new RibbonBar(this);
   ribbon->add_quick_action(undo_action);
   ribbon->add_quick_action(redo_action);
@@ -549,6 +686,11 @@ MainWindow::MainWindow(QWidget* parent)
   RibbonGroup* panels_group = view_page->add_group(QStringLiteral("panels"), tr("Panels"));
   panels_group->add_action(property_toggle);
   panels_group->add_action(handle_toggle);
+  panels_group->add_action(render_scene_toggle);
+  panels_group->add_action(timing_toggle);
+
+  RibbonGroup* timing_group = view_page->add_group(QStringLiteral("timing"), tr("Timing"));
+  timing_group->add_action(timing_record_action_);
 
   RibbonGroup* workspace_group =
       view_page->add_group(QStringLiteral("workspace"), tr("Workspace"));
@@ -948,6 +1090,8 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
   connect(vp, &DocumentViewport::document_changed, this, &MainWindow::refresh_property_panel);
   connect(vp, &DocumentViewport::selection_changed, this, &MainWindow::refresh_handle_inspector);
   connect(vp, &DocumentViewport::document_changed, this, &MainWindow::refresh_handle_inspector);
+  connect(vp, &DocumentViewport::document_changed, this,
+          &MainWindow::refresh_render_scene_inspector);
   connect(vp, &DocumentViewport::plugin_point_input_changed, this,
           [this](bool active) {
             if (active) {
@@ -968,6 +1112,10 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
   }
   sync_render_mode_actions();
   bind_plugin_session();
+  // add_entity / add_import_mesh mark dirty while assembling the initial scene.
+  // That baseline is not a user edit, so closing without further changes must
+  // not prompt to save.
+  document->clear_dirty();
 }
 
 void MainWindow::new_document() {
@@ -1026,6 +1174,10 @@ bool MainWindow::open_path(const QString& path) {
     refresh_home();
     statusBar()->showMessage(
         tr("Loaded render scene %1 (read-only draw list)").arg(info.absoluteFilePath()), 5000);
+    if (render_scene_dock_) {
+      render_scene_dock_->show();
+    }
+    refresh_render_scene_inspector();
     return true;
   }
 
@@ -1086,6 +1238,7 @@ bool MainWindow::open_path(const QString& path) {
 
   Result<MeshCpu> mesh = Err("no loader");
   if (occt_supports_extension(file)) {
+    TAMIAS_TIMING_SCOPE("open_file", TimingCategory::Command);
     auto* ops = ShapeOpsRegistry::instance().find("occt");
     if (!ops) {
       QMessageBox::critical(this, tr("Open"), tr("OCCT ShapeOps is not registered."));
@@ -1232,6 +1385,11 @@ bool MainWindow::export_render_scene() {
     QMessageBox::critical(this, tr("Export"), QString::fromStdString(r.error()));
     return false;
   }
+  if (auto r = write_render_scene_debug_sidecars(qstring_to_path(abs_path), scene); !r) {
+    QMessageBox::warning(this, tr("Export"),
+                         tr("Scene saved, but debug dump failed:\n%1")
+                             .arg(QString::fromStdString(r.error())));
+  }
   statusBar()->showMessage(
       tr("Exported %1  digest=%2")
           .arg(abs_path, QString::fromStdString(render_scene_digest(scene))),
@@ -1305,10 +1463,10 @@ bool MainWindow::pin_render_scene_golden() {
 
   const GoldenTestRun tests = run_render_scene_golden_tests(source_dir, this);
 
-  QString inspect = QString::fromStdString(inspect_render_scene(scene));
-  inspect += QStringLiteral("\nwritten to: ");
-  inspect += dir_q;
-  inspect += QStringLiteral("\n\n--- RenderSceneGolden* ---\n");
+  QString inspect = tr("Full dump: %1\nMeshes / textures: %2\n\n")
+                        .arg(path_to_qstring(dir / "scene.inspect.txt"),
+                             path_to_qstring(dir / "debug"));
+  inspect += QStringLiteral("--- RenderSceneGolden* ---\n");
   inspect += tests.log;
 
   if (tests.ok) {
@@ -1340,6 +1498,11 @@ bool MainWindow::write_render_scene_document(const QString& path, bool show_insp
     QMessageBox::critical(this, show_inspect ? tr("Export") : tr("Save"),
                           QString::fromStdString(r.error()));
     return false;
+  }
+  if (auto r = write_render_scene_debug_sidecars(file, scene); !r) {
+    QMessageBox::warning(this, show_inspect ? tr("Export") : tr("Save"),
+                         tr("Scene saved, but debug dump failed:\n%1")
+                             .arg(QString::fromStdString(r.error())));
   }
   document.set_path(file);
   document.set_name(path_to_utf8(file.filename()));
@@ -1538,6 +1701,77 @@ void MainWindow::refresh_handle_inspector() {
   Document& doc = vp->document();
   const SceneNode* node = doc.scene().selected_node();
   handle_inspector_->show_selection(&doc, node ? node->id : 0);
+}
+
+void MainWindow::refresh_render_scene_inspector() {
+  if (render_scene_inspector_ == nullptr) {
+    return;
+  }
+  if (render_scene_dock_ != nullptr && !render_scene_dock_->isVisible()) {
+    return;
+  }
+  DocumentViewport* vp = current_viewport();
+  if (vp == nullptr) {
+    render_scene_inspector_->clear();
+    return;
+  }
+  Document& doc = vp->document();
+  if (const RenderScene* snap = doc.render_snapshot()) {
+    render_scene_inspector_->show_scene(*snap);
+    return;
+  }
+  render_scene_inspector_->show_scene(doc.capture_render_scene(vp->capture_render_scene_view()));
+}
+
+void MainWindow::dump_render_scene_debug() {
+  auto* vp = current_viewport();
+  if (vp == nullptr) {
+    QMessageBox::information(this, tr("Render Scene"), tr("Open a document first."));
+    return;
+  }
+  Document& doc = vp->document();
+  const RenderScene scene = doc.render_snapshot()
+                                ? *doc.render_snapshot()
+                                : doc.capture_render_scene(vp->capture_render_scene_view());
+  std::filesystem::path target;
+  if (!doc.path().empty() && is_render_scene_path(doc.path())) {
+    target = doc.path();
+  } else {
+    const QString dir = QFileDialog::getExistingDirectory(
+        this, tr("Write render-scene debug files"), QString());
+    if (dir.isEmpty()) {
+      return;
+    }
+    target = qstring_to_path(dir) / "scene.trscn";
+  }
+  if (auto r = write_render_scene_debug_sidecars(target, scene); !r) {
+    QMessageBox::critical(this, tr("Render Scene"), QString::fromStdString(r.error()));
+    return;
+  }
+  std::filesystem::path inspect = target;
+  inspect.replace_extension(".inspect.txt");
+  std::filesystem::path debug = target;
+  debug.replace_extension(".debug");
+  statusBar()->showMessage(
+      tr("Wrote %1 and %2").arg(path_to_qstring(inspect), path_to_qstring(debug)), 8000);
+}
+
+void MainWindow::refresh_timing_status() {
+  auto& session = TimingSession::instance();
+  const std::uint64_t us = session.elapsed_us();
+  QString elapsed;
+  if (us >= 1'000'000) {
+    elapsed = QString::number(static_cast<double>(us) / 1'000'000.0, 'f', 2) + QStringLiteral(" s");
+  } else if (us >= 1000) {
+    elapsed = QString::number(static_cast<double>(us) / 1000.0, 'f', 2) + QStringLiteral(" ms");
+  } else {
+    elapsed = QString::number(us) + QStringLiteral(" us");
+  }
+  if (session.is_recording()) {
+    statusBar()->showMessage(tr("Recording %1").arg(elapsed));
+  } else if (us > 0) {
+    statusBar()->showMessage(tr("Timing %1").arg(elapsed), 8000);
+  }
 }
 
 void MainWindow::frame_all() {

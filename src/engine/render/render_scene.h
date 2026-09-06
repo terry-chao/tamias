@@ -51,7 +51,16 @@ RenderScene bake_render_scene(
 
 [[nodiscard]] std::uint64_t render_scene_triangle_count(const RenderScene& scene);
 [[nodiscard]] std::string render_scene_digest(const RenderScene& scene);
+// 人读全量 dump：相机矩阵、每条 draw、全部顶点/索引、贴图像素摘要。
 [[nodiscard]] std::string inspect_render_scene(const RenderScene& scene);
+
+// 写出 inspect 文本 + debug/ 可视化 sidecar（mesh_*.obj、draw_*_world.obj、tex_*.ppm）。
+Result<void> write_render_scene_debug_files(const std::filesystem::path& inspect_path,
+                                            const std::filesystem::path& debug_dir,
+                                            const RenderScene& scene);
+// 紧挨着 .trscn：stem.inspect.txt 与 stem.debug/。
+Result<void> write_render_scene_debug_sidecars(const std::filesystem::path& trscn_path,
+                                               const RenderScene& scene);
 
 Result<std::vector<std::uint8_t>> serialize_render_scene(const RenderScene& scene);
 Result<RenderScene> deserialize_render_scene(std::span<const std::uint8_t> bytes);

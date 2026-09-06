@@ -5,6 +5,7 @@ add_library(tamias_render STATIC
   scene_graph.cpp
   ibl.cpp
   render_scene.cpp
+  render_scene_debug.cpp
   render_scene_io.cpp
   render_scene_golden.cpp
 )

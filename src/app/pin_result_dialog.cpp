@@ -252,14 +252,19 @@ Tally fill_scene_table(PinResultDialog& dlg, QTableWidget* table, const RenderSc
   const QString trscn_path = path_to_qstring(dir / "scene.trscn");
   const QString json_path = path_to_qstring(dir / "scene.meta.json");
   const QString inspect_path = path_to_qstring(dir / "scene.inspect.txt");
+  const QString debug_path = path_to_qstring(dir / "debug");
   const bool has_trscn = QFileInfo::exists(trscn_path);
   const bool has_json = QFileInfo::exists(json_path);
   const bool has_inspect = QFileInfo::exists(inspect_path);
+  const bool has_debug = QFileInfo(debug_path).isDir();
   const bool sidecar_ok = has_trscn && has_json && has_inspect;
   add_row(table, &tally, dlg.tr("sidecar 文件"),
           dlg.tr("trscn / json / inspect"),
           sidecar_ok ? dlg.tr("三份都在") : dlg.tr("缺文件"),
           sidecar_ok ? GoldenTestCase::Status::Passed : GoldenTestCase::Status::Failed);
+  add_row(table, &tally, dlg.tr("debug 可视化"), dlg.tr("OBJ / PPM"),
+          has_debug ? dlg.tr("已写出") : dlg.tr("缺 debug/"),
+          has_debug ? GoldenTestCase::Status::Passed : GoldenTestCase::Status::Failed);
 
   const auto add_count = [&](const QString& name, std::uint64_t live_n, std::uint64_t file_n) {
     const auto [note, st] = check_u64(dlg, live_n, file_ok, file_n);

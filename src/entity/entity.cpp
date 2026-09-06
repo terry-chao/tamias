@@ -28,6 +28,7 @@
 #include "entity/wall_entity.h"
 #include "entity/window_entity.h"
 #include "engine/modeling/occt_geom_builder.h"
+#include "engine/profile/timing_scope.h"
 #include "bim/line_location.h"
 #include "bim/point_location.h"
 #include "bim/surface_location.h"
@@ -144,6 +145,7 @@ void Entity::sync_location_from_transform(const Mat4& transform, double storey_e
 }
 
 Result<MeshCpu> Entity::createGeom(double deflection) const {
+  TAMIAS_TIMING_SCOPE("createGeom", TimingCategory::Modeling);
   return geometry_builder().build(model, deflection);
 }
 

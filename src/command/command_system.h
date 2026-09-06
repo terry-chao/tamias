@@ -82,6 +82,7 @@ class CommandSystem {
   const CommandRegistry& registry_;
   CommandStack stack_;
   std::unique_ptr<Command> pending_;
+  std::string pending_name_;
 };
 
 }  // namespace tamias

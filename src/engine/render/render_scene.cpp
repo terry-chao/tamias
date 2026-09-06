@@ -191,25 +191,154 @@ std::string render_scene_digest(const RenderScene& scene) {
   return hex_u64(h);
 }
 
+namespace {
+
+const char* render_mode_name(RenderMode mode) {
+  switch (mode) {
+    case RenderMode::Wireframe:
+      return "wireframe";
+    case RenderMode::Shaded:
+      return "shaded";
+    case RenderMode::Realistic:
+      return "realistic";
+  }
+  return "unknown";
+}
+
+void dump_vec3(std::ostringstream& out, const Vec3& v) {
+  out << v.x << ' ' << v.y << ' ' << v.z;
+}
+
+void dump_mat4(std::ostringstream& out, const char* indent, const Mat4& m) {
+  for (int row = 0; row < 4; ++row) {
+    out << indent << m(row, 0) << ' ' << m(row, 1) << ' ' << m(row, 2) << ' ' << m(row, 3) << '\n';
+  }
+}
+
+void dump_aabb(std::ostringstream& out, const Aabb& box) {
+  if (!box.valid()) {
+    out << "(invalid)";
+    return;
+  }
+  out << '(';
+  dump_vec3(out, box.min);
+  out << ")-(";
+  dump_vec3(out, box.max);
+  out << ')';
+}
+
+}  // namespace
+
 std::string inspect_render_scene(const RenderScene& scene) {
   std::ostringstream out;
+  out << std::setprecision(9);
   out << "source: " << (scene.source.empty() ? "(unnamed)" : scene.source) << '\n';
-  out << "meshes=" << scene.meshes.size() << "  textures=" << scene.textures.size()
-      << "  items=" << scene.items.size() << "  tris=" << render_scene_triangle_count(scene)
+  out << "version=" << scene.version << "  meshes=" << scene.meshes.size()
+      << "  textures=" << scene.textures.size() << "  items=" << scene.items.size()
+      << "  tris=" << render_scene_triangle_count(scene)
       << "  digest=" << render_scene_digest(scene) << '\n';
-  out << "view mode=" << static_cast<int>(scene.view.mode) << "  size=" << scene.view.width << 'x'
-      << scene.view.height << "  distance=" << scene.view.view_distance << '\n';
-  for (const auto& item : scene.items) {
-    std::uint64_t tris = 0;
-    const auto it = scene.meshes.find(item.mesh_asset_id);
-    if (it != scene.meshes.end() && !it->second.line_list) {
-      tris = static_cast<std::uint64_t>(it->second.indices.size() / 3);
+  out << "view mode=" << static_cast<int>(scene.view.mode) << '(' << render_mode_name(scene.view.mode)
+      << ")  size=" << scene.view.width << 'x' << scene.view.height
+      << "  distance=" << scene.view.view_distance << '\n';
+
+  out << "\n==== VIEW ====\n";
+  out << "eye=";
+  dump_vec3(out, scene.view.eye_position);
+  out << "  target=";
+  dump_vec3(out, scene.view.target);
+  out << "  yaw=" << scene.view.yaw << "  pitch=" << scene.view.pitch
+      << "  fovy=" << scene.view.fovy << '\n';
+  out << "znear=" << scene.view.znear << "  zfar=" << scene.view.zfar
+      << "  ortho=" << (scene.view.orthographic ? 1 : 0) << '\n';
+  out << "view_matrix (column-major, rows):\n";
+  dump_mat4(out, "  ", scene.view.view);
+  out << "proj_matrix (column-major, rows):\n";
+  dump_mat4(out, "  ", scene.view.proj);
+
+  std::vector<std::uint64_t> mesh_ids;
+  mesh_ids.reserve(scene.meshes.size());
+  for (const auto& [id, _] : scene.meshes) {
+    mesh_ids.push_back(id);
+  }
+  std::sort(mesh_ids.begin(), mesh_ids.end());
+  out << "\n==== MESHES ====\n";
+  for (std::uint64_t id : mesh_ids) {
+    const MeshCpu& mesh = scene.meshes.at(id);
+    const std::uint64_t tris =
+        mesh.line_list ? 0u : static_cast<std::uint64_t>(mesh.indices.size() / 3);
+    out << "mesh id=" << id << " verts=" << mesh.vertices.size()
+        << " indices=" << mesh.indices.size() << " tris=" << tris
+        << " line_list=" << (mesh.line_list ? 1 : 0)
+        << " has_texcoord=" << (mesh.has_texcoord ? 1 : 0) << " vertex_colors="
+        << (mesh_has_vertex_colors(mesh) ? 1 : 0) << " aabb=";
+    dump_aabb(out, mesh.bounds);
+    out << '\n';
+    for (std::size_t i = 0; i < mesh.vertices.size(); ++i) {
+      const Vertex& v = mesh.vertices[i];
+      out << "  v[" << i << "] p=";
+      dump_vec3(out, v.position);
+      out << " n=";
+      dump_vec3(out, v.normal);
+      out << " uv=" << v.uv.x << ' ' << v.uv.y << " c=";
+      dump_vec3(out, v.color);
+      out << '\n';
     }
-    out << "item node=" << item.node_id << " mesh=" << item.mesh_asset_id << " tris=" << tris;
+    out << "  indices=";
+    for (std::size_t i = 0; i < mesh.indices.size(); ++i) {
+      if (i != 0) {
+        out << (mesh.line_list ? ((i % 2 == 0) ? ' ' : '-') : ((i % 3 == 0) ? ' ' : ','));
+      }
+      out << mesh.indices[i];
+    }
+    out << '\n';
+  }
+
+  std::vector<std::uint64_t> tex_ids;
+  tex_ids.reserve(scene.textures.size());
+  for (const auto& [id, _] : scene.textures) {
+    tex_ids.push_back(id);
+  }
+  std::sort(tex_ids.begin(), tex_ids.end());
+  out << "\n==== TEXTURES ====\n";
+  for (std::uint64_t id : tex_ids) {
+    const TextureAsset& tex = scene.textures.at(id);
+    out << "tex id=" << id << " size=" << tex.width << 'x' << tex.height
+        << " srgb=" << (tex.srgb ? 1 : 0) << " bytes=" << tex.rgba.size() << '\n';
+    const std::size_t pixels =
+        static_cast<std::size_t>(tex.width) * static_cast<std::size_t>(tex.height);
+    const std::size_t stored = tex.rgba.size() / 4;
+    const std::size_t n = (std::min)(pixels, stored);
+    constexpr std::size_t kMaxPx = 64;
+    const std::size_t shown = (std::min)(n, kMaxPx);
+    for (std::size_t i = 0; i < shown; ++i) {
+      const std::size_t o = i * 4;
+      out << "  px[" << i << "]=" << static_cast<int>(tex.rgba[o]) << ','
+          << static_cast<int>(tex.rgba[o + 1]) << ',' << static_cast<int>(tex.rgba[o + 2]) << ','
+          << static_cast<int>(tex.rgba[o + 3]) << '\n';
+    }
+    if (n > shown) {
+      out << "  ... " << (n - shown) << " more pixels (full image in debug/tex_" << id
+          << ".ppm)\n";
+    }
+  }
+
+  out << "\n==== DRAWS ====\n";
+  for (std::size_t i = 0; i < scene.items.size(); ++i) {
+    const SceneDrawItem& item = scene.items[i];
+    std::uint64_t tris = 0;
+    std::uint64_t verts = 0;
+    const auto it = scene.meshes.find(item.mesh_asset_id);
+    if (it != scene.meshes.end()) {
+      verts = static_cast<std::uint64_t>(it->second.vertices.size());
+      if (!it->second.line_list) {
+        tris = static_cast<std::uint64_t>(it->second.indices.size() / 3);
+      }
+    }
+    out << "item[" << i << "] item node=" << item.node_id << " mesh=" << item.mesh_asset_id
+        << " verts=" << verts << " tris=" << tris;
     if (item.bounds.valid()) {
-      out << " aabb=(" << item.bounds.min.x << ',' << item.bounds.min.y << ',' << item.bounds.min.z
-          << ")-(" << item.bounds.max.x << ',' << item.bounds.max.y << ',' << item.bounds.max.z
-          << ')';
+      out << " aabb=";
+      dump_aabb(out, item.bounds);
     }
     out << " color=(" << item.color.x << ',' << item.color.y << ',' << item.color.z << ')';
     if (item.selected) {
@@ -225,6 +354,13 @@ std::string inspect_render_scene(const RenderScene& scene) {
       out << " normal=" << item.normal_texture_id;
     }
     out << '\n';
+    out << "  category=(" << item.category_color.x << ',' << item.category_color.y << ','
+        << item.category_color.z << ") roughness=" << item.roughness
+        << " metallic=" << item.metallic << " opacity=" << item.opacity << '\n';
+    out << "  translation=" << item.transform(0, 3) << ' ' << item.transform(1, 3) << ' '
+        << item.transform(2, 3) << '\n';
+    out << "  transform:\n";
+    dump_mat4(out, "    ", item.transform);
   }
   return out.str();
 }

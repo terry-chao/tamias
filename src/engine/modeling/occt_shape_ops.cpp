@@ -2,6 +2,7 @@
 
 #include "engine/core/fs_utf8.h"
 #include "engine/core/log.h"
+#include "engine/profile/timing_scope.h"
 
 #include <BRep_Builder.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
@@ -104,16 +105,21 @@ class OcctShape final : public Shape {
   [[nodiscard]] std::string backend_name() const override { return "occt"; }
 
   [[nodiscard]] Result<MeshCpu> tessellate(double linear_deflection) const override {
+    TAMIAS_TIMING_SCOPE("Shape::tessellate", TimingCategory::Modeling);
     if (shape_.IsNull()) {
       return Err("OCCT shape is null");
     }
     const double deflection = std::max(linear_deflection, 1e-4);
-    BRepMesh_IncrementalMesh mesher(shape_, deflection, Standard_False, 0.5, Standard_True);
-    mesher.Perform();
-    if (!mesher.IsDone()) {
-      return Err("BRepMesh_IncrementalMesh failed");
+    {
+      TAMIAS_TIMING_SCOPE("BRepMesh", TimingCategory::Modeling);
+      BRepMesh_IncrementalMesh mesher(shape_, deflection, Standard_False, 0.5, Standard_True);
+      mesher.Perform();
+      if (!mesher.IsDone()) {
+        return Err("BRepMesh_IncrementalMesh failed");
+      }
     }
 
+    TAMIAS_TIMING_SCOPE("extract_triangles", TimingCategory::Modeling);
     Quantity_Color root_qty;
     const bool has_root_color = lookup_color(colors_, shape_, root_qty);
 
@@ -241,6 +247,7 @@ class OcctShapeOps final : public IShapeOps {
 
   [[nodiscard]] Result<std::unique_ptr<Shape>> read_file(
       const std::filesystem::path& path) const override {
+    TAMIAS_TIMING_SCOPE("ShapeOps::read_file", TimingCategory::Modeling);
     const std::string ext = lower_ext(path);
     const std::string native = path_to_utf8(path);
     if (ext == ".step" || ext == ".stp") {
@@ -251,11 +258,17 @@ class OcctShapeOps final : public IShapeOps {
       STEPCAFControl_Reader reader;
       reader.SetColorMode(true);
       reader.SetNameMode(true);
-      if (reader.ReadFile(native.c_str()) != IFSelect_RetDone) {
-        return Err("STEPCAFControl_Reader::ReadFile failed: " + native);
+      {
+        TAMIAS_TIMING_SCOPE("STEPCAF ReadFile", TimingCategory::Modeling);
+        if (reader.ReadFile(native.c_str()) != IFSelect_RetDone) {
+          return Err("STEPCAFControl_Reader::ReadFile failed: " + native);
+        }
       }
-      if (!reader.Transfer(doc)) {
-        return Err("STEPCAFControl_Reader::Transfer failed: " + native);
+      {
+        TAMIAS_TIMING_SCOPE("STEPCAF Transfer", TimingCategory::Modeling);
+        if (!reader.Transfer(doc)) {
+          return Err("STEPCAFControl_Reader::Transfer failed: " + native);
+        }
       }
       Handle(XCAFDoc_ShapeTool) shapes = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
       TopoDS_Shape shape = compound_free_shapes(shapes);
@@ -272,11 +285,17 @@ class OcctShapeOps final : public IShapeOps {
       IGESCAFControl_Reader reader;
       reader.SetColorMode(true);
       reader.SetNameMode(true);
-      if (reader.ReadFile(native.c_str()) != IFSelect_RetDone) {
-        return Err("IGESCAFControl_Reader::ReadFile failed: " + native);
+      {
+        TAMIAS_TIMING_SCOPE("IGESCAF ReadFile", TimingCategory::Modeling);
+        if (reader.ReadFile(native.c_str()) != IFSelect_RetDone) {
+          return Err("IGESCAFControl_Reader::ReadFile failed: " + native);
+        }
       }
-      if (!reader.Transfer(doc)) {
-        return Err("IGESCAFControl_Reader::Transfer failed: " + native);
+      {
+        TAMIAS_TIMING_SCOPE("IGESCAF Transfer", TimingCategory::Modeling);
+        if (!reader.Transfer(doc)) {
+          return Err("IGESCAFControl_Reader::Transfer failed: " + native);
+        }
       }
       Handle(XCAFDoc_ShapeTool) shapes = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
       TopoDS_Shape shape = compound_free_shapes(shapes);
@@ -288,6 +307,7 @@ class OcctShapeOps final : public IShapeOps {
     if (ext == ".brep") {
       TopoDS_Shape shape;
       BRep_Builder builder;
+      TAMIAS_TIMING_SCOPE("BRepTools::Read", TimingCategory::Modeling);
       if (!BRepTools::Read(shape, native.c_str(), builder)) {
         return Err("BRepTools::Read failed: " + native);
       }

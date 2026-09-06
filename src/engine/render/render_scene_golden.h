@@ -38,7 +38,7 @@ Result<RenderSceneGoldenMeta> load_render_scene_golden_meta(const std::filesyste
 // 已有 scene.trscn 时补写 sidecar（不改 trscn）。
 Result<RenderSceneGoldenMeta> refresh_render_scene_golden_sidecar(const std::filesystem::path& dir);
 
-// 写出 scene.trscn / scene.meta.json / scene.inspect.txt，再 load 校验 digest。
+// 写出 scene.trscn / scene.meta.json / scene.inspect.txt / debug/，再 load 校验 digest。
 // 不改调用方的 Document 路径。已存在且 overwrite=false 时失败。
 Result<RenderSceneGoldenMeta> save_render_scene_golden(const std::filesystem::path& golden_root,
                                                        std::string_view slug,

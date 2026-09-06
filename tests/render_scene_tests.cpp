@@ -431,6 +431,12 @@ TEST(RenderScene, InspectMentionsDigestAndItems) {
   EXPECT_NE(text.find("selected"), std::string::npos);
   EXPECT_NE(text.find("textures=1"), std::string::npos);
   EXPECT_NE(text.find("albedo=11"), std::string::npos);
+  EXPECT_NE(text.find("==== VIEW ===="), std::string::npos);
+  EXPECT_NE(text.find("==== MESHES ===="), std::string::npos);
+  EXPECT_NE(text.find("==== TEXTURES ===="), std::string::npos);
+  EXPECT_NE(text.find("v[0]"), std::string::npos);
+  EXPECT_NE(text.find("transform:"), std::string::npos);
+  EXPECT_NE(text.find("roughness="), std::string::npos);
 }
 
 TEST(RenderSceneIo, UnicodePathRoundTrip) {
@@ -467,6 +473,12 @@ TEST(RenderSceneGolden, PinWritesSidecarAndRoundTrips) {
   EXPECT_EQ(meta->digest, render_scene_digest(original));
   EXPECT_EQ(meta->items, 1u);
   EXPECT_EQ(meta->textures, 1u);
+
+  EXPECT_TRUE(std::filesystem::is_regular_file(root / "box" / "debug" / "mesh_7.obj", ec));
+  EXPECT_TRUE(std::filesystem::is_regular_file(root / "box" / "debug" / "tex_11.ppm", ec));
+  EXPECT_TRUE(std::filesystem::is_regular_file(root / "box" / "debug" / "draw_0_node_3.obj", ec));
+  const auto inspect_size = std::filesystem::file_size(root / "box" / "scene.inspect.txt", ec);
+  EXPECT_GT(inspect_size, 400u);
 
   auto loaded_meta = load_render_scene_golden_meta(root / "box");
   ASSERT_TRUE(loaded_meta) << loaded_meta.error();

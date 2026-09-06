@@ -82,7 +82,8 @@ Pin 卡在中间：建模已经算完、GPU 还没上场。它回答的问题是
 2. 写入仓库 `assets/samples/render/<name>/`：
    - `scene.trscn`
    - `scene.meta.json`（digest、条数；测试读这个，不要把哈希写进 C++）
-   - `scene.inspect.txt`
+   - `scene.inspect.txt`（全量人读 dump）
+   - `debug/`（OBJ 网格 + PPM 贴图）
 3. 写完立刻再 load 一遍，digest 对不上会失败。
 4. **不会**改当前文档路径（Save 仍写原来的 `.tdoc` / `.trscn`）。
 5. 写完立刻跑 `tamias_tests --gtest_filter=RenderSceneGolden*`。旁边没有 `tamias_tests.exe` 时，先调 `scripts/build-tests.ps1` 按当前配置（Debug / RelWithDebInfo / Release）编出来。结果接在 inspect 对话框后面。
@@ -93,28 +94,28 @@ Pin 卡在中间：建模已经算完、GPU 还没上场。它回答的问题是
 
 ### Pin 之后怎么看数据
 
-Pin **不会**再打开一个数据调试器。三个文件就是你能看的全部：
+Pin / Export 会写出二进制快照，再附上**全量人读 dump** 和 **可视化 sidecar**。打开 `.trscn` 时左侧会弹出 **Render Scene** 面板（`Ctrl+Shift+I`）：点一条 draw，视口画黄色 AABB；勾选 Isolate 只留该条。
 
 | 文件 | 干什么 |
 |---|---|
 | `scene.trscn` | 二进制快照。用软件 **Open** 打开，眼睛看那一帧长什么样 |
-| `scene.inspect.txt` | 人读的摘要：网格数、三角数、每条 item 的 aabb / 颜色 / 贴图 id |
-| `scene.meta.json` | 给测试用的数字：`digest`、`items`、`meshes`。不是给人逐顶点翻的 |
+| `scene.inspect.txt` | **全量**人读 dump：相机矩阵、每条 draw 的 transform / PBR、全部顶点与索引、贴图像素摘要 |
+| `debug/mesh_<id>.obj` | 资产空间网格，Blender / 任意 DCC 可打开 |
+| `debug/draw_*_node_*.obj` | 该条 draw 的世界空间拷贝（已乘 transform） |
+| `debug/tex_<id>.ppm` | albedo / 法线贴图像素，系统看图软件可开 |
+| `scene.meta.json` | 给测试用的数字：`digest`、`items`、`meshes` |
 
-**看画面：** File → Open → `assets/samples/render/box/scene.trscn`。和 Pin 当时一样就对了。
+Export 写在 `.trscn` 旁边：`foo.inspect.txt`、`foo.debug/`。
 
-**看数字：** 打开同目录的 `scene.inspect.txt`。例如：
+**看画面：** File → Open → `assets/samples/render/box/scene.trscn`。和 Pin 当时一样就对了。面板里点 draw 对包围盒。
 
-```
-meshes=1  textures=2  items=1  tris=12  digest=413df9fb7b89430f
-item node=1 mesh=1 tris=12 aabb=(-0.5,0,-0.5)-(0.5,1,0.5) color=(0.72,0.66,0.56)
-```
+**看数字：** 打开同目录的 `scene.inspect.txt`。开头仍是计数和 digest，下面是 VIEW / MESHES / TEXTURES / DRAWS。
 
 对照你的预期：该有 1 个盒子 → `items=1`、`tris=12`；盒子该在原点附近 → aabb 大约 `(-0.5,0,-0.5)-(0.5,1,0.5)`。条数不对、aabb 飞了、缺 albedo，问题就在这份货单里。
 
 **看有没有悄悄变：** Pin 写完会自动跑 `RenderSceneGolden*`，输出在同一个对话框里。也可以自己跑 `tamias_tests --gtest_filter=RenderSceneGolden*`。测试重读 `scene.trscn`，再算 digest，和 json 里记下的比。红了再打开 inspect，看是条数变了还是网格变了。
 
-没有「逐顶点 / 逐像素」面板。要查 shader 用 RenderDoc；要查墙怎么连用原来的 `.tdoc`。
+要查 shader / 像素用 RenderDoc；要查墙怎么连用原来的 `.tdoc`。
 
 ### 调试步骤
 
@@ -136,15 +137,9 @@ Home → File → **Export Render Scene**，选一个文件名。写完立刻在
 
 `Ctrl+Shift+P`（或 Home → File → **Pin Render Scene for Tests**），夹具名例如 `box`。状态栏会显示 `Pinned golden ... digest=...`。
 
-**4. 对照 inspect 文本**
+**4. 对照 inspect 与可视化 sidecar**
 
-例如 `assets/samples/render/box/scene.inspect.txt`：
-
-```
-meshes=1  textures=2  items=1  tris=12  digest=413df9fb7b89430f
-view mode=1  size=2004x1242
-item node=1 mesh=1 tris=12 aabb=(-0.5,0,-0.5)-(0.5,1,0.5)
-```
+`assets/samples/render/box/scene.inspect.txt` 现在是全量 dump（顶点、矩阵都在）。`debug/mesh_*.obj` 和 `debug/tex_*.ppm` 用外部工具看网格和贴图。软件里 `Ctrl+Shift+I` 打开 Render Scene 面板，点 draw 看黄色包围盒。
 
 先看：item 条数对不对、aabb 是否离谱、贴图 id 是否被引用、digest 是否和上次一样。
 
@@ -226,7 +221,7 @@ Magic `TRSC`，version 1。Chunk：`META` / `VIEW` / `MESH` / `DRAW`；有贴图
 | `DRAW` | 已烘好的 `SceneDrawItem` |
 | `TEXT` | 被 albedo/normal 引用到的 `TextureAsset`（RGBA8） |
 
-API：`bake_render_scene`、`render_scene_digest`、`inspect_render_scene`、`serialize` / `deserialize` / `save` / `load`、`is_render_scene_path`。文档侧：`Document::capture_render_scene`、`set_render_snapshot`、`document_from_render_scene`。
+API：`bake_render_scene`、`render_scene_digest`、`inspect_render_scene`、`write_render_scene_debug_files` / `write_render_scene_debug_sidecars`、`serialize` / `deserialize` / `save` / `load`、`is_render_scene_path`。文档侧：`Document::capture_render_scene`、`set_render_snapshot`、`document_from_render_scene`。
 
 ---
 
