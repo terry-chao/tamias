@@ -120,6 +120,18 @@ inline Mat4 scale(Vec3 s) {
   return r;
 }
 
+// 绕 X 轴旋转（pitch）。+Z 转到 (0, -sin a, cos a)。
+inline Mat4 rotate_x(float angle) {
+  const float c = std::cos(angle);
+  const float s = std::sin(angle);
+  Mat4 r = Mat4::identity();
+  r(1, 1) = c;
+  r(1, 2) = -s;
+  r(2, 1) = s;
+  r(2, 2) = c;
+  return r;
+}
+
 // 绕 Y 轴旋转（Y-up 世界的 yaw）。+Z 转到 (sin a, 0, cos a)。
 inline Mat4 rotate_y(float angle) {
   const float c = std::cos(angle);
@@ -130,6 +142,18 @@ inline Mat4 rotate_y(float angle) {
   r(2, 0) = -s;
   r(2, 2) = c;
   return r;
+}
+
+// 把单元线段（原点 → +Z）映射到世界坐标 start→end。用于预览线 / AABB 线框。
+inline Mat4 segment_model(Vec3 start, Vec3 end) {
+  const Vec3 d = end - start;
+  const float seg_len = length(d);
+  if (seg_len < 1e-6f) {
+    return translate(start);
+  }
+  const float yaw = std::atan2(d.x, d.z);
+  const float pitch = std::atan2(-d.y, std::sqrt(d.x * d.x + d.z * d.z));
+  return translate(start) * rotate_y(yaw) * rotate_x(pitch) * scale({1.f, 1.f, seg_len});
 }
 
 // Vulkan clip space: Y down in NDC after correction; we keep OpenGL-like math and

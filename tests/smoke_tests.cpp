@@ -130,6 +130,26 @@ TEST(Math, AabbExpand) {
   EXPECT_FLOAT_EQ(box.max.z, 4.f);
 }
 
+TEST(Math, SegmentModelMapsUnitZToEndpoints) {
+  const auto check = [](Vec3 a, Vec3 b) {
+    const Mat4 m = segment_model(a, b);
+    const Vec3 p0 = m * Vec3{0.f, 0.f, 0.f};
+    const Vec3 p1 = m * Vec3{0.f, 0.f, 1.f};
+    EXPECT_NEAR(p0.x, a.x, 1e-5f);
+    EXPECT_NEAR(p0.y, a.y, 1e-5f);
+    EXPECT_NEAR(p0.z, a.z, 1e-5f);
+    EXPECT_NEAR(p1.x, b.x, 1e-5f);
+    EXPECT_NEAR(p1.y, b.y, 1e-5f);
+    EXPECT_NEAR(p1.z, b.z, 1e-5f);
+  };
+  check({0.f, 0.f, 0.f}, {1.f, 0.f, 0.f});
+  check({0.f, 0.f, 0.f}, {0.f, 1.f, 0.f});
+  check({0.f, 0.f, 0.f}, {0.f, 0.f, 1.f});
+  check({0.f, 1.f, 0.f}, {0.f, 0.f, 0.f});
+  check({1.f, 2.f, 3.f}, {4.f, 6.f, 5.f});
+  check({-0.5f, 0.f, 0.5f}, {-0.5f, 1.f, 0.5f});
+}
+
 TEST(Math, FrustumCullsAabb) {
   // Eye at +Z looking at origin (OpenGL camera space, −Z forward).
   const Mat4 view = look_at({0.f, 0.f, 8.f}, {0.f, 0.f, 0.f}, {0.f, 1.f, 0.f});

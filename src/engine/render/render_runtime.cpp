@@ -1072,12 +1072,11 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
 
       auto draw_segment = [&](Vec3 start, Vec3 end, float r, float g, float b) {
         const Vec3 d = end - start;
-        const float seg_len = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+        const float seg_len = length(d);
         if (seg_len < 1e-6f) {
           return;
         }
-        const float yaw = std::atan2(d.x, d.z);
-        const Mat4 model = translate(start) * rotate_y(yaw) * scale({1.f, 1.f, seg_len});
+        const Mat4 model = segment_model(start, end);
         PushConstants pc{};
         pc.mvp = view_proj * model;
         pc.model = model;
