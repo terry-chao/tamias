@@ -14,11 +14,9 @@ Result<void> remesh_entity(Document& document, Entity& entity) {
   if (!mesh) {
     return Err(mesh.error());
   }
-  MeshAsset* asset = document.mesh(entity.mesh_asset_id);
-  if (asset == nullptr) {
+  if (!document.replace_entity_mesh(entity.id, std::move(*mesh))) {
     return Err("host_update: mesh asset not found");
   }
-  asset->cpu = std::move(*mesh);
   return {};
 }
 

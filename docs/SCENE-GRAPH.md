@@ -273,7 +273,7 @@ Tamias 渲染 (render_runtime)     OCCT 渲染 (V3d_Viewer + OpenGl 驱动)
 |---|---|---|
 | **highlight / selection** | 点中墙、高亮整层，交互刚需 | `SceneDrawItem.selected` 字段已留位，渲染侧未消费 |
 | **z-layer 抽象** | 轴网/标高/标注/剖切框这些 overlay，别再布尔硬编码 | `FrameSubmission` 里 `show_axes/show_grid/show_preview_line` + 单独 pipeline 是当前笨办法 |
-| **空间索引 + 实例化** | BIM 规模（几万构件）的剔除与合批 | 视锥一期已落地，见 [视锥剔除](FRUSTUM-CULLING.md)；合批 / BVH 视锥仍缺。加速结构不是场景图。亿级三角见 [超大规模三角](MASSIVE-GEOMETRY.md) |
+| **空间索引 + 实例化** | BIM 规模（几万构件）的剔除与合批 | 视锥一期已落地，见 [视锥剔除](FRUSTUM-CULLING.md)；G1a intern 已落地，GPU instance 见 [合批 / Instancing](INSTANCING.md)。加速结构不是场景图。亿级三角见 [超大规模三角](MASSIVE-GEOMETRY.md) |
 | **按楼层/类别可见性** | 「只看结构柱」「关掉 MEP」 | [BIM 业务层](BIM.md) 查出 id，渲染侧只收可见性标志 |
 
 **最重要的提醒**：最后两项（空间索引、实例化）补的是**渲染侧加速结构（八叉树/BVH + 实例表）**，不是「把语义树搬进渲染」。语义树永远留在 `Scene` / Document，渲染永远只拿展平结果。

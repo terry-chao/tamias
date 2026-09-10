@@ -130,7 +130,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 |---|---|
 | 遍历 | ✅ 语义侧展平成 `render_items`，渲染侧平铺 `for` 循环提交 |
 | 视锥剔除 | ✅ 一期：叶子 AABB × 六平面（[视锥剔除](FRUSTUM-CULLING.md)）；二期/三期未做 |
-| 合批 / GPU instancing | ❌ 每 item 一次 draw，没有按 mesh / 材质分桶 |
+| 合批 / GPU instancing | ⏳ G1a 几何 intern 已落地；G1b/c 分桶 + `instance_count` 见 [合批 / Instancing](INSTANCING.md) |
 | 排序 | ❌ 按列表顺序画，没有不透明 / 透明排序 |
 
 所以准确的现状是：已经做了「遍历 + 一期视锥剔除 + 提交」，还没做「合批 + 排序」；而且遍历发生在语义侧（展平），渲染侧只是平铺 `for` 循环，本身没有渲染树可遍历。
@@ -182,7 +182,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 |---|---|
 | **材质/纹理** | RHI 真 texture/UBO/sampler，双后端，glTF PBR 基础（编辑预览也需要它） |
 | **IFC 导入** | IfcParse 空间树已通。下一步：语义树 + 特征树/网格 + 材质映射（对齐 P 线）；几何走 IfcGeom + 同一份 OCCT 7.9.3 |
-| **大模型渲染** | 视锥剔除 + 按 mesh/材质合批/instancing + 不透明/透明排序 + 渐进加载。亿级三角的完整方案见 [超大规模三角](MASSIVE-GEOMETRY.md)（G0 仪表 → G1 合批 → G2 剔除 → G3 自适应离散 → G4 驻留 → G5 meshlet → G6 indirect） |
+| **大模型渲染** | 视锥剔除 + 按 mesh/材质合批/instancing + 不透明/透明排序 + 渐进加载。G1 方案见 [合批 / Instancing](INSTANCING.md)；亿级三角总图见 [超大规模三角](MASSIVE-GEOMETRY.md)（G0 仪表 → G1 合批 → G2 剔除 → G3 自适应离散 → G4 驻留 → G5 meshlet → G6 indirect） |
 | **截面/分类着色/选择** | 截面裁剪 + Appearance Profiler + 轮廓/多选 |
 | **属性面板/大纲树/测量** | 编辑的交互配套 |
 | **导出 IFC** | 编辑后交付，**现在成了刚需**（原 M12「可选」改为「必做」） |

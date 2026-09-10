@@ -341,12 +341,82 @@ bool Document::sync_entity_location(std::uint64_t entity_id) {
   return true;
 }
 
+void Document::register_mesh_hash(MeshAsset& asset) {
+  if (asset.content_hash == 0) {
+    asset.content_hash = mesh_content_hash(asset.cpu);
+  }
+  mesh_by_hash_[asset.content_hash] = asset.id;
+}
+
+void Document::unregister_mesh_hash(const MeshAsset& asset) {
+  if (asset.content_hash == 0) {
+    return;
+  }
+  const auto it = mesh_by_hash_.find(asset.content_hash);
+  if (it != mesh_by_hash_.end() && it->second == asset.id) {
+    mesh_by_hash_.erase(it);
+  }
+}
+
+void Document::remove_mesh(std::uint64_t id) {
+  const auto it = meshes_.find(id);
+  if (it == meshes_.end()) {
+    return;
+  }
+  unregister_mesh_hash(it->second);
+  meshes_.erase(it);
+}
+
+bool Document::mesh_referenced(std::uint64_t id) const {
+  if (id == 0) {
+    return false;
+  }
+  for (const auto& node : scene_.nodes()) {
+    if (node.mesh_asset_id == id) {
+      return true;
+    }
+  }
+  return false;
+}
+
+MeshAsset& Document::intern_mesh(std::string name, MeshCpu cpu) {
+  const std::uint64_t hash = mesh_content_hash(cpu);
+  if (const auto it = mesh_by_hash_.find(hash); it != mesh_by_hash_.end()) {
+    if (MeshAsset* existing = mesh(it->second)) {
+      if (mesh_cpu_equal(existing->cpu, cpu)) {
+        return *existing;
+      }
+    }
+  }
+  MeshAsset asset{};
+  asset.name = std::move(name);
+  asset.cpu = std::move(cpu);
+  asset.content_hash = hash;
+  return add_mesh(std::move(asset));
+}
+
+bool Document::replace_entity_mesh(std::uint64_t entity_id, MeshCpu cpu) {
+  Entity* target = entity(entity_id);
+  if (target == nullptr) {
+    return false;
+  }
+  const std::uint64_t old_id = target->mesh_asset_id;
+  MeshAsset& stored = intern_mesh(target->name, std::move(cpu));
+  target->mesh_asset_id = stored.id;
+  if (SceneNode* node = scene_.find(entity_id)) {
+    node->mesh_asset_id = stored.id;
+    scene_.bump_generation();
+    scene_.mark_dirty(entity_id);
+  }
+  if (old_id != stored.id && !mesh_referenced(old_id)) {
+    remove_mesh(old_id);
+  }
+  return true;
+}
+
 // 只接收已求值的实体 + 几何，不做造型（造型在 Entity::createGeom，见 entity.cpp）。
 Entity* Document::add_entity(std::unique_ptr<Entity> entity, MeshCpu mesh) {
-  MeshAsset asset{};
-  asset.name = entity->name;
-  asset.cpu = std::move(mesh);
-  MeshAsset& stored_mesh = add_mesh(std::move(asset));
+  MeshAsset& stored_mesh = intern_mesh(entity->name, std::move(mesh));
   entity->mesh_asset_id = stored_mesh.id;
 
   SceneNode node{};
@@ -399,7 +469,9 @@ void Document::remove_entity(std::uint64_t id) {
   bim_.remove_involving(id);
   entities_.erase(it);
   scene_.remove_node(id);
-  remove_mesh(mesh_id);
+  if (!mesh_referenced(mesh_id)) {
+    remove_mesh(mesh_id);
+  }
   recompute_scene();
   mark_dirty();
 }
@@ -407,7 +479,9 @@ void Document::remove_entity(std::uint64_t id) {
 void Document::insert_entity(std::unique_ptr<Entity> entity, MeshAsset mesh) {
   const std::uint64_t id = entity->id;
   const std::uint64_t mesh_id = entity->mesh_asset_id;
-  insert_mesh(std::move(mesh));
+  if (this->mesh(mesh_id) == nullptr) {
+    insert_mesh(std::move(mesh));
+  }
 
   SceneNode node{};
   node.id = id;
@@ -544,10 +618,7 @@ Document document_from_render_scene(RenderScene scene) {
 
 std::uint64_t Document::add_import_mesh(std::string name, MeshCpu mesh, Mat4 transform,
                                         Vec3 color) {
-  MeshAsset asset{};
-  asset.name = std::move(name);
-  asset.cpu = std::move(mesh);
-  MeshAsset& stored_mesh = add_mesh(std::move(asset));
+  MeshAsset& stored_mesh = intern_mesh(std::move(name), std::move(mesh));
 
   SceneNode node{};
   node.name = stored_mesh.name;

@@ -192,7 +192,7 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 3. 填 push constants：`mvp = clip × proj × view × 物体世界矩阵`。
 4. `draw_indexed`。
 
-**现在没有：** 按材质合批、GPU instancing、透明排序。屏外叶子一期已经不进清单；一万个仍在画面里的构件仍是一万次 draw。大模型会先卡在合批，不卡在「三角太多」本身。
+**现在：** 同几何会 intern 成一份 `MeshAsset`（G1a）。**还没有：** GPU instancing、透明排序。屏外叶子一期已经不进清单；一万个仍在画面里的同型号柱仍是一万次 draw（网格已共享）。方案见 [合批 / Instancing](INSTANCING.md)。
 
 ---
 
@@ -298,7 +298,7 @@ IBL 是 split-sum：CPU 烘焙工作室环境立方体 → irradiance / GGX pref
 
 这些在 [路线图](ROADMAP.md) 里，**不是漏画**，是还没做：
 
-- 合批 / instancing（大 BIM 的下一道性能命门；视锥一期已落地，二期/三期见 [视锥剔除](FRUSTUM-CULLING.md)）
+- 合批 / instancing（G1a intern 已落地；G1b/c 见 [合批 / Instancing](INSTANCING.md)；视锥二期/三期见 [视锥剔除](FRUSTUM-CULLING.md)）
 - 截面剖切、Hidden Line
 - 阴影、AO、自定义 HDRI（工作室 split-sum IBL 已有）
 - 渲染侧场景图（VSG 式节点 + 命令图）——现在每帧展平

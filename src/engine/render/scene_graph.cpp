@@ -1,6 +1,8 @@
 #include "engine/render/scene_graph.h"
 
 #include "engine/core/log.h"
+#include "engine/render/batch_key.h"
+#include "engine/render/gpu_instance.h"
 
 #include <cstddef>
 #include <span>

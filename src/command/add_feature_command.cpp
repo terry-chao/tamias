@@ -34,12 +34,10 @@ Result<void> AddFeatureCommand::apply(bool add) {
     entity->model = saved;
     return Err(mesh.error());
   }
-  MeshAsset* asset = document_->mesh(entity->mesh_asset_id);
-  if (asset == nullptr) {
+  if (!document_->replace_entity_mesh(entity_id_, std::move(*mesh))) {
     entity->model = saved;
     return Err("AddFeatureCommand: mesh asset not found");
   }
-  asset->cpu = std::move(*mesh);
   sync_entity_grips(*entity);
   document_->recompute_scene();
   document_->mark_dirty();

@@ -50,6 +50,7 @@ class Document {
 
   MeshAsset& add_mesh(MeshAsset asset) {
     asset.id = next_mesh_id_++;
+    register_mesh_hash(asset);
     auto& stored = meshes_[asset.id];
     stored = std::move(asset);
     return stored;
@@ -62,6 +63,7 @@ class Document {
     } else {
       next_mesh_id_ = std::max(next_mesh_id_, asset.id + 1);
     }
+    register_mesh_hash(asset);
     auto& stored = meshes_[asset.id];
     stored = std::move(asset);
     return stored;
@@ -163,6 +165,7 @@ class Document {
   void clear_content() {
     scene_.clear();
     meshes_.clear();
+    mesh_by_hash_.clear();
     entities_.clear();
     bim_.clear();
     render_snapshot_.reset();
@@ -170,7 +173,13 @@ class Document {
   }
 
   // 删除指定网格资产（供命令撤销用）。
-  void remove_mesh(std::uint64_t id) { meshes_.erase(id); }
+  void remove_mesh(std::uint64_t id);
+
+  // 按内容指纹复用网格。相同三角网返回已有资产。
+  MeshAsset& intern_mesh(std::string name, MeshCpu cpu);
+
+  // 换实体网格：intern 新网，旧网若无引用则删。改参数 / 倒角必须走这里，禁止原地覆盖。
+  bool replace_entity_mesh(std::uint64_t entity_id, MeshCpu cpu);
 
   // ===== 领域实体 API（封装 SceneNode，command/app 不直接碰节点）=====
 
@@ -309,12 +318,16 @@ class Document {
 
  private:
   void seed_default_materials();
+  void register_mesh_hash(MeshAsset& asset);
+  void unregister_mesh_hash(const MeshAsset& asset);
+  [[nodiscard]] bool mesh_referenced(std::uint64_t id) const;
 
   std::string name_;
   std::filesystem::path path_;
   Scene scene_;
   BimModel bim_;
   std::unordered_map<std::uint64_t, MeshAsset> meshes_;
+  std::unordered_map<std::uint64_t, std::uint64_t> mesh_by_hash_;
   std::unordered_map<std::uint64_t, std::unique_ptr<Entity>> entities_;
   std::unordered_map<std::uint64_t, Material> materials_;
   std::unordered_map<std::uint64_t, TextureAsset> textures_;

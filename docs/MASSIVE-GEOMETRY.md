@@ -114,14 +114,9 @@
 
 ### G1 实例化 + 合批（最高 ROI）
 
-BIM 里「三角多」经常是「同一段墙截面复制了八千次」。
+完整企业级方案（三层模型、合批键、实例布局、RHI 契约、分期 G1a–d）见 **[合批 / Instancing](INSTANCING.md)**。这里只留总图里的位置。
 
-- 语义侧：创建实体时按几何指纹（特征参数哈希 / IFC mapped item / 网格哈希）复用 `mesh_asset_id`。
-- 渲染侧：`RecordCommands` 不要叶子立刻 `draw_indexed`。先按 `(gpu_mesh, pipeline, 透明否)` 分桶，桶内写 instance buffer（`Mat4` + 颜色/选中）。
-- RHI：`DrawIndexedDesc.instance_count` 已经在 [device.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/device.h) 里；Vulkan/OpenGL/WebGL 的 `draw_indexed` 都吃这个字段。缺的是 **instance 顶点属性或 SSBO**，以及 shader 用 `SV_InstanceID` 取矩阵。
-- 合批不要按语义父子：楼层是给二期剪枝用的，不是 draw 分组键。
-
-目标：一万根同型号柱 = **1 次 draw**，不是一万次。
+BIM 里「三角多」经常是「同一段墙截面复制了八千次」。G1 先 intern 再 instance：一万根同型号柱 = **1 份网格 + 1 次 draw**。合批不要按语义父子。
 
 ### G2 层级剔除（设计已有，代码差二期/三期）
 

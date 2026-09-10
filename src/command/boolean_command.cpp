@@ -42,19 +42,16 @@ Result<void> BooleanCommand::apply(bool combined) {
       a->model = a_model_old_;  // 回滚
       return Err(mesh.error());
     }
-    MeshAsset* asset = document_->mesh(a->mesh_asset_id);
-    if (asset == nullptr) {
+    if (!document_->replace_entity_mesh(a_id_, std::move(*mesh))) {
+      a->model = a_model_old_;
       return Err("BooleanCommand: mesh asset not found");
     }
-    asset->cpu = std::move(*mesh);
     document_->remove_entity(b_id_);
   } else {
     a->model = a_model_old_;
-    MeshAsset* asset = document_->mesh(a->mesh_asset_id);
-    if (asset == nullptr) {
+    if (!document_->replace_entity_mesh(a_id_, a_mesh_old_.cpu)) {
       return Err("BooleanCommand: mesh asset not found");
     }
-    asset->cpu = a_mesh_old_.cpu;
     document_->insert_entity(b_entity_->clone(), b_mesh_);
   }
   document_->recompute_scene();

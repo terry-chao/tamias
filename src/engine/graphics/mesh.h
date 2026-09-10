@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <vector>
 
 namespace tamias {
@@ -145,6 +146,52 @@ inline MeshCpu make_cylinder_mesh(float radius, float height, int segments = 24)
 
   recompute_bounds(mesh);
   return mesh;
+}
+
+inline std::uint64_t mesh_content_hash(const MeshCpu& mesh) {
+  constexpr std::uint64_t kOffset = 14695981039346656037ull;
+  constexpr std::uint64_t kPrime = 1099511628211ull;
+  std::uint64_t h = kOffset;
+  const auto mix_u8 = [&](std::uint8_t v) {
+    h ^= v;
+    h *= kPrime;
+  };
+  const auto mix_bytes = [&](const void* data, std::size_t n) {
+    const auto* p = static_cast<const std::uint8_t*>(data);
+    for (std::size_t i = 0; i < n; ++i) {
+      mix_u8(p[i]);
+    }
+  };
+  mix_u8(mesh.line_list ? 1u : 0u);
+  mix_u8(mesh.has_texcoord ? 1u : 0u);
+  const std::uint64_t vcount = mesh.vertices.size();
+  const std::uint64_t icount = mesh.indices.size();
+  mix_bytes(&vcount, sizeof(vcount));
+  mix_bytes(&icount, sizeof(icount));
+  if (!mesh.vertices.empty()) {
+    mix_bytes(mesh.vertices.data(), mesh.vertices.size() * sizeof(Vertex));
+  }
+  if (!mesh.indices.empty()) {
+    mix_bytes(mesh.indices.data(), mesh.indices.size() * sizeof(std::uint32_t));
+  }
+  return h;
+}
+
+inline bool mesh_cpu_equal(const MeshCpu& a, const MeshCpu& b) {
+  if (a.line_list != b.line_list || a.has_texcoord != b.has_texcoord ||
+      a.vertices.size() != b.vertices.size() || a.indices.size() != b.indices.size()) {
+    return false;
+  }
+  if (!a.vertices.empty() &&
+      std::memcmp(a.vertices.data(), b.vertices.data(), a.vertices.size() * sizeof(Vertex)) != 0) {
+    return false;
+  }
+  if (!a.indices.empty() &&
+      std::memcmp(a.indices.data(), b.indices.data(), a.indices.size() * sizeof(std::uint32_t)) !=
+          0) {
+    return false;
+  }
+  return true;
 }
 
 }  // namespace tamias

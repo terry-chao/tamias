@@ -14,3 +14,4 @@
 
 - [语义树](../SCENE-GRAPH.md) —— 和 OCCT 对照、变换累积、展平；「实现地图」一节说明场景图散落在哪些文件、每帧怎么流转
 - [超大规模三角](../MASSIVE-GEOMETRY.md) —— 虚拟离散流水线：实例化合批、自适应 deflection、驻留预算；不是把语义树搬进 GPU
+- [合批 / Instancing](../INSTANCING.md) —— G1 企业级方案：L0 intern + L1 GPU instance + L2 MDI

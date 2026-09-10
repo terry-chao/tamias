@@ -15,11 +15,9 @@ Result<void> rebuild_entity_mesh(Document& document, std::uint64_t entity_id) {
   if (!mesh) {
     return Err(mesh.error());
   }
-  MeshAsset* asset = document.mesh(entity->mesh_asset_id);
-  if (asset == nullptr) {
+  if (!document.replace_entity_mesh(entity_id, std::move(*mesh))) {
     return Err("rebuild_entity_mesh: mesh asset not found");
   }
-  asset->cpu = std::move(*mesh);
   document.scene().set_transform(entity_id, entity->local_transform);
   document.recompute_scene();
   document.mark_dirty();

@@ -89,6 +89,7 @@ CMake 用 `gtest_discover_tests(... DISCOVERY_MODE PRE_TEST)`，并给 OCCT DLL 
 | [`tests/feature_boolean_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/feature_boolean_tests.cpp) | `FeatureModel` | 2 | 特征树布尔 Cut / Common |
 | [`tests/camera_controller_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/camera_controller_tests.cpp) | `CameraController` | 4 | orbit / pan / frame_aabb / dolly_to_focus |
 | [`tests/import_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/import_tests.cpp) | `MeshIo` `OcctImport` | 5 | 最小 GLB、拒绝 ASCII glTF、STEP/IGES/BREP 读写 |
+| [`tests/mesh_intern_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/mesh_intern_tests.cpp) | `MeshIntern` | 4 | 同几何 intern 一份 `MeshAsset`；改参数 COW；删共享引用不丢网 |
 
 夹具：IFC 样例、OBJ 样例（`cube.obj` / `alvin.obj`）。**仓库里没有 `.trscn` 金样**——[RENDER-SCENE.md](RENDER-SCENE.md) 写了「桌面导出 → 锁 digest」的做法，测试还没接上。
 

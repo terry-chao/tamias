@@ -34,7 +34,13 @@ Result<void> SetFeatureParamCommand::execute() {
   }
   const auto it = f->params.find(param_name_);
   old_value_ = (it != f->params.end()) ? it->second : 0.0;
-  return apply(new_value_);
+  if (auto r = apply(new_value_); !r) {
+    return r;
+  }
+  if (Entity* updated = document_->entity(entity_id_)) {
+    mesh_asset_id_ = updated->mesh_asset_id;
+  }
+  return {};
 }
 
 Result<void> SetFeatureParamCommand::apply(double value) {
@@ -98,11 +104,9 @@ Result<void> SetFeatureParamCommand::apply(double value) {
   if (!mesh) {
     return Err(mesh.error());
   }
-  MeshAsset* asset = document_->mesh(entity->mesh_asset_id);
-  if (asset == nullptr) {
+  if (!document_->replace_entity_mesh(entity_id_, std::move(*mesh))) {
     return Err("SetFeatureParamCommand: mesh asset not found");
   }
-  asset->cpu = std::move(*mesh);
   document_->recompute_scene();
   document_->mark_dirty();
   if (auto r = notify_entity_changed(*document_, entity_id_); !r) {
