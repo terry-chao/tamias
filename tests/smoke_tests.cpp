@@ -401,8 +401,9 @@ TEST(Document, RenderItemsFrustumCullsOffscreen) {
   const auto visible = doc.render_items(&frustum);
   ASSERT_EQ(visible.size(), 1u);
   EXPECT_TRUE(contains_mesh(visible, front));
-  EXPECT_FALSE(contains_mesh(visible, behind));
-  EXPECT_FALSE(contains_mesh(visible, beside));
+  // intern 后三份立方体共享同一 mesh id，不能再用资产 id 判断「哪一个节点」可见。
+  EXPECT_FLOAT_EQ(visible[0].transform(0, 3), 0.f);
+  EXPECT_FLOAT_EQ(visible[0].transform(2, 3), 0.f);
 
   EXPECT_EQ(doc.render_items(nullptr).size(), 3u);
 }

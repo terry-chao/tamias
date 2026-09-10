@@ -2,7 +2,7 @@
 
 > 大 BIM 的下一道性能命门。语义树 / 展平见 [SCENE-GRAPH.md](SCENE-GRAPH.md)；视锥一期见 [视锥剔除](FRUSTUM-CULLING.md)；几十亿三角的总图见 [超大规模三角](MASSIVE-GEOMETRY.md)（本文是其中 **G1** 的企业级方案）。
 
-**状态：** G1a（几何 intern）已落地。G1b（Frame 常量 + 实例缓冲）与 G1c（`RecordCommands` 分桶 + `instance_count`）尚未接线；`GpuInstance` / `BatchKey` 类型已进树。G1 完成前不要开阴影 pass、不要做 Nanite。
+**状态：** G1a（几何 intern）+ G1b（实例顶点缓冲 + shader 读实例）+ G1c（`RecordCommands` 按 `BatchKey` 分桶，`instance_count = N`）已落地。半透明仍一物一 draw。G1 完成前不要开阴影 pass、不要做 Nanite。
 
 ---
 
@@ -76,7 +76,7 @@ Scene 实例（node → geometry_id + world）
 
 实例里存 world，不存 MVP：阴影级联、剖切、多视口换的是 FrameConstants（view / proj / eye / IBL），同一张实例表能复用。
 
-每条实例目标 **64 字节**（打包后）。G1 先用未打包记录（3×4 world + float4 颜色/材质，见 `gpu_instance.h`），打包是 G1b 细节。10 万份即使按 96 B 计也只有约 10 MB。**N=1 也走同一路径**，禁止「单物体旧 push constant、多物体新 instance」两套管线。
+每条实例目标 **64 字节**（打包后）。G1 用未打包的 80 字节顶点记录（三行 float4 仿射矩阵 + float4 颜色 + float4 材质，见 `gpu_instance.h`），打包是后续细节。10 万份即使按 96 B 计也只有约 10 MB。**N=1 也走同一路径**，禁止「单物体旧 push constant、多物体新 instance」两套管线。
 
 ---
 
@@ -104,13 +104,13 @@ Scene 实例（node → geometry_id + world）
 | Mesh VBO/IBO | L0 intern 后一份 | 几何变了才 upload |
 | 材质贴图 | 按 BatchKey 绑定 | 切批时换，不按实例换 |
 
-实例数据用 **storage / 顶点 instance rate**，不要用 push constant 数组（128–256 字节装不下）。Storage 同一份能给以后的 compute 剔除和 indirect 读。
+实例数据用 **顶点 instance rate**（`GpuInstance` 第二槽），不要用 push constant 数组（128–256 字节装不下）。Storage / SSBO 留给以后的 compute 剔除和 indirect。
 
 | 后端 | G1 | 以后 |
 |---|---|---|
-| Vulkan | storage 或 instance 顶点缓冲 + `gl_InstanceIndex` | `vkCmdDrawIndexedIndirectCount` |
-| OpenGL 4.5 | SSBO / divisor=1 + `glDrawElementsInstanced` | `glMultiDrawElementsIndirect` |
-| WebGPU | storage 或 instance stepMode + `drawIndexed(instanceCount)` | 间接绘制有；不做 mesh shader |
+| Vulkan | instance 顶点缓冲 + `vkCmdDrawIndexed(..., instanceCount)` | `vkCmdDrawIndexedIndirectCount` |
+| OpenGL 4.5 | divisor=1 + `glDrawElementsInstanced` | `glMultiDrawElementsIndirect` |
+| WebGPU | instance stepMode + `drawIndexed(instanceCount)` | 间接绘制有；不做 mesh shader |
 
 ---
 
@@ -133,9 +133,9 @@ Scene 实例（node → geometry_id + world）
 | 刀 | 改哪里 | 可独立验收 |
 |---|---|---|
 | **G1a intern** | `Document` 按指纹复用；改参数 COW | 1 万同型号柱：CPU 网格份数 = 1；画面不变 |
-| **G1b 常量拆分** | Frame 常量 + Instance 缓冲；shader 读 InstanceID；N=1 先替换现有 draw | 现有场景观感不变 |
-| **G1c 分桶** | `RecordCommands` 先 `BatchKey` 分桶再提交 | 1 万柱：draw 掉到个位数 |
-| **G1d 锁测试** | Mock RHI：同 mesh 1 万实例的 draw 次数；计时面板出 batches/instances | 回归不靠肉眼 |
+| **G1b 常量拆分** | 实例顶点缓冲 + `mesh.vert` 读 world/颜色；`pc.mvp` = view_proj | 现有场景观感不变；N=1 走实例路径 |
+| **G1c 分桶** | `RecordCommands` 先 `BatchKey` 分桶再提交 | 同 mesh 多实例：draw 次数 = 批次数 |
+| **G1d 锁测试** | Mock RHI：同 mesh 多实例的 `instance_count`；半透明不合批 | 回归不靠肉眼 |
 
 **G1 明确不做：** 语义树剪枝、BVH 视锥、自适应 deflection、阴影、剖切、透明合批、Nanite、LevelDB、把 `Scene` 搬进 GPU。
 
@@ -170,7 +170,7 @@ Scene 实例（node → geometry_id + world）
 | [mesh.h](https://github.com/terry-chao/tamias/blob/main/src/engine/graphics/mesh.h) | `MeshCpu` | 内容指纹 |
 | [mesh_asset.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/mesh_asset.h) | 一资产一份 CPU 网 | intern + `content_hash` |
 | [document.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.cpp) `add_entity` | 每次 `add_mesh` | `intern_mesh` / `replace_entity_mesh` |
-| [gpu_instance.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/gpu_instance.h) | — | 64B 实例记录 |
-| [batch_key.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/batch_key.h) | — | 合批键 |
-| [scene_graph.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene_graph.cpp) `RecordCommands` | 一叶子一 draw | G1c 分桶 |
-| [device.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/device.h) `DrawIndexedDesc` | `instance_count` 已留 | 接实例缓冲 |
+| [gpu_instance.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/gpu_instance.h) | 80B 实例记录 | 仿射行 + 颜色/材质 |
+| [batch_key.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/batch_key.h) | 合批键 | 网格 / PSO / 贴图 / 线 |
+| [scene_graph.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene_graph.cpp) `RecordCommands` | 按 `BatchKey` 分桶，flush 时 `instance_count = N` | 半透明仍单画 |
+| [device.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/device.h) | `set_instance_buffer` + `PipelineDesc.instanced` | 四后端 instance rate |

@@ -2,6 +2,7 @@
 
 #include "engine/core/log.h"
 #include "engine/graphics/mesh.h"
+#include "engine/render/gpu_instance.h"
 #include "engine/render/render_types.h"
 
 #include <algorithm>
@@ -138,8 +139,8 @@ class WebGpuShaderModule final : public ShaderModule {
 
 class WebGpuPipeline final : public PipelineState {
  public:
-  WebGpuPipeline(WGPURenderPipeline pipeline, PrimitiveTopology topology)
-      : pipeline_(pipeline), topology_(topology) {}
+  WebGpuPipeline(WGPURenderPipeline pipeline, PrimitiveTopology topology, bool instanced)
+      : pipeline_(pipeline), topology_(topology), instanced_(instanced) {}
   ~WebGpuPipeline() override {
     if (pipeline_) {
       wgpuRenderPipelineRelease(pipeline_);
@@ -147,10 +148,12 @@ class WebGpuPipeline final : public PipelineState {
   }
   [[nodiscard]] WGPURenderPipeline handle() const { return pipeline_; }
   [[nodiscard]] PrimitiveTopology topology() const { return topology_; }
+  [[nodiscard]] bool instanced() const { return instanced_; }
 
  private:
   WGPURenderPipeline pipeline_ = nullptr;
   PrimitiveTopology topology_ = PrimitiveTopology::TriangleList;
+  bool instanced_ = false;
 };
 
 class WebGpuFence final : public Fence {
@@ -201,6 +204,10 @@ class WebGpuCommandList final : public CommandList {
     vertex_ = static_cast<WebGpuBuffer*>(&buffer);
     vertex_offset_ = offset;
   }
+  void set_instance_buffer(Buffer& buffer, std::uint64_t offset = 0) override {
+    instance_ = static_cast<WebGpuBuffer*>(&buffer);
+    instance_offset_ = offset;
+  }
   void set_index_buffer(Buffer& buffer, std::uint64_t offset = 0) override {
     index_ = static_cast<WebGpuBuffer*>(&buffer);
     index_offset_ = offset;
@@ -223,8 +230,10 @@ class WebGpuCommandList final : public CommandList {
   WGPUCommandBuffer commands_ = nullptr;
   WebGpuPipeline* pipeline_ = nullptr;
   WebGpuBuffer* vertex_ = nullptr;
+  WebGpuBuffer* instance_ = nullptr;
   WebGpuBuffer* index_ = nullptr;
   std::uint64_t vertex_offset_ = 0;
+  std::uint64_t instance_offset_ = 0;
   std::uint64_t index_offset_ = 0;
   std::uint32_t push_slot_ = 0;
   std::array<WebGpuTexture*, kMeshTextureSlots> textures_{};
@@ -481,6 +490,7 @@ void WebGpuCommandList::reset() {
   }
   pipeline_ = nullptr;
   vertex_ = nullptr;
+  instance_ = nullptr;
   index_ = nullptr;
   textures_ = {};
   bind_dirty_ = true;
@@ -614,6 +624,10 @@ void WebGpuCommandList::draw_indexed(const DrawIndexedDesc& desc) {
   wgpuRenderPassEncoderSetBindGroup(pass_, 0, bind_group_, 1, &dyn);
   wgpuRenderPassEncoderSetVertexBuffer(pass_, 0, vertex_->handle(), vertex_offset_,
                                        WGPU_WHOLE_SIZE);
+  if (pipeline_->instanced() && instance_) {
+    wgpuRenderPassEncoderSetVertexBuffer(pass_, 1, instance_->handle(), instance_offset_,
+                                         WGPU_WHOLE_SIZE);
+  }
   wgpuRenderPassEncoderSetIndexBuffer(pass_, index_->handle(), WGPUIndexFormat_Uint32,
                                       index_offset_, WGPU_WHOLE_SIZE);
   wgpuRenderPassEncoderDrawIndexed(pass_, desc.index_count, desc.instance_count, desc.first_index,
@@ -1015,11 +1029,37 @@ Result<std::unique_ptr<PipelineState>> WebGpuDevice::create_pipeline(const Pipel
   attrs[3].format = WGPUVertexFormat_Float32x3;
   attrs[3].offset = offsetof(Vertex, color);
   attrs[3].shaderLocation = 3;
-  WGPUVertexBufferLayout vbl = WGPU_VERTEX_BUFFER_LAYOUT_INIT;
-  vbl.stepMode = WGPUVertexStepMode_Vertex;
-  vbl.arrayStride = sizeof(Vertex);
-  vbl.attributeCount = 4;
-  vbl.attributes = attrs;
+  WGPUVertexBufferLayout layouts[2];
+  layouts[0] = WGPU_VERTEX_BUFFER_LAYOUT_INIT;
+  layouts[0].stepMode = WGPUVertexStepMode_Vertex;
+  layouts[0].arrayStride = sizeof(Vertex);
+  layouts[0].attributeCount = 4;
+  layouts[0].attributes = attrs;
+
+  WGPUVertexAttribute inst_attrs[5];
+  for (auto& a : inst_attrs) {
+    a = WGPU_VERTEX_ATTRIBUTE_INIT;
+  }
+  inst_attrs[0].format = WGPUVertexFormat_Float32x4;
+  inst_attrs[0].offset = offsetof(GpuInstance, row0);
+  inst_attrs[0].shaderLocation = 4;
+  inst_attrs[1].format = WGPUVertexFormat_Float32x4;
+  inst_attrs[1].offset = offsetof(GpuInstance, row1);
+  inst_attrs[1].shaderLocation = 5;
+  inst_attrs[2].format = WGPUVertexFormat_Float32x4;
+  inst_attrs[2].offset = offsetof(GpuInstance, row2);
+  inst_attrs[2].shaderLocation = 6;
+  inst_attrs[3].format = WGPUVertexFormat_Float32x4;
+  inst_attrs[3].offset = offsetof(GpuInstance, color);
+  inst_attrs[3].shaderLocation = 7;
+  inst_attrs[4].format = WGPUVertexFormat_Float32x4;
+  inst_attrs[4].offset = offsetof(GpuInstance, material);
+  inst_attrs[4].shaderLocation = 8;
+  layouts[1] = WGPU_VERTEX_BUFFER_LAYOUT_INIT;
+  layouts[1].stepMode = WGPUVertexStepMode_Instance;
+  layouts[1].arrayStride = sizeof(GpuInstance);
+  layouts[1].attributeCount = 5;
+  layouts[1].attributes = inst_attrs;
 
   WGPUBlendState blend = WGPU_BLEND_STATE_INIT;
   blend.color.operation = WGPUBlendOperation_Add;
@@ -1051,8 +1091,8 @@ Result<std::unique_ptr<PipelineState>> WebGpuDevice::create_pipeline(const Pipel
   pd.layout = pipeline_layout_;
   pd.vertex.module = vs->handle();
   pd.vertex.entryPoint = wgpu_cstr("main");
-  pd.vertex.bufferCount = 1;
-  pd.vertex.buffers = &vbl;
+  pd.vertex.bufferCount = desc.instanced ? 2 : 1;
+  pd.vertex.buffers = layouts;
   pd.primitive.topology = desc.topology == PrimitiveTopology::LineList
                               ? WGPUPrimitiveTopology_LineList
                               : WGPUPrimitiveTopology_TriangleList;
@@ -1066,7 +1106,7 @@ Result<std::unique_ptr<PipelineState>> WebGpuDevice::create_pipeline(const Pipel
   if (!pipeline) {
     return Err("wgpuDeviceCreateRenderPipeline failed");
   }
-  return std::make_unique<WebGpuPipeline>(pipeline, desc.topology);
+  return std::make_unique<WebGpuPipeline>(pipeline, desc.topology, desc.instanced);
 }
 
 Result<std::unique_ptr<SwapChain>> WebGpuDevice::create_swap_chain(const SwapChainDesc& desc) {

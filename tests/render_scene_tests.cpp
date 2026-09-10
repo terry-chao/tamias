@@ -4,6 +4,7 @@
 #include "engine/render/render_scene.h"
 #include "engine/render/render_scene_golden.h"
 #include "engine/render/scene_graph.h"
+#include "engine/render/gpu_instance.h"
 
 #include <gtest/gtest.h>
 
@@ -44,6 +45,7 @@ class MockCommandList : public CommandList {
   void end_render_pass() override {}
   void set_pipeline(PipelineState& pipeline) override { pipelines.push_back(&pipeline); }
   void set_vertex_buffer(Buffer&, std::uint64_t) override { ++vertex_binds; }
+  void set_instance_buffer(Buffer&, std::uint64_t) override { ++instance_binds; }
   void set_index_buffer(Buffer&, std::uint64_t) override { ++index_binds; }
   void set_push_constants(std::span<const std::byte> data) override {
     PushConstants pc{};
@@ -61,6 +63,7 @@ class MockCommandList : public CommandList {
   std::vector<DrawIndexedDesc> draws;
   int texture_binds = 0;
   int vertex_binds = 0;
+  int instance_binds = 0;
   int index_binds = 0;
 };
 
@@ -78,6 +81,8 @@ struct Fixture {
   bool texture_diag_logged = false;
   Mat4 view_proj = Mat4::identity();
   SceneGraphDrawContext ctx;
+  MockBuffer instance_buf;
+  std::vector<GpuInstance> recorded;
 
   Fixture() {
     ctx.command_list = &cmds;
@@ -94,6 +99,8 @@ struct Fixture {
     ctx.textures = &textures;
     ctx.texture_asset_to_gpu = &texture_asset_to_gpu;
     ctx.texture_diag_logged = &texture_diag_logged;
+    ctx.instance_buffer = &instance_buf;
+    ctx.recorded_instances = &recorded;
   }
 
   void add_mesh(std::uint64_t asset_id, std::uint32_t index_count) {
@@ -107,6 +114,7 @@ struct Fixture {
   }
 
   void visit(RenderNode& root) {
+    recorded.clear();
     RecordCommands visitor(ctx);
     root.accept(visitor);
   }
@@ -418,9 +426,10 @@ TEST(RenderScene, ReplayBuildsSameDrawCount) {
   f.visit(*root);
 
   ASSERT_EQ(f.cmds.draws.size(), scene.items.size());
-  ASSERT_EQ(f.cmds.push_constants.size(), 1u);
-  EXPECT_FLOAT_EQ(f.cmds.push_constants[0].color[0], 0.6f);  // shaded uses category
-  expect_mat4_eq(f.cmds.push_constants[0].model, scene.items[0].transform);
+  ASSERT_EQ(f.cmds.draws[0].instance_count, 1u);
+  ASSERT_EQ(f.recorded.size(), 1u);
+  EXPECT_FLOAT_EQ(f.recorded[0].color[0], 0.6f);  // shaded uses category
+  expect_mat4_eq(gpu_instance_world(f.recorded[0]), scene.items[0].transform);
 }
 
 TEST(RenderScene, InspectMentionsDigestAndItems) {
@@ -582,7 +591,12 @@ TEST(RenderSceneGolden, ScansRepositoryFixtures) {
     }
     auto graph = build_scene_graph(scene->items);
     f.visit(*graph);
-    EXPECT_EQ(f.cmds.draws.size(), scene->items.size());
+    std::uint32_t instances = 0;
+    for (const auto& d : f.cmds.draws) {
+      instances += d.instance_count;
+    }
+    EXPECT_EQ(instances, scene->items.size());
+    EXPECT_LE(f.cmds.draws.size(), scene->items.size());
   }
 }
 

@@ -2,6 +2,7 @@
 
 #include "engine/core/log.h"
 #include "engine/graphics/mesh.h"
+#include "engine/render/gpu_instance.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -92,12 +93,13 @@ class WebGLShaderModule final : public ShaderModule {
 class WebGLPipeline final : public PipelineState {
  public:
   WebGLPipeline(GLuint program, bool depth_test, bool depth_write, bool blend,
-                PrimitiveTopology topology)
+                PrimitiveTopology topology, bool instanced)
       : program_(program),
         depth_test_(depth_test),
         depth_write_(depth_write),
         blend_(blend),
-        topology_(topology) {}
+        topology_(topology),
+        instanced_(instanced) {}
   ~WebGLPipeline() override {
     if (program_) {
       glDeleteProgram(program_);
@@ -108,6 +110,7 @@ class WebGLPipeline final : public PipelineState {
   [[nodiscard]] bool depth_write() const { return depth_write_; }
   [[nodiscard]] bool blend() const { return blend_; }
   [[nodiscard]] PrimitiveTopology topology() const { return topology_; }
+  [[nodiscard]] bool instanced() const { return instanced_; }
 
  private:
   GLuint program_ = 0;
@@ -115,6 +118,7 @@ class WebGLPipeline final : public PipelineState {
   bool depth_write_ = true;
   bool blend_ = false;
   PrimitiveTopology topology_ = PrimitiveTopology::TriangleList;
+  bool instanced_ = false;
 };
 
 class WebGLFence final : public Fence {
@@ -156,6 +160,10 @@ class WebGLCommandList final : public CommandList {
     vertex_ = static_cast<WebGLBuffer*>(&buffer);
     vertex_offset_ = offset;
   }
+  void set_instance_buffer(Buffer& buffer, std::uint64_t offset = 0) override {
+    instance_ = static_cast<WebGLBuffer*>(&buffer);
+    instance_offset_ = offset;
+  }
   void set_index_buffer(Buffer& buffer, std::uint64_t offset = 0) override {
     index_ = static_cast<WebGLBuffer*>(&buffer);
     index_offset_ = offset;
@@ -183,8 +191,10 @@ class WebGLCommandList final : public CommandList {
   WebGLDevice* device_ = nullptr;
   WebGLPipeline* pipeline_ = nullptr;
   WebGLBuffer* vertex_ = nullptr;
+  WebGLBuffer* instance_ = nullptr;
   WebGLBuffer* index_ = nullptr;
   std::uint64_t vertex_offset_ = 0;
+  std::uint64_t instance_offset_ = 0;
   std::uint64_t index_offset_ = 0;
 };
 
@@ -282,25 +292,64 @@ void WebGLCommandList::draw_indexed(const DrawIndexedDesc& desc) {
   const auto base = reinterpret_cast<const void*>(static_cast<std::uintptr_t>(vertex_offset_));
   glEnableVertexAttribArray(0);
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, base);
+  glVertexAttribDivisor(0, 0);
   glEnableVertexAttribArray(1);
   glVertexAttribPointer(
       1, 3, GL_FLOAT, GL_FALSE, stride,
       reinterpret_cast<const void*>(
           static_cast<std::uintptr_t>(vertex_offset_ + offsetof(Vertex, normal))));
+  glVertexAttribDivisor(1, 0);
   glEnableVertexAttribArray(2);
   glVertexAttribPointer(
       2, 2, GL_FLOAT, GL_FALSE, stride,
       reinterpret_cast<const void*>(static_cast<std::uintptr_t>(vertex_offset_ + offsetof(Vertex, uv))));
+  glVertexAttribDivisor(2, 0);
   glEnableVertexAttribArray(3);
   glVertexAttribPointer(
       3, 3, GL_FLOAT, GL_FALSE, stride,
       reinterpret_cast<const void*>(
           static_cast<std::uintptr_t>(vertex_offset_ + offsetof(Vertex, color))));
+  glVertexAttribDivisor(3, 0);
+
+  if (pipeline_->instanced() && instance_) {
+    constexpr GLsizei inst_stride = static_cast<GLsizei>(sizeof(GpuInstance));
+    glBindBuffer(GL_ARRAY_BUFFER, instance_->handle());
+    const auto inst_base = static_cast<std::uintptr_t>(instance_offset_);
+    const struct {
+      GLuint index;
+      GLint size;
+      std::size_t offset;
+    } inst_attrs[] = {
+        {4, 4, offsetof(GpuInstance, row0)},
+        {5, 4, offsetof(GpuInstance, row1)},
+        {6, 4, offsetof(GpuInstance, row2)},
+        {7, 4, offsetof(GpuInstance, color)},
+        {8, 4, offsetof(GpuInstance, material)},
+    };
+    for (const auto& attr : inst_attrs) {
+      glEnableVertexAttribArray(attr.index);
+      glVertexAttribPointer(attr.index, attr.size, GL_FLOAT, GL_FALSE, inst_stride,
+                            reinterpret_cast<const void*>(inst_base + attr.offset));
+      glVertexAttribDivisor(attr.index, 1);
+    }
+  } else {
+    for (GLuint i = 4; i <= 8; ++i) {
+      glDisableVertexAttribArray(i);
+      glVertexAttribDivisor(i, 0);
+    }
+  }
+
   const auto index_ptr = reinterpret_cast<const void*>(static_cast<std::uintptr_t>(
       index_offset_ + desc.first_index * sizeof(std::uint32_t)));
   const GLenum mode =
       pipeline_->topology() == PrimitiveTopology::LineList ? GL_LINES : GL_TRIANGLES;
-  glDrawElements(mode, static_cast<GLsizei>(desc.index_count), GL_UNSIGNED_INT, index_ptr);
+  const GLsizei instances = static_cast<GLsizei>(std::max(1u, desc.instance_count));
+  if (pipeline_->instanced()) {
+    glDrawElementsInstanced(mode, static_cast<GLsizei>(desc.index_count), GL_UNSIGNED_INT,
+                            index_ptr, instances);
+  } else {
+    glDrawElements(mode, static_cast<GLsizei>(desc.index_count), GL_UNSIGNED_INT, index_ptr);
+  }
 }
 
 Result<void> WebGLDevice::make_current() {
@@ -549,7 +598,7 @@ Result<std::unique_ptr<PipelineState>> WebGLDevice::create_pipeline(const Pipeli
     glUseProgram(0);
   }
   return std::make_unique<WebGLPipeline>(program, desc.depth_test, desc.depth_write, desc.blend,
-                                         desc.topology);
+                                         desc.topology, desc.instanced);
 }
 
 Result<std::unique_ptr<SwapChain>> WebGLDevice::create_swap_chain(const SwapChainDesc& desc) {

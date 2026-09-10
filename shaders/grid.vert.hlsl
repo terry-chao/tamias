@@ -11,5 +11,7 @@ VsOutput main(VsInput input) {
   o.selected = 0.0;
   o.mode = 0.0;
   o.color = float3(1.0, 1.0, 1.0);
+  o.rough_metal = float2(0.0, 0.0);
+  o.opacity = 1.0;
   return o;
 }

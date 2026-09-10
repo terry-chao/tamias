@@ -33,6 +33,8 @@ struct VsOutput {
   [[vk::location(3)]] float3 world_pos : TEXCOORD2;
   [[vk::location(4)]] float mode : TEXCOORD3;
   [[vk::location(5)]] float3 color : COLOR;
+  [[vk::location(6)]] float2 rough_metal : TEXCOORD4;
+  [[vk::location(7)]] float opacity : TEXCOORD5;
 };
 
 #endif // TAMIAS_MESH_HLSLI

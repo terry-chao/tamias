@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <span>
+#include <string>
 
 namespace tamias {
 
@@ -155,7 +156,6 @@ void RecordCommands::apply(DrawableNode& node) {
     return;
   }
 
-  // 绑定 albedo / normal：真实感且已上传 → 实纹理；着色模式只用构件色。
   Texture* bound_albedo = ctx_.default_texture;
   Texture* bound_normal = ctx_.default_normal != nullptr ? ctx_.default_normal : ctx_.default_texture;
   bool has_albedo = false;
@@ -194,67 +194,136 @@ void RecordCommands::apply(DrawableNode& node) {
     *ctx_.texture_diag_logged = true;
   }
 
-  // Vulkan 的 set_texture 依赖当前 pipeline layout；先绑管线再绑描述符。
+  PipelineState* pipeline = nullptr;
   if (transmissive) {
-    if (ctx_.blend_pipeline == nullptr) {
-      return;
-    }
-    ctx_.command_list->set_pipeline(*ctx_.blend_pipeline);
+    pipeline = ctx_.blend_pipeline;
   } else if (as_lines) {
-    if (ctx_.entity_line_pipeline == nullptr) {
-      return;
-    }
-    ctx_.command_list->set_pipeline(*ctx_.entity_line_pipeline);
+    pipeline = ctx_.entity_line_pipeline;
+  } else if (ctx_.mode_value == 0.f) {
+    pipeline = ctx_.wire_pipeline;
   } else {
-    if (ctx_.mode_value == 0.f) {
-      if (ctx_.wire_pipeline == nullptr) {
-        return;
-      }
-      ctx_.command_list->set_pipeline(*ctx_.wire_pipeline);
-    } else {
-      if (ctx_.shaded_pipeline == nullptr) {
-        return;
-      }
-      ctx_.command_list->set_pipeline(*ctx_.shaded_pipeline);
-    }
+    pipeline = ctx_.shaded_pipeline;
   }
-  if (bound_albedo != nullptr) {
-    ctx_.command_list->set_texture(*bound_albedo, kTextureSlotAlbedo);
-  }
-  if (bound_normal != nullptr) {
-    ctx_.command_list->set_texture(*bound_normal, kTextureSlotNormal);
+  if (pipeline == nullptr) {
+    return;
   }
 
   const Vec3 color = use_material ? ctx_.material_color : ctx_.category_color;
+  GpuInstance instance =
+      make_gpu_instance(world, color, use_material ? ctx_.material_opacity : 1.f,
+                        use_material ? ctx_.material_roughness : 0.6f,
+                        use_material ? ctx_.material_metallic : 0.f, ctx_.selected);
+
+  PendingBatch batch{};
+  batch.key.gpu_mesh_id = gpu_it->second;
+  batch.key.pipeline = pipeline;
+  batch.key.albedo = bound_albedo;
+  batch.key.normal = bound_normal;
+  batch.key.lines = as_lines;
+  batch.key.transparent = transmissive;
+  batch.pipeline = pipeline;
+  batch.albedo = bound_albedo;
+  batch.normal = bound_normal;
+  batch.mesh = &mesh;
+  batch.has_albedo = has_albedo;
+  batch.has_normal = has_normal;
+  batch.as_lines = as_lines;
+
+  if (transmissive) {
+    batch.instances.push_back(instance);
+    flush_batch(batch);
+    return;
+  }
+  enqueue(std::move(batch), instance);
+}
+
+void RecordCommands::enqueue(PendingBatch batch, GpuInstance instance) {
+  const auto it = batch_index_.find(batch.key);
+  if (it != batch_index_.end()) {
+    batches_[it->second].instances.push_back(instance);
+    return;
+  }
+  batch.instances.push_back(instance);
+  batch_index_.emplace(batch.key, batches_.size());
+  batches_.push_back(std::move(batch));
+}
+
+void RecordCommands::flush_batch(PendingBatch& batch) {
+  if (batch.instances.empty() || ctx_.command_list == nullptr || ctx_.view_proj == nullptr ||
+      batch.pipeline == nullptr || batch.mesh == nullptr || batch.mesh->vertex_buffer == nullptr ||
+      batch.mesh->index_buffer == nullptr) {
+    return;
+  }
+
+  ctx_.command_list->set_pipeline(*batch.pipeline);
+  if (batch.albedo != nullptr) {
+    ctx_.command_list->set_texture(*batch.albedo, kTextureSlotAlbedo);
+  }
+  if (batch.normal != nullptr) {
+    ctx_.command_list->set_texture(*batch.normal, kTextureSlotNormal);
+  }
+
+  if (ctx_.recorded_instances != nullptr) {
+    ctx_.recorded_instances->insert(ctx_.recorded_instances->end(), batch.instances.begin(),
+                                    batch.instances.end());
+  }
+
+  const auto bytes = static_cast<std::uint64_t>(batch.instances.size() * sizeof(GpuInstance));
+  if (ctx_.grow_instance_buffer) {
+    const std::uint64_t needed =
+        (ctx_.instance_write_offset != nullptr ? *ctx_.instance_write_offset : 0) + bytes;
+    ctx_.instance_buffer = ctx_.grow_instance_buffer(needed);
+  }
+  std::uint64_t offset = 0;
+  if (ctx_.instance_write_offset != nullptr) {
+    offset = *ctx_.instance_write_offset;
+  }
+  if (ctx_.instance_buffer != nullptr) {
+    ctx_.instance_buffer->write(
+        offset, std::as_bytes(std::span<const GpuInstance>{batch.instances.data(),
+                                                           batch.instances.size()}));
+    ctx_.command_list->set_instance_buffer(*ctx_.instance_buffer, offset);
+  }
+  if (ctx_.instance_write_offset != nullptr) {
+    *ctx_.instance_write_offset += bytes;
+  }
+
   PushConstants pc{};
-  pc.mvp = *ctx_.view_proj * world;
-  pc.model = world;
-  pc.color[0] = color.x;
-  pc.color[1] = color.y;
-  pc.color[2] = color.z;
-  pc.color[3] = use_material ? ctx_.material_opacity : 1.f;
-  pc.material[0] = use_material ? ctx_.material_roughness : 0.6f;
-  pc.material[1] = use_material ? ctx_.material_metallic : 0.f;
-  pc.material[2] = has_albedo ? 1.f : 0.f;
-  pc.material[3] = has_normal ? 1.f : 0.f;
+  pc.mvp = *ctx_.view_proj;
+  pc.model = Mat4::identity();
+  pc.color[0] = pc.color[1] = pc.color[2] = 1.f;
+  pc.color[3] = 1.f;
+  pc.material[0] = 0.6f;
+  pc.material[1] = 0.f;
+  pc.material[2] = batch.has_albedo ? 1.f : 0.f;
+  pc.material[3] = batch.has_normal ? 1.f : 0.f;
   pc.light_dir_selected[0] = 0.45f;
   pc.light_dir_selected[1] = 0.35f;
   pc.light_dir_selected[2] = 0.82f;
-  pc.light_dir_selected[3] = ctx_.selected ? 1.f : 0.f;
+  pc.light_dir_selected[3] = 0.f;
   pc.eye_pos_mode[0] = ctx_.eye_position.x;
   pc.eye_pos_mode[1] = ctx_.eye_position.y;
   pc.eye_pos_mode[2] = ctx_.eye_position.z;
-  pc.eye_pos_mode[3] = as_lines ? 3.f : ctx_.mode_value;
+  pc.eye_pos_mode[3] = batch.as_lines ? 3.f : ctx_.mode_value;
   pc.lighting[0] = ctx_.exposure;
   pc.lighting[1] = ctx_.key_light_intensity;
   pc.lighting[2] = ctx_.ibl_max_mip;
-  pc.lighting[3] = mesh.has_texcoord ? 1.f : 0.f;
+  pc.lighting[3] = batch.mesh->has_texcoord ? 1.f : 0.f;
   ctx_.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
-  ctx_.command_list->set_vertex_buffer(*mesh.vertex_buffer);
-  ctx_.command_list->set_index_buffer(*mesh.index_buffer);
+  ctx_.command_list->set_vertex_buffer(*batch.mesh->vertex_buffer);
+  ctx_.command_list->set_index_buffer(*batch.mesh->index_buffer);
   DrawIndexedDesc draw{};
-  draw.index_count = mesh.index_count;
+  draw.index_count = batch.mesh->index_count;
+  draw.instance_count = static_cast<std::uint32_t>(batch.instances.size());
   ctx_.command_list->draw_indexed(draw);
+}
+
+void RecordCommands::flush_all() {
+  for (auto& batch : batches_) {
+    flush_batch(batch);
+  }
+  batches_.clear();
+  batch_index_.clear();
 }
 
 // ---------------------------------------------------------------------------

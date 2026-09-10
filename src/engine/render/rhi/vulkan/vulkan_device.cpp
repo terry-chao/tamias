@@ -2,6 +2,7 @@
 
 #include "engine/core/log.h"
 #include "engine/graphics/mesh.h"
+#include "engine/render/gpu_instance.h"
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -309,6 +310,11 @@ class VulkanCommandList final : public CommandList {
   void set_vertex_buffer(Buffer& buffer, std::uint64_t offset) override {
     VkBuffer buf = static_cast<VulkanBuffer&>(buffer).handle();
     vkCmdBindVertexBuffers(cmds_[active_frame_], 0, 1, &buf, &offset);
+  }
+
+  void set_instance_buffer(Buffer& buffer, std::uint64_t offset) override {
+    VkBuffer buf = static_cast<VulkanBuffer&>(buffer).handle();
+    vkCmdBindVertexBuffers(cmds_[active_frame_], 1, 1, &buf, &offset);
   }
 
   void set_index_buffer(Buffer& buffer, std::uint64_t offset) override {
@@ -1307,19 +1313,32 @@ Result<std::unique_ptr<PipelineState>> VulkanDevice::create_pipeline(const Pipel
   stages[1].module = fs->handle();
   stages[1].pName = "main";
 
-  VkVertexInputBindingDescription binding{};
-  binding.binding = 0;
-  binding.stride = sizeof(Vertex);  // pos3 + nrm3 + uv2 + color3
-  binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-  std::array<VkVertexInputAttributeDescription, 4> attrs{};
+  VkVertexInputBindingDescription bindings[2]{};
+  bindings[0].binding = 0;
+  bindings[0].stride = sizeof(Vertex);
+  bindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+  bindings[1].binding = 1;
+  bindings[1].stride = sizeof(GpuInstance);
+  bindings[1].inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
+  std::array<VkVertexInputAttributeDescription, 9> attrs{};
   attrs[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT, static_cast<std::uint32_t>(offsetof(Vertex, position))};
   attrs[1] = {1, 0, VK_FORMAT_R32G32B32_SFLOAT, static_cast<std::uint32_t>(offsetof(Vertex, normal))};
   attrs[2] = {2, 0, VK_FORMAT_R32G32_SFLOAT, static_cast<std::uint32_t>(offsetof(Vertex, uv))};
   attrs[3] = {3, 0, VK_FORMAT_R32G32B32_SFLOAT, static_cast<std::uint32_t>(offsetof(Vertex, color))};
+  attrs[4] = {4, 1, VK_FORMAT_R32G32B32A32_SFLOAT,
+              static_cast<std::uint32_t>(offsetof(GpuInstance, row0))};
+  attrs[5] = {5, 1, VK_FORMAT_R32G32B32A32_SFLOAT,
+              static_cast<std::uint32_t>(offsetof(GpuInstance, row1))};
+  attrs[6] = {6, 1, VK_FORMAT_R32G32B32A32_SFLOAT,
+              static_cast<std::uint32_t>(offsetof(GpuInstance, row2))};
+  attrs[7] = {7, 1, VK_FORMAT_R32G32B32A32_SFLOAT,
+              static_cast<std::uint32_t>(offsetof(GpuInstance, color))};
+  attrs[8] = {8, 1, VK_FORMAT_R32G32B32A32_SFLOAT,
+              static_cast<std::uint32_t>(offsetof(GpuInstance, material))};
   VkPipelineVertexInputStateCreateInfo vi{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
-  vi.vertexBindingDescriptionCount = 1;
-  vi.pVertexBindingDescriptions = &binding;
-  vi.vertexAttributeDescriptionCount = static_cast<std::uint32_t>(attrs.size());
+  vi.vertexBindingDescriptionCount = desc.instanced ? 2u : 1u;
+  vi.pVertexBindingDescriptions = bindings;
+  vi.vertexAttributeDescriptionCount = desc.instanced ? 9u : 4u;
   vi.pVertexAttributeDescriptions = attrs.data();
 
   VkPipelineInputAssemblyStateCreateInfo ia{

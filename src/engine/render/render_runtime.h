@@ -142,6 +142,8 @@ class RenderThread {
   std::unique_ptr<Texture> ibl_brdf_lut_;
   float ibl_max_mip_ = 4.f;
   bool logged_texture_diag_ = false;  // 只打一次贴图诊断日志
+  std::unique_ptr<Buffer> instance_buffer_;  // 可增长 host-visible 实例顶点缓冲
+  std::uint64_t instance_write_offset_ = 0;
   std::unordered_map<std::uint64_t, ChannelState> channels_;
   std::uint64_t next_mesh_id_ = 1;
   std::uint64_t next_texture_id_ = 1;

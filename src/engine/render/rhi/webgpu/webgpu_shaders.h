@@ -32,6 +32,11 @@ struct VsIn {
   @location(1) normal: vec3<f32>,
   @location(2) uv: vec2<f32>,
   @location(3) color: vec3<f32>,
+  @location(4) inst_row0: vec4<f32>,
+  @location(5) inst_row1: vec4<f32>,
+  @location(6) inst_row2: vec4<f32>,
+  @location(7) inst_color: vec4<f32>,
+  @location(8) inst_material: vec4<f32>,
 };
 struct VsOut {
   @builtin(position) position: vec4<f32>,
@@ -41,19 +46,26 @@ struct VsOut {
   @location(3) world_pos: vec3<f32>,
   @location(4) mode: f32,
   @location(5) color: vec3<f32>,
+  @location(6) rough_metal: vec2<f32>,
+  @location(7) opacity: f32,
 };
 @vertex
 fn main(input: VsIn) -> VsOut {
   var o: VsOut;
-  let world = pc.model * vec4<f32>(input.position, 1.0);
-  o.world_pos = world.xyz;
-  let model3 = mat3x3<f32>(pc.model[0].xyz, pc.model[1].xyz, pc.model[2].xyz);
-  o.normal = model3 * input.normal;
+  let hp = vec4<f32>(input.position, 1.0);
+  let world = vec3<f32>(dot(input.inst_row0, hp), dot(input.inst_row1, hp),
+                        dot(input.inst_row2, hp));
+  o.world_pos = world;
+  o.normal = vec3<f32>(dot(input.inst_row0.xyz, input.normal),
+                       dot(input.inst_row1.xyz, input.normal),
+                       dot(input.inst_row2.xyz, input.normal));
   o.uv = input.uv;
-  o.color = input.color;
-  o.selected = pc.light_dir_selected.w;
+  o.color = input.inst_color.rgb * input.color;
+  o.selected = input.inst_material.z;
   o.mode = pc.eye_pos_mode.w;
-  o.position = pc.mvp * vec4<f32>(input.position, 1.0);
+  o.rough_metal = input.inst_material.xy;
+  o.opacity = input.inst_color.a;
+  o.position = pc.mvp * vec4<f32>(world, 1.0);
   return o;
 }
 )WGSL";
@@ -69,6 +81,8 @@ struct FsIn {
   @location(3) world_pos: vec3<f32>,
   @location(4) mode: f32,
   @location(5) color: vec3<f32>,
+  @location(6) rough_metal: vec2<f32>,
+  @location(7) opacity: f32,
 };
 
 fn shaded_simple(n: vec3<f32>, l: vec3<f32>, base: vec3<f32>) -> vec3<f32> {
@@ -206,7 +220,8 @@ fn main(input: FsIn) -> @location(0) vec4<f32> {
   var lit_rgb: vec3<f32>;
   var lit_a = 1.0;
   if (input.mode > 1.5) {
-    let pbr = shaded_realistic(n, l, v, base, pc.material.x, pc.material.y, clamp(pc.color.w, 0.0, 1.0));
+    let pbr = shaded_realistic(n, l, v, base, input.rough_metal.x, input.rough_metal.y,
+                               clamp(input.opacity, 0.0, 1.0));
     lit_rgb = pbr.rgb;
     lit_a = pbr.a;
   } else {

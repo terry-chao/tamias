@@ -4,6 +4,7 @@
 #include "engine/core/log.h"
 #include "engine/math/math.h"
 #include "engine/render/ibl.h"
+#include "engine/render/gpu_instance.h"
 #include "engine/render/scene_graph.h"
 #if defined(TAMIAS_HAS_RHI_WEBGL)
 #include "engine/render/rhi/webgl/webgl_shaders.h"
@@ -272,6 +273,8 @@ void RenderThread::stop() {
   ibl_irradiance_.reset();
   ibl_prefilter_.reset();
   ibl_brdf_lut_.reset();
+  instance_buffer_.reset();
+  instance_write_offset_ = 0;
   shaded_pipeline_.reset();
   wire_pipeline_.reset();
   line_pipeline_.reset();
@@ -534,6 +537,7 @@ Result<void> RenderThread::ensure_pipelines() {
   shaded.vertex_shader = vs_.get();
   shaded.fragment_shader = fs_.get();
   shaded.wireframe = false;
+  shaded.instanced = true;
   auto p0 = device_->create_pipeline(shaded);
   if (!p0) {
     return Err(p0.error());
@@ -906,6 +910,21 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
   channel.command_list->set_scissor(0, 0, channel.swap_chain->width(), channel.swap_chain->height());
   const Mat4 clip = device_->clip_space_correction_matrix();
   const Mat4 view_proj = clip * frame.proj * frame.view;
+  instance_write_offset_ = 0;
+  {
+    const auto estimated = (std::max)(
+        static_cast<std::uint64_t>((frame.items.size() + 4096u) * sizeof(GpuInstance)),
+        static_cast<std::uint64_t>(1024 * 1024));
+    if (!instance_buffer_ || instance_buffer_->desc().size < estimated) {
+      BufferDesc d{};
+      d.size = estimated;
+      d.usage = BufferDesc::Usage::Vertex;
+      d.host_visible = true;
+      if (auto created = device_->create_buffer(d)) {
+        instance_buffer_ = std::move(*created);
+      }
+    }
+  }
 
   auto bind_mesh_sets = [&]() {
     if (default_texture_) {
@@ -923,6 +942,26 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     if (ibl_brdf_lut_) {
       channel.command_list->set_texture(*ibl_brdf_lut_, kTextureSlotIblBrdfLut);
     }
+  };
+  auto upload_instances = [&](std::span<const GpuInstance> insts) -> bool {
+    if (insts.empty() || !instance_buffer_) {
+      return false;
+    }
+    const auto bytes = static_cast<std::uint64_t>(insts.size_bytes());
+    if (instance_write_offset_ + bytes > instance_buffer_->desc().size) {
+      return false;
+    }
+    if (auto w = instance_buffer_->write(instance_write_offset_, std::as_bytes(insts)); !w) {
+      return false;
+    }
+    channel.command_list->set_instance_buffer(*instance_buffer_, instance_write_offset_);
+    instance_write_offset_ += bytes;
+    return true;
+  };
+  auto bind_identity_instance = [&]() {
+    const GpuInstance inst =
+        make_gpu_instance(Mat4::identity(), Vec3{1.f, 1.f, 1.f}, 1.f, 0.6f, 0.f, false);
+    upload_instances(std::span<const GpuInstance>{&inst, 1});
   };
   // 天空：采样 IBL cubemap，与模型环境倒影同源。
   if (sky_pipeline_ && sky_mesh_.index_buffer && ibl_prefilter_) {
@@ -956,6 +995,7 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
     channel.command_list->set_vertex_buffer(*mesh.vertex_buffer);
     channel.command_list->set_index_buffer(*mesh.index_buffer);
+    bind_identity_instance();
     DrawIndexedDesc d{};
     d.index_count = mesh.index_count;
     channel.command_list->draw_indexed(d);
@@ -1038,6 +1078,26 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     ctx.textures = &textures_;
     ctx.texture_asset_to_gpu = &texture_asset_to_gpu_;
     ctx.texture_diag_logged = &logged_texture_diag_;
+    ctx.grow_instance_buffer = [&](std::uint64_t bytes) -> Buffer* {
+      if (instance_buffer_ && instance_buffer_->desc().size >= bytes) {
+        return instance_buffer_.get();
+      }
+      if (instance_write_offset_ != 0) {
+        return instance_buffer_.get();
+      }
+      BufferDesc d{};
+      d.size = (std::max)(bytes, static_cast<std::uint64_t>(256 * sizeof(GpuInstance)));
+      d.usage = BufferDesc::Usage::Vertex;
+      d.host_visible = true;
+      auto created = device_->create_buffer(d);
+      if (!created) {
+        return instance_buffer_.get();
+      }
+      instance_buffer_ = std::move(*created);
+      return instance_buffer_.get();
+    };
+    ctx.instance_buffer = instance_buffer_.get();
+    ctx.instance_write_offset = &instance_write_offset_;
     RecordCommands visitor(ctx);
     channel.scene_root->accept(visitor);
     if (mode_value > 1.5f && blend_pipeline_) {
@@ -1078,14 +1138,17 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
         }
         const Mat4 model = segment_model(start, end);
         PushConstants pc{};
-        pc.mvp = view_proj * model;
-        pc.model = model;
+        pc.mvp = view_proj;
+        pc.model = Mat4::identity();
         pc.color[0] = r;
         pc.color[1] = g;
         pc.color[2] = b;
         pc.color[3] = 1.f;
         pc.eye_pos_mode[3] = 3.f;  // mode 3 = 无光照线条
         channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
+        const GpuInstance inst =
+            make_gpu_instance(model, Vec3{1.f, 1.f, 1.f}, 1.f, 0.6f, 0.f, false);
+        upload_instances(std::span<const GpuInstance>{&inst, 1});
         DrawIndexedDesc pd{};
         pd.index_count = preview_line_mesh_.index_count;
         channel.command_list->draw_indexed(pd);

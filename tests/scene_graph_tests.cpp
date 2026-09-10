@@ -1,4 +1,5 @@
 #include "engine/render/scene_graph.h"
+#include "engine/render/gpu_instance.h"
 #include "engine/document/document.h"
 #include "engine/io/mesh_io.h"
 #include "entity/column_entity.h"
@@ -48,6 +49,7 @@ class MockCommandList : public CommandList {
   void end_render_pass() override {}
   void set_pipeline(PipelineState& pipeline) override { pipelines.push_back(&pipeline); }
   void set_vertex_buffer(Buffer&, std::uint64_t) override { ++vertex_binds; }
+  void set_instance_buffer(Buffer&, std::uint64_t) override { ++instance_binds; }
   void set_index_buffer(Buffer&, std::uint64_t) override { ++index_binds; }
   void set_push_constants(std::span<const std::byte> data) override {
     PushConstants pc{};
@@ -65,6 +67,7 @@ class MockCommandList : public CommandList {
   std::vector<DrawIndexedDesc> draws;
   int texture_binds = 0;
   int vertex_binds = 0;
+  int instance_binds = 0;
   int index_binds = 0;
 };
 
@@ -84,6 +87,8 @@ struct Fixture {
   std::unordered_map<std::uint64_t, GpuTexture> textures;
   std::unordered_map<std::uint64_t, std::uint64_t> texture_asset_to_gpu;
   bool texture_diag_logged = false;
+  MockBuffer instance_buf;
+  std::vector<GpuInstance> recorded;
 
   Fixture() {
     ctx.command_list = &cmds;
@@ -100,6 +105,8 @@ struct Fixture {
     ctx.textures = &textures;
     ctx.texture_asset_to_gpu = &texture_asset_to_gpu;
     ctx.texture_diag_logged = &texture_diag_logged;
+    ctx.instance_buffer = &instance_buf;
+    ctx.recorded_instances = &recorded;
   }
 
   void add_mesh(std::uint64_t asset_id, std::uint32_t index_count) {
@@ -113,6 +120,7 @@ struct Fixture {
   }
 
   void visit(RenderNode& root) {
+    recorded.clear();
     RecordCommands visitor(ctx);
     root.accept(visitor);
   }
@@ -163,23 +171,32 @@ TEST(SceneGraph, RecordsDrawWithAccumulatedTransformAndMaterial) {
 
   ASSERT_EQ(f.cmds.draws.size(), 1u);
   ASSERT_EQ(f.cmds.push_constants.size(), 1u);
+  ASSERT_EQ(f.recorded.size(), 1u);
   EXPECT_EQ(f.cmds.draws[0].index_count, 6u);
+  EXPECT_EQ(f.cmds.draws[0].instance_count, 1u);
   EXPECT_EQ(f.cmds.texture_binds, 2);
   EXPECT_EQ(f.cmds.vertex_binds, 1);
+  EXPECT_EQ(f.cmds.instance_binds, 1);
   EXPECT_EQ(f.cmds.index_binds, 1);
   EXPECT_EQ(f.cmds.pipelines.back(), &f.shaded);
 
   const PushConstants& pc = f.cmds.push_constants[0];
-  expect_mat4_eq(pc.model, translate({1.f, 2.f, 3.f}));
-  expect_mat4_eq(pc.mvp, f.view_proj * translate({1.f, 2.f, 3.f}));
+  expect_mat4_eq(pc.model, Mat4::identity());
+  expect_mat4_eq(pc.mvp, f.view_proj);
   EXPECT_FLOAT_EQ(pc.color[0], 1.f);
-  EXPECT_FLOAT_EQ(pc.color[1], 0.f);
-  EXPECT_FLOAT_EQ(pc.color[2], 0.f);
-  EXPECT_FLOAT_EQ(pc.color[3], 1.f);
-  EXPECT_FLOAT_EQ(pc.material[0], 0.2f);
-  EXPECT_FLOAT_EQ(pc.material[1], 0.9f);
-  EXPECT_FLOAT_EQ(pc.light_dir_selected[3], 1.f);  // selected
-  EXPECT_FLOAT_EQ(pc.eye_pos_mode[3], 2.f);        // realistic mode
+  EXPECT_FLOAT_EQ(pc.color[1], 1.f);
+  EXPECT_FLOAT_EQ(pc.color[2], 1.f);
+  EXPECT_FLOAT_EQ(pc.material[2], 0.f);
+  EXPECT_FLOAT_EQ(pc.light_dir_selected[3], 0.f);
+  EXPECT_FLOAT_EQ(pc.eye_pos_mode[3], 2.f);
+  expect_mat4_eq(gpu_instance_world(f.recorded[0]), translate({1.f, 2.f, 3.f}));
+  EXPECT_FLOAT_EQ(f.recorded[0].color[0], 1.f);
+  EXPECT_FLOAT_EQ(f.recorded[0].color[1], 0.f);
+  EXPECT_FLOAT_EQ(f.recorded[0].color[2], 0.f);
+  EXPECT_FLOAT_EQ(f.recorded[0].color[3], 1.f);
+  EXPECT_FLOAT_EQ(f.recorded[0].material[0], 0.2f);
+  EXPECT_FLOAT_EQ(f.recorded[0].material[1], 0.9f);
+  EXPECT_FLOAT_EQ(f.recorded[0].material[2], 1.f);
 }
 
 TEST(SceneGraph, RealisticBindsAlbedoAndNormalMaps) {
@@ -212,11 +229,12 @@ TEST(SceneGraph, RealisticBindsAlbedoAndNormalMaps) {
   f.visit(*root);
 
   ASSERT_EQ(f.cmds.push_constants.size(), 1u);
+  ASSERT_EQ(f.recorded.size(), 1u);
   const PushConstants& pc = f.cmds.push_constants[0];
-  EXPECT_FLOAT_EQ(pc.material[0], 0.2f);
-  EXPECT_FLOAT_EQ(pc.material[1], 0.9f);
   EXPECT_FLOAT_EQ(pc.material[2], 1.f);  // has_albedo
   EXPECT_FLOAT_EQ(pc.material[3], 1.f);  // has_normal
+  EXPECT_FLOAT_EQ(f.recorded[0].material[0], 0.2f);
+  EXPECT_FLOAT_EQ(f.recorded[0].material[1], 0.9f);
   EXPECT_EQ(f.cmds.texture_binds, 2);
 }
 
@@ -245,15 +263,17 @@ TEST(SceneGraph, ShadedUsesCategoryColorAndIgnoresAlbedo) {
   f.visit(*root);
 
   ASSERT_EQ(f.cmds.push_constants.size(), 1u);
+  ASSERT_EQ(f.recorded.size(), 1u);
   const PushConstants& pc = f.cmds.push_constants[0];
-  EXPECT_FLOAT_EQ(pc.color[0], 0.62f);
-  EXPECT_FLOAT_EQ(pc.color[1], 0.45f);
-  EXPECT_FLOAT_EQ(pc.color[2], 0.72f);
-  EXPECT_FLOAT_EQ(pc.material[0], 0.6f);
-  EXPECT_FLOAT_EQ(pc.material[1], 0.f);
+  EXPECT_FLOAT_EQ(pc.color[0], 1.f);
   EXPECT_FLOAT_EQ(pc.material[2], 0.f);  // no albedo in shaded
   EXPECT_FLOAT_EQ(pc.material[3], 0.f);  // no normal in shaded
   EXPECT_FLOAT_EQ(pc.eye_pos_mode[3], 1.f);
+  EXPECT_FLOAT_EQ(f.recorded[0].color[0], 0.62f);
+  EXPECT_FLOAT_EQ(f.recorded[0].color[1], 0.45f);
+  EXPECT_FLOAT_EQ(f.recorded[0].color[2], 0.72f);
+  EXPECT_FLOAT_EQ(f.recorded[0].material[0], 0.6f);
+  EXPECT_FLOAT_EQ(f.recorded[0].material[1], 0.f);
 }
 
 TEST(SceneGraph, RealisticGlassDrawnOnlyInTransparentPass) {
@@ -280,8 +300,9 @@ TEST(SceneGraph, RealisticGlassDrawnOnlyInTransparentPass) {
   f.ctx.transparent_pass = true;
   f.visit(*root);
   ASSERT_EQ(f.cmds.draws.size(), 1u);
-  ASSERT_EQ(f.cmds.push_constants.size(), 1u);
-  EXPECT_FLOAT_EQ(f.cmds.push_constants[0].color[3], 0.16f);
+  ASSERT_EQ(f.recorded.size(), 1u);
+  EXPECT_EQ(f.cmds.draws[0].instance_count, 1u);
+  EXPECT_FLOAT_EQ(f.recorded[0].color[3], 0.16f);
 }
 
 TEST(SceneGraph, NestedTransformsMultiplyInTraversalOrder) {
@@ -302,8 +323,9 @@ TEST(SceneGraph, NestedTransformsMultiplyInTraversalOrder) {
   f.visit(*root);
 
   ASSERT_EQ(f.cmds.draws.size(), 1u);
-  expect_mat4_eq(f.cmds.push_constants[0].model, outer * inner);
-  expect_mat4_eq(f.cmds.push_constants[0].mvp, f.view_proj * outer * inner);
+  ASSERT_EQ(f.recorded.size(), 1u);
+  expect_mat4_eq(gpu_instance_world(f.recorded[0]), outer * inner);
+  expect_mat4_eq(f.cmds.push_constants[0].mvp, f.view_proj);
 }
 
 TEST(SceneGraph, InvisibleSubtreeIsSkipped) {
@@ -345,10 +367,32 @@ TEST(SceneGraph, SiblingStateGroupsOverrideExplicitly) {
 
   f.visit(*root);
 
-  ASSERT_EQ(f.cmds.draws.size(), 2u);
-  ASSERT_EQ(f.cmds.push_constants.size(), 2u);
-  EXPECT_FLOAT_EQ(f.cmds.push_constants[0].color[0], 1.f);
-  EXPECT_FLOAT_EQ(f.cmds.push_constants[1].color[2], 1.f);
+  ASSERT_EQ(f.cmds.draws.size(), 1u);
+  ASSERT_EQ(f.cmds.draws[0].instance_count, 2u);
+  ASSERT_EQ(f.recorded.size(), 2u);
+  EXPECT_FLOAT_EQ(f.recorded[0].color[0], 1.f);
+  EXPECT_FLOAT_EQ(f.recorded[1].color[2], 1.f);
+}
+
+TEST(SceneGraph, SameMeshManyInstancesOneDraw) {
+  Fixture f;
+  f.add_mesh(10, 3);
+
+  auto root = std::make_unique<GroupNode>();
+  for (int i = 0; i < 10; ++i) {
+    auto transform = std::make_unique<TransformNode>();
+    transform->matrix = translate({static_cast<float>(i), 0.f, 0.f});
+    transform->add_child(make_drawable(static_cast<std::uint64_t>(i + 1), 10));
+    root->add_child(std::move(transform));
+  }
+
+  f.visit(*root);
+
+  ASSERT_EQ(f.cmds.draws.size(), 1u);
+  EXPECT_EQ(f.cmds.draws[0].instance_count, 10u);
+  ASSERT_EQ(f.recorded.size(), 10u);
+  expect_mat4_eq(gpu_instance_world(f.recorded[0]), translate({0.f, 0.f, 0.f}));
+  expect_mat4_eq(gpu_instance_world(f.recorded[9]), translate({9.f, 0.f, 0.f}));
 }
 
 TEST(SceneGraph, LinesCommandSelectsEntityLinePipelineAndMode3) {
@@ -427,13 +471,15 @@ TEST(SceneGraph, BuildFromItemsMapsFieldsAndTreeShape) {
   f.visit(*root);
 
   ASSERT_EQ(f.cmds.draws.size(), 2u);
-  ASSERT_EQ(f.cmds.push_constants.size(), 2u);
-  EXPECT_FLOAT_EQ(f.cmds.push_constants[0].color[0], 1.f);
-  EXPECT_FLOAT_EQ(f.cmds.push_constants[0].light_dir_selected[3], 1.f);
-  expect_mat4_eq(f.cmds.push_constants[0].model, world);
+  ASSERT_EQ(f.recorded.size(), 2u);
+  EXPECT_EQ(f.cmds.draws[0].instance_count, 1u);
+  EXPECT_EQ(f.cmds.draws[1].instance_count, 1u);
+  EXPECT_FLOAT_EQ(f.recorded[0].color[0], 1.f);
+  EXPECT_FLOAT_EQ(f.recorded[0].material[2], 1.f);
+  expect_mat4_eq(gpu_instance_world(f.recorded[0]), world);
   EXPECT_EQ(f.cmds.draws[0].index_count, 6u);
-  EXPECT_FLOAT_EQ(f.cmds.push_constants[1].color[2], 1.f);
-  EXPECT_FLOAT_EQ(f.cmds.push_constants[1].light_dir_selected[3], 0.f);
+  EXPECT_FLOAT_EQ(f.recorded[1].color[2], 1.f);
+  EXPECT_FLOAT_EQ(f.recorded[1].material[2], 0.f);
   EXPECT_EQ(f.cmds.draws[1].index_count, 12u);
   EXPECT_TRUE(f.texture_diag_logged);
 }
@@ -571,14 +617,14 @@ TEST(SceneGraphIncremental, UpdatesExistingNodeInPlace) {
 
   f.visit(*root);
   ASSERT_EQ(f.cmds.draws.size(), 2u);
-  ASSERT_EQ(f.cmds.push_constants.size(), 2u);
-  expect_mat4_eq(f.cmds.push_constants[0].model, translate({9.f, 8.f, 7.f}));
-  EXPECT_FLOAT_EQ(f.cmds.push_constants[0].color[2], 1.f);
-  EXPECT_FLOAT_EQ(f.cmds.push_constants[0].light_dir_selected[3], 1.f);
+  ASSERT_EQ(f.recorded.size(), 2u);
+  expect_mat4_eq(gpu_instance_world(f.recorded[0]), translate({9.f, 8.f, 7.f}));
+  EXPECT_FLOAT_EQ(f.recorded[0].color[2], 1.f);
+  EXPECT_FLOAT_EQ(f.recorded[0].material[2], 1.f);
   // node 2 保持原样。
-  expect_mat4_eq(f.cmds.push_constants[1].model, Mat4::identity());
-  EXPECT_FLOAT_EQ(f.cmds.push_constants[1].color[1], 1.f);
-  EXPECT_FLOAT_EQ(f.cmds.push_constants[1].light_dir_selected[3], 0.f);
+  expect_mat4_eq(gpu_instance_world(f.recorded[1]), Mat4::identity());
+  EXPECT_FLOAT_EQ(f.recorded[1].color[1], 1.f);
+  EXPECT_FLOAT_EQ(f.recorded[1].material[2], 0.f);
 }
 
 TEST(SceneGraphIncremental, InsertAndRemoveSubtrees) {

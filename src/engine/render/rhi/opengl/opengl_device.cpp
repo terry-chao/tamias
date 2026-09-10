@@ -3,6 +3,7 @@
 #include "engine/core/log.h"
 #include "gl_loader.h"
 #include "engine/graphics/mesh.h"
+#include "engine/render/gpu_instance.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -78,13 +79,14 @@ class OpenGLShaderModule final : public ShaderModule {
 class OpenGLPipeline final : public PipelineState {
  public:
   OpenGLPipeline(GLuint program, bool wireframe, bool depth_test, bool depth_write, bool blend,
-                 PrimitiveTopology topology)
+                 PrimitiveTopology topology, bool instanced)
       : program_(program),
         wireframe_(wireframe),
         depth_test_(depth_test),
         depth_write_(depth_write),
         blend_(blend),
-        topology_(topology) {}
+        topology_(topology),
+        instanced_(instanced) {}
   ~OpenGLPipeline() override {
     if (program_) {
       gl::DeleteProgram(program_);
@@ -96,6 +98,7 @@ class OpenGLPipeline final : public PipelineState {
   [[nodiscard]] bool depth_write() const { return depth_write_; }
   [[nodiscard]] bool blend() const { return blend_; }
   [[nodiscard]] PrimitiveTopology topology() const { return topology_; }
+  [[nodiscard]] bool instanced() const { return instanced_; }
 
  private:
   GLuint program_ = 0;
@@ -104,6 +107,7 @@ class OpenGLPipeline final : public PipelineState {
   bool depth_write_ = true;
   bool blend_ = false;
   PrimitiveTopology topology_ = PrimitiveTopology::TriangleList;
+  bool instanced_ = false;
 };
 
 class OpenGLFence final : public Fence {
@@ -152,6 +156,7 @@ class OpenGLCommandList final : public CommandList {
   void end_render_pass() override {}
   void set_pipeline(PipelineState& pipeline) override;
   void set_vertex_buffer(Buffer& buffer, std::uint64_t offset = 0) override;
+  void set_instance_buffer(Buffer& buffer, std::uint64_t offset = 0) override;
   void set_index_buffer(Buffer& buffer, std::uint64_t offset = 0) override;
   void set_push_constants(std::span<const std::byte> data) override;
   void set_texture(Texture& texture, std::uint32_t slot = 0) override;
@@ -165,8 +170,10 @@ class OpenGLCommandList final : public CommandList {
   bool recording_ = false;
   OpenGLPipeline* pipeline_ = nullptr;
   OpenGLBuffer* vertex_ = nullptr;
+  OpenGLBuffer* instance_ = nullptr;
   OpenGLBuffer* index_ = nullptr;
   std::uint64_t vertex_offset_ = 0;
+  std::uint64_t instance_offset_ = 0;
   std::uint64_t index_offset_ = 0;
 };
 
@@ -818,7 +825,8 @@ Result<std::unique_ptr<PipelineState>> OpenGLDevice::create_pipeline(const Pipel
   }
   release_current();
   return std::make_unique<OpenGLPipeline>(program, desc.wireframe, desc.depth_test,
-                                          desc.depth_write, desc.blend, desc.topology);
+                                          desc.depth_write, desc.blend, desc.topology,
+                                          desc.instanced);
 }
 
 OpenGLSwapChain::OpenGLSwapChain(OpenGLDevice* device, SwapChainDesc desc)
@@ -927,6 +935,11 @@ void OpenGLCommandList::set_vertex_buffer(Buffer& buffer, std::uint64_t offset) 
   vertex_offset_ = offset;
 }
 
+void OpenGLCommandList::set_instance_buffer(Buffer& buffer, std::uint64_t offset) {
+  instance_ = static_cast<OpenGLBuffer*>(&buffer);
+  instance_offset_ = offset;
+}
+
 void OpenGLCommandList::set_index_buffer(Buffer& buffer, std::uint64_t offset) {
   index_ = static_cast<OpenGLBuffer*>(&buffer);
   index_offset_ = offset;
@@ -970,25 +983,63 @@ void OpenGLCommandList::draw_indexed(const DrawIndexedDesc& desc) {
   const auto base = reinterpret_cast<const void*>(static_cast<std::uintptr_t>(vertex_offset_));
   gl::EnableVertexAttribArray(0);
   gl::VertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, base);
+  gl::VertexAttribDivisor(0, 0);
   gl::EnableVertexAttribArray(1);
   gl::VertexAttribPointer(
       1, 3, GL_FLOAT, GL_FALSE, stride,
       reinterpret_cast<const void*>(static_cast<std::uintptr_t>(vertex_offset_ + offsetof(Vertex, normal))));
+  gl::VertexAttribDivisor(1, 0);
   gl::EnableVertexAttribArray(2);
   gl::VertexAttribPointer(
       2, 2, GL_FLOAT, GL_FALSE, stride,
       reinterpret_cast<const void*>(static_cast<std::uintptr_t>(vertex_offset_ + offsetof(Vertex, uv))));
+  gl::VertexAttribDivisor(2, 0);
   gl::EnableVertexAttribArray(3);
   gl::VertexAttribPointer(
       3, 3, GL_FLOAT, GL_FALSE, stride,
       reinterpret_cast<const void*>(static_cast<std::uintptr_t>(vertex_offset_ + offsetof(Vertex, color))));
+  gl::VertexAttribDivisor(3, 0);
+
+  if (pipeline_->instanced() && instance_) {
+    constexpr GLsizei inst_stride = static_cast<GLsizei>(sizeof(GpuInstance));
+    gl::BindBuffer(GL_ARRAY_BUFFER, instance_->handle());
+    const auto inst_base = static_cast<std::uintptr_t>(instance_offset_);
+    const struct {
+      GLuint index;
+      GLint size;
+      std::size_t offset;
+    } inst_attrs[] = {
+        {4, 4, offsetof(GpuInstance, row0)},
+        {5, 4, offsetof(GpuInstance, row1)},
+        {6, 4, offsetof(GpuInstance, row2)},
+        {7, 4, offsetof(GpuInstance, color)},
+        {8, 4, offsetof(GpuInstance, material)},
+    };
+    for (const auto& attr : inst_attrs) {
+      gl::EnableVertexAttribArray(attr.index);
+      gl::VertexAttribPointer(attr.index, attr.size, GL_FLOAT, GL_FALSE, inst_stride,
+                              reinterpret_cast<const void*>(inst_base + attr.offset));
+      gl::VertexAttribDivisor(attr.index, 1);
+    }
+  } else {
+    for (GLuint i = 4; i <= 8; ++i) {
+      gl::DisableVertexAttribArray(i);
+      gl::VertexAttribDivisor(i, 0);
+    }
+  }
 
   const auto index_ptr =
       reinterpret_cast<const void*>(static_cast<std::uintptr_t>(
           index_offset_ + desc.first_index * sizeof(std::uint32_t)));
   const GLenum mode =
       pipeline_->topology() == PrimitiveTopology::LineList ? GL_LINES : GL_TRIANGLES;
-  gl::DrawElements(mode, static_cast<GLsizei>(desc.index_count), GL_UNSIGNED_INT, index_ptr);
+  const GLsizei instances = static_cast<GLsizei>(std::max(1u, desc.instance_count));
+  if (pipeline_->instanced()) {
+    gl::DrawElementsInstanced(mode, static_cast<GLsizei>(desc.index_count), GL_UNSIGNED_INT,
+                              index_ptr, instances);
+  } else {
+    gl::DrawElements(mode, static_cast<GLsizei>(desc.index_count), GL_UNSIGNED_INT, index_ptr);
+  }
 }
 
 Result<std::unique_ptr<RHIDevice>> create_opengl_device(const DeviceCreateInfo& info) {

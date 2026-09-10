@@ -179,9 +179,9 @@ float4 main(VsOutput input) : SV_Target0 {
       base = sample_triplanar_albedo(input.world_pos, n);
     }
   }
-  float rough = pc.material.x;
-  float metal = pc.material.y;
-  float opacity = saturate(pc.color.w);
+  float rough = input.rough_metal.x;
+  float metal = input.rough_metal.y;
+  float opacity = saturate(input.opacity);
 
   float4 lit;
   if (input.mode > 1.5) {

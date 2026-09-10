@@ -135,6 +135,9 @@ struct PipelineDesc {
   bool depth_write = true;
   bool blend = false;  // ONE / ONE_MINUS_SRC_ALPHA，玻璃等半透明
   bool wireframe = false;
+  // Mesh pipelines bind a second vertex buffer at instance rate (GpuInstance).
+  // Grid / sky stay false: those shaders still use pc.model / pc.mvp.
+  bool instanced = false;
   TextureDesc::Format color_format = TextureDesc::Format::B8G8R8A8_SRGB;
   TextureDesc::Format depth_format = TextureDesc::Format::D32_SFLOAT;
 };
@@ -201,6 +204,7 @@ class CommandList {
   virtual void end_render_pass() = 0;
   virtual void set_pipeline(PipelineState& pipeline) = 0;
   virtual void set_vertex_buffer(Buffer& buffer, std::uint64_t offset = 0) = 0;
+  virtual void set_instance_buffer(Buffer& buffer, std::uint64_t offset = 0) = 0;
   virtual void set_index_buffer(Buffer& buffer, std::uint64_t offset = 0) = 0;
   virtual void set_push_constants(std::span<const std::byte> data) = 0;
   virtual void set_texture(Texture& texture, std::uint32_t slot = 0) = 0;

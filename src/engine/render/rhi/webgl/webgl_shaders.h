@@ -23,21 +23,32 @@ layout(location = 0) in vec3 a_position;
 layout(location = 1) in vec3 a_normal;
 layout(location = 2) in vec2 a_uv;
 layout(location = 3) in vec3 a_color;
+layout(location = 4) in vec4 a_inst_row0;
+layout(location = 5) in vec4 a_inst_row1;
+layout(location = 6) in vec4 a_inst_row2;
+layout(location = 7) in vec4 a_inst_color;
+layout(location = 8) in vec4 a_inst_material;
 out vec3 v_normal;
 out vec2 v_uv;
 out float v_selected;
 out vec3 v_world_pos;
 out float v_mode;
 out vec3 v_color;
+out vec2 v_rough_metal;
+out float v_opacity;
 void main() {
-  vec4 world = pc.model * vec4(a_position, 1.0);
-  v_world_pos = world.xyz;
-  v_normal = mat3(pc.model) * a_normal;
+  vec4 hp = vec4(a_position, 1.0);
+  vec3 world = vec3(dot(a_inst_row0, hp), dot(a_inst_row1, hp), dot(a_inst_row2, hp));
+  v_world_pos = world;
+  v_normal = vec3(dot(a_inst_row0.xyz, a_normal), dot(a_inst_row1.xyz, a_normal),
+                  dot(a_inst_row2.xyz, a_normal));
   v_uv = a_uv;
-  v_color = a_color;
-  v_selected = pc.light_dir_selected.w;
+  v_color = a_inst_color.rgb * a_color;
+  v_selected = a_inst_material.z;
   v_mode = pc.eye_pos_mode.w;
-  gl_Position = pc.mvp * vec4(a_position, 1.0);
+  v_rough_metal = a_inst_material.xy;
+  v_opacity = a_inst_color.a;
+  gl_Position = pc.mvp * vec4(world, 1.0);
 }
 )GLSL";
   return src;
@@ -57,6 +68,8 @@ in float v_selected;
 in vec3 v_world_pos;
 in float v_mode;
 in vec3 v_color;
+in vec2 v_rough_metal;
+in float v_opacity;
 out vec4 frag_color;
 
 vec3 shaded_simple(vec3 n, vec3 l, vec3 base) {
@@ -194,7 +207,8 @@ void main() {
   vec3 lit_rgb;
   float lit_a = 1.0;
   if (v_mode > 1.5) {
-    vec4 pbr = shaded_realistic(n, l, v, base, pc.material.x, pc.material.y, clamp(pc.color.w, 0.0, 1.0));
+    vec4 pbr = shaded_realistic(n, l, v, base, v_rough_metal.x, v_rough_metal.y,
+                                clamp(v_opacity, 0.0, 1.0));
     lit_rgb = pbr.rgb;
     lit_a = pbr.a;
   } else {

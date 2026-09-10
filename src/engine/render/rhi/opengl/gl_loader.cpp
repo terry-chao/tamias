@@ -34,7 +34,9 @@ void (*GenVertexArrays)(GLsizei, GLuint*) = nullptr;
 void (*DeleteVertexArrays)(GLsizei, const GLuint*) = nullptr;
 void (*BindVertexArray)(GLuint) = nullptr;
 void (*EnableVertexAttribArray)(GLuint) = nullptr;
+void (*DisableVertexAttribArray)(GLuint) = nullptr;
 void (*VertexAttribPointer)(GLuint, GLint, GLenum, GLboolean, GLsizei, const void*) = nullptr;
+void (*VertexAttribDivisor)(GLuint, GLuint) = nullptr;
 
 GLuint (*CreateShader)(GLenum) = nullptr;
 void (*DeleteShader)(GLuint) = nullptr;
@@ -65,6 +67,7 @@ void (*Viewport)(GLint, GLint, GLsizei, GLsizei) = nullptr;
 void (*Scissor)(GLint, GLint, GLsizei, GLsizei) = nullptr;
 void (*PolygonMode)(GLenum, GLenum) = nullptr;
 void (*DrawElements)(GLenum, GLsizei, GLenum, const void*) = nullptr;
+void (*DrawElementsInstanced)(GLenum, GLsizei, GLenum, const void*, GLsizei) = nullptr;
 void (*Finish)() = nullptr;
 GLenum (*GetError)() = nullptr;
 const GLubyte* (*GetString)(GLenum) = nullptr;
@@ -108,7 +111,9 @@ bool load_procs() {
   ok = load(DeleteVertexArrays, "glDeleteVertexArrays") && ok;
   ok = load(BindVertexArray, "glBindVertexArray") && ok;
   ok = load(EnableVertexAttribArray, "glEnableVertexAttribArray") && ok;
+  ok = load(DisableVertexAttribArray, "glDisableVertexAttribArray") && ok;
   ok = load(VertexAttribPointer, "glVertexAttribPointer") && ok;
+  ok = load(VertexAttribDivisor, "glVertexAttribDivisor") && ok;
   ok = load(CreateShader, "glCreateShader") && ok;
   ok = load(DeleteShader, "glDeleteShader") && ok;
   ok = load(ShaderSource, "glShaderSource") && ok;
@@ -139,6 +144,7 @@ bool load_procs() {
   ok = load(Scissor, "glScissor") && ok;
   ok = load(PolygonMode, "glPolygonMode") && ok;
   ok = load(DrawElements, "glDrawElements") && ok;
+  ok = load(DrawElementsInstanced, "glDrawElementsInstanced") && ok;
   ok = load(Finish, "glFinish") && ok;
   ok = load(GetError, "glGetError") && ok;
   ok = load(GetString, "glGetString") && ok;

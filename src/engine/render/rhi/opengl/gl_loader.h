@@ -207,8 +207,10 @@ extern void (*GenVertexArrays)(GLsizei n, GLuint* arrays);
 extern void (*DeleteVertexArrays)(GLsizei n, const GLuint* arrays);
 extern void (*BindVertexArray)(GLuint array);
 extern void (*EnableVertexAttribArray)(GLuint index);
+extern void (*DisableVertexAttribArray)(GLuint index);
 extern void (*VertexAttribPointer)(GLuint index, GLint size, GLenum type, GLboolean normalized,
                                    GLsizei stride, const void* pointer);
+extern void (*VertexAttribDivisor)(GLuint index, GLuint divisor);
 
 extern GLuint (*CreateShader)(GLenum type);
 extern void (*DeleteShader)(GLuint shader);
@@ -243,6 +245,8 @@ extern void (*Viewport)(GLint x, GLint y, GLsizei width, GLsizei height);
 extern void (*Scissor)(GLint x, GLint y, GLsizei width, GLsizei height);
 extern void (*PolygonMode)(GLenum face, GLenum mode);
 extern void (*DrawElements)(GLenum mode, GLsizei count, GLenum type, const void* indices);
+extern void (*DrawElementsInstanced)(GLenum mode, GLsizei count, GLenum type, const void* indices,
+                                     GLsizei instancecount);
 extern void (*Finish)();
 extern GLenum (*GetError)();
 extern const GLubyte* (*GetString)(GLenum name);

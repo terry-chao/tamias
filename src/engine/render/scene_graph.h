@@ -2,8 +2,11 @@
 
 #include "engine/render/render_types.h"
 #include "engine/render/rhi/device.h"
+#include "engine/render/batch_key.h"
+#include "engine/render/gpu_instance.h"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -107,6 +110,12 @@ struct SceneGraphDrawContext {
   std::unordered_map<std::uint64_t, std::uint64_t>* texture_asset_to_gpu = nullptr;
   bool* texture_diag_logged = nullptr; // 只打一次的贴图诊断日志
 
+  // G1b/c：可增长的 instance 顶点缓冲。录制 flush 时按偏移追加写入本批 GpuInstance。
+  Buffer* instance_buffer = nullptr;
+  std::uint64_t* instance_write_offset = nullptr;
+  std::function<Buffer*(std::uint64_t bytes)> grow_instance_buffer;
+  std::vector<GpuInstance>* recorded_instances = nullptr;  // 测试用：按 flush 顺序追加
+
   // ---- 以下状态由 StateCommands 录制累积、Drawable 录制消费 ----
   Vec3 material_color{0.75f, 0.78f, 0.82f};
   Vec3 category_color{0.72f, 0.74f, 0.78f};
@@ -187,6 +196,10 @@ class RenderVisitor {
 class RecordCommands final : public RenderVisitor {
  public:
   explicit RecordCommands(SceneGraphDrawContext& ctx) : ctx_(ctx) {}
+  ~RecordCommands() override { flush_all(); }
+
+  RecordCommands(const RecordCommands&) = delete;
+  RecordCommands& operator=(const RecordCommands&) = delete;
 
   void apply(GroupNode& node) override;
   void apply(TransformNode& node) override;
@@ -194,8 +207,26 @@ class RecordCommands final : public RenderVisitor {
   void apply(DrawableNode& node) override;
 
  private:
+  struct PendingBatch {
+    BatchKey key{};
+    PipelineState* pipeline = nullptr;
+    Texture* albedo = nullptr;
+    Texture* normal = nullptr;
+    const GpuMesh* mesh = nullptr;
+    bool has_albedo = false;
+    bool has_normal = false;
+    bool as_lines = false;
+    std::vector<GpuInstance> instances;
+  };
+
+  void enqueue(PendingBatch batch, GpuInstance instance);
+  void flush_batch(PendingBatch& batch);
+  void flush_all();
+
   SceneGraphDrawContext& ctx_;
   std::vector<Mat4> matrix_stack_{Mat4::identity()};
+  std::vector<PendingBatch> batches_;
+  std::unordered_map<BatchKey, std::size_t, BatchKeyHash> batch_index_;
 };
 
 // 由展平结果（SceneDrawItem 列表）每帧全量构建场景图。
