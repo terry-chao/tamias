@@ -488,7 +488,7 @@ MainWindow::MainWindow(QWidget* parent)
   tabifyDockWidget(property_dock, texture_library_dock_);
   property_dock->raise();
   auto* texture_toggle = texture_library_dock_->toggleViewAction();
-  texture_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/properties.svg")));
+  texture_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/texture_library.svg")));
   addAction(texture_toggle);
 
   handle_inspector_ = new HandleInspector(this);
