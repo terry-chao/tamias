@@ -45,6 +45,8 @@ class DocumentViewport final : public QWidget {
   void set_render_mode(RenderMode mode);
   [[nodiscard]] RenderMode render_mode() const { return mode_; }
   void frame_scene();
+  // 框显指定句柄的构件（找不到或无有效包围盒则不动）。
+  void frame_node(std::uint64_t node_id);
   void request_redraw();
   void set_plan_view(bool plan, bool restore_perspective = true);
   [[nodiscard]] bool plan_view() const { return plan_view_; }
@@ -58,6 +60,8 @@ class DocumentViewport final : public QWidget {
   void apply_viewport_state(const ViewportState& state);
   // 设置当前创建工具（None / Wall / Box / Cylinder）。
   void set_tool(ToolMode mode);
+  // 用绘制面板确认的参数武装一个创建命令（取消旧 pending，按 args dispatch）。
+  void arm_create(ToolMode mode, const CommandArgs& args);
   [[nodiscard]] ToolMode tool_mode() const { return session_->tool_mode(); }
   // 撤销 / 重做最近一条命令。
   void undo();
@@ -140,6 +144,8 @@ class DocumentViewport final : public QWidget {
   void adjust_selected_param(double delta);
   void run_command(const std::string& name, const CommandArgs& args, bool notify = true);
   void dispatch_tool_command(ToolMode mode);
+  // 用面板最近一次武装的参数重新武装当前工具（连续绘制同类型构件时用）。
+  void rearm_tool();
   void resync_all_meshes();
   void resync_textures();
   void cancel_tool();
@@ -206,6 +212,9 @@ class DocumentViewport final : public QWidget {
   int active_floor_ = -1;  // -1 = all floors
   std::uint64_t last_submitted_scene_generation_ = 0;  // 脏标记游标（见 Scene::dirty_since）
   bool plan_view_ = false;
+  // 绘制面板最近一次武装的参数（连续绘制同类型构件时复用，避免回退到硬编码默认）。
+  ToolMode last_arm_mode_ = ToolMode::None;
+  CommandArgs last_arm_args_;
   float persp_yaw_ = 0.785398163f;
   float persp_pitch_ = 0.35f;
   std::optional<Aabb> debug_aabb_;

@@ -25,6 +25,35 @@ CreatePrimitiveCommand::CreatePrimitiveCommand(Document& document, PrimitiveKind
   scripted_ = true;
 }
 
+CreatePrimitiveCommand::CreatePrimitiveCommand(Document& document, ColumnShape shape,
+                                               double size_a, double size_b, double height)
+    : CreatePrimitiveCommand(document, PrimitiveKind::Column) {
+  column_shape_ = shape;
+  column_size_a_ = size_a;
+  column_size_b_ = size_b;
+  column_height_ = height;
+}
+
+CreatePrimitiveCommand::CreatePrimitiveCommand(Document& document, PrimitiveKind kind,
+                                               Vec3 position, ColumnShape shape,
+                                               double size_a, double size_b, double height)
+    : CreatePrimitiveCommand(document, kind, position, 0) {
+  if (kind_ == PrimitiveKind::Column) {
+    column_shape_ = shape;
+    column_size_a_ = size_a;
+    column_size_b_ = size_b;
+    column_height_ = height;
+  }
+}
+
+CreatePrimitiveCommand::CreatePrimitiveCommand(Document& document, PrimitiveKind kind,
+                                               double width, double height, double thickness)
+    : CreatePrimitiveCommand(document, kind) {
+  opening_width_ = width;
+  opening_height_ = height;
+  opening_thickness_ = thickness;
+}
+
 Result<bool> CreatePrimitiveCommand::on_point(Vec3 point) { return on_pick(point, 0); }
 
 Result<bool> CreatePrimitiveCommand::on_pick(Vec3 point, std::uint64_t picked_entity_id) {
@@ -57,18 +86,24 @@ Result<void> CreatePrimitiveCommand::execute() {
       break;
     }
     case PrimitiveKind::Column: {
-      ColumnEntity column(position_);
-      document_->assign_active_storey(column);
-      auto geometry = column.createGeom();
+      std::unique_ptr<ColumnEntity> column;
+      if (column_shape_ == ColumnShape::Circular) {
+        column = std::make_unique<ColumnEntity>(
+            ColumnEntity::circular(position_, column_size_a_, column_height_));
+      } else {
+        column = std::make_unique<ColumnEntity>(
+            position_, column_size_a_, column_size_b_, column_height_);
+      }
+      document_->assign_active_storey(*column);
+      auto geometry = column->createGeom();
       if (!geometry) {
         return Err(geometry.error());
       }
-      added = document_->add_entity(std::make_unique<ColumnEntity>(std::move(column)),
-                                    std::move(*geometry));
+      added = document_->add_entity(std::move(column), std::move(*geometry));
       break;
     }
     case PrimitiveKind::Door: {
-      DoorEntity door(position_);
+      DoorEntity door(position_, opening_width_, opening_height_, opening_thickness_);
       auto geometry = door.createGeom();
       if (!geometry) {
         return Err(geometry.error());
@@ -78,7 +113,7 @@ Result<void> CreatePrimitiveCommand::execute() {
       break;
     }
     case PrimitiveKind::Window: {
-      WindowEntity window(position_);
+      WindowEntity window(position_, opening_width_, opening_height_, opening_thickness_);
       auto geometry = window.createGeom();
       if (!geometry) {
         return Err(geometry.error());

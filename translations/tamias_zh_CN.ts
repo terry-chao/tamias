@@ -556,6 +556,42 @@ Overwrite scene.trscn and sidecar files?</source>
         <translation>创建窗：点击放置</translation>
     </message>
     <message>
+        <source>Struct. Wall</source>
+        <translation>结构墙</translation>
+    </message>
+    <message>
+        <source>Create a structural / shear wall: click start, then end</source>
+        <translation>创建结构墙/剪力墙：点击起点，再点击终点</translation>
+    </message>
+    <message>
+        <source>Foundation</source>
+        <translation>基础</translation>
+    </message>
+    <message>
+        <source>Create a foundation: click to place</source>
+        <translation>创建基础：点击放置</translation>
+    </message>
+    <message>
+        <source>Curtain Wall</source>
+        <translation>幕墙</translation>
+    </message>
+    <message>
+        <source>Create a curtain wall: click start, then end</source>
+        <translation>创建幕墙：点击起点，再点击终点</translation>
+    </message>
+    <message>
+        <source>Architectural</source>
+        <translation>建筑</translation>
+    </message>
+    <message>
+        <source>Structural</source>
+        <translation>结构</translation>
+    </message>
+    <message>
+        <source>Draw</source>
+        <translation>绘制</translation>
+    </message>
+    <message>
         <source>Line</source>
         <translation>直线</translation>
     </message>
@@ -2318,6 +2354,22 @@ Plugin ID: %4</source>
         <translation>此构件无关联</translation>
     </message>
     <message>
+        <source>Copied: %1</source>
+        <translation>已复制：%1</translation>
+    </message>
+    <message>
+        <source>Handle id (decimal or 0x…)</source>
+        <translation>句柄 id（十进制或 0x…）</translation>
+    </message>
+    <message>
+        <source>Locate</source>
+        <translation>定位</translation>
+    </message>
+    <message>
+        <source>Frame the viewport on the component with this handle</source>
+        <translation>把视口框显到该句柄对应的构件</translation>
+    </message>
+    <message>
         <source>Wall</source>
         <translation>墙</translation>
     </message>
@@ -2798,6 +2850,37 @@ Wheel zooms, drag pans, double-click a bar to focus.</source>
     <message>
         <source>Self</source>
         <translation>自身</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::DrawPanel</name>
+    <message>
+        <source>Architectural</source>
+        <translation>建筑</translation>
+    </message>
+    <message>
+        <source>Structural</source>
+        <translation>结构</translation>
+    </message>
+    <message>
+        <source>Type</source>
+        <translation>类型</translation>
+    </message>
+    <message>
+        <source>Section</source>
+        <translation>截面</translation>
+    </message>
+    <message>
+        <source>Start Drawing</source>
+        <translation>开始绘制</translation>
+    </message>
+    <message>
+        <source>Re-arm</source>
+        <translation>重新武装</translation>
+    </message>
+    <message>
+        <source>Select a component from the ribbon to start drawing</source>
+        <translation>从功能区选择一个构件开始绘制</translation>
     </message>
 </context>
 </TS>

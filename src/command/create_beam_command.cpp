@@ -7,8 +7,17 @@ namespace tamias {
 CreateBeamCommand::CreateBeamCommand(Document& document, double width, double depth)
     : document_(&document), width_(width), depth_(depth) {}
 
-CreateBeamCommand::CreateBeamCommand(Document& document, double width, double depth, Vec3 start,
-                                     Vec3 end)
+CreateBeamCommand::CreateBeamCommand(Document& document, BeamShape shape, double flange_width,
+                                       double web_thickness, double height, double flange_thickness)
+    : document_(&document),
+      shape_(shape),
+      flange_width_(flange_width),
+      web_thickness_(web_thickness),
+      height_(height),
+      flange_thickness_(flange_thickness) {}
+
+CreateBeamCommand::CreateBeamCommand(Document& document, double width, double depth,
+                                       Vec3 start, Vec3 end)
     : CreateBeamCommand(document, width, depth) {
   start_ = start;
   end_ = end;
@@ -27,13 +36,28 @@ Result<bool> CreateBeamCommand::on_point(Vec3 point) {
 }
 
 Result<void> CreateBeamCommand::execute() {
-  BeamEntity beam(start_, end_, width_, depth_);
-  auto geometry = beam.createGeom();
+  std::unique_ptr<BeamEntity> beam;
+  switch (shape_) {
+    case BeamShape::Tee:
+      beam = std::make_unique<BeamEntity>(BeamEntity::tee(start_, end_, flange_width_,
+                                                            web_thickness_, height_,
+                                                            flange_thickness_));
+      break;
+    case BeamShape::IBeam:
+      beam = std::make_unique<BeamEntity>(BeamEntity::ibeam(start_, end_, flange_width_,
+                                                             web_thickness_, height_,
+                                                             flange_thickness_));
+      break;
+    case BeamShape::Rectangular:
+    default:
+      beam = std::make_unique<BeamEntity>(start_, end_, width_, depth_);
+      break;
+  }
+  auto geometry = beam->createGeom();
   if (!geometry) {
     return Err(geometry.error());
   }
-  Entity* added = document_->add_entity(std::make_unique<BeamEntity>(std::move(beam)),
-                                        std::move(*geometry));
+  Entity* added = document_->add_entity(std::move(beam), std::move(*geometry));
   if (added == nullptr) {
     return Err("CreateBeamCommand: add_beam failed");
   }

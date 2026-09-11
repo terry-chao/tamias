@@ -30,6 +30,18 @@ enum class EntityKind : std::uint8_t {
   Rectangle = 13,
   BSpline = 14,
   Nurbs = 15,
+  // 建筑结构分类后补齐的构件。
+  StructuralWall = 16,  // 结构墙 / 剪力墙（承重）
+  Foundation = 17,       // 基础
+  CurtainWall = 18       // 幕墙（建筑）
+};
+
+// 构件所属专业：建筑 / 结构 / 其他（草图与基础体）。
+// 用于 Ribbon 分组、绘制面板归类与 IFC 导出时的 IfcProduct 映射。
+enum class Discipline : std::uint8_t {
+  None = 0,          // 草图、基础体等非建筑结构构件
+  Architectural = 1,
+  Structural = 2
 };
 
 [[nodiscard]] inline const char* entity_kind_name(EntityKind kind) {
@@ -66,8 +78,33 @@ enum class EntityKind : std::uint8_t {
       return "BSpline";
     case EntityKind::Nurbs:
       return "Nurbs";
+    case EntityKind::StructuralWall:
+      return "StructuralWall";
+    case EntityKind::Foundation:
+      return "Foundation";
+    case EntityKind::CurtainWall:
+      return "CurtainWall";
   }
   return "Unknown";
+}
+
+// 构件的专业归属。墙/板按类型默认归类：Wall=建筑，StructuralWall=结构，Slab=结构。
+[[nodiscard]] inline Discipline entity_kind_discipline(EntityKind kind) {
+  switch (kind) {
+    case EntityKind::Wall:
+    case EntityKind::Door:
+    case EntityKind::Window:
+    case EntityKind::CurtainWall:
+      return Discipline::Architectural;
+    case EntityKind::Column:
+    case EntityKind::Beam:
+    case EntityKind::Slab:
+    case EntityKind::StructuralWall:
+    case EntityKind::Foundation:
+      return Discipline::Structural;
+    default:
+      return Discipline::None;
+  }
 }
 
 // 领域实体基类：参数化对象，持有特征树（造型配方）+ 放置 + 网格引用。

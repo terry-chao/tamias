@@ -19,6 +19,7 @@
 #include "plugin_prompt_dialog.h"
 #include "pin_result_dialog.h"
 #include "property_panel.h"
+#include "draw_panel.h"
 #include "qt_path.h"
 #include "ribbon_bar.h"
 #include "ribbon_group.h"
@@ -299,6 +300,36 @@ MainWindow::MainWindow(QWidget* parent)
   create_group_->addAction(window_action_);
   addAction(window_action_);
 
+  structural_wall_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/structural_wall.svg")),
+                                        tr("Struct. Wall"), this);
+  structural_wall_action_->setCheckable(true);
+  structural_wall_action_->setProperty("toolMode", static_cast<int>(ToolMode::StructuralWall));
+  structural_wall_action_->setToolTip(tr("Create a structural / shear wall: click start, then end"));
+  connect(structural_wall_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::StructuralWall); });
+  create_group_->addAction(structural_wall_action_);
+  addAction(structural_wall_action_);
+
+  foundation_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/foundation.svg")),
+                                   tr("Foundation"), this);
+  foundation_action_->setCheckable(true);
+  foundation_action_->setProperty("toolMode", static_cast<int>(ToolMode::Foundation));
+  foundation_action_->setToolTip(tr("Create a foundation: click to place"));
+  connect(foundation_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::Foundation); });
+  create_group_->addAction(foundation_action_);
+  addAction(foundation_action_);
+
+  curtain_wall_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/curtain_wall.svg")),
+                                     tr("Curtain Wall"), this);
+  curtain_wall_action_->setCheckable(true);
+  curtain_wall_action_->setProperty("toolMode", static_cast<int>(ToolMode::CurtainWall));
+  curtain_wall_action_->setToolTip(tr("Create a curtain wall: click start, then end"));
+  connect(curtain_wall_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::CurtainWall); });
+  create_group_->addAction(curtain_wall_action_);
+  addAction(curtain_wall_action_);
+
   line_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/line.svg")),
                             tr("Line"), this);
   line_action_->setCheckable(true);
@@ -487,6 +518,27 @@ MainWindow::MainWindow(QWidget* parent)
   property_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/properties.svg")));
   addAction(property_toggle);
 
+  // 左侧绘制设置面板：点构件 icon 后在此选子类型/参数，再"开始绘制"武装命令。
+  draw_panel_ = new DrawPanel(this);
+  draw_dock_ = new QDockWidget(tr("Draw"), this);
+  draw_dock_->setObjectName(QStringLiteral("drawDock"));
+  draw_dock_->setWidget(draw_panel_);
+  draw_dock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+  addDockWidget(Qt::LeftDockWidgetArea, draw_dock_);
+  auto* draw_toggle = draw_dock_->toggleViewAction();
+  draw_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/properties.svg")));
+  addAction(draw_toggle);
+  connect(draw_panel_, &DrawPanel::armed_args, this, [this](ToolMode mode, const CommandArgs& args) {
+    if (auto* vp = current_viewport()) {
+      vp->arm_create(mode, args);
+    }
+  });
+  connect(draw_panel_, &DrawPanel::disarmed, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->set_tool(ToolMode::None);
+    }
+  });
+
   texture_library_panel_ = new TextureLibraryPanel(this);
   texture_library_dock_ = new QDockWidget(tr("Texture Library"), this);
   texture_library_dock_->setObjectName(QStringLiteral("textureLibraryDock"));
@@ -510,13 +562,18 @@ MainWindow::MainWindow(QWidget* parent)
   handle_dock->setWidget(handle_inspector_);
   handle_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
   addDockWidget(Qt::RightDockWidgetArea, handle_dock);
-  handle_dock->hide();
   auto* handle_toggle = handle_dock->toggleViewAction();
   handle_toggle->setText(tr("Inspector"));
   handle_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/inspector.svg")));
   handle_toggle->setShortcut(QKeySequence(tr("Ctrl+D")));
   handle_toggle->setToolTip(tr("Inspect the selected component's document handle"));
   addAction(handle_toggle);
+  connect(handle_inspector_, &HandleInspector::locate_requested, this,
+          [this](std::uint64_t node_id) {
+            if (auto* vp = current_viewport()) {
+              vp->frame_node(node_id);
+            }
+          });
 
   timing_panel_ = new TimingPanel(this);
   timing_panel_->setMinimumWidth(360);
@@ -586,14 +643,20 @@ MainWindow::MainWindow(QWidget* parent)
   primitives_group->add_action(box_action_);
   primitives_group->add_action(cylinder_action_);
 
-  RibbonGroup* building_group =
-      home_page->add_group(QStringLiteral("building"), tr("Building"));
-  building_group->add_action(wall_action_);
-  building_group->add_action(beam_action_);
-  building_group->add_action(column_action_);
-  building_group->add_action(slab_action_);
-  building_group->add_action(door_action_);
-  building_group->add_action(window_action_);
+  RibbonGroup* architectural_group =
+      home_page->add_group(QStringLiteral("architectural"), tr("Architectural"));
+  architectural_group->add_action(wall_action_);
+  architectural_group->add_action(door_action_);
+  architectural_group->add_action(window_action_);
+  architectural_group->add_action(curtain_wall_action_);
+
+  RibbonGroup* structural_group =
+      home_page->add_group(QStringLiteral("structural"), tr("Structural"));
+  structural_group->add_action(beam_action_);
+  structural_group->add_action(column_action_);
+  structural_group->add_action(slab_action_);
+  structural_group->add_action(structural_wall_action_);
+  structural_group->add_action(foundation_action_);
 
   RibbonGroup* modify_group = home_page->add_group(QStringLiteral("modify"), tr("Modify"));
   modify_group->add_action(fillet_action_);
@@ -862,6 +925,9 @@ void MainWindow::set_create_tool(ToolMode mode) {
   if (auto* vp = current_viewport()) {
     vp->set_tool(mode);
     sync_create_tool_actions(vp->tool_mode());
+    if (draw_panel_ != nullptr) {
+      draw_panel_->set_component(mode);
+    }
     return;
   }
   sync_create_tool_actions(ToolMode::None);
@@ -1079,6 +1145,12 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
   auto* vp = new DocumentViewport(document, thread, nullptr);
   connect(vp, &DocumentViewport::tool_mode_changed, this, [this](ToolMode mode) {
     sync_create_tool_actions(mode);
+    if (draw_panel_ != nullptr) {
+      // 工具退出（Esc / 右键 / 切换）时取消面板武装状态。
+      if (mode == ToolMode::None) {
+        draw_panel_->set_armed(false);
+      }
+    }
   });
   connect(vp, &DocumentViewport::status_message, this, [this](const QString& text) {
     statusBar()->showMessage(text, 5000);

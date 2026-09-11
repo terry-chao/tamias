@@ -387,6 +387,8 @@ Entity* Document::add_entity(std::unique_ptr<Entity> entity, MeshCpu mesh) {
       case EntityKind::Beam:
       case EntityKind::Column:
       case EntityKind::Slab:
+      case EntityKind::StructuralWall:
+      case EntityKind::Foundation:
         preset = "Concrete";
         break;
       default:

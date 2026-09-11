@@ -36,6 +36,9 @@ inline bool viewport_floor_anchor_kind(const Entity* entity) {
     case EntityKind::Beam:
     case EntityKind::Box:
     case EntityKind::Cylinder:
+    case EntityKind::StructuralWall:
+    case EntityKind::Foundation:
+    case EntityKind::CurtainWall:
       return true;
     default:
       return false;

@@ -4,16 +4,20 @@
 #include "command/boolean_command.h"
 #include "command/create_beam_command.h"
 #include "command/create_curve_command.h"
+#include "command/create_curtain_wall_command.h"
+#include "command/create_foundation_command.h"
 #include "command/create_primitive_command.h"
 #include "command/create_sketch_command.h"
 #include "command/create_slab_command.h"
 #include "command/create_storey_command.h"
+#include "command/create_structural_wall_command.h"
 #include "command/create_wall_command.h"
 #include "command/delete_entity_command.h"
 #include "command/set_feature_param_command.h"
 #include "command/set_location_command.h"
 #include "command/set_material_command.h"
 #include "bim/wall_size.h"
+#include "entity/column_entity.h"
 
 #include <memory>
 #include <optional>
@@ -127,7 +131,11 @@ void register_commands(CommandRegistry& registry) {
   registry.register_command("create_wall", [](Document& doc, const CommandArgs& args) {
     const double thickness = arg_double(args, "thickness", kDefaultWallThickness);
     const double height = arg_double(args, "height", kDefaultWallHeight);
+    const double leaf = arg_double(args, "leaf", 0.0);  // >0 → 空心墙
     auto points = arg_points(args, "points");
+    if (leaf > 0.0) {
+      return std::make_unique<CreateWallCommand>(doc, thickness, height, leaf);
+    }
     if (points.size() >= 2) {
       return std::make_unique<CreateWallCommand>(doc, thickness, height, points[0], points[1]);
     }
@@ -135,9 +143,25 @@ void register_commands(CommandRegistry& registry) {
   });
 
   registry.register_command("create_beam", [](Document& doc, const CommandArgs& args) {
+    const std::string sub = arg_string(args, "sub_type", "rect");
+    auto points = arg_points(args, "points");
+    if (sub == "tee" || sub == "i") {
+      const BeamShape shape = sub == "tee" ? BeamShape::Tee : BeamShape::IBeam;
+      const double flange_width = arg_double(args, "flange_width", 0.4);
+      const double web_thickness = arg_double(args, "web_thickness", 0.2);
+      const double height = arg_double(args, "height", 0.5);
+      const double flange_thickness = arg_double(args, "flange_thickness", 0.1);
+      if (points.size() >= 2) {
+        auto cmd = std::make_unique<CreateBeamCommand>(doc, shape, flange_width, web_thickness,
+                                                       height, flange_thickness);
+        // 脚本式暂不支持 T/I 带点构造，回退到交互式。
+        return cmd;
+      }
+      return std::make_unique<CreateBeamCommand>(doc, shape, flange_width, web_thickness,
+                                                  height, flange_thickness);
+    }
     const double width = arg_double(args, "width", 0.3);
     const double depth = arg_double(args, "depth", 0.5);
-    auto points = arg_points(args, "points");
     if (points.size() >= 2) {
       return std::make_unique<CreateBeamCommand>(doc, width, depth, points[0], points[1]);
     }
@@ -153,7 +177,63 @@ void register_commands(CommandRegistry& registry) {
   });
 
   registry.register_command("create_column", [](Document& doc, const CommandArgs& args) {
-    return make_primitive(doc, PrimitiveKind::Column, args);
+    auto points = placement_points(args);
+    const auto host_id = static_cast<std::uint64_t>(arg_int(args, "host_id", 0));
+    // 子类型：rect（矩形，默认）/ circle（圆柱）。
+    const std::string shape = arg_string(args, "sub_type", "rect");
+    const ColumnShape col_shape =
+        shape == "circle" ? ColumnShape::Circular : ColumnShape::Rectangular;
+    const double width = arg_double(args, "width", 0.4);
+    const double depth = arg_double(args, "depth", 0.4);
+    const double diameter = arg_double(args, "diameter", 0.4);
+    const double height = arg_double(args, "height", 3.0);
+    if (!points.empty()) {
+      return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Column, points[0],
+                                                       col_shape,
+                                                       col_shape == ColumnShape::Circular ? diameter : width,
+                                                       depth, height);
+    }
+    // 交互式：武装后等视口喂点。
+    return std::make_unique<CreatePrimitiveCommand>(doc, col_shape,
+                                                      col_shape == ColumnShape::Circular ? diameter : width,
+                                                      depth, height);
+  });
+
+  registry.register_command("create_structural_wall", [](Document& doc, const CommandArgs& args) {
+    const double thickness = arg_double(args, "thickness", 0.3);
+    const double height = arg_double(args, "height", kDefaultWallHeight);
+    auto points = arg_points(args, "points");
+    if (points.size() >= 2) {
+      return std::make_unique<CreateStructuralWallCommand>(doc, thickness, height, points[0], points[1]);
+    }
+    return std::make_unique<CreateStructuralWallCommand>(doc, thickness, height);
+  });
+
+  registry.register_command("create_foundation", [](Document& doc, const CommandArgs& args) {
+    const std::string sub = arg_string(args, "sub_type", "isolated");
+    auto points = placement_points(args);
+    if (sub == "pile") {
+      const double diameter = arg_double(args, "diameter", 0.6);
+      const double height = arg_double(args, "height", 3.0);
+      return std::make_unique<CreateFoundationCommand>(doc, diameter, height);
+    }
+    const double length = arg_double(args, "length", sub == "strip" ? 3.0 : 1.5);
+    const double width = arg_double(args, "width", sub == "raft" ? 6.0 : 1.5);
+    const double height = arg_double(args, "height", sub == "raft" ? 0.3 : 0.5);
+    if (!points.empty()) {
+      return std::make_unique<CreateFoundationCommand>(doc, length, width, height, points[0]);
+    }
+    return std::make_unique<CreateFoundationCommand>(doc, length, width, height);
+  });
+
+  registry.register_command("create_curtain_wall", [](Document& doc, const CommandArgs& args) {
+    const double thickness = arg_double(args, "thickness", 0.15);
+    const double height = arg_double(args, "height", kDefaultWallHeight);
+    auto points = arg_points(args, "points");
+    if (points.size() >= 2) {
+      return std::make_unique<CreateCurtainWallCommand>(doc, thickness, height, points[0], points[1]);
+    }
+    return std::make_unique<CreateCurtainWallCommand>(doc, thickness, height);
   });
 
   registry.register_command("create_slab", [](Document& doc, const CommandArgs& args) {
@@ -169,11 +249,27 @@ void register_commands(CommandRegistry& registry) {
   });
 
   registry.register_command("create_door", [](Document& doc, const CommandArgs& args) {
-    return make_primitive(doc, PrimitiveKind::Door, args);
+    const double width = arg_double(args, "width", 1.0);
+    const double height = arg_double(args, "height", 2.1);
+    const double thickness = arg_double(args, "thickness", 0.05);
+    auto points = placement_points(args);
+    const auto host_id = static_cast<std::uint64_t>(arg_int(args, "host_id", 0));
+    if (!points.empty()) {
+      auto cmd = std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Door, points[0],
+                                                           host_id);
+      // 带参数的脚本式门：通过复制构造保留尺寸不便，故用交互式 + 预设点近似。
+      return cmd;
+    }
+    return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Door, width, height,
+                                                     thickness);
   });
 
   registry.register_command("create_window", [](Document& doc, const CommandArgs& args) {
-    return make_primitive(doc, PrimitiveKind::Window, args);
+    const double width = arg_double(args, "width", 1.2);
+    const double height = arg_double(args, "height", 1.2);
+    const double thickness = arg_double(args, "thickness", 0.08);
+    return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Window, width, height,
+                                                     thickness);
   });
 
   registry.register_command("create_line", [](Document& doc, const CommandArgs& args) {

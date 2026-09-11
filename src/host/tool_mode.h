@@ -19,7 +19,11 @@ enum class ToolMode {
   Arc,
   Bezier,
   Rectangle,
-  BSpline
+  BSpline,
+  // 新增构件（建筑/结构分类后补齐）。
+  StructuralWall,  // 结构墙 / 剪力墙
+  Foundation,      // 基础
+  CurtainWall      // 幕墙（建筑）
 };
 
 }  // namespace tamias

@@ -47,6 +47,12 @@ QString PropertyPanel::entity_label(EntityKind kind) {
       return tr("Door");
     case EntityKind::Window:
       return tr("Window");
+    case EntityKind::StructuralWall:
+      return tr("Structural Wall");
+    case EntityKind::Foundation:
+      return tr("Foundation");
+    case EntityKind::CurtainWall:
+      return tr("Curtain Wall");
     case EntityKind::Line:
       return tr("Line");
     case EntityKind::Polyline:
@@ -190,6 +196,33 @@ QString PropertyPanel::param_label(EntityKind entity_kind, FeatureKind feature_k
         }
         if (is("height")) {
           return tr("Thickness");
+        }
+      } else if (feature_kind == FeatureKind::Extrude && is("depth")) {
+        return tr("Height");
+      }
+      break;
+    case EntityKind::StructuralWall:
+    case EntityKind::CurtainWall:
+      // 与墙同造型：RectProfile(width=厚度, height=长度) + Extrude(depth=高度)。
+      if (feature_kind == FeatureKind::RectProfile) {
+        if (is("width")) {
+          return tr("Thickness");
+        }
+        if (is("height")) {
+          return tr("Length");
+        }
+      } else if (feature_kind == FeatureKind::Extrude && is("depth")) {
+        return tr("Height");
+      }
+      break;
+    case EntityKind::Foundation:
+      // 与板同造型：RectProfile(width=长, height=宽) + Extrude(depth=高)。
+      if (rect_like) {
+        if (is("width")) {
+          return tr("Length");
+        }
+        if (is("height")) {
+          return tr("Width");
         }
       } else if (feature_kind == FeatureKind::Extrude && is("depth")) {
         return tr("Height");

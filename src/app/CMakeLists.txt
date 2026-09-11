@@ -27,6 +27,9 @@ add_executable(tamias
   golden_test_runner.cpp
   handle_inspector.cpp
   property_panel.cpp
+  draw_panel.cpp
+  section_preview_widget.cpp
+  component_specs.cpp
   texture_library_panel.cpp
   texture_inspector_dialog.cpp
   texture_image.cpp

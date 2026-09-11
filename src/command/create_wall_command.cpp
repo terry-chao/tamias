@@ -11,7 +11,13 @@ CreateWallCommand::CreateWallCommand(Document& document, double thickness, doubl
       elevation_(document.bim().storey_elevation(document.bim().active_storey_id())) {}
 
 CreateWallCommand::CreateWallCommand(Document& document, double thickness, double height,
-                                     Vec3 start, Vec3 end)
+                                       double leaf)
+    : CreateWallCommand(document, thickness, height) {
+  leaf_ = leaf;
+}
+
+CreateWallCommand::CreateWallCommand(Document& document, double thickness, double height,
+                                       Vec3 start, Vec3 end)
     : CreateWallCommand(document, thickness, height) {
   start_ = start;
   end_ = end;
@@ -30,13 +36,19 @@ Result<bool> CreateWallCommand::on_point(Vec3 point) {
 }
 
 Result<void> CreateWallCommand::execute() {
-  WallEntity wall(start_, end_, thickness_, height_);  // 两点构造实体
-  document_->assign_active_storey(wall);
-  auto geometry = wall.createGeom();                    // 造型（实体 createGeom）
+  std::unique_ptr<WallEntity> wall;
+  if (leaf_ > 0.0) {
+    wall = std::make_unique<WallEntity>(WallEntity::hollow(start_, end_, thickness_, height_,
+                                                             leaf_));
+  } else {
+    wall = std::make_unique<WallEntity>(start_, end_, thickness_, height_);
+  }
+  document_->assign_active_storey(*wall);
+  auto geometry = wall->createGeom();
   if (!geometry) {
     return Err(geometry.error());
   }
-  Entity* added = document_->add_entity(std::make_unique<WallEntity>(std::move(wall)),
+  Entity* added = document_->add_entity(std::make_unique<WallEntity>(std::move(*wall)),
                                         std::move(*geometry));  // 入文档
   if (added == nullptr) {
     return Err("CreateWallCommand: add_wall failed");

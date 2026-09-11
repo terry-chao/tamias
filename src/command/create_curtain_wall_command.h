@@ -5,15 +5,12 @@
 
 namespace tamias {
 
-// 创建一面参数化墙（交互式）：dispatch 后武装，拖拽两个点确定墙，然后 createGeom 造型。
-class CreateWallCommand final : public Command {
+// 创建参数化幕墙（交互式）：dispatch 后武装，拖拽两点确定幕墙。
+class CreateCurtainWallCommand final : public Command {
  public:
-  // 实心墙（默认）。
-  CreateWallCommand(Document& document, double thickness, double height);
-  // 空心墙：leaf 单侧壁厚。
-  CreateWallCommand(Document& document, double thickness, double height, double leaf);
-  // 脚本式（实心）。
-  CreateWallCommand(Document& document, double thickness, double height, Vec3 start, Vec3 end);
+  CreateCurtainWallCommand(Document& document, double thickness, double height);
+  CreateCurtainWallCommand(Document& document, double thickness, double height,
+                            Vec3 start, Vec3 end);
 
   [[nodiscard]] bool interactive() const override { return !scripted_; }
   [[nodiscard]] Result<bool> on_point(Vec3 point) override;
@@ -31,9 +28,8 @@ class CreateWallCommand final : public Command {
 
  private:
   Document* document_ = nullptr;
-  double thickness_ = 0.2;
+  double thickness_ = 0.15;
   double height_ = 3.0;
-  double leaf_ = 0.0;  // >0 表示空心墙
   double elevation_ = 0.0;
   bool has_start_ = false;
   bool scripted_ = false;

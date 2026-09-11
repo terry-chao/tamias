@@ -15,4 +15,16 @@ ColumnEntity::ColumnEntity(Vec3 position, double width, double depth, double hei
   sync_from_location(0.0);
 }
 
+ColumnEntity ColumnEntity::circular(Vec3 position, double diameter, double height) {
+  ColumnEntity col;
+  col.name = "column";
+  const double radius = diameter * 0.5;
+  auto& profile = col.model.add_feature(FeatureKind::CircleProfile, {}, {{"radius", radius}});
+  col.model.add_feature(FeatureKind::Extrude, {profile.id}, {{"depth", height}});
+  col.location = std::make_unique<PointLocation>(
+      Vec3{position.x, 0.f, position.z}, 0, static_cast<double>(position.y));
+  col.sync_from_location(0.0);
+  return col;
+}
+
 }  // namespace tamias

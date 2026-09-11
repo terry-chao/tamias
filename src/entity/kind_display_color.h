@@ -19,6 +19,12 @@ namespace tamias {
       return {0.42f, 0.58f, 0.48f};  // 鼠尾绿
     case EntityKind::Window:
       return {0.48f, 0.70f, 0.78f};  // 浅水蓝
+    case EntityKind::StructuralWall:
+      return {0.55f, 0.52f, 0.48f};  // 深石灰（区别于建筑墙）
+    case EntityKind::Foundation:
+      return {0.50f, 0.50f, 0.55f};  // 基础灰
+    case EntityKind::CurtainWall:
+      return {0.60f, 0.78f, 0.82f};  // 玻璃青
     case EntityKind::Box:
       return {0.62f, 0.68f, 0.76f};  // 冷灰石
     case EntityKind::Cylinder:

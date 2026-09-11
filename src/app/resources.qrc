@@ -19,6 +19,9 @@
     <file alias="slab.svg">../../assets/icons/slab.svg</file>
     <file alias="door.svg">../../assets/icons/door.svg</file>
     <file alias="window.svg">../../assets/icons/window.svg</file>
+    <file alias="structural_wall.svg">../../assets/icons/structural_wall.svg</file>
+    <file alias="foundation.svg">../../assets/icons/foundation.svg</file>
+    <file alias="curtain_wall.svg">../../assets/icons/curtain_wall.svg</file>
     <file alias="line.svg">../../assets/icons/line.svg</file>
     <file alias="polyline.svg">../../assets/icons/polyline.svg</file>
     <file alias="circle.svg">../../assets/icons/circle.svg</file>

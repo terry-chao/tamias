@@ -9,6 +9,9 @@ class WallEntity final : public FamilyEntity {
  public:
   WallEntity() : FamilyEntity(EntityKind::Wall, "Basic Wall") {}
   WallEntity(Vec3 start, Vec3 end, double thickness, double height);
+  // 空心墙：外箱减去内箱（留顶板与两端实体），leaf 为单侧壁厚。
+  static WallEntity hollow(Vec3 start, Vec3 end, double thickness, double height,
+                            double leaf = 0.08, double end_inset = 0.2, double cap = 0.1);
 };
 
 }  // namespace tamias

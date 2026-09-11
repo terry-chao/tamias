@@ -2,13 +2,19 @@
 
 #include "command/command.h"
 #include "engine/document/document.h"
+#include "entity/beam_entity.h"
 
 namespace tamias {
 
-// 创建参数化梁（交互式）：两个点确定跨度和方向，截面尺寸由参数给定。
+// 创建参数化梁（交互式）：两个点确定跨度和方向，截面由子类型与参数给定。
 class CreateBeamCommand final : public Command {
  public:
+  // 矩形梁。
   CreateBeamCommand(Document& document, double width, double depth);
+  // T 形 / 工字梁。
+  CreateBeamCommand(Document& document, BeamShape shape, double flange_width,
+                     double web_thickness, double height, double flange_thickness);
+  // 脚本式（带两端点）。
   CreateBeamCommand(Document& document, double width, double depth, Vec3 start, Vec3 end);
 
   [[nodiscard]] bool interactive() const override { return !scripted_; }
@@ -24,8 +30,16 @@ class CreateBeamCommand final : public Command {
 
  private:
   Document* document_ = nullptr;
+  BeamShape shape_ = BeamShape::Rectangular;
+  // 矩形梁。
   double width_ = 0.3;
   double depth_ = 0.5;
+  // T 形 / 工字梁。
+  double flange_width_ = 0.4;
+  double web_thickness_ = 0.2;
+  double height_ = 0.5;
+  double flange_thickness_ = 0.1;
+
   bool has_start_ = false;
   bool scripted_ = false;
   Vec3 start_{};

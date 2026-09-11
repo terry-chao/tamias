@@ -284,7 +284,9 @@ std::vector<Vec3> inferred_grip_locals(const Entity& entity) {
     case EntityKind::Rectangle:
       return sketch_locals(entity);
     case EntityKind::Wall:
-    case EntityKind::Beam: {
+    case EntityKind::Beam:
+    case EntityKind::StructuralWall:
+    case EntityKind::CurtainWall: {
       const Feature* profile = find_kind(entity.model, FeatureKind::RectProfile);
       if (profile == nullptr) {
         return {};
@@ -294,7 +296,8 @@ std::vector<Vec3> inferred_grip_locals(const Entity& entity) {
     }
     case EntityKind::Box:
     case EntityKind::Slab:
-    case EntityKind::Column: {
+    case EntityKind::Column:
+    case EntityKind::Foundation: {
       const Feature* profile = find_footprint(entity.model);
       if (profile == nullptr) {
         return {};
@@ -344,11 +347,14 @@ bool apply_entity_grip(Entity& entity, int index, Vec3 world) {
       break;
     case EntityKind::Wall:
     case EntityKind::Beam:
+    case EntityKind::StructuralWall:
+    case EntityKind::CurtainWall:
       ok = apply_segment(entity, index, world);
       break;
     case EntityKind::Box:
     case EntityKind::Slab:
     case EntityKind::Column:
+    case EntityKind::Foundation:
       ok = apply_footprint_corner(entity, index, world);
       break;
     case EntityKind::Cylinder: {
@@ -416,6 +422,7 @@ std::vector<Vec3> grip_preview_polyline(const Entity& entity) {
     case EntityKind::Box:
     case EntityKind::Slab:
     case EntityKind::Column:
+    case EntityKind::Foundation:
       pts.push_back(pts.front());
       return pts;
     default:

@@ -3,6 +3,7 @@
 #include "bim/relation.h"
 #include "command/command.h"
 #include "engine/document/document.h"
+#include "entity/column_entity.h"
 
 #include <optional>
 
@@ -17,6 +18,18 @@ class CreatePrimitiveCommand final : public Command {
   CreatePrimitiveCommand(Document& document, PrimitiveKind kind);
   CreatePrimitiveCommand(Document& document, PrimitiveKind kind, Vec3 position,
                          std::uint64_t host_id = 0);
+
+  // 柱子专用：带子类型与截面/高度参数（交互式，无预设位置）。
+  CreatePrimitiveCommand(Document& document, ColumnShape shape, double size_a,
+                         double size_b, double height);
+
+  // 柱子专用：带子类型与截面/高度参数 + 预设位置（脚本式）。
+  CreatePrimitiveCommand(Document& document, PrimitiveKind kind, Vec3 position,
+                         ColumnShape shape, double size_a, double size_b, double height);
+
+  // 门/窗专用：带宽×高×厚参数（交互式，无预设位置）。
+  CreatePrimitiveCommand(Document& document, PrimitiveKind kind, double width,
+                         double height, double thickness);
 
   [[nodiscard]] bool interactive() const override { return !scripted_; }
   [[nodiscard]] Result<bool> on_point(Vec3 point) override;
@@ -36,6 +49,15 @@ class CreatePrimitiveCommand final : public Command {
   bool scripted_ = false;
   Vec3 position_{};
   std::uint64_t host_id_ = 0;
+  // 柱子参数（仅 kind_ == Column 时使用）。
+  ColumnShape column_shape_ = ColumnShape::Rectangular;
+  double column_size_a_ = 0.4;  // 矩形=width，圆形=diameter
+  double column_size_b_ = 0.4;  // 矩形=depth，圆形=未用
+  double column_height_ = 3.0;
+  // 门/窗参数（仅 kind_ == Door/Window 时使用）。
+  double opening_width_ = 1.0;
+  double opening_height_ = 2.1;
+  double opening_thickness_ = 0.05;
   MeshAsset mesh_{};
   std::unique_ptr<Entity> entity_;
   std::optional<Relation> relation_;

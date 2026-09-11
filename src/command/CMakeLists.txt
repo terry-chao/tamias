@@ -7,6 +7,9 @@ add_library(tamias_command STATIC
   create_primitive_command.cpp
   create_slab_command.cpp
   create_storey_command.cpp
+  create_structural_wall_command.cpp
+  create_foundation_command.cpp
+  create_curtain_wall_command.cpp
   create_sketch_command.cpp
   delete_entity_command.cpp
   move_entities_command.cpp

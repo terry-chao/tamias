@@ -11,6 +11,9 @@ add_library(tamias_entity STATIC
   slab_entity.cpp
   door_entity.cpp
   window_entity.cpp
+  structural_wall_entity.cpp
+  foundation_entity.cpp
+  curtain_wall_entity.cpp
   line_entity.cpp
   polyline_entity.cpp
   circle_entity.cpp

@@ -32,6 +32,7 @@ class TextureLibraryPanel;
 class TimingPanel;
 class PluginManager;
 class RibbonGroup;
+class DrawPanel;
 
 class MainWindow final : public QMainWindow {
   Q_OBJECT
@@ -111,6 +112,9 @@ class MainWindow final : public QMainWindow {
   QAction* slab_action_ = nullptr;
   QAction* door_action_ = nullptr;
   QAction* window_action_ = nullptr;
+  QAction* structural_wall_action_ = nullptr;
+  QAction* foundation_action_ = nullptr;
+  QAction* curtain_wall_action_ = nullptr;
   QAction* line_action_ = nullptr;
   QAction* polyline_action_ = nullptr;
   QAction* circle_action_ = nullptr;
@@ -123,6 +127,8 @@ class MainWindow final : public QMainWindow {
   QActionGroup* create_group_ = nullptr;
   PropertyPanel* property_panel_ = nullptr;
   HandleInspector* handle_inspector_ = nullptr;
+  DrawPanel* draw_panel_ = nullptr;
+  QDockWidget* draw_dock_ = nullptr;
   SceneDebuggerWindow* scene_debugger_ = nullptr;
   TextureLibraryPanel* texture_library_panel_ = nullptr;
   QDockWidget* texture_library_dock_ = nullptr;

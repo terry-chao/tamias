@@ -7,24 +7,17 @@
 #include "entity/bspline_entity.h"
 #include "entity/circle_entity.h"
 #include "entity/column_entity.h"
+#include "entity/curtain_wall_entity.h"
 #include "entity/cylinder_entity.h"
 #include "entity/door_entity.h"
 #include "entity/family_entity.h"
+#include "entity/foundation_entity.h"
 #include "entity/line_entity.h"
 #include "entity/nurbs_entity.h"
 #include "entity/polyline_entity.h"
 #include "entity/rectangle_entity.h"
 #include "entity/slab_entity.h"
-#include "entity/wall_entity.h"
-#include "entity/window_entity.h"
-#include "entity/column_entity.h"
-#include "entity/cylinder_entity.h"
-#include "entity/door_entity.h"
-#include "entity/family_entity.h"
-#include "entity/line_entity.h"
-#include "entity/polyline_entity.h"
-#include "entity/rectangle_entity.h"
-#include "entity/slab_entity.h"
+#include "entity/structural_wall_entity.h"
 #include "entity/wall_entity.h"
 #include "entity/window_entity.h"
 #include "engine/modeling/occt_geom_builder.h"
@@ -68,6 +61,13 @@ std::unique_ptr<Entity> make_entity(EntityKind kind) {
     case EntityKind::Nurbs:
       return std::make_unique<NurbsEntity>();
     case EntityKind::Wall:
+      return std::make_unique<WallEntity>();
+    case EntityKind::StructuralWall:
+      return std::make_unique<StructuralWallEntity>();
+    case EntityKind::Foundation:
+      return std::make_unique<FoundationEntity>();
+    case EntityKind::CurtainWall:
+      return std::make_unique<CurtainWallEntity>();
     default:
       return std::make_unique<WallEntity>();
   }

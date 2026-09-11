@@ -6,6 +6,7 @@
 #include "command/import_texture_command.h"
 #include "command/replace_texture_command.h"
 #include "command/update_material_command.h"
+#include "component_specs.h"
 #include "engine/core/log.h"
 #include "engine/math/grid.h"
 #include "engine/modeling/curve_geom.h"
@@ -250,6 +251,19 @@ void DocumentViewport::apply_viewport_state(const ViewportState& state) {
 void DocumentViewport::frame_scene() {
   stop_view_animation();
   camera_.frame_aabb(document_->bounds());
+  request_redraw();
+}
+
+void DocumentViewport::frame_node(std::uint64_t node_id) {
+  if (document_ == nullptr || node_id == 0) {
+    return;
+  }
+  const SceneNode* node = document_->scene().find(node_id);
+  if (node == nullptr || !node->world_bounds.valid()) {
+    return;
+  }
+  stop_view_animation();
+  camera_.frame_aabb(node->world_bounds);
   request_redraw();
 }
 
@@ -1037,16 +1051,57 @@ void DocumentViewport::set_tool(ToolMode mode) {
     return;
   }
   session_->set_tool(mode);
+  cancel_plugin_point_input();
+  command_system_.cancel();
   if (mode != ToolMode::None) {
-    cancel_plugin_point_input();
-    command_system_.cancel();  // 取消之前的 pending
     setFocus();
-    dispatch_tool_command(mode);  // 点按钮 → 立即 dispatch 命令（armed）
-  } else {
-    command_system_.cancel();
+    // 有绘制规格的构件（墙/梁/柱/板/门/窗/结构墙/基础/幕墙）走面板武装，
+    // 点 icon 不立即绘制；其余（草图、基础体）沿用立即 dispatch。
+    if (find_component_spec(mode) == nullptr) {
+      dispatch_tool_command(mode);
+    }
   }
   request_redraw();
   emit tool_mode_changed(mode);
+}
+
+void DocumentViewport::arm_create(ToolMode mode, const CommandArgs& args) {
+  if (mode == ToolMode::Slab && !plan_view_) {
+    refuse_slab_outside_plan(true);
+    emit tool_mode_changed(session_->tool_mode());
+    return;
+  }
+  session_->set_tool(mode);
+  cancel_plugin_point_input();
+  command_system_.cancel();
+  setFocus();
+  const ComponentSpec* spec = find_component_spec(mode);
+  const std::string name = spec != nullptr ? spec->command.toStdString()
+                                            : std::string{"create_box"};
+  if (auto r = session_->dispatch(name, args); !r) {
+    log_error(r.error());
+  }
+  last_arm_mode_ = mode;
+  last_arm_args_ = args;
+  request_redraw();
+  emit tool_mode_changed(mode);
+}
+
+void DocumentViewport::rearm_tool() {
+  const ToolMode mode = session_->tool_mode();
+  if (mode == ToolMode::None) {
+    return;
+  }
+  if (find_component_spec(mode) != nullptr && last_arm_mode_ == mode) {
+    // 面板构件：用上次武装参数重新 dispatch。
+    command_system_.cancel();
+    const ComponentSpec* spec = find_component_spec(mode);
+    if (auto r = session_->dispatch(spec->command.toStdString(), last_arm_args_); !r) {
+      log_error(r.error());
+    }
+  } else {
+    dispatch_tool_command(mode);
+  }
 }
 
 void DocumentViewport::dispatch_tool_command(ToolMode mode) {
@@ -1125,7 +1180,7 @@ bool DocumentViewport::finish_pending_if_done(const Result<bool>& done) {
   if (!done) {
     log_error(done.error());
     if (session_->tool_mode() != ToolMode::None) {
-      dispatch_tool_command(session_->tool_mode());
+      rearm_tool();
     }
     request_redraw();
     return true;
@@ -1136,7 +1191,7 @@ bool DocumentViewport::finish_pending_if_done(const Result<bool>& done) {
     emit document_changed();
     // 画完一个实体后继续同一绘制命令，直到 Esc / 右键退出。
     if (session_->tool_mode() != ToolMode::None) {
-      dispatch_tool_command(session_->tool_mode());
+      rearm_tool();
     }
     request_redraw();
     return true;
