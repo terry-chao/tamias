@@ -1,6 +1,6 @@
 source: 未命名
-version=1  meshes=1  textures=2  items=1  tris=12  digest=1dc2b2ab1373784f
-view mode=1(shaded)  size=2304x1242  distance=2.16506338
+version=3  meshes=1  textures=2  items=1  tris=12  digest=dedb6f08612fab59
+view mode=1(shaded)  size=2286x1242  distance=2.16506338  hidden=0
 
 ==== VIEW ====
 eye=1.43811488 1.2423954 1.43811488  target=0 0.5 0  yaw=0.785398185  pitch=0.349999994  fovy=0.800000012
@@ -11,7 +11,7 @@ view_matrix (column-major, rows):
   0.664236844 0.342897773 0.664236844 -2.33651233
   0 0 0 1
 proj_matrix (column-major, rows):
-  1.2750026 0 0 0
+  1.28504193 0 0 0
   0 2.36522222 0 0
   0 0 -1.00002003 -0.0100002
   0 0 -1 0
