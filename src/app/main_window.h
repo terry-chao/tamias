@@ -57,6 +57,8 @@ class MainWindow final : public QMainWindow {
   void refresh_render_scene_inspector();
   void refresh_texture_library_panel();
   void dump_render_scene_debug();
+  void dump_selected_render_draw();
+  void sync_render_scene_selection();
 
  private:
   void showEvent(QShowEvent* event) override;

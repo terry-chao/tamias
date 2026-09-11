@@ -61,6 +61,9 @@ Result<void> write_render_scene_debug_files(const std::filesystem::path& inspect
 // 紧挨着 .trscn：stem.inspect.txt 与 stem.debug/。
 Result<void> write_render_scene_debug_sidecars(const std::filesystem::path& trscn_path,
                                                const RenderScene& scene);
+// 单条 draw 的世界空间 OBJ（含 UV / 法线），方便只丢这一条进 DCC。
+Result<void> write_render_scene_debug_draw(const std::filesystem::path& obj_path,
+                                           const RenderScene& scene, std::size_t item_index);
 
 Result<std::vector<std::uint8_t>> serialize_render_scene(const RenderScene& scene);
 Result<RenderScene> deserialize_render_scene(std::span<const std::uint8_t> bytes);

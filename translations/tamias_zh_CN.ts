@@ -398,8 +398,8 @@
     </message>
     <message>
         <location filename="../src/app/main_window.cpp"/>
-        <source>Export Render Scene</source>
-        <translation>导出渲染场景</translation>
+        <source>Save Render Scene Snapshot</source>
+        <translation>保存渲染场景快照</translation>
     </message>
     <message>
         <location filename="../src/app/main_window.cpp"/>
@@ -418,8 +418,8 @@
     </message>
     <message>
         <location filename="../src/app/main_window.cpp"/>
-        <source>Exported %1  digest=%2</source>
-        <translation>已导出 %1  digest=%2</translation>
+        <source>Saved snapshot %1  digest=%2</source>
+        <translation>已保存快照 %1  digest=%2</translation>
     </message>
     <message>
         <location filename="../src/app/main_window.cpp"/>
@@ -993,6 +993,10 @@ Click an object to select it, or use a create tool</source>
         <translation>可视化调试已烘焙的绘制清单：网格、贴图、包围盒</translation>
     </message>
     <message>
+        <source>Debug the cooked draw list: meshes, textures, AABB overlay, snapshot / pin</source>
+        <translation>对照绘制清单：网格、贴图、包围盒，以及保存快照 / 钉进测试</translation>
+    </message>
+    <message>
         <source>Vertex %1  world %2  n %3  uv (%4, %5)  color %6</source>
         <translation>顶点 %1  世界坐标 %2  法线 %3  uv (%4, %5)  颜色 %6</translation>
     </message>
@@ -1019,6 +1023,22 @@ Meshes / textures: %2
     <message>
         <source>Wrote %1 and %2</source>
         <translation>已写出 %1 和 %2</translation>
+    </message>
+    <message>
+        <source>Wrote %1</source>
+        <translation>已写出 %1</translation>
+    </message>
+    <message>
+        <source>Select a draw first.</source>
+        <translation>请先选一条绘制。</translation>
+    </message>
+    <message>
+        <source>Write this draw as OBJ</source>
+        <translation>将此条写成 OBJ</translation>
+    </message>
+    <message>
+        <source>Wavefront OBJ (*.obj)</source>
+        <translation>Wavefront OBJ (*.obj)</translation>
     </message>
     <message>
         <source>Pinned %1 but RenderSceneGolden* failed</source>
@@ -1052,16 +1072,48 @@ Meshes / textures: %2
         <translation>写出调试文件…</translation>
     </message>
     <message>
-        <source>Dump inspect.txt, OBJ meshes, and PPM textures next to the scene</source>
-        <translation>在场景旁写出 inspect.txt、OBJ 网格和 PPM 贴图</translation>
+        <source>Write inspect.txt, OBJ meshes, and PPM textures. From a live view, also writes scene.trscn.</source>
+        <translation>写出 inspect.txt、OBJ 网格和 PPM 贴图。从当前视口还会顺带写 scene.trscn。</translation>
     </message>
     <message>
         <source>Refresh</source>
         <translation>刷新</translation>
     </message>
     <message>
-        <source>Open a .trscn, or capture the current view.</source>
-        <translation>打开 .trscn，或刷新以捕获当前视口。</translation>
+        <source>Recapture the current viewport's cooked draw list</source>
+        <translation>重新捕获当前视口的绘制清单</translation>
+    </message>
+    <message>
+        <source>Save snapshot…</source>
+        <translation>保存快照…</translation>
+    </message>
+    <message>
+        <source>Write a .trscn plus inspect.txt / OBJ / PPM. Does not change the current document.</source>
+        <translation>写出 .trscn 以及 inspect.txt / OBJ / PPM，不改当前文档。</translation>
+    </message>
+    <message>
+        <source>Pin for tests…</source>
+        <translation>钉进测试…</translation>
+    </message>
+    <message>
+        <source>Write assets/samples/render/&lt;name&gt;/ and run RenderSceneGolden*</source>
+        <translation>写入 assets/samples/render/&lt;name&gt;/，并跑 RenderSceneGolden*</translation>
+    </message>
+    <message>
+        <source>Open a document to capture the current view's draw list.</source>
+        <translation>打开文档后即可捕获当前视口的绘制清单。</translation>
+    </message>
+    <message>
+        <source>Filter by #, node, or mesh id</source>
+        <translation>按序号、节点或网格 id 筛选</translation>
+    </message>
+    <message>
+        <source>Write this draw as OBJ…</source>
+        <translation>将此条写成 OBJ…</translation>
+    </message>
+    <message>
+        <source>World-space mesh of the selected draw, for Blender or any DCC</source>
+        <translation>选中绘制的世界空间网格，可在 Blender 等软件打开</translation>
     </message>
     <message>
         <source>Scene</source>
@@ -1898,6 +1950,10 @@ Plugin ID: %4</source>
         <translation>导入...</translation>
     </message>
     <message>
+        <source>Preview...</source>
+        <translation>预览...</translation>
+    </message>
+    <message>
         <source>Replace...</source>
         <translation>替换...</translation>
     </message>
@@ -1942,6 +1998,152 @@ Plugin ID: %4</source>
     <message>
         <source>Unknown</source>
         <translation>未知</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::texture</name>
+    <message>
+        <source>Default albedo</source>
+        <translation>默认反照率</translation>
+    </message>
+    <message>
+        <source>Concrete albedo</source>
+        <translation>混凝土反照率</translation>
+    </message>
+    <message>
+        <source>Steel albedo</source>
+        <translation>钢材反照率</translation>
+    </message>
+    <message>
+        <source>Wood albedo</source>
+        <translation>木材反照率</translation>
+    </message>
+    <message>
+        <source>Plaster albedo</source>
+        <translation>石膏反照率</translation>
+    </message>
+    <message>
+        <source>Default normal</source>
+        <translation>默认法线</translation>
+    </message>
+    <message>
+        <source>Concrete normal</source>
+        <translation>混凝土法线</translation>
+    </message>
+    <message>
+        <source>Wood normal</source>
+        <translation>木材法线</translation>
+    </message>
+    <message>
+        <source>Steel normal</source>
+        <translation>钢材法线</translation>
+    </message>
+    <message>
+        <source>Plaster normal</source>
+        <translation>石膏法线</translation>
+    </message>
+    <message>
+        <source>Glass normal</source>
+        <translation>玻璃法线</translation>
+    </message>
+    <message>
+        <source>Texture #%1</source>
+        <translation>贴图 #%1</translation>
+    </message>
+    <message>
+        <source>Albedo</source>
+        <translation>反照率</translation>
+    </message>
+    <message>
+        <source>Normal</source>
+        <translation>法线</translation>
+    </message>
+    <message>
+        <source>ORM</source>
+        <translation>ORM</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>未知</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::TextureInspectorDialog</name>
+    <message>
+        <source>Texture</source>
+        <translation>纹理</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>名称</translation>
+    </message>
+    <message>
+        <source>Type</source>
+        <translation>类型</translation>
+    </message>
+    <message>
+        <source>Size</source>
+        <translation>尺寸</translation>
+    </message>
+    <message>
+        <source>Color space</source>
+        <translation>颜色空间</translation>
+    </message>
+    <message>
+        <source>References</source>
+        <translation>引用</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>来源</translation>
+    </message>
+    <message>
+        <source>Used by</source>
+        <translation>用于</translation>
+    </message>
+    <message>
+        <source>Replace...</source>
+        <translation>替换...</translation>
+    </message>
+    <message>
+        <source>(missing)</source>
+        <translation>（缺失）</translation>
+    </message>
+    <message>
+        <source>No preview</source>
+        <translation>无法预览</translation>
+    </message>
+    <message>
+        <source> (built-in)</source>
+        <translation> （内置）</translation>
+    </message>
+    <message>
+        <source>%1 × %2</source>
+        <translation>%1 × %2</translation>
+    </message>
+    <message>
+        <source>sRGB</source>
+        <translation>sRGB</translation>
+    </message>
+    <message>
+        <source>Linear</source>
+        <translation>线性</translation>
+    </message>
+    <message>
+        <source>Built-in (%1)</source>
+        <translation>内置（%1）</translation>
+    </message>
+    <message>
+        <source>Imported</source>
+        <translation>已导入</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>无</translation>
+    </message>
+    <message>
+        <source>, </source>
+        <translation>、</translation>
     </message>
 </context>
 <context>

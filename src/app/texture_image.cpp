@@ -1,6 +1,9 @@
 #include "texture_image.h"
 
+#include "engine/render/builtin_textures.h"
+
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QFileInfo>
 #include <QImage>
 #include <cstring>
@@ -45,6 +48,60 @@ Result<TextureAsset> decode_texture_image(const QByteArray& bytes, std::string n
     return Err("failed to decode image bytes");
   }
   return texture_from_qimage(image, std::move(name), usage, srgb);
+}
+
+QString texture_display_name(const TextureAsset& tex) {
+  if (tex.builtin_key == kBuiltinDefaultAlbedo) {
+    return QCoreApplication::translate("tamias::texture", "Default albedo");
+  }
+  if (tex.builtin_key == kBuiltinConcreteAlbedo) {
+    return QCoreApplication::translate("tamias::texture", "Concrete albedo");
+  }
+  if (tex.builtin_key == kBuiltinSteelAlbedo) {
+    return QCoreApplication::translate("tamias::texture", "Steel albedo");
+  }
+  if (tex.builtin_key == kBuiltinWoodAlbedo) {
+    return QCoreApplication::translate("tamias::texture", "Wood albedo");
+  }
+  if (tex.builtin_key == kBuiltinPlasterAlbedo) {
+    return QCoreApplication::translate("tamias::texture", "Plaster albedo");
+  }
+  if (tex.builtin_key == kBuiltinDefaultNormal) {
+    return QCoreApplication::translate("tamias::texture", "Default normal");
+  }
+  if (tex.builtin_key == kBuiltinConcreteNormal) {
+    return QCoreApplication::translate("tamias::texture", "Concrete normal");
+  }
+  if (tex.builtin_key == kBuiltinWoodNormal) {
+    return QCoreApplication::translate("tamias::texture", "Wood normal");
+  }
+  if (tex.builtin_key == kBuiltinSteelNormal) {
+    return QCoreApplication::translate("tamias::texture", "Steel normal");
+  }
+  if (tex.builtin_key == kBuiltinPlasterNormal) {
+    return QCoreApplication::translate("tamias::texture", "Plaster normal");
+  }
+  if (tex.builtin_key == kBuiltinGlassNormal) {
+    return QCoreApplication::translate("tamias::texture", "Glass normal");
+  }
+  if (!tex.name.empty()) {
+    return QString::fromStdString(tex.name);
+  }
+  return QCoreApplication::translate("tamias::texture", "Texture #%1").arg(tex.id);
+}
+
+QString texture_usage_label(TextureUsage usage) {
+  switch (usage) {
+    case TextureUsage::Albedo:
+      return QCoreApplication::translate("tamias::texture", "Albedo");
+    case TextureUsage::Normal:
+      return QCoreApplication::translate("tamias::texture", "Normal");
+    case TextureUsage::Orm:
+      return QCoreApplication::translate("tamias::texture", "ORM");
+    case TextureUsage::Unknown:
+    default:
+      return QCoreApplication::translate("tamias::texture", "Unknown");
+  }
 }
 
 QPixmap texture_thumbnail(const TextureAsset& tex, QSize size) {

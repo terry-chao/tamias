@@ -45,6 +45,6 @@ Ribbon「开始 → 插件」由 `PluginHost` 在启动时加载 C# 插件。插
 
 ## 现在有 / 还没有
 
-**有：** 打开 `.tdoc` / `.trscn` / 导入网格、转相机、点选、挤出等特征的属性编辑、墙工具预览线、线框/着色/真实模式、**Home → File → Export Render Scene**、**Pin Render Scene for Tests**（`Ctrl+Shift+P`，钉进 `assets/samples/render/` 金样；调试步骤见 [渲染场景快照](RENDER-SCENE.md#调试步骤)）、**Ctrl+D 句柄检查窗口**（点选构件显示 `.tdoc` 里的 id）、**开始 → 插件**（C# 示例：列出选择 / 删除所选）。
+**有：** 打开 `.tdoc` / `.trscn` / 导入网格、转相机、点选、挤出等特征的属性编辑、墙工具预览线、线框/着色/真实模式、**视图 → 渲染场景**（`Ctrl+Shift+I`：对照 draw list、写 `.trscn` / 钉金样 / 导出 OBJ；`Ctrl+Shift+P` 钉进 `assets/samples/render/`，调试步骤见 [渲染场景快照](RENDER-SCENE.md#调试步骤)）、**Ctrl+D 句柄检查窗口**（点选构件显示 `.tdoc` 里的 id）、**开始 → 插件**（C# 示例：列出选择 / 删除所选）。
 
 **还没有（路线图支撑线）：** 大纲树、测量、工作台切换、完整建模草图 UI、楼层/轴网 UI。壳继续长在 app 里；BIM 规则走 [BIM 业务层](BIM.md)，内核仍是 command →（bim）→ document → modeling。

@@ -1,6 +1,7 @@
 #include "engine/render/render_scene.h"
 
 #include "engine/core/fs_utf8.h"
+#include "engine/render/debug_vertex_overlay.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -37,11 +38,19 @@ Result<void> write_debug_obj(const std::filesystem::path& path, const MeshCpu& m
   }
   out << "# Tamias render-scene debug\n";
   out << std::setprecision(9) << std::fixed;
+  const bool write_colors = mesh_has_vertex_colors(mesh);
   for (const Vertex& v : mesh.vertices) {
-    out << "v " << v.position.x << ' ' << v.position.y << ' ' << v.position.z << '\n';
+    out << "v " << v.position.x << ' ' << v.position.y << ' ' << v.position.z;
+    if (write_colors) {
+      out << ' ' << v.color.x << ' ' << v.color.y << ' ' << v.color.z;
+    }
+    out << '\n';
   }
   for (const Vertex& v : mesh.vertices) {
     out << "vn " << v.normal.x << ' ' << v.normal.y << ' ' << v.normal.z << '\n';
+  }
+  for (const Vertex& v : mesh.vertices) {
+    out << "vt " << v.uv.x << ' ' << v.uv.y << '\n';
   }
   if (mesh.line_list) {
     for (std::size_t i = 0; i + 1 < mesh.indices.size(); i += 2) {
@@ -52,7 +61,8 @@ Result<void> write_debug_obj(const std::filesystem::path& path, const MeshCpu& m
       const auto i0 = mesh.indices[i] + 1;
       const auto i1 = mesh.indices[i + 1] + 1;
       const auto i2 = mesh.indices[i + 2] + 1;
-      out << "f " << i0 << "//" << i0 << ' ' << i1 << "//" << i1 << ' ' << i2 << "//" << i2 << '\n';
+      out << "f " << i0 << '/' << i0 << '/' << i0 << ' ' << i1 << '/' << i1 << '/' << i1 << ' '
+          << i2 << '/' << i2 << '/' << i2 << '\n';
     }
   }
   if (!out) {
@@ -65,6 +75,7 @@ MeshCpu transformed_mesh(const MeshCpu& mesh, const Mat4& transform) {
   MeshCpu out = mesh;
   for (Vertex& v : out.vertices) {
     v.position = transform * v.position;
+    v.normal = transform_normal_affine(transform, v.normal);
   }
   recompute_bounds(out);
   return out;
@@ -112,8 +123,8 @@ Result<void> write_render_scene_debug_files(const std::filesystem::path& inspect
   readme << "Tamias render-scene debug dump\n";
   readme << "source: " << (scene.source.empty() ? "(unnamed)" : scene.source) << '\n';
   readme << "digest: " << render_scene_digest(scene) << '\n';
-  readme << "mesh_<id>.obj        asset-space mesh (open in any DCC)\n";
-  readme << "draw_*_node_*.obj    world-space copy of that draw\n";
+  readme << "mesh_<id>.obj        asset-space mesh (open in any DCC; v/vt/vn)\n";
+  readme << "draw_*_node_*.obj    world-space copy of that draw (transform applied)\n";
   readme << "tex_<id>.ppm         albedo/normal pixels (any image viewer)\n";
   readme << "Parent inspect.txt has every vertex, matrix, and draw field.\n";
   if (auto r = write_text_file(debug_dir / "README.txt", readme.str()); !r) {
@@ -169,6 +180,19 @@ Result<void> write_render_scene_debug_sidecars(const std::filesystem::path& trsc
   std::filesystem::path debug = trscn_path;
   debug.replace_extension(".debug");
   return write_render_scene_debug_files(inspect, debug, scene);
+}
+
+Result<void> write_render_scene_debug_draw(const std::filesystem::path& obj_path,
+                                           const RenderScene& scene, std::size_t item_index) {
+  if (item_index >= scene.items.size()) {
+    return Err("draw index out of range");
+  }
+  const SceneDrawItem& item = scene.items[item_index];
+  const auto it = scene.meshes.find(item.mesh_asset_id);
+  if (it == scene.meshes.end()) {
+    return Err("mesh " + std::to_string(item.mesh_asset_id) + " is not in this scene");
+  }
+  return write_debug_obj(obj_path, transformed_mesh(it->second, item.transform));
 }
 
 }  // namespace tamias

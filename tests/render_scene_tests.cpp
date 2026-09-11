@@ -12,6 +12,9 @@
 #include <cmath>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <string>
 #include <unordered_map>
 
 namespace tamias {
@@ -460,6 +463,41 @@ TEST(RenderScene, InspectMentionsDigestAndItems) {
   EXPECT_NE(text.find("transform:"), std::string::npos);
   EXPECT_NE(text.find("roughness="), std::string::npos);
   EXPECT_NE(text.find("world_scale="), std::string::npos);
+}
+
+TEST(RenderScene, DebugDumpWritesUvAndWorldDraw) {
+  const auto root = std::filesystem::temp_directory_path() / "tamias_debug_dump";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(root, ec);
+  ASSERT_FALSE(ec) << ec.message();
+  const RenderScene original = handmade_scene();
+  const auto trscn = root / "scene.trscn";
+  ASSERT_TRUE(write_render_scene_debug_sidecars(trscn, original)) << "debug dump failed";
+
+  const auto mesh_obj = root / "scene.debug" / "mesh_7.obj";
+  const auto draw_obj = root / "scene.debug" / "draw_0_node_3.obj";
+  EXPECT_TRUE(std::filesystem::is_regular_file(mesh_obj, ec));
+  EXPECT_TRUE(std::filesystem::is_regular_file(draw_obj, ec));
+  EXPECT_TRUE(std::filesystem::is_regular_file(root / "scene.debug" / "tex_11.ppm", ec));
+
+  std::ifstream mesh_in(mesh_obj);
+  ASSERT_TRUE(mesh_in);
+  std::string mesh_text((std::istreambuf_iterator<char>(mesh_in)), std::istreambuf_iterator<char>());
+  EXPECT_NE(mesh_text.find("vt "), std::string::npos);
+  EXPECT_NE(mesh_text.find("f 1/1/1"), std::string::npos);
+
+  std::ifstream draw_in(draw_obj);
+  ASSERT_TRUE(draw_in);
+  std::string draw_text((std::istreambuf_iterator<char>(draw_in)), std::istreambuf_iterator<char>());
+  EXPECT_NE(draw_text.find("v 0.500000000 1.500000000 2.500000000"), std::string::npos);
+
+  const auto one = root / "one_draw.obj";
+  ASSERT_TRUE(write_render_scene_debug_draw(one, original, 0));
+  EXPECT_TRUE(std::filesystem::is_regular_file(one, ec));
+  EXPECT_FALSE(write_render_scene_debug_draw(root / "bad.obj", original, 9));
+
+  std::filesystem::remove_all(root, ec);
 }
 
 TEST(RenderSceneIo, UnicodePathRoundTrip) {

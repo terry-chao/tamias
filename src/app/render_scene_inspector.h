@@ -11,6 +11,7 @@ class QCheckBox;
 class QFormLayout;
 class QGroupBox;
 class QLabel;
+class QLineEdit;
 class QPlainTextEdit;
 class QSplitter;
 class QTableWidget;
@@ -18,7 +19,8 @@ class QTabWidget;
 
 namespace tamias {
 
-// 可视化调试：场景摘要 + 绘制清单 + 选中项属性 / 贴图 / 顶点。点选绘制画 AABB，点选顶点画标记。
+// 可视化调试：场景摘要 + 绘制清单 + 选中项属性 / 贴图 / 顶点。
+// 点选绘制画 AABB，点选顶点画标记；可保存快照、钉金样、写出 OBJ/PPM。
 class RenderSceneInspector final : public QWidget {
   Q_OBJECT
  public:
@@ -26,18 +28,27 @@ class RenderSceneInspector final : public QWidget {
 
   void show_scene(const RenderScene& scene);
   void clear();
+  void select_node(quint64 node_id);
+  [[nodiscard]] int current_draw_index() const;
+  [[nodiscard]] const RenderScene* current_scene() const {
+    return has_scene_ ? &scene_ : nullptr;
+  }
 
  signals:
   void overlay_requested(Aabb box, quint64 node_id, bool isolate);
   void overlay_cleared();
   void vertex_overlay_requested(DebugVertexOverlay vertex);
   void vertex_overlay_cleared();
-  void dump_requested();
   void refresh_requested();
+  void save_requested();
+  void pin_requested();
+  void dump_requested();
+  void dump_selected_requested();
 
  private:
   void rebuild();
   void show_empty();
+  void apply_filter();
   void on_draw_selected();
   void on_vertex_selected();
   void fill_selected_draw(int index);
@@ -59,6 +70,7 @@ class RenderSceneInspector final : public QWidget {
   QLabel* summary_digest_ = nullptr;
   QLabel* summary_camera_ = nullptr;
 
+  QLineEdit* filter_ = nullptr;
   QTableWidget* draws_ = nullptr;
   QCheckBox* isolate_ = nullptr;
 

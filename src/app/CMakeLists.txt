@@ -26,6 +26,7 @@ add_executable(tamias
   handle_inspector.cpp
   property_panel.cpp
   texture_library_panel.cpp
+  texture_inspector_dialog.cpp
   texture_image.cpp
   timing_panel.cpp
   timing_timeline_widget.cpp

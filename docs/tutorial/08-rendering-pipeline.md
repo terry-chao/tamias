@@ -104,6 +104,6 @@ src/engine/render/rhi/
 - [视锥、NDC 与屏幕](../NDC.md)：坐标变换深讲
 - [OpenGL 后端](../OPENGL.md)：绑缓冲、画三角、贴图的具体代码
 - [视锥剔除](../FRUSTUM-CULLING.md)：屏外不发 draw
-- [渲染场景快照](../RENDER-SCENE.md)：`.trscn` 冻住烤好的场景；[调试步骤](../RENDER-SCENE.md#调试步骤)（Export 写盘并打开 → Pin → 金样测试）
+- [渲染场景快照](../RENDER-SCENE.md)：`.trscn` 冻住烤好的场景；[调试步骤](../RENDER-SCENE.md#调试步骤)（面板对照 → Save snapshot / Pin → 金样测试）
 
 下一章：[BIM 业务层](09-bim-layer.md)

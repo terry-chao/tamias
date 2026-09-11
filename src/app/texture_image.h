@@ -18,5 +18,7 @@ Result<TextureAsset> load_texture_image(const QString& path, TextureUsage usage,
 Result<TextureAsset> decode_texture_image(const QByteArray& bytes, std::string name,
                                           TextureUsage usage, bool srgb);
 QPixmap texture_thumbnail(const TextureAsset& tex, QSize size);
+QString texture_display_name(const TextureAsset& tex);
+QString texture_usage_label(TextureUsage usage);
 
 }  // namespace tamias

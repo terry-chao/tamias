@@ -40,6 +40,7 @@
 #include <QShowEvent>
 #include <QStyle>
 #include <QStatusBar>
+#include <QDesktopServices>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
@@ -62,6 +63,7 @@
 #include <QSize>
 #include <QStatusBar>
 #include <QToolButton>
+#include <QUrl>
 #include <QVector>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -113,6 +115,10 @@ void center_on_primary_screen(QWidget* widget) {
     widget->resize(size);
   }
   widget->setGeometry(QStyle::alignedRect(Qt::LeftToRight, Qt::AlignCenter, size, avail));
+}
+
+void reveal_path(const std::filesystem::path& path) {
+  QDesktopServices::openUrl(QUrl::fromLocalFile(path_to_qstring(path)));
 }
 
 }  // namespace
@@ -190,19 +196,17 @@ MainWindow::MainWindow(QWidget* parent)
   connect(save_as_action, &QAction::triggered, this, &MainWindow::save_file_as);
   addAction(save_as_action);
 
-  auto* export_render_action = new QAction(ribbon_icon(QStringLiteral(":/icons/save_as.svg")),
-                                           tr("Export Render Scene"), this);
-  export_render_action->setToolTip(
-      tr("Write the current view to a .trscn and open it as a read-only snapshot"));
-  connect(export_render_action, &QAction::triggered, this, &MainWindow::export_render_scene);
-  addAction(export_render_action);
-
-  auto* pin_render_action = new QAction(ribbon_icon(QStringLiteral(":/icons/save_as.svg")),
-                                        tr("Pin Render Scene for Tests"), this);
+  auto* pin_render_action = new QAction(tr("Pin Render Scene for Tests"), this);
   pin_render_action->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+P")));
   pin_render_action->setToolTip(
       tr("Write the current view to assets/samples/render/<name>/ and run RenderSceneGolden*"));
-  connect(pin_render_action, &QAction::triggered, this, &MainWindow::pin_render_scene_golden);
+  connect(pin_render_action, &QAction::triggered, this, [this] {
+    if (render_scene_dock_ != nullptr) {
+      render_scene_dock_->show();
+      render_scene_dock_->raise();
+    }
+    pin_render_scene_golden();
+  });
   addAction(pin_render_action);
 
   auto* frame_all_action = new QAction(ribbon_icon(QStringLiteral(":/icons/frame_all.svg")),
@@ -487,6 +491,11 @@ MainWindow::MainWindow(QWidget* parent)
   addDockWidget(Qt::RightDockWidgetArea, texture_library_dock_);
   tabifyDockWidget(property_dock, texture_library_dock_);
   property_dock->raise();
+  connect(texture_library_dock_, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+    if (visible) {
+      refresh_texture_library_panel();
+    }
+  });
   auto* texture_toggle = texture_library_dock_->toggleViewAction();
   texture_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/texture_library.svg")));
   addAction(texture_toggle);
@@ -519,7 +528,7 @@ MainWindow::MainWindow(QWidget* parent)
   render_scene_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/shaded.svg")));
   render_scene_toggle->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+I")));
   render_scene_toggle->setToolTip(
-      tr("Visual debug of the cooked draw list: meshes, textures, AABB overlay"));
+      tr("Debug the cooked draw list: meshes, textures, AABB overlay, snapshot / pin"));
   addAction(render_scene_toggle);
 
   timing_panel_ = new TimingPanel(this);
@@ -617,6 +626,12 @@ MainWindow::MainWindow(QWidget* parent)
   });
   connect(render_scene_inspector_, &RenderSceneInspector::dump_requested, this,
           &MainWindow::dump_render_scene_debug);
+  connect(render_scene_inspector_, &RenderSceneInspector::save_requested, this,
+          &MainWindow::export_render_scene);
+  connect(render_scene_inspector_, &RenderSceneInspector::pin_requested, this,
+          &MainWindow::pin_render_scene_golden);
+  connect(render_scene_inspector_, &RenderSceneInspector::dump_selected_requested, this,
+          &MainWindow::dump_selected_render_draw);
   connect(render_scene_inspector_, &RenderSceneInspector::refresh_requested, this,
           &MainWindow::refresh_render_scene_inspector);
   connect(render_scene_dock_, &QDockWidget::visibilityChanged, this,
@@ -638,8 +653,6 @@ MainWindow::MainWindow(QWidget* parent)
   file_group->add_action(open_action);
   file_group->add_action(save_action);
   file_group->add_action(save_as_action);
-  file_group->add_action(export_render_action);
-  file_group->add_action(pin_render_action);
 
   RibbonGroup* draw_group = home_page->add_group(QStringLiteral("draw"), tr("Draw"));
   draw_group->add_action(line_action_);
@@ -969,6 +982,12 @@ void MainWindow::show_documents() {
     return;
   }
   stack_->setCurrentWidget(tabs_);
+  // addTab emits currentChanged before the stack leaves the home page, so
+  // current_viewport() is still null and the texture library would stay empty.
+  refresh_property_panel();
+  refresh_handle_inspector();
+  refresh_render_scene_inspector();
+  refresh_texture_library_panel();
 }
 
 void MainWindow::activate_open_document(int index) {
@@ -1153,6 +1172,8 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
   connect(vp, &DocumentViewport::document_changed, this, &MainWindow::refresh_handle_inspector);
   connect(vp, &DocumentViewport::document_changed, this,
           &MainWindow::refresh_render_scene_inspector);
+  connect(vp, &DocumentViewport::selection_changed, this,
+          &MainWindow::sync_render_scene_selection);
   connect(vp, &DocumentViewport::document_changed, this,
           &MainWindow::refresh_texture_library_panel);
   connect(vp, &DocumentViewport::selection_changed, this,
@@ -1479,7 +1500,7 @@ bool MainWindow::write_selected_mesh(const QString& path) {
 bool MainWindow::export_render_scene() {
   auto* vp = current_viewport();
   if (!vp) {
-    QMessageBox::information(this, tr("Export"), tr("Open a document first."));
+    QMessageBox::information(this, tr("Render Scene"), tr("Open a document first."));
     return false;
   }
   QString suggested = QString::fromStdString(vp->document().name());
@@ -1490,7 +1511,7 @@ bool MainWindow::export_render_scene() {
     suggested = QFileInfo(suggested).completeBaseName() + QStringLiteral(".trscn");
   }
   const QString path = QFileDialog::getSaveFileName(
-      this, tr("Export Render Scene"), suggested, tr("Render Scene (*.trscn)"));
+      this, tr("Save Render Scene Snapshot"), suggested, tr("Render Scene (*.trscn)"));
   if (path.isEmpty()) {
     return false;
   }
@@ -1501,25 +1522,20 @@ bool MainWindow::export_render_scene() {
   const QString abs_path = QFileInfo(out_path).absoluteFilePath();
   const RenderScene scene = vp->document().capture_render_scene(vp->capture_render_scene_view());
   if (auto r = save_render_scene(qstring_to_path(abs_path), scene); !r) {
-    QMessageBox::critical(this, tr("Export"), QString::fromStdString(r.error()));
+    QMessageBox::critical(this, tr("Render Scene"), QString::fromStdString(r.error()));
     return false;
   }
   if (auto r = write_render_scene_debug_sidecars(qstring_to_path(abs_path), scene); !r) {
-    QMessageBox::warning(this, tr("Export"),
+    QMessageBox::warning(this, tr("Render Scene"),
                          tr("Scene saved, but debug dump failed:\n%1")
                              .arg(QString::fromStdString(r.error())));
   }
   statusBar()->showMessage(
-      tr("Exported %1  digest=%2")
+      tr("Saved snapshot %1  digest=%2")
           .arg(abs_path, QString::fromStdString(render_scene_digest(scene))),
       8000);
-  if (const int existing = find_open_document(abs_path); existing >= 0) {
-    if (auto* w = tabs_->widget(existing)) {
-      tabs_->removeTab(existing);
-      delete w;
-    }
-  }
-  return open_path(abs_path);
+  reveal_path(qstring_to_path(QFileInfo(abs_path).absolutePath()));
+  return true;
 }
 
 bool MainWindow::pin_render_scene_golden() {
@@ -1844,9 +1860,28 @@ void MainWindow::refresh_render_scene_inspector() {
   Document& doc = vp->document();
   if (const RenderScene* snap = doc.render_snapshot()) {
     render_scene_inspector_->show_scene(*snap);
+  } else {
+    render_scene_inspector_->show_scene(doc.capture_render_scene(vp->capture_render_scene_view()));
+  }
+  sync_render_scene_selection();
+}
+
+void MainWindow::sync_render_scene_selection() {
+  if (render_scene_inspector_ == nullptr) {
     return;
   }
-  render_scene_inspector_->show_scene(doc.capture_render_scene(vp->capture_render_scene_view()));
+  if (render_scene_dock_ != nullptr && !render_scene_dock_->isVisible()) {
+    return;
+  }
+  DocumentViewport* vp = current_viewport();
+  if (vp == nullptr) {
+    return;
+  }
+  const std::vector<std::uint64_t> ids = vp->document().selected_ids();
+  if (ids.empty()) {
+    return;
+  }
+  render_scene_inspector_->select_node(ids.front());
 }
 
 void MainWindow::dump_render_scene_debug() {
@@ -1856,9 +1891,13 @@ void MainWindow::dump_render_scene_debug() {
     return;
   }
   Document& doc = vp->document();
-  const RenderScene scene = doc.render_snapshot()
-                                ? *doc.render_snapshot()
-                                : doc.capture_render_scene(vp->capture_render_scene_view());
+  const RenderScene* shown =
+      render_scene_inspector_ != nullptr ? render_scene_inspector_->current_scene() : nullptr;
+  const RenderScene scene = shown != nullptr
+                                ? *shown
+                                : (doc.render_snapshot()
+                                       ? *doc.render_snapshot()
+                                       : doc.capture_render_scene(vp->capture_render_scene_view()));
   std::filesystem::path target;
   if (!doc.path().empty() && is_render_scene_path(doc.path())) {
     target = doc.path();
@@ -1869,6 +1908,10 @@ void MainWindow::dump_render_scene_debug() {
       return;
     }
     target = qstring_to_path(dir) / "scene.trscn";
+    if (auto r = save_render_scene(target, scene); !r) {
+      QMessageBox::critical(this, tr("Render Scene"), QString::fromStdString(r.error()));
+      return;
+    }
   }
   if (auto r = write_render_scene_debug_sidecars(target, scene); !r) {
     QMessageBox::critical(this, tr("Render Scene"), QString::fromStdString(r.error()));
@@ -1880,6 +1923,51 @@ void MainWindow::dump_render_scene_debug() {
   debug.replace_extension(".debug");
   statusBar()->showMessage(
       tr("Wrote %1 and %2").arg(path_to_qstring(inspect), path_to_qstring(debug)), 8000);
+  reveal_path(debug);
+}
+
+void MainWindow::dump_selected_render_draw() {
+  auto* vp = current_viewport();
+  if (vp == nullptr || render_scene_inspector_ == nullptr) {
+    QMessageBox::information(this, tr("Render Scene"), tr("Open a document first."));
+    return;
+  }
+  const int index = render_scene_inspector_->current_draw_index();
+  if (index < 0) {
+    QMessageBox::information(this, tr("Render Scene"), tr("Select a draw first."));
+    return;
+  }
+  Document& doc = vp->document();
+  const RenderScene* shown = render_scene_inspector_->current_scene();
+  const RenderScene scene = shown != nullptr
+                                ? *shown
+                                : (doc.render_snapshot()
+                                       ? *doc.render_snapshot()
+                                       : doc.capture_render_scene(vp->capture_render_scene_view()));
+  if (index >= static_cast<int>(scene.items.size())) {
+    QMessageBox::information(this, tr("Render Scene"), tr("Select a draw first."));
+    return;
+  }
+  const SceneDrawItem& item = scene.items[static_cast<std::size_t>(index)];
+  const QString suggested =
+      QStringLiteral("draw_%1_node_%2.obj").arg(index).arg(item.node_id);
+  const QString path = QFileDialog::getSaveFileName(
+      this, tr("Write this draw as OBJ"), suggested, tr("Wavefront OBJ (*.obj)"));
+  if (path.isEmpty()) {
+    return;
+  }
+  QString out_path = path;
+  if (!out_path.endsWith(QStringLiteral(".obj"), Qt::CaseInsensitive)) {
+    out_path += QStringLiteral(".obj");
+  }
+  if (auto r = write_render_scene_debug_draw(qstring_to_path(out_path), scene,
+                                             static_cast<std::size_t>(index));
+      !r) {
+    QMessageBox::critical(this, tr("Render Scene"), QString::fromStdString(r.error()));
+    return;
+  }
+  statusBar()->showMessage(tr("Wrote %1").arg(out_path), 8000);
+  reveal_path(qstring_to_path(QFileInfo(out_path).absolutePath()));
 }
 
 void MainWindow::frame_all() {

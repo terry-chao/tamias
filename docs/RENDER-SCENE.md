@@ -10,20 +10,20 @@
 
 ## 这个工具在调试什么
 
-**不是**断点调试器，也**不是**查 GPU / shader。Pin / Export 冻住的是：**这一帧交给渲染器的那份 CPU 货单**——有哪些网格、每条 draw 用什么材质/贴图、相机在哪。
+**不是**断点调试器，也**不是**查 GPU / shader。面板冻住的是：**这一帧交给渲染器的那份 CPU 货单**——有哪些网格、每条 draw 用什么材质/贴图、相机在哪。
 
 屏幕上一个盒子，背后其实是两段活：
 
 1. **建模**（`.tdoc`）：墙、布尔、OCCT 求值 → 三角网
 2. **渲染**：把三角网上 GPU 画出来
 
-Pin 卡在中间：建模已经算完、GPU 还没上场。它回答的问题是：
+面板卡在中间：建模已经算完、GPU 还没上场。它回答的问题是：
 
 > 「程序到底打算画什么？」而不是「像素为什么是这个颜色？」
 
 典型用途：
 
-| 你怀疑的问题 | Pin 能不能帮上 |
+| 你怀疑的问题 | 面板能不能帮上 |
 |---|---|
 | 盒子三角数不对、缺面、包围盒飞了 | 能。inspect 里看 `meshes` / `tris` / `aabb` |
 | 颜色、贴图、金属度烘焙错了 | 能。看 item 的 color / albedo / normal |
@@ -34,7 +34,7 @@ Pin 卡在中间：建模已经算完、GPU 还没上场。它回答的问题是
 
 所以它调试的是 **CPU 侧场景烘焙 / 展平**（`render_items()` 的输出），外加把「这一版输出」锁进测试，防止以后无声回归。
 
-手工怎么走见 [调试步骤](#调试步骤)。
+入口都在 **视图 → 面板 → 渲染场景**（`Ctrl+Shift+I`）。手工怎么走见 [调试步骤](#调试步骤)。
 
 ---
 
@@ -47,7 +47,7 @@ Pin 卡在中间：建模已经算完、GPU 还没上场。它回答的问题是
 | 下次打开 | 走文档管线（可重算） | 直接喂烤好的网格和 draw list |
 | 日常建模 | 用这个 | 不要当工作文档 |
 
-日常继续用 `.tdoc`。某一帧看起来不对、想固定那一版网格和相机再查，再导出 `.trscn`。
+日常继续用 `.tdoc`。某一帧看起来不对、想固定那一版网格和相机再查，打开渲染场景面板再保存 `.trscn`。
 
 只会带上**当前能画到的**网格，以及 item 的 albedo/normal 真正引用到的贴图。文档里默认那堆 512² 材质如果没被引用，不会打进文件。
 
@@ -55,28 +55,39 @@ Pin 卡在中间：建模已经算完、GPU 还没上场。它回答的问题是
 
 ## 1. 怎么用
 
-### Export 和 Pin 怎么选
+桌面里所有渲染场景操作都在 **视图 → 面板 → 渲染场景**（`Ctrl+Shift+I`）。功能区 Home → File 不再放导出 / 钉入按钮。
 
-| | **Export Render Scene** | **Pin Render Scene for Tests** |
+打开面板会立刻捕获当前视口的 draw list。点一条绘制，视口画黄色 AABB；勾选 Isolate 只留该条。视口里点选构件，清单会跳到对应 draw。
+
+| 按钮 | 干什么 |
+|---|---|
+| **Refresh** | 再录一帧当前视口 |
+| **Save snapshot…** | 写任意路径的 `.trscn` + `inspect.txt` + `debug/`（不改当前文档） |
+| **Pin for tests…** | 入库 `assets/samples/render/<name>/`，立刻跑 `RenderSceneGolden*`（快捷键 `Ctrl+Shift+P`） |
+| **Write debug files…** | 写出 inspect / OBJ / PPM；活文档还会顺带写 `scene.trscn`，并打开 `debug/` 文件夹 |
+| **Write this draw as OBJ…** | 只导出选中那一条的世界空间网格 |
+
+### Save snapshot 和 Pin 怎么选
+
+| | **Save snapshot** | **Pin for tests** |
 |---|---|---|
-| 入口 | Home → File → Export | Home → File → Pin（`Ctrl+Shift+P`） |
 | 写到哪 | 你选的任意 `.trscn` | 固定 `assets/samples/render/<name>/` |
-| 用途 | 临时复现：写盘并立刻打开只读快照 | 入库金样，gtest 会扫 |
+| 用途 | 临时复现：冻住这一帧，Blender / 文本对照 | 入库金样，gtest 会扫 |
 | 会不会改当前文档路径 | 否 | 否（Save 仍写原来的 `.tdoc`） |
 
-日常建模继续用 `.tdoc`。某一帧看起来不对、想固定网格和相机再查，再 Export / Pin。
+日常建模继续用 `.tdoc`。某一帧看起来不对、想固定网格和相机再查，再 Save snapshot / Pin。
 
-### 桌面：导出
+### 桌面：保存快照
 
 1. 打开 `.tdoc` / STEP / OBJ 等，把视口转到要留下的角度和着色模式（线框 / 着色 / 真实感）。
-2. 功能区 **Home → File → Export Render Scene**。
-3. 选一个文件名（`某个名字.trscn`）。
+2. **视图 → 渲染场景**，确认清单和 AABB 对得上。
+3. **Save snapshot…**，选一个文件名（`某个名字.trscn`）。
 
-写盘后**立刻在新标签打开**这份快照：相机和着色模式从文件恢复，状态栏写 `read-only draw list`。原来的 `.tdoc` 标签还在，Save 仍写原来的文档。状态栏会带 `digest=`。
+写盘后当前标签不变（还是原来的 `.tdoc`）。旁边会有 `foo.inspect.txt` 和 `foo.debug/`。要单独打开快照：File → Open 那个 `.trscn`。状态栏会带 `digest=`。
 
 ### 桌面：钉进测试（Pin）
 
-调试到「这一帧就是对的」之后：**Home → File → Pin Render Scene for Tests**（`Ctrl+Shift+P`）。
+调试到「这一帧就是对的」之后：面板里 **Pin for tests…**（或 `Ctrl+Shift+P`，会先打开面板）。
 
 1. 起一个英文夹具名（字母开头，只含字母数字 `-` `_`），例如 `box`。
 2. 写入仓库 `assets/samples/render/<name>/`：
@@ -94,18 +105,18 @@ Pin 卡在中间：建模已经算完、GPU 还没上场。它回答的问题是
 
 ### Pin 之后怎么看数据
 
-Pin / Export 会写出二进制快照，再附上**全量人读 dump** 和 **可视化 sidecar**。打开 `.trscn` 时左侧会弹出 **Render Scene** 面板（`Ctrl+Shift+I`）：点一条 draw，视口画黄色 AABB；勾选 Isolate 只留该条。
+Pin / Save snapshot / Write debug files 都会写出二进制快照（或旁边的 sidecar），再附上**全量人读 dump** 和 **可视化 sidecar**。**视图 → 渲染场景**（`Ctrl+Shift+I`）是日常对照入口：点一条 draw，视口画黄色 AABB；勾选 Isolate 只留该条。点选视口里的构件，清单跟着跳。
 
 | 文件 | 干什么 |
 |---|---|
 | `scene.trscn` | 二进制快照。用软件 **Open** 打开，眼睛看那一帧长什么样 |
 | `scene.inspect.txt` | **全量**人读 dump：相机矩阵、每条 draw 的 transform / PBR、全部顶点与索引、贴图像素摘要 |
-| `debug/mesh_<id>.obj` | 资产空间网格，Blender / 任意 DCC 可打开 |
+| `debug/mesh_<id>.obj` | 资产空间网格（含 UV），Blender / 任意 DCC 可打开 |
 | `debug/draw_*_node_*.obj` | 该条 draw 的世界空间拷贝（已乘 transform） |
 | `debug/tex_<id>.ppm` | albedo / 法线贴图像素，系统看图软件可开 |
 | `scene.meta.json` | 给测试用的数字：`digest`、`items`、`meshes` |
 
-Export 写在 `.trscn` 旁边：`foo.inspect.txt`、`foo.debug/`。
+Save snapshot 写在 `.trscn` 旁边：`foo.inspect.txt`、`foo.debug/`。从活文档点 **Write debug files…** 时，目录里会有完整的 `scene.trscn` + inspect + `debug/`（含 UV 的 OBJ，世界空间 draw 已乘 transform）。
 
 **看画面：** File → Open → `assets/samples/render/box/scene.trscn`。和 Pin 当时一样就对了。面板里点 draw 对包围盒。
 
@@ -125,21 +136,24 @@ Pin 卡在 `render_items()` 之后、`upload_mesh` 之前，用来锁「这一�
 
 打开模型（`.tdoc` / STEP / OBJ），转到要锁的视角和着色模式（线框 / 着色 / 真实感）。确认这一帧就是你要对照的状态。
 
-**2. Export：写盘并打开快照**
+**2. 面板里对照 CPU 货单**
 
-Home → File → **Export Render Scene**，选一个文件名。写完立刻在新标签打开这份 `.trscn`，不用再走 File → Open。
+**视图 → 渲染场景**（`Ctrl+Shift+I`）。打开即捕获当前视口，不用先导出。
 
-- 原来的 `.tdoc` 标签还在
-- 快照相机会恢复，状态栏写 `read-only draw list`
-- 打开后不再走特征树 / OCCT；画面还错，问题在渲染；画面对了，问题在建模 / 烘焙之前
+- 点 draw：视口黄色 AABB；Isolate 只留该条
+- 点顶点：视口标记位置 / 法线 / UV / 顶点色
+- 视口点选构件：清单跳到对应 draw
+- **Write this draw as OBJ…**：只把这一条世界空间网格丢进 Blender
+- 画面还错，先看清单条数、aabb、贴图 id；画面对了再怀疑 GPU
 
-**3. 看对了再 Pin 入库**
+**3. 看对了再 Save / Pin**
 
-`Ctrl+Shift+P`（或 Home → File → **Pin Render Scene for Tests**），夹具名例如 `box`。状态栏会显示 `Pinned golden ... digest=...`。
+- 临时冻住：**Save snapshot…**，当前 `.tdoc` 标签还在
+- 入库金样：**Pin for tests…**（`Ctrl+Shift+P`），夹具名例如 `box`。状态栏会显示 `Pinned golden ... digest=...`
 
 **4. 对照 inspect 与可视化 sidecar**
 
-`assets/samples/render/box/scene.inspect.txt` 现在是全量 dump（顶点、矩阵都在）。`debug/mesh_*.obj` 和 `debug/tex_*.ppm` 用外部工具看网格和贴图。软件里 `Ctrl+Shift+I` 打开 Render Scene 面板，点 draw 看黄色包围盒。
+`assets/samples/render/box/scene.inspect.txt` 现在是全量 dump（顶点、矩阵都在）。`debug/mesh_*.obj` 带 UV，`debug/draw_*_node_*.obj` 是已乘 transform 的世界空间拷贝，`debug/tex_*.ppm` 用外部工具看贴图。
 
 先看：item 条数对不对、aabb 是否离谱、贴图 id 是否被引用、digest 是否和上次一样。
 
@@ -221,7 +235,7 @@ Magic `TRSC`，version 1。Chunk：`META` / `VIEW` / `MESH` / `DRAW`；有贴图
 | `DRAW` | 已烘好的 `SceneDrawItem` |
 | `TEXT` | 被 albedo/normal 引用到的 `TextureAsset`（RGBA8） |
 
-API：`bake_render_scene`、`render_scene_digest`、`inspect_render_scene`、`write_render_scene_debug_files` / `write_render_scene_debug_sidecars`、`serialize` / `deserialize` / `save` / `load`、`is_render_scene_path`。文档侧：`Document::capture_render_scene`、`set_render_snapshot`、`document_from_render_scene`。
+API：`bake_render_scene`、`render_scene_digest`、`inspect_render_scene`、`write_render_scene_debug_files` / `write_render_scene_debug_sidecars` / `write_render_scene_debug_draw`、`serialize` / `deserialize` / `save` / `load`、`is_render_scene_path`。文档侧：`Document::capture_render_scene`、`set_render_snapshot`、`document_from_render_scene`。
 
 ---
 
@@ -257,7 +271,7 @@ Windows 终端必须先 `vcvars64.bat` 再编，见仓库 `.cursor/rules/windows
 手工拼 `handmade_scene()` 适合测 IO。**锁真实模型**用 Pin，测试里不必再走 OCCT / 特征树，也不用手写一条 `TEST`。桌面里怎么走到 Pin，见 [调试步骤](#调试步骤)。
 
 1. 桌面打开模型，转到要锁住的视角和着色模式。
-2. **Pin Render Scene for Tests**，夹具名例如 `box`。
+2. **视图 → 渲染场景 → Pin for tests…**，夹具名例如 `box`。
 3. 提交 `assets/samples/render/box/`（`scene.trscn` + sidecar）。
 4. `tamias_tests --gtest_filter=RenderSceneGolden*`：digest 对 sidecar、hydrate 条数、Mock draw 次数。
 

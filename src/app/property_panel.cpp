@@ -491,17 +491,11 @@ void PropertyPanel::add_material_editor(QWidget* parent, QVBoxLayout* column,
     combo->setCurrentIndex(selected);
   }
 
-  auto texture_label = [this](const TextureAsset& tex) {
-    if (!tex.name.empty()) {
-      return QString::fromStdString(tex.name);
-    }
-    return tr("Texture #%1").arg(tex.id);
-  };
-  auto make_texture_row = [this, target_id, current_sp, document, parent, texture_label, apply_all](
+  auto make_texture_row = [this, target_id, current_sp, document, parent, apply_all](
                               std::uint64_t Material::* field, bool srgb, TextureUsage usage,
                               int slot, const QString& dialog_title) {
     auto* combo = new QComboBox(parent);
-    auto fill_combo = [this, document, combo, texture_label, usage](std::uint64_t current_id) {
+    auto fill_combo = [this, document, combo, usage](std::uint64_t current_id) {
       const QSignalBlocker block(combo);
       combo->clear();
       combo->addItem(tr("None"), static_cast<qulonglong>(0));
@@ -522,12 +516,12 @@ void PropertyPanel::add_material_editor(QWidget* parent, QVBoxLayout* column,
         if (tex == nullptr) {
           continue;
         }
-        combo->addItem(texture_label(*tex), static_cast<qulonglong>(tid));
+        combo->addItem(texture_display_name(*tex), static_cast<qulonglong>(tid));
       }
       int idx = combo->findData(static_cast<qulonglong>(current_id));
       if (idx < 0 && current_id != 0) {
         if (const TextureAsset* tex = document->texture(current_id)) {
-          combo->addItem(texture_label(*tex), static_cast<qulonglong>(current_id));
+          combo->addItem(texture_display_name(*tex), static_cast<qulonglong>(current_id));
           idx = combo->count() - 1;
         }
       }

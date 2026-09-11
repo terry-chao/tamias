@@ -10,7 +10,9 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QImage>
+#include <QGridLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPixmap>
 #include <QPlainTextEdit>
 #include <QPushButton>
@@ -117,7 +119,8 @@ RenderSceneInspector::RenderSceneInspector(QWidget* parent) : QWidget(parent) {
   root->setContentsMargins(8, 8, 8, 8);
   root->setSpacing(8);
 
-  empty_ = new QLabel(tr("Open a .trscn, or capture the current view."), this);
+  empty_ = new QLabel(
+      tr("Open a document to capture the current view's draw list."), this);
   empty_->setAlignment(Qt::AlignCenter);
   empty_->setWordWrap(true);
   empty_->setMinimumHeight(120);
@@ -145,15 +148,29 @@ RenderSceneInspector::RenderSceneInspector(QWidget* parent) : QWidget(parent) {
   summary_layout->addWidget(summary_digest_);
   summary_layout->addWidget(summary_camera_);
 
-  auto* actions = new QHBoxLayout();
+  auto* actions = new QGridLayout();
+  actions->setContentsMargins(0, 4, 0, 0);
+  actions->setHorizontalSpacing(6);
+  actions->setVerticalSpacing(6);
   auto* refresh_btn = new QPushButton(tr("Refresh"), summary);
+  refresh_btn->setToolTip(tr("Recapture the current viewport's cooked draw list"));
+  auto* save_btn = new QPushButton(tr("Save snapshot…"), summary);
+  save_btn->setToolTip(
+      tr("Write a .trscn plus inspect.txt / OBJ / PPM. Does not change the current document."));
+  auto* pin_btn = new QPushButton(tr("Pin for tests…"), summary);
+  pin_btn->setToolTip(
+      tr("Write assets/samples/render/<name>/ and run RenderSceneGolden*"));
   auto* dump_btn = new QPushButton(tr("Write debug files…"), summary);
-  dump_btn->setToolTip(tr("Dump inspect.txt, OBJ meshes, and PPM textures next to the scene"));
+  dump_btn->setToolTip(
+      tr("Write inspect.txt, OBJ meshes, and PPM textures. From a live view, also writes scene.trscn."));
   connect(refresh_btn, &QPushButton::clicked, this, &RenderSceneInspector::refresh_requested);
+  connect(save_btn, &QPushButton::clicked, this, &RenderSceneInspector::save_requested);
+  connect(pin_btn, &QPushButton::clicked, this, &RenderSceneInspector::pin_requested);
   connect(dump_btn, &QPushButton::clicked, this, &RenderSceneInspector::dump_requested);
-  actions->addStretch();
-  actions->addWidget(refresh_btn);
-  actions->addWidget(dump_btn);
+  actions->addWidget(refresh_btn, 0, 0);
+  actions->addWidget(save_btn, 0, 1);
+  actions->addWidget(pin_btn, 1, 0);
+  actions->addWidget(dump_btn, 1, 1);
   summary_layout->addLayout(actions);
   body_layout->addWidget(summary);
 
@@ -163,6 +180,11 @@ RenderSceneInspector::RenderSceneInspector(QWidget* parent) : QWidget(parent) {
   auto* list_box = new QGroupBox(tr("Draws"), split);
   auto* list_layout = new QVBoxLayout(list_box);
   list_layout->setContentsMargins(8, 8, 8, 8);
+  filter_ = new QLineEdit(list_box);
+  filter_->setPlaceholderText(tr("Filter by #, node, or mesh id"));
+  filter_->setClearButtonEnabled(true);
+  connect(filter_, &QLineEdit::textChanged, this, &RenderSceneInspector::apply_filter);
+  list_layout->addWidget(filter_);
   draws_ = make_table(list_box, {tr("#"), tr("Node"), tr("Tris"), tr("Color"), tr("Albedo")});
   draws_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
   draws_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
@@ -182,6 +204,11 @@ RenderSceneInspector::RenderSceneInspector(QWidget* parent) : QWidget(parent) {
   isolate_ = new QCheckBox(tr("Isolate this draw"), detail_box);
   connect(isolate_, &QCheckBox::toggled, this, [this](bool) { emit_overlay(); });
   detail_layout->addWidget(isolate_);
+  auto* dump_draw_btn = new QPushButton(tr("Write this draw as OBJ…"), detail_box);
+  dump_draw_btn->setToolTip(tr("World-space mesh of the selected draw, for Blender or any DCC"));
+  connect(dump_draw_btn, &QPushButton::clicked, this,
+          &RenderSceneInspector::dump_selected_requested);
+  detail_layout->addWidget(dump_draw_btn);
 
   auto* form = new QFormLayout();
   form->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -293,6 +320,35 @@ void RenderSceneInspector::clear() {
   emit vertex_overlay_cleared();
 }
 
+void RenderSceneInspector::select_node(quint64 node_id) {
+  if (!has_scene_ || draws_ == nullptr) {
+    return;
+  }
+  for (int i = 0; i < static_cast<int>(scene_.items.size()); ++i) {
+    if (scene_.items[static_cast<std::size_t>(i)].node_id == node_id) {
+      if (draws_->isRowHidden(i) && filter_ != nullptr) {
+        filter_->clear();
+      }
+      draws_->selectRow(i);
+      if (auto* item = draws_->item(i, 0)) {
+        draws_->scrollToItem(item);
+      }
+      return;
+    }
+  }
+}
+
+int RenderSceneInspector::current_draw_index() const {
+  if (!has_scene_ || draws_ == nullptr) {
+    return -1;
+  }
+  const int row = draws_->currentRow();
+  if (row < 0 || row >= static_cast<int>(scene_.items.size())) {
+    return -1;
+  }
+  return row;
+}
+
 void RenderSceneInspector::show_empty() {
   empty_->show();
   body_->hide();
@@ -357,6 +413,7 @@ void RenderSceneInspector::rebuild() {
       draws_->selectRow(select);
     }
   }
+  apply_filter();
   if (select >= 0) {
     fill_selected_draw(select);
     emit_overlay();
@@ -365,6 +422,23 @@ void RenderSceneInspector::rebuild() {
     emit overlay_cleared();
   }
   emit vertex_overlay_cleared();
+}
+
+void RenderSceneInspector::apply_filter() {
+  if (draws_ == nullptr) {
+    return;
+  }
+  const QString q = filter_ != nullptr ? filter_->text().trimmed() : QString();
+  for (int i = 0; i < draws_->rowCount(); ++i) {
+    bool match = q.isEmpty();
+    if (!match && i < static_cast<int>(scene_.items.size())) {
+      const SceneDrawItem& item = scene_.items[static_cast<std::size_t>(i)];
+      match = QString::number(i).contains(q, Qt::CaseInsensitive) ||
+              QString::number(item.node_id).contains(q, Qt::CaseInsensitive) ||
+              QString::number(item.mesh_asset_id).contains(q, Qt::CaseInsensitive);
+    }
+    draws_->setRowHidden(i, !match);
+  }
 }
 
 void RenderSceneInspector::on_draw_selected() {

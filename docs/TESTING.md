@@ -79,7 +79,7 @@ CMake 用 `gtest_discover_tests(... DISCOVERY_MODE PRE_TEST)`，并给 OCCT DLL 
 |---|---|---|---|
 | [`tests/smoke_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/smoke_tests.cpp) | `Math` `MeshIo` `BinaryArchive` `DocumentIo` `Document` `DocumentHistory` `Picking` `Camera` `ViewportFloor` `Modeling` `RenderConfig` `Occt` `FeatureModel` `Entity` `SketchEntity` `CurveGeom` `CommandSystem` `EntityGrip` `Bim` `Io` | 67 | 杂烩：数学、OBJ / `.tdoc`、拾取、实体建网格、命令撤销、特征 fillet/chamfer/union、BIM 宿主 |
 | [`tests/scene_graph_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/scene_graph_tests.cpp) | `SceneGraph` `SceneDirty` `SceneGraphIncremental` `Document` | 19 | 展平 draw list、材质/透明通道、脏标记、增量更新；**Mock `CommandList`** 记 draw |
-| [`tests/render_scene_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/render_scene_tests.cpp) | `RenderScene` `RenderSceneIo` | 17 | `.trscn` 烘焙、digest、roundtrip、视锥裁剪、水合后再录制 |
+| [`tests/render_scene_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/render_scene_tests.cpp) | `RenderScene` `RenderSceneIo` | 18 | `.trscn` 烘焙、digest、roundtrip、视锥裁剪、水合后再录制、debug OBJ |
 | [`tests/plugin_host_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/plugin_host_tests.cpp) | `CommandArgText` `PluginHost` `PluginManager` `PluginPointInputSession` `PluginPromptSpec` | 11 | 参数解析、HostApi 派发、点选会话；多数**不启动 CLR** |
 | [`tests/host/session_test.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/host/session_test.cpp) | `SessionTest` | 5 | `Session` 的 dispatch / 撤销 / 选择 / 换文档 / 事件监听 |
 | [`tests/location_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/location_tests.cpp) | `Location` | 3 | 墙的线定位、板相对标高、楼层 roundtrip |
@@ -251,7 +251,7 @@ EXPECT_FALSE(mesh->indices.empty());
 
 ### 7.6 `.trscn` 金样（无 GPU，现在就能做）
 
-这是渲染回归的**第一层**，做法在 [RENDER-SCENE.md §4](RENDER-SCENE.md#4-结合自动化测试)。手工调试顺序见 [调试步骤](RENDER-SCENE.md#调试步骤)。应用里 **Pin Render Scene for Tests** 把当前视口写到 `assets/samples/render/<name>/`（`scene.trscn` + `scene.meta.json`）。gtest `RenderSceneGolden.ScansRepositoryFixtures` 扫这个目录：digest、hydrate、Mock draw。没有夹具时 skip。
+这是渲染回归的**第一层**，做法在 [RENDER-SCENE.md §4](RENDER-SCENE.md#4-结合自动化测试)。手工调试顺序见 [调试步骤](RENDER-SCENE.md#调试步骤)。应用里 **视图 → 渲染场景 → Pin for tests** 把当前视口写到 `assets/samples/render/<name>/`（`scene.trscn` + `scene.meta.json`）。gtest `RenderSceneGolden.ScansRepositoryFixtures` 扫这个目录：digest、hydrate、Mock draw。没有夹具时 skip。
 
 着色或烘焙改了导致 digest 变：再 Pin 覆盖金样，不要改哈希函数去凑绿。Web 打开 `.trscn` 仍是人眼，不要假装进了 gtest。
 
@@ -313,7 +313,7 @@ C++ 已经测 HostApi 和（可选）加载 Hello。C# 侧缺的是**文本协�
 
 1. `command_dispatch_tests.cpp`（缺的命令 + chamfer + 布尔 1/2）——纯仿现有，当天能绿。
 2. `camera_controller_tests.cpp` + Session listener。
-3. 桌面 **Pin Render Scene for Tests** 入库（`assets/samples/render/<name>/`），跑 `RenderSceneGolden*`。
+3. 桌面 **视图 → 渲染场景 → Pin for tests** 入库（`assets/samples/render/<name>/`），跑 `RenderSceneGolden*`。
 4. 最小 `.glb` + 一个 `.brep` 盒子。
 5. C# `CommandArgs` xUnit（与 C++ 样例同源）。
 6. CI 跑 `ctest`（先 Linux 或本机自托管）。

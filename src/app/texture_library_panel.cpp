@@ -2,6 +2,7 @@
 
 #include "engine/document/document.h"
 #include "texture_image.h"
+#include "texture_inspector_dialog.h"
 
 #include <QFileDialog>
 #include <QHBoxLayout>
@@ -14,23 +15,6 @@
 #include <vector>
 
 namespace tamias {
-namespace {
-
-QString usage_label(const TextureLibraryPanel& panel, TextureUsage usage) {
-  switch (usage) {
-    case TextureUsage::Albedo:
-      return panel.tr("Albedo");
-    case TextureUsage::Normal:
-      return panel.tr("Normal");
-    case TextureUsage::Orm:
-      return panel.tr("ORM");
-    case TextureUsage::Unknown:
-    default:
-      return panel.tr("Unknown");
-  }
-}
-
-}  // namespace
 
 TextureLibraryPanel::TextureLibraryPanel(QWidget* parent) : QWidget(parent) {
   auto* root = new QVBoxLayout(this);
@@ -46,15 +30,20 @@ TextureLibraryPanel::TextureLibraryPanel(QWidget* parent) : QWidget(parent) {
   auto* buttons = new QHBoxLayout(row);
   buttons->setContentsMargins(0, 0, 0, 0);
   import_btn_ = new QPushButton(tr("Import..."), row);
+  inspect_btn_ = new QPushButton(tr("Preview..."), row);
   replace_btn_ = new QPushButton(tr("Replace..."), row);
   buttons->addWidget(import_btn_);
+  buttons->addWidget(inspect_btn_);
   buttons->addWidget(replace_btn_);
   buttons->addStretch(1);
   root->addWidget(row);
 
   connect(import_btn_, &QPushButton::clicked, this, &TextureLibraryPanel::on_import);
-  connect(replace_btn_, &QPushButton::clicked, this, &TextureLibraryPanel::on_replace);
-  connect(list_, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem*) { on_replace(); });
+  connect(inspect_btn_, &QPushButton::clicked, this, &TextureLibraryPanel::on_inspect);
+  connect(replace_btn_, &QPushButton::clicked, this, [this] { on_replace(); });
+  connect(list_, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem*) { on_inspect(); });
+  connect(list_, &QListWidget::currentItemChanged, this, [this](QListWidgetItem*) { update_actions(); });
+  update_actions();
 }
 
 void TextureLibraryPanel::set_document(Document* document) {
@@ -66,7 +55,7 @@ void TextureLibraryPanel::rebuild() {
   const std::uint64_t keep = selected_id();
   list_->clear();
   if (document_ == nullptr) {
-    replace_btn_->setEnabled(false);
+    update_actions();
     return;
   }
   std::vector<std::uint64_t> ids;
@@ -88,12 +77,12 @@ void TextureLibraryPanel::rebuild() {
     if (!thumb.isNull()) {
       item->setIcon(QIcon(thumb));
     }
-    QString name = tex->name.empty() ? tr("Texture #%1").arg(id) : QString::fromStdString(tex->name);
+    QString name = texture_display_name(*tex);
     if (!tex->builtin_key.empty()) {
       name += tr(" (built-in)");
     }
-            item->setText(tr("%1\n%2  %3×%4  refs %5")
-                      .arg(name, usage_label(*this, tex->usage))
+    item->setText(tr("%1\n%2  %3×%4  refs %5")
+                      .arg(name, texture_usage_label(tex->usage))
                       .arg(tex->width)
                       .arg(tex->height)
                       .arg(document_->texture_ref_count(id)));
@@ -104,7 +93,13 @@ void TextureLibraryPanel::rebuild() {
   if (restore >= 0) {
     list_->setCurrentRow(restore);
   }
-  replace_btn_->setEnabled(list_->count() > 0);
+  update_actions();
+}
+
+void TextureLibraryPanel::update_actions() {
+  const bool has = selected_id() != 0;
+  inspect_btn_->setEnabled(has);
+  replace_btn_->setEnabled(has);
 }
 
 void TextureLibraryPanel::on_import() {
@@ -120,13 +115,28 @@ void TextureLibraryPanel::on_import() {
   emit texture_import_requested(std::move(*asset));
 }
 
-void TextureLibraryPanel::on_replace() {
+void TextureLibraryPanel::on_inspect() {
+  const std::uint64_t id = selected_id();
+  if (id == 0 || document_ == nullptr) {
+    return;
+  }
+  TextureInspectorDialog dialog(*document_, id, this);
+  connect(&dialog, &TextureInspectorDialog::replace_requested, this, [this, &dialog] {
+    on_replace(&dialog);
+    dialog.reload();
+    rebuild();
+  });
+  dialog.exec();
+}
+
+void TextureLibraryPanel::on_replace(QWidget* dialog_parent) {
   const std::uint64_t id = selected_id();
   if (id == 0) {
     return;
   }
   const QString path = QFileDialog::getOpenFileName(
-      this, tr("Replace texture"), QString(), tr("Images (*.png *.jpg *.jpeg *.bmp)"));
+      dialog_parent != nullptr ? dialog_parent : this, tr("Replace texture"), QString(),
+      tr("Images (*.png *.jpg *.jpeg *.bmp)"));
   if (path.isEmpty()) {
     return;
   }
