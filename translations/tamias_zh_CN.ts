@@ -1660,6 +1660,114 @@ distance %3</source>
         <source>Magenta diamond: position  ·  RGB axes: XYZ  ·  Cyan arrow: normal  ·  Red/green ticks: UV (length = value)  ·  Inner diamond: vertex color</source>
         <translation>洋红菱形：位置  ·  RGB 短轴：XYZ  · 青色箭头：法线  · 红/绿刻度：UV（长度=数值）  · 内侧菱形：顶点色</translation>
     </message>
+    <message>
+        <source>Texture</source>
+        <translation>贴图变换</translation>
+    </message>
+    <message>
+        <source>scale (%1, %2)  ·  offset (%3, %4)  ·  rot %5 rad  ·  world_scale %6</source>
+        <translation>缩放 (%1, %2)  ·  偏移 (%3, %4)  ·  旋转 %5 弧度  ·  世界缩放 %6</translation>
+    </message>
+    <message>
+        <source>ORM</source>
+        <translation>ORM</translation>
+    </message>
+    <message>
+        <source>Triangles</source>
+        <translation>三角面</translation>
+    </message>
+    <message>
+        <source>Triangles (%1)</source>
+        <translation>三角面（%1）</translation>
+    </message>
+    <message>
+        <source>v0</source>
+        <translation>v0</translation>
+    </message>
+    <message>
+        <source>v1</source>
+        <translation>v1</translation>
+    </message>
+    <message>
+        <source>v2</source>
+        <translation>v2</translation>
+    </message>
+    <message>
+        <source>Face normal</source>
+        <translation>面法线</translation>
+    </message>
+    <message>
+        <source>Area</source>
+        <translation>面积</translation>
+    </message>
+    <message>
+        <source>Click a row to highlight that triangle in the viewport.</source>
+        <translation>点击一行，在视口中高亮该三角面。</translation>
+    </message>
+    <message>
+        <source>Face normal and area use local-space vertex positions; highlight uses world space.</source>
+        <translation>面法线和面积用局部空间顶点；高亮用世界空间。</translation>
+    </message>
+    <message>
+        <source>Line list, no triangles</source>
+        <translation>线列表，无三角面</translation>
+    </message>
+    <message>
+        <source>Faces</source>
+        <translation>面</translation>
+    </message>
+    <message>
+        <source>Faces (%1)</source>
+        <translation>面（%1）</translation>
+    </message>
+    <message>
+        <source>first_index</source>
+        <translation>起始索引</translation>
+    </message>
+    <message>
+        <source>index_count</source>
+        <translation>索引数</translation>
+    </message>
+    <message>
+        <source>tris</source>
+        <translation>三角</translation>
+    </message>
+    <message>
+        <source>Bounds</source>
+        <translation>范围</translation>
+    </message>
+    <message>
+        <source>Click a row to highlight that BRep face's AABB in the viewport.</source>
+        <translation>点击一行，在视口中高亮该 BRep 面的包围盒。</translation>
+    </message>
+    <message>
+        <source>BRep face index ranges; empty when the mesh is an imported triangle soup.</source>
+        <translation>BRep 面的索引范围；导入的三角汤为空。</translation>
+    </message>
+    <message>
+        <source>No BRep face info (imported triangle soup)</source>
+        <translation>无 BRep 面信息（导入三角汤）</translation>
+    </message>
+    <message>
+        <source>yaw %1  ·  pitch %2  ·  fovy %3  ·  znear %4  ·  zfar %5  ·  %6</source>
+        <translation>偏航 %1  ·  俯仰 %2  ·  视野 %3  ·  近裁 %4  ·  远裁 %5  ·  %6</translation>
+    </message>
+    <message>
+        <source>orthographic</source>
+        <translation>正交</translation>
+    </message>
+    <message>
+        <source>perspective</source>
+        <translation>透视</translation>
+    </message>
+    <message>
+        <source>source %1  ·  v%2</source>
+        <translation>来源 %1  ·  v%2</translation>
+    </message>
+    <message>
+        <source>(unnamed)</source>
+        <translation>（未命名）</translation>
+    </message>
 </context>
 <context>
     <name>tamias::PluginManagerDialog</name>

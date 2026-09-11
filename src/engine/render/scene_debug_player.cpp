@@ -46,6 +46,7 @@ void SceneDebugPlayer::set_scene(RenderScene scene) {
   step_count_.reset();
   debug_aabb_.reset();
   debug_vertex_.reset();
+  debug_triangle_.reset();
   bump_generation();
 }
 
@@ -69,6 +70,10 @@ void SceneDebugPlayer::set_debug_aabb(std::optional<Aabb> box) { debug_aabb_ = s
 
 void SceneDebugPlayer::set_debug_vertex(std::optional<DebugVertexOverlay> vertex) {
   debug_vertex_ = std::move(vertex);
+}
+
+void SceneDebugPlayer::set_debug_triangle(std::optional<std::array<Vec3, 3>> triangle) {
+  debug_triangle_ = std::move(triangle);
 }
 
 std::vector<SceneDrawItem> SceneDebugPlayer::filtered_items() const {
@@ -142,6 +147,15 @@ FrameSubmission SceneDebugPlayer::make_frame(NativeWindowHandle window, std::uin
   frame.debug_vertex = debug_vertex_;
   if (debug_aabb_ && debug_aabb_->valid()) {
     fill_aabb_debug_lines(*debug_aabb_, frame.debug_line_segments);
+  }
+  if (debug_triangle_) {
+    const auto& t = *debug_triangle_;
+    frame.debug_line_segments.push_back(t[0]);
+    frame.debug_line_segments.push_back(t[1]);
+    frame.debug_line_segments.push_back(t[1]);
+    frame.debug_line_segments.push_back(t[2]);
+    frame.debug_line_segments.push_back(t[2]);
+    frame.debug_line_segments.push_back(t[0]);
   }
   return frame;
 }

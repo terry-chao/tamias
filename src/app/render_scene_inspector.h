@@ -40,6 +40,9 @@ class RenderSceneInspector final : public QWidget {
   void overlay_cleared();
   void vertex_overlay_requested(DebugVertexOverlay vertex);
   void vertex_overlay_cleared();
+  // 选中三角面时，传世界空间三顶点；视口画三边高亮。
+  void triangle_overlay_requested(Vec3 v0, Vec3 v1, Vec3 v2);
+  void triangle_overlay_cleared();
   void refresh_requested();
   void save_requested();
   void pin_requested();
@@ -52,12 +55,19 @@ class RenderSceneInspector final : public QWidget {
   void apply_filter();
   void on_draw_selected();
   void on_vertex_selected();
+  void on_triangle_selected();
+  void on_face_selected();
   void fill_selected_draw(int index);
   void fill_vertices(std::uint64_t mesh_id);
+  void fill_triangles(std::uint64_t mesh_id);
+  void fill_faces(std::uint64_t mesh_id);
   void set_vertices_tab_title(int count);
+  void set_triangles_tab_title(int count);
+  void set_faces_tab_title(int count);
   void set_texture_thumb(QLabel* image, QLabel* caption, std::uint64_t tex_id, const QString& kind);
   void emit_overlay();
   void emit_vertex_overlay();
+  void emit_triangle_overlay();
   void set_color_chip(QLabel* chip, const Vec3& color);
 
   RenderScene scene_;
@@ -70,6 +80,8 @@ class RenderSceneInspector final : public QWidget {
   QLabel* summary_counts_ = nullptr;
   QLabel* summary_digest_ = nullptr;
   QLabel* summary_camera_ = nullptr;
+  QLabel* summary_camera2_ = nullptr;
+  QLabel* summary_source_ = nullptr;
   QWidget* actions_ = nullptr;
 
   QLineEdit* filter_ = nullptr;
@@ -81,17 +93,24 @@ class RenderSceneInspector final : public QWidget {
   QLabel* field_flags_ = nullptr;
   QLabel* field_aabb_ = nullptr;
   QLabel* field_translation_ = nullptr;
-  QLabel* field_transform_ = nullptr;
+  QTableWidget* field_transform_ = nullptr;
   QLabel* field_pbr_ = nullptr;
+  QLabel* field_tex_ = nullptr;
   QLabel* color_chip_ = nullptr;
   QLabel* category_chip_ = nullptr;
   QLabel* albedo_image_ = nullptr;
   QLabel* albedo_caption_ = nullptr;
   QLabel* normal_image_ = nullptr;
   QLabel* normal_caption_ = nullptr;
+  QLabel* orm_image_ = nullptr;
+  QLabel* orm_caption_ = nullptr;
 
   QTableWidget* verts_ = nullptr;
   QWidget* verts_page_ = nullptr;
+  QTableWidget* tris_ = nullptr;
+  QWidget* tris_page_ = nullptr;
+  QTableWidget* faces_ = nullptr;
+  QWidget* faces_page_ = nullptr;
   QTabWidget* extras_ = nullptr;
   QPlainTextEdit* dump_ = nullptr;
 };

@@ -5,6 +5,7 @@
 #include "engine/render/render_runtime.h"
 #include "engine/render/render_scene.h"
 
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <vector>
@@ -30,6 +31,8 @@ class SceneDebugPlayer {
 
   void set_debug_aabb(std::optional<Aabb> box);
   void set_debug_vertex(std::optional<DebugVertexOverlay> vertex);
+  // 选中三角面的三边高亮：传入世界空间三个顶点；nullopt 清除。
+  void set_debug_triangle(std::optional<std::array<Vec3, 3>> triangle);
   void set_show_axes(bool enabled) { show_axes_ = enabled; }
   [[nodiscard]] bool show_axes() const { return show_axes_; }
 
@@ -53,6 +56,7 @@ class SceneDebugPlayer {
   bool show_axes_ = false;
   std::optional<Aabb> debug_aabb_;
   std::optional<DebugVertexOverlay> debug_vertex_;
+  std::optional<std::array<Vec3, 3>> debug_triangle_;
   std::uint64_t generation_ = 1;
 };
 

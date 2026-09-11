@@ -15,19 +15,25 @@
 #include <QActionGroup>
 #include <QCloseEvent>
 #include <QCoreApplication>
+#include <QColor>
 #include <QDesktopServices>
 #include <QDialog>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHeaderView>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QInputDialog>
+#include <QPainter>
+#include <QPixmap>
+#include <QRect>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QSlider>
 #include <QSplitter>
+#include <QSize>
 #include <QStatusBar>
 #include <QTableWidget>
 #include <QToolBar>
@@ -35,12 +41,35 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <array>
 
 namespace tamias {
 namespace {
 
 QString tr_dbg(const char* source) {
   return QCoreApplication::translate("tamias::SceneDebuggerWindow", source);
+}
+
+QIcon toolbar_icon(const QString& resource) {
+  const QIcon source(resource);
+  QIcon result;
+  for (int extent : {16, 32}) {
+    for (int scale = 1; scale <= 2; ++scale) {
+      const int px = extent * scale;
+      QPixmap canvas(px, px);
+      canvas.setDevicePixelRatio(scale);
+      canvas.fill(Qt::transparent);
+      {
+        QPainter painter(&canvas);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        source.paint(&painter, QRect(0, 0, extent, extent));
+        painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+        painter.fillRect(QRect(0, 0, extent, extent), QColor(47, 125, 222));
+      }
+      result.addPixmap(canvas);
+    }
+  }
+  return result;
 }
 
 void reveal_path(const std::filesystem::path& path) {
@@ -120,30 +149,31 @@ SceneDebuggerWindow::SceneDebuggerWindow(std::shared_ptr<RenderThread> render_th
                                          QWidget* parent)
     : QMainWindow(parent) {
   setWindowTitle(tr("Scene Debugger"));
-  resize(1400, 860);
 
   auto* toolbar = addToolBar(tr("Scene"));
   toolbar->setMovable(false);
-  auto* open_act = toolbar->addAction(tr("Open…"));
+  toolbar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+  toolbar->setIconSize(QSize(20, 20));
+  auto* open_act = toolbar->addAction(toolbar_icon(QStringLiteral(":/icons/open.svg")), tr("Open…"));
   connect(open_act, &QAction::triggered, this, &SceneDebuggerWindow::open_file);
-  auto* save_act = toolbar->addAction(tr("Save…"));
+  auto* save_act = toolbar->addAction(toolbar_icon(QStringLiteral(":/icons/save.svg")), tr("Save…"));
   connect(save_act, &QAction::triggered, this, &SceneDebuggerWindow::save_snapshot);
-  recapture_action_ = toolbar->addAction(tr("Recapture"));
+  recapture_action_ = toolbar->addAction(toolbar_icon(QStringLiteral(":/icons/frame_all.svg")), tr("Recapture"));
   recapture_action_->setEnabled(false);
   connect(recapture_action_, &QAction::triggered, this, &SceneDebuggerWindow::recapture);
-  auto* pin_act = toolbar->addAction(tr("Pin for tests…"));
+  auto* pin_act = toolbar->addAction(toolbar_icon(QStringLiteral(":/icons/save_as.svg")), tr("Pin for tests…"));
   connect(pin_act, &QAction::triggered, this, &SceneDebuggerWindow::pin_golden);
-  auto* dump_act = toolbar->addAction(tr("Write debug files…"));
+  auto* dump_act = toolbar->addAction(toolbar_icon(QStringLiteral(":/icons/inspector.svg")), tr("Write debug files…"));
   connect(dump_act, &QAction::triggered, this, &SceneDebuggerWindow::write_debug_files);
-  auto* compare_act = toolbar->addAction(tr("Compare…"));
+  auto* compare_act = toolbar->addAction(toolbar_icon(QStringLiteral(":/icons/view_2d.svg")), tr("Compare…"));
   connect(compare_act, &QAction::triggered, this, &SceneDebuggerWindow::compare_with_file);
   toolbar->addSeparator();
 
   auto* mode_group = new QActionGroup(this);
   mode_group->setExclusive(true);
-  wireframe_action_ = toolbar->addAction(tr("Wire"));
-  shaded_action_ = toolbar->addAction(tr("Shaded"));
-  realistic_action_ = toolbar->addAction(tr("Realistic"));
+  wireframe_action_ = toolbar->addAction(toolbar_icon(QStringLiteral(":/icons/wireframe.svg")), tr("Wire"));
+  shaded_action_ = toolbar->addAction(toolbar_icon(QStringLiteral(":/icons/shaded.svg")), tr("Shaded"));
+  realistic_action_ = toolbar->addAction(toolbar_icon(QStringLiteral(":/icons/realistic.svg")), tr("Realistic"));
   wireframe_action_->setCheckable(true);
   shaded_action_->setCheckable(true);
   realistic_action_->setCheckable(true);
@@ -156,13 +186,13 @@ SceneDebuggerWindow::SceneDebuggerWindow(std::shared_ptr<RenderThread> render_th
   connect(realistic_action_, &QAction::triggered, this,
           [this] { set_mode(RenderMode::Realistic); });
   toolbar->addSeparator();
-  axes_action_ = toolbar->addAction(tr("Axes"));
+  axes_action_ = toolbar->addAction(toolbar_icon(QStringLiteral(":/icons/view_3d.svg")), tr("Axes"));
   axes_action_->setCheckable(true);
   connect(axes_action_, &QAction::toggled, this, [this](bool on) {
     replay_->player().set_show_axes(on);
     replay_->sync_from_player();
   });
-  apply_hidden_action_ = toolbar->addAction(tr("Captured hidden"));
+  apply_hidden_action_ = toolbar->addAction(toolbar_icon(QStringLiteral(":/icons/visibility.svg")), tr("Captured hidden"));
   apply_hidden_action_->setCheckable(true);
   apply_hidden_action_->setChecked(true);
   apply_hidden_action_->setToolTip(
@@ -176,7 +206,7 @@ SceneDebuggerWindow::SceneDebuggerWindow(std::shared_ptr<RenderThread> render_th
   replay_ = new ReplayViewport(std::move(render_thread), this);
   inspector_ = new RenderSceneInspector(this);
   inspector_->set_actions_visible(false);
-  inspector_->setMinimumWidth(320);
+  inspector_->setMinimumWidth(200);
 
   auto* commands_page = new QWidget(this);
   auto* commands_layout = new QVBoxLayout(commands_page);
@@ -217,10 +247,13 @@ SceneDebuggerWindow::SceneDebuggerWindow(std::shared_ptr<RenderThread> render_th
   split->addWidget(inspector_);
   split->addWidget(replay_wrap);
   split->addWidget(commands_page);
-  split->setStretchFactor(0, 3);
+  split->setStretchFactor(0, 1);
   split->setStretchFactor(1, 5);
-  split->setStretchFactor(2, 3);
+  split->setStretchFactor(2, 1);
+  split->setSizes({190, 1020, 190});
   setCentralWidget(split);
+  setMinimumSize(960, 600);
+  resize(1400, 860);
   statusBar()->showMessage(tr("Open a .trscn or capture the current view."));
 
   connect(inspector_, &RenderSceneInspector::overlay_requested, this,
@@ -244,6 +277,15 @@ SceneDebuggerWindow::SceneDebuggerWindow(std::shared_ptr<RenderThread> render_th
           });
   connect(inspector_, &RenderSceneInspector::vertex_overlay_cleared, this, [this] {
     replay_->player().set_debug_vertex(std::nullopt);
+    replay_->sync_from_player();
+  });
+  connect(inspector_, &RenderSceneInspector::triangle_overlay_requested, this,
+          [this](Vec3 v0, Vec3 v1, Vec3 v2) {
+            replay_->player().set_debug_triangle(std::array<Vec3, 3>{v0, v1, v2});
+            replay_->sync_from_player();
+          });
+  connect(inspector_, &RenderSceneInspector::triangle_overlay_cleared, this, [this] {
+    replay_->player().set_debug_triangle(std::nullopt);
     replay_->sync_from_player();
   });
   connect(inspector_, &RenderSceneInspector::dump_selected_requested, this,
