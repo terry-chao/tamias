@@ -153,6 +153,7 @@ Result<MeshCpu> tessellate_shape(const TopoDS_Shape& shape, double deflection) {
 
     const int n_tris = tri->NbTriangles();
     mesh.indices.reserve(mesh.indices.size() + static_cast<std::size_t>(n_tris) * 3);
+    const std::uint32_t face_first = static_cast<std::uint32_t>(mesh.indices.size());
     for (int i = 1; i <= n_tris; ++i) {
       int n1 = 0;
       int n2 = 0;
@@ -181,6 +182,12 @@ Result<MeshCpu> tessellate_shape(const TopoDS_Shape& shape, double deflection) {
         mesh.vertices[i2].normal = n;
       }
     }
+    MeshFaceRange range{};
+    range.first_index = face_first;
+    range.index_count = static_cast<std::uint32_t>(mesh.indices.size()) - face_first;
+    if (range.index_count != 0) {
+      mesh.faces.push_back(range);
+    }
   }
 
   if (mesh.indices.empty()) {
@@ -194,6 +201,7 @@ Result<MeshCpu> tessellate_shape(const TopoDS_Shape& shape, double deflection) {
     v.normal = {n.x, n.z, -n.y};
   }
   recompute_bounds(mesh);
+  recompute_face_bounds(mesh);
   return mesh;
 }
 

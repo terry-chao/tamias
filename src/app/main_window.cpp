@@ -25,9 +25,12 @@
 #include "ribbon_group.h"
 #include "ribbon_page.h"
 #include "settings_dialog.h"
+#include "texture_image.h"
+#include "texture_library_panel.h"
 #include "timing_panel.h"
 #include "engine/profile/timing_scope.h"
 
+#include <QByteArray>
 #include <QAction>
 #include <QActionGroup>
 #include <QCloseEvent>
@@ -146,6 +149,7 @@ MainWindow::MainWindow(QWidget* parent)
     refresh_property_panel();
     refresh_handle_inspector();
     refresh_render_scene_inspector();
+    refresh_texture_library_panel();
     bind_plugin_session();
   });
   connect(home_, &HomePage::openRequested, this, &MainWindow::open_file);
@@ -475,6 +479,18 @@ MainWindow::MainWindow(QWidget* parent)
   property_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/properties.svg")));
   addAction(property_toggle);
 
+  texture_library_panel_ = new TextureLibraryPanel(this);
+  texture_library_dock_ = new QDockWidget(tr("Texture Library"), this);
+  texture_library_dock_->setObjectName(QStringLiteral("textureLibraryDock"));
+  texture_library_dock_->setWidget(texture_library_panel_);
+  texture_library_dock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+  addDockWidget(Qt::RightDockWidgetArea, texture_library_dock_);
+  tabifyDockWidget(property_dock, texture_library_dock_);
+  property_dock->raise();
+  auto* texture_toggle = texture_library_dock_->toggleViewAction();
+  texture_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/properties.svg")));
+  addAction(texture_toggle);
+
   handle_inspector_ = new HandleInspector(this);
   auto* handle_dock = new QDockWidget(tr("Handle Inspector"), this);
   handle_dock->setObjectName(QStringLiteral("handleInspectorDock"));
@@ -676,6 +692,7 @@ MainWindow::MainWindow(QWidget* parent)
 
   RibbonGroup* panels_group = view_page->add_group(QStringLiteral("panels"), tr("Panels"));
   panels_group->add_action(property_toggle);
+  panels_group->add_action(texture_toggle);
   panels_group->add_action(handle_toggle);
   panels_group->add_action(render_scene_toggle);
   panels_group->add_action(timing_toggle);
@@ -806,6 +823,61 @@ MainWindow::MainWindow(QWidget* parent)
               vp->set_entity_material(entity_id, std::move(material));
             }
           });
+  connect(property_panel_, &PropertyPanel::material_shared_updated, this,
+          [this](Material material) {
+            if (auto* vp = current_viewport()) {
+              vp->update_library_material(material);
+            }
+          });
+  connect(property_panel_, &PropertyPanel::texture_import_requested, this,
+          [this](quint64 target_id, TextureAsset asset, int slot, bool edit_shared) {
+            auto* vp = current_viewport();
+            if (vp == nullptr) {
+              return;
+            }
+            Document& doc = vp->document();
+            const std::uint64_t tid = vp->import_texture(std::move(asset));
+            if (tid == 0) {
+              return;
+            }
+            Material material{};
+            const Entity* entity = doc.entity(target_id);
+            const SceneNode* node = doc.scene().find(target_id);
+            const std::uint64_t mid =
+                entity != nullptr ? entity->material_id : (node != nullptr ? node->material_id : 0);
+            if (mid != 0) {
+              if (const Material* m = doc.material(mid)) {
+                material = *m;
+              }
+            }
+            if (slot == 1) {
+              material.normal_texture_id = tid;
+            } else if (slot == 2) {
+              material.orm_texture_id = tid;
+            } else {
+              material.albedo_texture_id = tid;
+            }
+            if (edit_shared && material.id != 0) {
+              vp->update_library_material(material);
+            } else {
+              material.id = 0;
+              material.name.clear();
+              vp->set_entity_material(target_id, material);
+            }
+            refresh_property_panel();
+          });
+  connect(texture_library_panel_, &TextureLibraryPanel::texture_import_requested, this,
+          [this](TextureAsset asset) {
+            if (auto* vp = current_viewport()) {
+              vp->import_texture(std::move(asset));
+            }
+          });
+  connect(texture_library_panel_, &TextureLibraryPanel::texture_replace_requested, this,
+          [this](quint64 id, TextureAsset asset) {
+            if (auto* vp = current_viewport()) {
+              vp->replace_texture(id, std::move(asset));
+            }
+          });
   connect(property_panel_, &PropertyPanel::location_edited, this,
           [this](std::uint64_t entity_id, std::uint64_t storey_id,
                  double elevation_offset) {
@@ -815,6 +887,7 @@ MainWindow::MainWindow(QWidget* parent)
           });
   refresh_property_panel();
   refresh_handle_inspector();
+  refresh_texture_library_panel();
 
   statusBar()->showMessage(tr("Ready — Open a model"));
   show_home();
@@ -1080,6 +1153,10 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
   connect(vp, &DocumentViewport::document_changed, this, &MainWindow::refresh_handle_inspector);
   connect(vp, &DocumentViewport::document_changed, this,
           &MainWindow::refresh_render_scene_inspector);
+  connect(vp, &DocumentViewport::document_changed, this,
+          &MainWindow::refresh_texture_library_panel);
+  connect(vp, &DocumentViewport::selection_changed, this,
+          &MainWindow::refresh_texture_library_panel);
   connect(vp, &DocumentViewport::plugin_point_input_changed, this,
           [this](bool active) {
             if (active) {
@@ -1224,7 +1301,8 @@ bool MainWindow::open_path(const QString& path) {
     return true;
   }
 
-  Result<MeshCpu> mesh = Err("no loader");
+  std::unique_ptr<Shape> cad_shape;
+  std::optional<ImportedModel> imported;
   if (occt_supports_extension(file)) {
     TAMIAS_TIMING_SCOPE("open_file", TimingCategory::Command);
     auto* ops = ShapeOpsRegistry::instance().find("occt");
@@ -1237,25 +1315,78 @@ bool MainWindow::open_path(const QString& path) {
       QMessageBox::critical(this, tr("Open"), QString::fromStdString(shape.error()));
       return false;
     }
-    mesh = (*shape)->tessellate(0.1);
+    cad_shape = std::move(*shape);
   } else {
-    mesh = load_mesh_file(file);
-  }
-  if (!mesh) {
-    QMessageBox::critical(this, tr("Open"), QString::fromStdString(mesh.error()));
-    return false;
+    auto model = load_mesh_model(file);
+    if (!model) {
+      QMessageBox::critical(this, tr("Open"), QString::fromStdString(model.error()));
+      return false;
+    }
+    imported = std::move(*model);
   }
   auto document = std::make_shared<Document>(path_to_utf8(file.filename()));
   document->set_path(file);
-  const bool has_colors = mesh_has_vertex_colors(*mesh);
-  const Vec3 color = has_colors ? Vec3{1.f, 1.f, 1.f} : Vec3{0.75f, 0.78f, 0.82f};
-  const std::uint64_t mesh_id =
-      document->add_import_mesh(path_to_utf8(file.filename()), std::move(*mesh), Mat4::identity(),
-                                color);
+  std::uint64_t mesh_id = 0;
+  if (cad_shape) {
+    mesh_id = document->add_import_shape(path_to_utf8(file.filename()), std::move(cad_shape),
+                                         Mat4::identity(), {0.75f, 0.78f, 0.82f});
+  } else if (imported) {
+    auto import_slot = [&](const std::string& path, const std::vector<std::uint8_t>& bytes,
+                           TextureUsage usage, bool srgb) -> std::uint64_t {
+      Result<TextureAsset> asset = Err("none");
+      if (!bytes.empty()) {
+        const QByteArray raw(reinterpret_cast<const char*>(bytes.data()),
+                             static_cast<int>(bytes.size()));
+        std::string name = "imported";
+        if (!path.empty()) {
+          name = std::filesystem::path(path).stem().string();
+        }
+        asset = decode_texture_image(raw, std::move(name), usage, srgb);
+      } else if (!path.empty()) {
+        asset = load_texture_image(QString::fromStdString(path), usage, srgb);
+      } else {
+        return 0;
+      }
+      if (!asset) {
+        return 0;
+      }
+      return document->import_texture(std::move(*asset)).id;
+    };
+    Material mat{};
+    mat.name = path_to_utf8(file.stem());
+    mat.base_color = imported->base_color;
+    mat.roughness = imported->roughness;
+    mat.metallic = imported->metallic;
+    mat.opacity = imported->opacity;
+    mat.albedo_texture_id =
+        import_slot(imported->albedo_path, imported->albedo_bytes, TextureUsage::Albedo, true);
+    mat.normal_texture_id =
+        import_slot(imported->normal_path, imported->normal_bytes, TextureUsage::Normal, false);
+    mat.orm_texture_id =
+        import_slot(imported->orm_path, imported->orm_bytes, TextureUsage::Orm, false);
+    const std::uint64_t mat_id = document->add_material(std::move(mat)).id;
+    const bool has_colors = mesh_has_vertex_colors(imported->mesh);
+    const Vec3 color = has_colors ? Vec3{1.f, 1.f, 1.f} : imported->base_color;
+    mesh_id = document->add_import_mesh(path_to_utf8(file.filename()), std::move(imported->mesh),
+                                        Mat4::identity(), color, mat_id);
+  }
+  if (mesh_id == 0) {
+    QMessageBox::critical(this, tr("Open"), tr("Failed to add imported geometry."));
+    return false;
+  }
   add_document_tab(document);
 
   const MeshAsset* asset = document->mesh(mesh_id);
-  const QImage thumb = render_mesh_thumbnail(asset->cpu);
+  MeshCpu thumb_mesh;
+  if (asset != nullptr && !asset->cpu.vertices.empty()) {
+    thumb_mesh = asset->cpu;
+  } else if (asset != nullptr && asset->cpu.bounds.valid()) {
+    const Vec3 e = asset->cpu.bounds.extent();
+    thumb_mesh = make_box_mesh(std::max(e.x, 0.01f), std::max(e.y, 0.01f), std::max(e.z, 0.01f));
+  } else {
+    thumb_mesh = make_box_mesh(1.f, 1.f, 1.f);
+  }
+  const QImage thumb = render_mesh_thumbnail(thumb_mesh);
   const QString thumb_path = save_mesh_thumbnail(info.absoluteFilePath(), thumb);
   recent_.add(info.absoluteFilePath(), thumb_path);
   refresh_home();
@@ -1669,8 +1800,7 @@ void MainWindow::refresh_property_panel() {
     return;
   }
   if (const SceneNode* node = doc.scene().selected_node()) {
-    property_panel_->show_entity(nullptr, nullptr, tr("Imported mesh: %1\n(no editable parameters)")
-                                                        .arg(QString::fromStdString(node->name)));
+    property_panel_->show_imported_mesh(node, &doc);
     return;
   }
   property_panel_->show_entity(
@@ -1689,6 +1819,14 @@ void MainWindow::refresh_handle_inspector() {
   Document& doc = vp->document();
   const SceneNode* node = doc.scene().selected_node();
   handle_inspector_->show_selection(&doc, node ? node->id : 0);
+}
+
+void MainWindow::refresh_texture_library_panel() {
+  if (texture_library_panel_ == nullptr) {
+    return;
+  }
+  DocumentViewport* vp = current_viewport();
+  texture_library_panel_->set_document(vp != nullptr ? &vp->document() : nullptr);
 }
 
 void MainWindow::refresh_render_scene_inspector() {

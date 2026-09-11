@@ -1320,7 +1320,7 @@ Result<std::unique_ptr<PipelineState>> VulkanDevice::create_pipeline(const Pipel
   bindings[1].binding = 1;
   bindings[1].stride = sizeof(GpuInstance);
   bindings[1].inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
-  std::array<VkVertexInputAttributeDescription, 9> attrs{};
+  std::array<VkVertexInputAttributeDescription, 10> attrs{};
   attrs[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT, static_cast<std::uint32_t>(offsetof(Vertex, position))};
   attrs[1] = {1, 0, VK_FORMAT_R32G32B32_SFLOAT, static_cast<std::uint32_t>(offsetof(Vertex, normal))};
   attrs[2] = {2, 0, VK_FORMAT_R32G32_SFLOAT, static_cast<std::uint32_t>(offsetof(Vertex, uv))};
@@ -1335,10 +1335,12 @@ Result<std::unique_ptr<PipelineState>> VulkanDevice::create_pipeline(const Pipel
               static_cast<std::uint32_t>(offsetof(GpuInstance, color))};
   attrs[8] = {8, 1, VK_FORMAT_R32G32B32A32_SFLOAT,
               static_cast<std::uint32_t>(offsetof(GpuInstance, material))};
+  attrs[9] = {9, 1, VK_FORMAT_R32G32B32A32_SFLOAT,
+              static_cast<std::uint32_t>(offsetof(GpuInstance, tex_st))};
   VkPipelineVertexInputStateCreateInfo vi{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
   vi.vertexBindingDescriptionCount = desc.instanced ? 2u : 1u;
   vi.pVertexBindingDescriptions = bindings;
-  vi.vertexAttributeDescriptionCount = desc.instanced ? 9u : 4u;
+  vi.vertexAttributeDescriptionCount = desc.instanced ? 10u : 4u;
   vi.pVertexAttributeDescriptions = attrs.data();
 
   VkPipelineInputAssemblyStateCreateInfo ia{
@@ -1403,7 +1405,7 @@ Result<std::unique_ptr<PipelineState>> VulkanDevice::create_pipeline(const Pipel
   // 所有管线共用同一 descriptor set layout（sky/grid 未用到的 set 无害）。
   const VkDescriptorSetLayout set_layouts[kMeshTextureSetCount] = {
       descriptor_set_layout_, descriptor_set_layout_, descriptor_set_layout_,
-      descriptor_set_layout_, descriptor_set_layout_};
+      descriptor_set_layout_, descriptor_set_layout_, descriptor_set_layout_};
   layout_ci.setLayoutCount = kMeshTextureSetCount;
   layout_ci.pSetLayouts = set_layouts;
   VkPipelineLayout layout = VK_NULL_HANDLE;

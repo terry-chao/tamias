@@ -1,4 +1,6 @@
 #include "engine/render/scene_graph.h"
+#include "engine/render/lod_mesh_set.h"
+#include "engine/render/mesh_lod.h"
 #include "engine/render/gpu_instance.h"
 #include "engine/document/document.h"
 #include "engine/io/mesh_io.h"
@@ -12,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace tamias {
@@ -107,6 +110,8 @@ struct Fixture {
     ctx.texture_diag_logged = &texture_diag_logged;
     ctx.instance_buffer = &instance_buf;
     ctx.recorded_instances = &recorded;
+    ctx.framebuffer_height = 720.f;
+    ctx.fovy = 0.8f;
   }
 
   void add_mesh(std::uint64_t asset_id, std::uint32_t index_count) {
@@ -174,7 +179,7 @@ TEST(SceneGraph, RecordsDrawWithAccumulatedTransformAndMaterial) {
   ASSERT_EQ(f.recorded.size(), 1u);
   EXPECT_EQ(f.cmds.draws[0].index_count, 6u);
   EXPECT_EQ(f.cmds.draws[0].instance_count, 1u);
-  EXPECT_EQ(f.cmds.texture_binds, 2);
+  EXPECT_EQ(f.cmds.texture_binds, 3);
   EXPECT_EQ(f.cmds.vertex_binds, 1);
   EXPECT_EQ(f.cmds.instance_binds, 1);
   EXPECT_EQ(f.cmds.index_binds, 1);
@@ -233,9 +238,36 @@ TEST(SceneGraph, RealisticBindsAlbedoAndNormalMaps) {
   const PushConstants& pc = f.cmds.push_constants[0];
   EXPECT_FLOAT_EQ(pc.material[2], 1.f);  // has_albedo
   EXPECT_FLOAT_EQ(pc.material[3], 1.f);  // has_normal
+  EXPECT_FLOAT_EQ(pc.light_dir_selected[3], 0.f);  // no ORM
   EXPECT_FLOAT_EQ(f.recorded[0].material[0], 0.2f);
   EXPECT_FLOAT_EQ(f.recorded[0].material[1], 0.9f);
-  EXPECT_EQ(f.cmds.texture_binds, 2);
+  EXPECT_EQ(f.cmds.texture_binds, 3);
+}
+
+TEST(SceneGraph, RealisticBindsOrmMap) {
+  Fixture f;
+  f.ctx.mode_value = 2.f;
+  f.add_mesh(42, 6);
+  GpuTexture gpu_orm;
+  gpu_orm.texture = std::make_unique<MockTexture>();
+  f.textures.emplace(3, std::move(gpu_orm));
+  f.texture_asset_to_gpu[13] = 3;
+
+  auto root = std::make_unique<GroupNode>();
+  auto transform = std::make_unique<TransformNode>();
+  auto state = std::make_unique<StateGroupNode>();
+  auto material = std::make_unique<BindMaterialCommand>();
+  material->orm_texture_id = 13;
+  state->commands.push_back(std::move(material));
+  state->add_child(make_drawable(7, 42));
+  transform->add_child(std::move(state));
+  root->add_child(std::move(transform));
+
+  f.visit(*root);
+
+  ASSERT_EQ(f.cmds.push_constants.size(), 1u);
+  EXPECT_FLOAT_EQ(f.cmds.push_constants[0].light_dir_selected[3], 1.f);
+  EXPECT_EQ(f.cmds.texture_binds, 3);
 }
 
 TEST(SceneGraph, ShadedUsesCategoryColorAndIgnoresAlbedo) {
@@ -736,6 +768,154 @@ TEST(Document, RenderItemsFillCategoryColorsByKind) {
   EXPECT_FLOAT_EQ(slab_c.z, expect_slab.z);
   EXPECT_NE(wall_c.x, column_c.x);
   EXPECT_NE(slab_c.y, wall_c.y);
+}
+
+TEST(SceneGraph, NearFarSameGeometrySplitsLodBatches) {
+  Fixture f;
+  f.ctx.fovy = 0.8f;
+  f.ctx.framebuffer_height = 720.f;
+  f.ctx.eye_position = {0.f, 0.f, 5.f};
+  f.add_mesh(10, 6);
+  f.add_mesh(11, 3);
+  std::unordered_map<std::uint64_t, LodMeshSet> lod_sets;
+  lod_sets[10].work = 10;
+  lod_sets[10].coarse = 11;
+  f.ctx.lod_sets = &lod_sets;
+  std::unordered_map<std::uint64_t, MeshLod> hyst;
+  f.ctx.lod_hysteresis = &hyst;
+
+  auto make_item = [](std::uint64_t node_id, Aabb bounds) {
+    auto transform = std::make_unique<TransformNode>();
+    auto drawable = make_drawable(node_id, 10);
+    drawable->bounds = bounds;
+    transform->add_child(std::move(drawable));
+    return transform;
+  };
+
+  Aabb near_box{};
+  near_box.min = {-1.f, -1.f, -1.f};
+  near_box.max = {1.f, 1.f, 1.f};
+  Aabb mid_box{};
+  mid_box.min = {-1.f, -1.f, -56.f};
+  mid_box.max = {1.f, 1.f, -54.f};
+
+  auto root = std::make_unique<GroupNode>();
+  root->add_child(make_item(1, near_box));
+  root->add_child(make_item(2, mid_box));
+  f.visit(*root);
+
+  ASSERT_EQ(f.cmds.draws.size(), 2u);
+  EXPECT_EQ(f.cmds.draws[0].instance_count, 1u);
+  EXPECT_EQ(f.cmds.draws[1].instance_count, 1u);
+  EXPECT_NE(f.cmds.draws[0].index_count, f.cmds.draws[1].index_count);
+}
+
+TEST(SceneGraph, SameLodInstancesStayBatched) {
+  Fixture f;
+  f.ctx.fovy = 0.8f;
+  f.ctx.framebuffer_height = 720.f;
+  f.ctx.eye_position = {0.f, 0.f, 5.f};
+  f.add_mesh(10, 6);
+  std::unordered_map<std::uint64_t, LodMeshSet> lod_sets;
+  lod_sets[10].work = 10;
+  f.ctx.lod_sets = &lod_sets;
+
+  Aabb near_box{};
+  near_box.min = {-1.f, -1.f, -1.f};
+  near_box.max = {1.f, 1.f, 1.f};
+
+  auto root = std::make_unique<GroupNode>();
+  for (int i = 0; i < 4; ++i) {
+    auto transform = std::make_unique<TransformNode>();
+    transform->matrix = translate({static_cast<float>(i) * 0.1f, 0.f, 0.f});
+    auto drawable = make_drawable(static_cast<std::uint64_t>(i + 1), 10);
+    drawable->bounds = near_box;
+    transform->add_child(std::move(drawable));
+    root->add_child(std::move(transform));
+  }
+  f.visit(*root);
+
+  ASSERT_EQ(f.cmds.draws.size(), 1u);
+  EXPECT_EQ(f.cmds.draws[0].instance_count, 4u);
+}
+
+TEST(SceneGraph, LinesIgnoreLodAndKeepWorkMesh) {
+  Fixture f;
+  f.ctx.fovy = 0.8f;
+  f.ctx.framebuffer_height = 720.f;
+  f.ctx.eye_position = {0.f, 0.f, 5.f};
+  f.add_mesh(10, 2);
+  f.add_mesh(11, 99);
+  std::unordered_map<std::uint64_t, LodMeshSet> lod_sets;
+  lod_sets[10].work = 10;
+  lod_sets[10].coarse = 11;
+  f.ctx.lod_sets = &lod_sets;
+  f.ctx.lines = true;
+
+  Aabb far_box{};
+  far_box.min = {-1.f, -1.f, -400.f};
+  far_box.max = {1.f, 1.f, -398.f};
+
+  auto root = std::make_unique<GroupNode>();
+  auto drawable = make_drawable(1, 10);
+  drawable->bounds = far_box;
+  root->add_child(std::move(drawable));
+  f.visit(*root);
+
+  ASSERT_EQ(f.cmds.draws.size(), 1u);
+  EXPECT_EQ(f.cmds.draws[0].index_count, 2u);
+}
+
+TEST(SceneGraph, HiddenNodesDoNotRequestLod) {
+  Fixture f;
+  f.ctx.eye_position = {0.f, 0.f, 5.f};
+  f.add_mesh(10, 6);
+  std::unordered_map<std::uint64_t, LodMeshSet> lod_sets;
+  lod_sets[10].work = 10;
+  f.ctx.lod_sets = &lod_sets;
+  std::vector<LodRequest> requests;
+  f.ctx.lod_requests = &requests;
+  std::unordered_set<std::uint64_t> hidden{1};
+  f.ctx.hidden_nodes = &hidden;
+
+  Aabb far_box{};
+  far_box.min = {-1.f, -1.f, -56.f};
+  far_box.max = {1.f, 1.f, -54.f};
+  auto root = std::make_unique<GroupNode>();
+  auto drawable = make_drawable(1, 10);
+  drawable->bounds = far_box;
+  root->add_child(std::move(drawable));
+  f.visit(*root);
+
+  EXPECT_TRUE(f.cmds.draws.empty());
+  EXPECT_TRUE(requests.empty());
+}
+
+TEST(SceneGraph, TinyProjectionDrawsSharedLodBox) {
+  Fixture f;
+  f.ctx.eye_position = {0.f, 0.f, 500.f};
+  f.add_mesh(10, 99);
+  GpuMesh box;
+  box.vertex_buffer = std::make_unique<MockBuffer>();
+  box.index_buffer = std::make_unique<MockBuffer>();
+  box.index_count = 36;
+  f.ctx.lod_box_mesh = &box;
+  f.ctx.lod_box_gpu_id = 999;
+  std::unordered_map<std::uint64_t, LodMeshSet> lod_sets;
+  lod_sets[10].work = 10;
+  f.ctx.lod_sets = &lod_sets;
+
+  Aabb near_box{};
+  near_box.min = {-1.f, -1.f, -1.f};
+  near_box.max = {1.f, 1.f, 1.f};
+  auto root = std::make_unique<GroupNode>();
+  auto drawable = make_drawable(1, 10);
+  drawable->bounds = near_box;
+  root->add_child(std::move(drawable));
+  f.visit(*root);
+
+  ASSERT_EQ(f.cmds.draws.size(), 1u);
+  EXPECT_EQ(f.cmds.draws[0].index_count, 36u);
 }
 
 }  // namespace

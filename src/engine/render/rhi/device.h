@@ -79,7 +79,8 @@ inline constexpr std::uint32_t kTextureSlotNormal = 1;
 inline constexpr std::uint32_t kTextureSlotIblIrradiance = 2;
 inline constexpr std::uint32_t kTextureSlotIblPrefilter = 3;
 inline constexpr std::uint32_t kTextureSlotIblBrdfLut = 4;
-inline constexpr std::uint32_t kMeshTextureSetCount = 5;
+inline constexpr std::uint32_t kTextureSlotOrm = 5;
+inline constexpr std::uint32_t kMeshTextureSetCount = 6;
 
 inline std::uint32_t texture_bytes_per_pixel(TextureDesc::Format format) {
   switch (format) {

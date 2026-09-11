@@ -1,4 +1,6 @@
-set(_tamias_modeling_src shape_ops.cpp curve_geom.cpp)
+find_package(Threads REQUIRED)
+
+set(_tamias_modeling_src shape_ops.cpp curve_geom.cpp tess_worker.cpp)
 if(TAMIAS_ENABLE_OCCT)
   list(APPEND _tamias_modeling_src
     occt_shape_ops.cpp
@@ -19,6 +21,7 @@ endif()
 target_link_libraries(tamias_modeling PUBLIC
   tamias::core
   tamias::graphics
+  Threads::Threads
 )
 if(TAMIAS_ENABLE_OCCT)
   target_link_libraries(tamias_modeling PUBLIC ${TAMIAS_OCCT_LIBRARIES})

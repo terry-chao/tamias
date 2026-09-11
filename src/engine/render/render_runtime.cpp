@@ -6,6 +6,7 @@
 #include "engine/render/ibl.h"
 #include "engine/render/gpu_instance.h"
 #include "engine/render/scene_graph.h"
+#include "engine/render/texture_mips.h"
 #if defined(TAMIAS_HAS_RHI_WEBGL)
 #include "engine/render/rhi/webgl/webgl_shaders.h"
 #endif
@@ -167,6 +168,8 @@ Result<GpuMesh> create_gpu_mesh(RHIDevice& device, MeshCpu mesh) {
   gpu.bounds = mesh.bounds;
   gpu.line_list = mesh.line_list;
   gpu.has_texcoord = mesh.has_texcoord;
+  gpu.gpu_bytes = mesh.vertices.size() * sizeof(Vertex) +
+                  mesh.indices.size() * sizeof(std::uint32_t);
   return gpu;
 }
 
@@ -266,10 +269,17 @@ void RenderThread::stop() {
   }
   channels_.clear();
   meshes_.clear();
+  asset_to_gpu_.clear();
+  resident_.clear();
+  texture_resident_.clear();
+  pending_evicted_texture_ids_.clear();
+  lod_box_mesh_ = GpuMesh{};
+  lod_box_gpu_id_ = 0;
   textures_.clear();
   texture_asset_to_gpu_.clear();
   default_texture_.reset();
   default_normal_.reset();
+  default_orm_.reset();
   ibl_irradiance_.reset();
   ibl_prefilter_.reset();
   ibl_brdf_lut_.reset();
@@ -329,88 +339,166 @@ void RenderThread::destroy_channel(std::uint64_t channel_id) {
   future.get();
 }
 
+Result<std::uint64_t> RenderThread::upload_mesh_on_thread(std::uint64_t asset_id, MeshCpu mesh) {
+  if (asset_id == 0 || mesh.vertices.empty() || mesh.indices.empty() || device_ == nullptr) {
+    return Err("upload_mesh: empty mesh");
+  }
+  if (auto cached = resident_.lookup(asset_id)) {
+    return *cached;
+  }
+  if (const auto it = asset_to_gpu_.find(asset_id); it != asset_to_gpu_.end()) {
+    resident_.insert(asset_id, it->second, meshes_[it->second].gpu_bytes);
+    return it->second;
+  }
+  auto gpu = create_gpu_mesh(*device_, std::move(mesh));
+  if (!gpu) {
+    return Err(gpu.error());
+  }
+  const std::uint64_t bytes = gpu->gpu_bytes;
+  const auto id = next_mesh_id_++;
+  meshes_.emplace(id, std::move(*gpu));
+  asset_to_gpu_[asset_id] = id;
+  resident_.insert(asset_id, id, bytes);
+  evict_resident();
+  return id;
+}
+
+void RenderThread::evict_resident() {
+  for (const std::uint64_t asset_id : resident_.over_budget_assets()) {
+    const auto gpu_it = asset_to_gpu_.find(asset_id);
+    if (gpu_it != asset_to_gpu_.end()) {
+      meshes_.erase(gpu_it->second);
+      asset_to_gpu_.erase(gpu_it);
+    }
+    resident_.erase(asset_id);
+  }
+}
+
+void RenderThread::evict_texture_resident() {
+  std::vector<std::uint64_t> evicted;
+  for (const std::uint64_t asset_id : texture_resident_.over_budget_assets()) {
+    const auto gpu_it = texture_asset_to_gpu_.find(asset_id);
+    if (gpu_it != texture_asset_to_gpu_.end()) {
+      textures_.erase(gpu_it->second);
+      texture_asset_to_gpu_.erase(gpu_it);
+    }
+    texture_resident_.erase(asset_id);
+    evicted.push_back(asset_id);
+  }
+  if (!evicted.empty()) {
+    std::scoped_lock lock(mutex_);
+    pending_evicted_texture_ids_.insert(pending_evicted_texture_ids_.end(), evicted.begin(),
+                                        evicted.end());
+  }
+}
+
+std::vector<std::uint64_t> RenderThread::take_evicted_texture_ids() {
+  std::scoped_lock lock(mutex_);
+  std::vector<std::uint64_t> out;
+  out.swap(pending_evicted_texture_ids_);
+  return out;
+}
+
 Result<std::uint64_t> RenderThread::upload_mesh(std::uint64_t asset_id, MeshCpu mesh) {
   auto promise = std::make_shared<std::promise<Result<std::uint64_t>>>();
   auto future = promise->get_future();
   post([this, mesh = std::move(mesh), promise, asset_id]() mutable {
-      BufferDesc vb{};
-      vb.size = mesh.vertices.size() * sizeof(Vertex);
-      vb.usage = BufferDesc::Usage::Vertex;
-      vb.host_visible = true;
-      auto vbuf = device_->create_buffer(vb);
-      if (!vbuf) {
-        promise->set_value(Err(vbuf.error()));
-        return;
-      }
-      auto bytes = std::as_bytes(std::span(mesh.vertices));
-      if (auto w = (*vbuf)->write(0, bytes); !w) {
-        promise->set_value(Err(w.error()));
-        return;
-      }
-
-      BufferDesc ib{};
-      ib.size = mesh.indices.size() * sizeof(std::uint32_t);
-      ib.usage = BufferDesc::Usage::Index;
-      ib.host_visible = true;
-      auto ibuf = device_->create_buffer(ib);
-      if (!ibuf) {
-        promise->set_value(Err(ibuf.error()));
-        return;
-      }
-      auto ibytes = std::as_bytes(std::span(mesh.indices));
-      if (auto w = (*ibuf)->write(0, ibytes); !w) {
-        promise->set_value(Err(w.error()));
-        return;
-      }
-
-      GpuMesh gpu;
-      gpu.vertex_buffer = std::move(*vbuf);
-      gpu.index_buffer = std::move(*ibuf);
-      gpu.index_count = static_cast<std::uint32_t>(mesh.indices.size());
-      gpu.bounds = mesh.bounds;
-      gpu.line_list = mesh.line_list;
-      gpu.has_texcoord = mesh.has_texcoord;
-      const auto id = next_mesh_id_++;
-      meshes_.emplace(id, std::move(gpu));
-      asset_to_gpu_[asset_id] = id;
-      promise->set_value(id);
-    });
+    promise->set_value(upload_mesh_on_thread(asset_id, std::move(mesh)));
+  });
   return future.get();
+}
+
+void RenderThread::request_upload_mesh(std::uint64_t asset_id, MeshCpu mesh) {
+  if (asset_id == 0 || mesh.vertices.empty()) {
+    return;
+  }
+  post([this, mesh = std::move(mesh), asset_id]() mutable {
+    (void)upload_mesh_on_thread(asset_id, std::move(mesh));
+  });
+}
+
+std::vector<LodRequest> RenderThread::take_lod_requests() {
+  std::scoped_lock lock(mutex_);
+  std::vector<LodRequest> out;
+  out.swap(pending_lod_requests_);
+  return out;
+}
+
+RenderFrameStats RenderThread::last_stats() const {
+  std::scoped_lock lock(mutex_);
+  return last_stats_;
 }
 
 Result<std::uint64_t> RenderThread::upload_texture(std::uint64_t asset_id, TextureAsset asset) {
   auto promise = std::make_shared<std::promise<Result<std::uint64_t>>>();
   auto future = promise->get_future();
   post([this, asset = std::move(asset), promise, asset_id]() mutable {
-      // 幂等：同一资产只上传一次，后续直接返回缓存的 GPU 纹理 id。
+      // 幂等：同一资产同一 generation 只上传一次；replace 后 generation 变了则重建。
       if (auto it = texture_asset_to_gpu_.find(asset_id); it != texture_asset_to_gpu_.end()) {
-        promise->set_value(it->second);
-        return;
+        auto gpu_it = textures_.find(it->second);
+        if (gpu_it != textures_.end() && gpu_it->second.generation == asset.generation) {
+          if (!texture_resident_.lookup(asset_id)) {
+            texture_resident_.insert(asset_id, it->second, gpu_it->second.gpu_bytes);
+          }
+          promise->set_value(it->second);
+          return;
+        }
+        if (gpu_it != textures_.end()) {
+          textures_.erase(gpu_it);
+        }
+        texture_asset_to_gpu_.erase(it);
+        texture_resident_.erase(asset_id);
       }
-      log_info("upload_texture: id=" + std::to_string(asset_id) + " " +
-               std::to_string(asset.width) + "x" + std::to_string(asset.height) +
-               " first_rgba=" + std::to_string(static_cast<int>(asset.rgba[0])) + "," +
-               std::to_string(static_cast<int>(asset.rgba[1])) + "," +
-               std::to_string(static_cast<int>(asset.rgba[2])) + "," +
-               std::to_string(static_cast<int>(asset.rgba[3])));
+      const int first_r = asset.rgba.empty() ? 0 : static_cast<int>(asset.rgba[0]);
+      const int first_g = asset.rgba.size() > 1 ? static_cast<int>(asset.rgba[1]) : 0;
+      const int first_b = asset.rgba.size() > 2 ? static_cast<int>(asset.rgba[2]) : 0;
+      const int first_a = asset.rgba.size() > 3 ? static_cast<int>(asset.rgba[3]) : 0;
+      log_info("upload_texture: id=" + std::to_string(asset_id) + " gen=" +
+               std::to_string(asset.generation) + " " + std::to_string(asset.width) + "x" +
+               std::to_string(asset.height) + " first_rgba=" + std::to_string(first_r) + "," +
+               std::to_string(first_g) + "," + std::to_string(first_b) + "," +
+               std::to_string(first_a));
+      std::vector<std::vector<std::uint8_t>> mips;
+      const std::size_t expected =
+          static_cast<std::size_t>(asset.width) * static_cast<std::size_t>(asset.height) * 4u;
+      if (!asset.rgba.empty() && asset.rgba.size() >= expected && asset.width > 0 &&
+          asset.height > 0) {
+        mips = build_texture_mips(asset);
+      } else if (!asset.rgba.empty()) {
+        mips.push_back(asset.rgba);
+      }
       TextureDesc desc{};
       desc.width = asset.width;
       desc.height = asset.height;
       desc.format = asset.srgb ? TextureDesc::Format::R8G8B8A8_SRGB
                                : TextureDesc::Format::R8G8B8A8_UNORM;
       desc.usage = TextureDesc::Usage::Sampled;
+      desc.mip_levels = std::max(1u, static_cast<std::uint32_t>(mips.size()));
       auto tex = device_->create_texture(desc);
       if (!tex) {
         promise->set_value(Err(tex.error()));
         return;
       }
-      if (auto w = (*tex)->write(0, std::as_bytes(std::span(asset.rgba))); !w) {
-        promise->set_value(Err(w.error()));
-        return;
+      std::uint64_t gpu_bytes = 0;
+      if (mips.empty()) {
+        if (auto w = (*tex)->write(0, std::as_bytes(std::span(asset.rgba))); !w) {
+          promise->set_value(Err(w.error()));
+          return;
+        }
+      } else {
+        for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(mips.size()); ++i) {
+          if (auto w = (*tex)->write_subresource(i, 0, std::as_bytes(std::span(mips[i]))); !w) {
+            promise->set_value(Err(w.error()));
+            return;
+          }
+          gpu_bytes += mips[i].size();
+        }
       }
       const auto id = next_texture_id_++;
-      textures_.emplace(id, GpuTexture{std::move(*tex)});
+      textures_.emplace(id, GpuTexture{std::move(*tex), asset.generation, gpu_bytes});
       texture_asset_to_gpu_[asset_id] = id;
+      texture_resident_.insert(asset_id, id, gpu_bytes);
+      evict_texture_resident();
       promise->set_value(id);
     });
   return future.get();
@@ -457,7 +545,8 @@ Result<void> RenderThread::ensure_pipelines() {
   if (shaded_pipeline_ && wire_pipeline_ && line_pipeline_ && entity_line_pipeline_ &&
       blend_pipeline_ && sky_pipeline_ && grid_pipeline_ &&
       axes_mesh_.index_buffer && sky_mesh_.index_buffer && grid_mesh_.index_buffer &&
-      preview_line_mesh_.index_buffer && default_texture_ && default_normal_ &&
+      preview_line_mesh_.index_buffer && lod_box_mesh_.index_buffer && default_texture_ && default_normal_ &&
+      default_orm_ &&
       ibl_irradiance_ && ibl_prefilter_ && ibl_brdf_lut_) {
     return {};
   }
@@ -757,6 +846,13 @@ Result<void> RenderThread::ensure_pipelines() {
   }
   preview_line_mesh_ = std::move(*preview_line_mesh);
 
+  auto lod_box = create_gpu_mesh(*device_, make_box_mesh(1.f, 1.f, 1.f));
+  if (!lod_box) {
+    return Err(lod_box.error());
+  }
+  lod_box_mesh_ = std::move(*lod_box);
+  lod_box_gpu_id_ = next_mesh_id_++;
+
   // 默认 1×1 白纹理：无贴图材质也须绑定合法纹理（Vulkan 描述符要求），采样结果为白色。
   if (!default_texture_) {
     TextureDesc td{};
@@ -790,6 +886,23 @@ Result<void> RenderThread::ensure_pipelines() {
       return Err(w.error());
     }
     default_normal_ = std::move(*tex);
+  }
+
+  if (!default_orm_) {
+    TextureDesc td{};
+    td.width = 1;
+    td.height = 1;
+    td.format = TextureDesc::Format::R8G8B8A8_UNORM;
+    td.usage = TextureDesc::Usage::Sampled;
+    auto tex = device_->create_texture(td);
+    if (!tex) {
+      return Err(tex.error());
+    }
+    const std::byte orm[4] = {std::byte{255}, std::byte{153}, std::byte{0}, std::byte{255}};
+    if (auto w = (*tex)->write(0, std::span<const std::byte>{orm, 4}); !w) {
+      return Err(w.error());
+    }
+    default_orm_ = std::move(*tex);
   }
 
   if (!ibl_irradiance_ || !ibl_prefilter_ || !ibl_brdf_lut_) {
@@ -933,6 +1046,9 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     if (default_normal_) {
       channel.command_list->set_texture(*default_normal_, kTextureSlotNormal);
     }
+    if (default_orm_) {
+      channel.command_list->set_texture(*default_orm_, kTextureSlotOrm);
+    }
     if (ibl_irradiance_) {
       channel.command_list->set_texture(*ibl_irradiance_, kTextureSlotIblIrradiance);
     }
@@ -1063,6 +1179,8 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     ctx.frustum = &frustum;
     ctx.hidden_nodes = &hidden;
     ctx.eye_position = frame.eye_position;
+    ctx.fovy = frame.fovy;
+    ctx.framebuffer_height = static_cast<float>(std::max(frame.height, 1u));
     ctx.mode_value = mode_value;
     ctx.shaded_pipeline = shaded_pipeline_.get();
     ctx.wire_pipeline = wire_pipeline_.get();
@@ -1070,6 +1188,7 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     ctx.blend_pipeline = blend_pipeline_.get();
     ctx.default_texture = default_texture_.get();
     ctx.default_normal = default_normal_.get();
+    ctx.default_orm = default_orm_.get();
     ctx.exposure = 1.f;
     ctx.key_light_intensity = 0.45f;
     ctx.ibl_max_mip = ibl_max_mip_;
@@ -1098,6 +1217,14 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     };
     ctx.instance_buffer = instance_buffer_.get();
     ctx.instance_write_offset = &instance_write_offset_;
+    std::vector<LodRequest> lod_requests;
+    RenderFrameStats stats{};
+    ctx.lod_sets = &frame.lod_sets;
+    ctx.lod_hysteresis = &channel.lod_by_node;
+    ctx.lod_requests = &lod_requests;
+    ctx.lod_box_mesh = lod_box_mesh_.index_buffer ? &lod_box_mesh_ : nullptr;
+    ctx.lod_box_gpu_id = lod_box_gpu_id_;
+    ctx.stats = &stats;
     RecordCommands visitor(ctx);
     channel.scene_root->accept(visitor);
     if (mode_value > 1.5f && blend_pipeline_) {
@@ -1106,6 +1233,14 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
       bind_mesh_sets();
       RecordCommands trans(ctx);
       channel.scene_root->accept(trans);
+    }
+    stats.gpu_mesh_bytes = resident_.bytes();
+    stats.lod_requests = static_cast<std::uint32_t>(lod_requests.size());
+    {
+      std::scoped_lock lock(mutex_);
+      last_stats_ = stats;
+      pending_lod_requests_.insert(pending_lod_requests_.end(), lod_requests.begin(),
+                                   lod_requests.end());
     }
   }
 

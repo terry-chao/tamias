@@ -4,6 +4,10 @@
 #include "engine/render/rhi/device.h"
 #include "engine/render/batch_key.h"
 #include "engine/render/gpu_instance.h"
+#include "engine/render/lod_mesh_set.h"
+#include "engine/render/lod_request.h"
+#include "engine/render/mesh_lod.h"
+#include "engine/render/render_frame_stats.h"
 
 #include <cstdint>
 #include <functional>
@@ -91,6 +95,8 @@ struct SceneGraphDrawContext {
   const Frustum* frustum = nullptr;                  // 录制时视锥剔除（nullptr = 不剔除）
   const std::unordered_set<std::uint64_t>* hidden_nodes = nullptr;  // 按语义节点 id 隐藏
   Vec3 eye_position{};
+  float fovy = 0.8f;
+  float framebuffer_height = 1.f;
   float mode_value = 1.f; // 0=wire / 1=shaded / 2=realistic（同 RenderMode 映射）
 
   PipelineState* shaded_pipeline = nullptr;
@@ -100,6 +106,7 @@ struct SceneGraphDrawContext {
   bool transparent_pass = false;            // 第二遍只画 opacity<1 的三角面
   Texture* default_texture = nullptr; // 1x1 白纹理，无贴图物体兜底
   Texture* default_normal = nullptr;  // 1x1 平坦法线
+  Texture* default_orm = nullptr;     // 1x1 AO=1 / rough=0.6 / metal=0
   float exposure = 1.f;
   float key_light_intensity = 0.45f;
   float ibl_max_mip = 4.f;
@@ -116,6 +123,13 @@ struct SceneGraphDrawContext {
   std::function<Buffer*(std::uint64_t bytes)> grow_instance_buffer;
   std::vector<GpuInstance>* recorded_instances = nullptr;  // 测试用：按 flush 顺序追加
 
+  const std::unordered_map<std::uint64_t, LodMeshSet>* lod_sets = nullptr;
+  std::unordered_map<std::uint64_t, MeshLod>* lod_hysteresis = nullptr;
+  std::vector<LodRequest>* lod_requests = nullptr;
+  const GpuMesh* lod_box_mesh = nullptr;
+  std::uint64_t lod_box_gpu_id = 0;
+  RenderFrameStats* stats = nullptr;
+
   // ---- 以下状态由 StateCommands 录制累积、Drawable 录制消费 ----
   Vec3 material_color{0.75f, 0.78f, 0.82f};
   Vec3 category_color{0.72f, 0.74f, 0.78f};
@@ -124,6 +138,8 @@ struct SceneGraphDrawContext {
   float material_opacity = 1.f;
   std::uint64_t material_albedo_texture_id = 0;
   std::uint64_t material_normal_texture_id = 0;
+  std::uint64_t material_orm_texture_id = 0;
+  TextureTransform material_tex{};
   bool selected = false;
   bool lines = false;
 };
@@ -147,6 +163,8 @@ class BindMaterialCommand final : public StateCommand {
   float opacity = 1.f;
   std::uint64_t albedo_texture_id = 0;
   std::uint64_t normal_texture_id = 0;
+  std::uint64_t orm_texture_id = 0;
+  TextureTransform tex;
 
   void record(SceneGraphDrawContext& ctx) override;
   std::unique_ptr<StateCommand> clone() const override;
@@ -212,9 +230,11 @@ class RecordCommands final : public RenderVisitor {
     PipelineState* pipeline = nullptr;
     Texture* albedo = nullptr;
     Texture* normal = nullptr;
+    Texture* orm = nullptr;
     const GpuMesh* mesh = nullptr;
     bool has_albedo = false;
     bool has_normal = false;
+    bool has_orm = false;
     bool as_lines = false;
     std::vector<GpuInstance> instances;
   };

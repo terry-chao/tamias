@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/math/math.h"
+#include "engine/render/texture_transform.h"
 
 #include <cstdint>
 
@@ -14,11 +15,21 @@ struct GpuInstance {
   float row1[4]{0.f, 1.f, 0.f, 0.f};
   float row2[4]{0.f, 0.f, 1.f, 0.f};
   float color[4]{0.75f, 0.78f, 0.82f, 1.f};
-  // x=roughness y=metallic z=selected w=unused (has_uv stays batch-level)
-  float material[4]{0.6f, 0.f, 0.f, 0.f};
+  // x=roughness y=metallic z=selected w=world_scale（triplanar）
+  float material[4]{0.6f, 0.f, 0.f, 2.f};
+  // xy=UV scale, zw=UV offset
+  float tex_st[4]{1.f, 1.f, 0.f, 0.f};
 };
 
-static_assert(sizeof(GpuInstance) == 80);
+static_assert(sizeof(GpuInstance) == 96);
+
+inline void apply_texture_transform(GpuInstance& inst, const TextureTransform& t) {
+  inst.tex_st[0] = t.scale.x;
+  inst.tex_st[1] = t.scale.y;
+  inst.tex_st[2] = t.offset.x;
+  inst.tex_st[3] = t.offset.y;
+  inst.material[3] = t.world_scale;
+}
 
 inline GpuInstance make_gpu_instance(const Mat4& world, Vec3 color, float opacity, float roughness,
                                      float metallic, bool selected) {
@@ -42,7 +53,11 @@ inline GpuInstance make_gpu_instance(const Mat4& world, Vec3 color, float opacit
   inst.material[0] = roughness;
   inst.material[1] = metallic;
   inst.material[2] = selected ? 1.f : 0.f;
-  inst.material[3] = 0.f;
+  inst.material[3] = 2.f;
+  inst.tex_st[0] = 1.f;
+  inst.tex_st[1] = 1.f;
+  inst.tex_st[2] = 0.f;
+  inst.tex_st[3] = 0.f;
   return inst;
 }
 

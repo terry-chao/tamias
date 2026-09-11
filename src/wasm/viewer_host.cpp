@@ -106,6 +106,13 @@ void ViewerHost::upload_document() {
       log_warn(r.error());
     }
   }
+  for (const std::uint64_t id : render_thread_->take_evicted_texture_ids()) {
+    if (const TextureAsset* tex = doc.texture(id)) {
+      if (auto r = render_thread_->upload_texture(id, *tex); !r) {
+        log_warn(r.error());
+      }
+    }
+  }
 }
 
 Result<void> ViewerHost::load_bytes(std::string_view name, std::span<const std::uint8_t> bytes) {
@@ -226,14 +233,32 @@ void ViewerHost::render() {
   frame.proj = cam.proj_matrix(aspect);
   frame.eye_position = cam.eye_position();
   frame.view_distance = cam.distance();
+  frame.fovy = cam.fovy();
   frame.mode = mode_;
   frame.items = session_->document().render_items();
+  frame.lod_sets = session_->document().tess_cache().snapshot();
   frame.scene_generation = session_->document().scene().generation();
   frame.scene_dirty_ids = session_->document().scene().dirty_since(last_submitted_scene_generation_);
   last_submitted_scene_generation_ = frame.scene_generation;
   channel_->resize(window(), width_, height_);
+  for (const std::uint64_t id : session_->document().apply_completed_tess_jobs()) {
+    if (const MeshAsset* asset = session_->document().mesh(id);
+        asset != nullptr && !asset->cpu.vertices.empty()) {
+      render_thread_->request_upload_mesh(id, asset->cpu);
+    }
+  }
+  for (const std::uint64_t id : render_thread_->take_evicted_texture_ids()) {
+    if (const TextureAsset* tex = session_->document().texture(id)) {
+      if (auto r = render_thread_->upload_texture(id, *tex); !r) {
+        log_warn(r.error());
+      }
+    }
+  }
   channel_->submit(std::move(frame));
   render_thread_->pump();
+  for (const LodRequest& req : render_thread_->take_lod_requests()) {
+    session_->document().enqueue_lod_request(req);
+  }
 }
 
 std::string ViewerHost::document_name() const {

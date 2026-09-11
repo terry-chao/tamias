@@ -11,6 +11,8 @@
 [[vk::binding(1, 3)]] SamplerState prefilter_samp;
 [[vk::binding(0, 4)]] Texture2D brdf_lut;
 [[vk::binding(1, 4)]] SamplerState brdf_samp;
+[[vk::binding(0, 5)]] Texture2D orm_tex;
+[[vk::binding(1, 5)]] SamplerState orm_samp;
 #else
 Texture2D albedo_tex : register(t0);
 SamplerState albedo_samp : register(s0);
@@ -22,6 +24,8 @@ TextureCube prefilter_tex : register(t3);
 SamplerState prefilter_samp : register(s3);
 Texture2D brdf_lut : register(t4);
 SamplerState brdf_samp : register(s4);
+Texture2D orm_tex : register(t5);
+SamplerState orm_samp : register(s5);
 #endif
 
 float3 shaded_simple(float3 n, float3 l, float3 base) {
@@ -29,8 +33,8 @@ float3 shaded_simple(float3 n, float3 l, float3 base) {
   return base * ndotl;
 }
 
-float3 sample_triplanar_albedo(float3 world_pos, float3 n) {
-  float3 wp = world_pos * 2.0;
+float3 sample_triplanar_albedo(float3 world_pos, float3 n, float world_scale) {
+  float3 wp = world_pos * world_scale;
   float3 blend = abs(n);
   blend = pow(blend, 4.0);
   blend = blend / max(blend.x + blend.y + blend.z, 1e-6);
@@ -45,8 +49,8 @@ float3 unpack_normal(float3 rgb) {
 }
 
 // Whiteout blend of tangent-space normals projected onto world axes.
-float3 sample_triplanar_normal(float3 world_pos, float3 n) {
-  float3 wp = world_pos * 2.0;
+float3 sample_triplanar_normal(float3 world_pos, float3 n, float world_scale) {
+  float3 wp = world_pos * world_scale;
   float3 blend = abs(n);
   blend = pow(blend, 4.0);
   blend = blend / max(blend.x + blend.y + blend.z, 1e-6);
@@ -76,8 +80,19 @@ float3 sample_uv_normal(float3 n, float3 world_pos, float2 uv) {
   return normalize(t * tnormal.x + b * tnormal.y + n * tnormal.z);
 }
 
+float3 sample_triplanar_orm(float3 world_pos, float3 n, float world_scale) {
+  float3 wp = world_pos * world_scale;
+  float3 blend = abs(n);
+  blend = pow(blend, 4.0);
+  blend = blend / max(blend.x + blend.y + blend.z, 1e-6);
+  float3 cx = orm_tex.Sample(orm_samp, wp.zy).rgb;
+  float3 cy = orm_tex.Sample(orm_samp, wp.xz).rgb;
+  float3 cz = orm_tex.Sample(orm_samp, wp.xy).rgb;
+  return cx * blend.x + cy * blend.y + cz * blend.z;
+}
+
 float4 shaded_realistic(float3 n, float3 l, float3 v, float3 base, float rough, float metal,
-                        float opacity) {
+                        float opacity, float ao) {
   const float PI = 3.14159265;
 
   float ndotl = max(dot(n, l), 0.0);
@@ -94,7 +109,7 @@ float4 shaded_realistic(float3 n, float3 l, float3 v, float3 base, float rough, 
   float3 F = f0 + (float3(1.0, 1.0, 1.0) - f0) * pow(1.0 - vdoth, 5.0);
 
   float transmissive = (opacity < 0.999 && metal < 0.5) ? 1.0 : 0.0;
-  float3 kd = base * (1.0 - metal);
+  float3 kd = base * (1.0 - metal) * ao;
   if (transmissive > 0.5) {
     kd *= opacity;
   }
@@ -162,7 +177,7 @@ float4 main(VsOutput input) : SV_Target0 {
     if (pc.lighting.w > 0.5) {
       n = sample_uv_normal(n, input.world_pos, input.uv);
     } else {
-      n = sample_triplanar_normal(input.world_pos, n);
+      n = sample_triplanar_normal(input.world_pos, n, input.world_scale);
     }
     n = normalize(n);
     if (dot(n, v) < 0.0) {
@@ -176,16 +191,24 @@ float4 main(VsOutput input) : SV_Target0 {
     if (pc.lighting.w > 0.5) {
       base = albedo_tex.Sample(albedo_samp, input.uv).rgb;
     } else {
-      base = sample_triplanar_albedo(input.world_pos, n);
+      base = sample_triplanar_albedo(input.world_pos, n, input.world_scale);
     }
   }
   float rough = input.rough_metal.x;
   float metal = input.rough_metal.y;
+  float ao = 1.0;
+  if (pc.light_dir_selected.w > 0.5) {
+    float3 orm = pc.lighting.w > 0.5 ? orm_tex.Sample(orm_samp, input.uv).rgb
+                                     : sample_triplanar_orm(input.world_pos, n, input.world_scale);
+    ao = orm.r;
+    rough = orm.g;
+    metal = orm.b;
+  }
   float opacity = saturate(input.opacity);
 
   float4 lit;
   if (input.mode > 1.5) {
-    lit = shaded_realistic(n, l, v, base, rough, metal, opacity);
+    lit = shaded_realistic(n, l, v, base, rough, metal, opacity, ao);
   } else {
     lit = float4(shaded_simple(n, l, base), 1.0);
   }

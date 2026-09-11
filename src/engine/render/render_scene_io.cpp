@@ -14,7 +14,10 @@ namespace tamias {
 namespace {
 
 constexpr char kMagic[4] = {'T', 'R', 'S', 'C'};
-constexpr std::uint32_t kFormatVersion = 1;
+constexpr std::uint32_t kFormatVersion = 3;
+constexpr std::uint32_t kMinFormatVersion = 1;
+constexpr std::uint32_t kTextureTransformFormatVersion = 2;
+constexpr std::uint32_t kOrmTextureFormatVersion = 3;
 
 constexpr std::uint32_t fourcc(char a, char b, char c, char d) {
   return static_cast<std::uint32_t>(static_cast<std::uint8_t>(a)) |
@@ -250,10 +253,31 @@ Result<void> write_item(BinaryWriter& w, const SceneDrawItem& item) {
   if (auto r = w.write_bool(item.selected); !r) {
     return r;
   }
-  return w.write_bool(item.lines);
+  if (auto r = w.write_bool(item.lines); !r) {
+    return r;
+  }
+  if (auto r = w.write_f32(item.tex.scale.x); !r) {
+    return r;
+  }
+  if (auto r = w.write_f32(item.tex.scale.y); !r) {
+    return r;
+  }
+  if (auto r = w.write_f32(item.tex.offset.x); !r) {
+    return r;
+  }
+  if (auto r = w.write_f32(item.tex.offset.y); !r) {
+    return r;
+  }
+  if (auto r = w.write_f32(item.tex.rotation); !r) {
+    return r;
+  }
+  if (auto r = w.write_f32(item.tex.world_scale); !r) {
+    return r;
+  }
+  return w.write_u64(item.orm_texture_id);
 }
 
-Result<void> read_item(BinaryReader& r, SceneDrawItem& item) {
+Result<void> read_item(BinaryReader& r, SceneDrawItem& item, std::uint32_t version) {
   auto node_id = r.read_u64();
   if (!node_id) {
     return Err(node_id.error());
@@ -311,6 +335,45 @@ Result<void> read_item(BinaryReader& r, SceneDrawItem& item) {
     return Err(lines.error());
   }
   item.lines = *lines;
+  item.tex = TextureTransform{};
+  if (version >= kTextureTransformFormatVersion) {
+    auto sx = r.read_f32();
+    if (!sx) {
+      return Err(sx.error());
+    }
+    auto sy = r.read_f32();
+    if (!sy) {
+      return Err(sy.error());
+    }
+    auto ox = r.read_f32();
+    if (!ox) {
+      return Err(ox.error());
+    }
+    auto oy = r.read_f32();
+    if (!oy) {
+      return Err(oy.error());
+    }
+    auto rot = r.read_f32();
+    if (!rot) {
+      return Err(rot.error());
+    }
+    auto world = r.read_f32();
+    if (!world) {
+      return Err(world.error());
+    }
+    item.tex.scale = {*sx, *sy};
+    item.tex.offset = {*ox, *oy};
+    item.tex.rotation = *rot;
+    item.tex.world_scale = *world;
+  }
+  item.orm_texture_id = 0;
+  if (version >= kOrmTextureFormatVersion) {
+    auto orm = r.read_u64();
+    if (!orm) {
+      return Err(orm.error());
+    }
+    item.orm_texture_id = *orm;
+  }
   return {};
 }
 
@@ -498,7 +561,7 @@ Result<RenderScene> deserialize_render_scene(std::span<const std::uint8_t> bytes
   if (!version) {
     return Err(version.error());
   }
-  if (*version != kFormatVersion) {
+  if (*version < kMinFormatVersion || *version > kFormatVersion) {
     return Err("Unsupported render scene version: " + std::to_string(*version));
   }
   auto chunk_count = reader.read_u32();
@@ -576,7 +639,7 @@ Result<RenderScene> deserialize_render_scene(std::span<const std::uint8_t> bytes
       }
       scene.items.resize(static_cast<std::size_t>(*count));
       for (auto& item : scene.items) {
-        if (auto res = read_item(chunk_r, item); !res) {
+        if (auto res = read_item(chunk_r, item, *version); !res) {
           return Err(res.error());
         }
       }

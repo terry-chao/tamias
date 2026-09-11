@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/graphics/mesh_face_range.h"
 #include "engine/math/math.h"
 
 #include <cmath>
@@ -22,12 +23,26 @@ struct MeshCpu {
   Aabb bounds{};
   bool line_list = false;     // true：索引按 LineList 成对解释，不是三角面
   bool has_texcoord = false;  // 导入 UV；CAD 离散网格保持 false，着色走 triplanar
+  std::vector<MeshFaceRange> faces;  // BRep Face 范围；导入三角汤可为空
 };
 
 inline void recompute_bounds(MeshCpu& mesh) {
   mesh.bounds = {};
   for (const auto& v : mesh.vertices) {
     mesh.bounds.expand(v.position);
+  }
+}
+
+inline void recompute_face_bounds(MeshCpu& mesh) {
+  for (auto& face : mesh.faces) {
+    face.bounds = {};
+    const std::uint32_t end = face.first_index + face.index_count;
+    for (std::uint32_t i = face.first_index; i < end && i < mesh.indices.size(); ++i) {
+      const std::uint32_t idx = mesh.indices[i];
+      if (idx < mesh.vertices.size()) {
+        face.bounds.expand(mesh.vertices[idx].position);
+      }
+    }
   }
 }
 

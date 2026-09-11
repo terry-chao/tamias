@@ -2,6 +2,7 @@
 
 #include "engine/math/math.h"
 #include "engine/render/rhi/device.h"
+#include "engine/render/texture_transform.h"
 
 #include <cstdint>
 #include <memory>
@@ -24,6 +25,8 @@ struct SceneDrawItem {
   float opacity = 1.0f;                 // <1 = 真实感半透明
   std::uint64_t albedo_texture_id = 0;  // 0 = 无贴图
   std::uint64_t normal_texture_id = 0;
+  std::uint64_t orm_texture_id = 0;
+  TextureTransform tex;
   bool selected = false;
   bool lines = false;  // 草图折线：用 LineList 画，而不是三角面
 };
@@ -36,10 +39,13 @@ struct GpuMesh {
   Aabb bounds{};
   bool line_list = false;
   bool has_texcoord = false;  // 导入网格带 UV；BRep / 程序化几何走 triplanar
+  std::uint64_t gpu_bytes = 0;
 };
 
 struct GpuTexture {
   std::unique_ptr<Texture> texture;
+  std::uint64_t generation = 0;  // 与 TextureAsset.generation 对齐；变了就重建
+  std::uint64_t gpu_bytes = 0;
 };
 
 // 与 shader 的 push constants 布局一一对应（std140）。

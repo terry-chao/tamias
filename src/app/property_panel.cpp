@@ -1,12 +1,15 @@
 #include "property_panel.h"
 
 #include "engine/document/document.h"
+#include "texture_image.h"
 
 #include <QAbstractSpinBox>
+#include <QCheckBox>
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QImage>
@@ -17,6 +20,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -358,12 +362,39 @@ void PropertyPanel::show_entity(const Entity* entity, Document* document,
   }
 
   column->addLayout(form);
-  add_material_editor(content_, column, eid, entity, document);
+  add_material_editor(content_, column, eid, entity->material_id, document);
+  column->addStretch(1);
+}
+
+void PropertyPanel::show_imported_mesh(const SceneNode* node, Document* document) {
+  if (content_) {
+    content_->hide();
+    content_->deleteLater();
+    content_ = nullptr;
+  }
+  content_ = new QWidget(this);
+  auto* column = new QVBoxLayout(content_);
+  column->setContentsMargins(0, 0, 0, 0);
+  column->setSpacing(6);
+  root_->addWidget(content_);
+
+  auto* header = new QLabel(content_);
+  header->setWordWrap(true);
+  header->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  if (node == nullptr) {
+    header->setText(tr("No selection"));
+    column->addWidget(header);
+    column->addStretch(1);
+    return;
+  }
+  header->setText(tr("Imported mesh — %1").arg(QString::fromStdString(node->name)));
+  column->addWidget(header);
+  add_material_editor(content_, column, node->id, node->material_id, document);
   column->addStretch(1);
 }
 
 void PropertyPanel::add_material_editor(QWidget* parent, QVBoxLayout* column,
-                                        std::uint64_t entity_id, const Entity* entity,
+                                        std::uint64_t target_id, std::uint64_t current_material_id,
                                         Document* document) {
   auto* header = new QLabel(tr("Material"), parent);
   header->setStyleSheet(QStringLiteral("font-weight: 600; color: #9aa0a6; margin-top: 4px;"));
@@ -373,22 +404,36 @@ void PropertyPanel::add_material_editor(QWidget* parent, QVBoxLayout* column,
   form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
   form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
-  // 材质库快照（拷贝一份，避免在信号 lambda 里持有 Document 裸指针 —— 面板可跨文档存活）。
   auto materials = std::make_shared<std::unordered_map<std::uint64_t, Material>>();
-  Material current;  // 默认材质（灰），entity 未赋值材质时的初始快照
+  Material current;
+  std::uint32_t user_count = 0;
   if (document != nullptr) {
     for (const auto& [mid, mat] : document->materials()) {
       (*materials)[mid] = mat;
     }
-    if (entity->material_id != 0) {
-      if (const Material* m = document->material(entity->material_id)) {
+    if (current_material_id != 0) {
+      if (const Material* m = document->material(current_material_id)) {
         current = *m;
       }
+      user_count = document->material_user_count(current_material_id);
     }
   }
   auto current_sp = std::make_shared<Material>(current);
 
-  // 颜色色块：点击弹 QColorDialog，改 base_color 并转成自定义材质（id=0 → 新建）。
+  auto* apply_all = new QCheckBox(tr("Apply to all objects using this material"), parent);
+  apply_all->setChecked(current.id != 0 && user_count <= 1);
+  apply_all->setEnabled(current.id != 0);
+
+  auto commit_edit = [this, target_id, current_sp, apply_all]() {
+    if (apply_all->isChecked() && current_sp->id != 0) {
+      emit material_shared_updated(*current_sp);
+      return;
+    }
+    current_sp->id = 0;
+    current_sp->name.clear();
+    emit material_edited(target_id, *current_sp);
+  };
+
   auto color_style = [](const QColor& c) {
     return QStringLiteral("background-color: %1; border: 1px solid #555; min-height: 22px;")
         .arg(c.name());
@@ -412,7 +457,20 @@ void PropertyPanel::add_material_editor(QWidget* parent, QVBoxLayout* column,
   metal_spin->setKeyboardTracking(false);
   metal_spin->setValue(current_sp->metallic);
 
-  // 材质下拉：选库材质 → 引用（保留 id）；列表含自定义材质（空名显示 "(Custom)"）。
+  auto* world_spin = new QDoubleSpinBox(parent);
+  world_spin->setRange(0.05, 50.0);
+  world_spin->setDecimals(2);
+  world_spin->setSingleStep(0.1);
+  world_spin->setKeyboardTracking(false);
+  world_spin->setValue(current_sp->tex.world_scale);
+
+  auto* uv_spin = new QDoubleSpinBox(parent);
+  uv_spin->setRange(0.01, 100.0);
+  uv_spin->setDecimals(2);
+  uv_spin->setSingleStep(0.1);
+  uv_spin->setKeyboardTracking(false);
+  uv_spin->setValue(current_sp->tex.scale.x);
+
   auto* combo = new QComboBox(parent);
   std::vector<std::uint64_t> ids;
   ids.reserve(materials->size());
@@ -420,13 +478,12 @@ void PropertyPanel::add_material_editor(QWidget* parent, QVBoxLayout* column,
     (void)unused;
     ids.push_back(mid);
   }
-  std::sort(ids.begin(), ids.end());  // 稳定顺序：Default（id=1）排最前
+  std::sort(ids.begin(), ids.end());
   int selected = -1;
   for (const std::uint64_t mid : ids) {
     const Material& mat = materials->at(mid);
-    const QString label = material_display_name(mat.name);
-    combo->addItem(label, static_cast<qulonglong>(mid));
-    if (entity->material_id == mid) {
+    combo->addItem(material_display_name(mat.name), static_cast<qulonglong>(mid));
+    if (current_material_id == mid) {
       selected = combo->count() - 1;
     }
   }
@@ -434,83 +491,123 @@ void PropertyPanel::add_material_editor(QWidget* parent, QVBoxLayout* column,
     combo->setCurrentIndex(selected);
   }
 
-  auto texture_label = [](std::uint64_t id) {
-    return id == 0 ? tr("None") : tr("Texture #%1").arg(id);
+  auto texture_label = [this](const TextureAsset& tex) {
+    if (!tex.name.empty()) {
+      return QString::fromStdString(tex.name);
+    }
+    return tr("Texture #%1").arg(tex.id);
   };
-  auto make_texture_row = [this, entity_id, current_sp, document, parent, texture_label](
-                              std::uint64_t Material::* field, bool srgb,
-                              const QString& dialog_title) {
-    auto* button = new QPushButton(texture_label(current_sp.get()->*field), parent);
-    button->setCursor(Qt::PointingHandCursor);
-    auto* clear = new QPushButton(tr("Clear"), parent);
-    clear->setEnabled((current_sp.get()->*field) != 0);
-    connect(button, &QPushButton::clicked, this,
-            [this, entity_id, current_sp, document, button, clear, texture_label, field, srgb,
-             dialog_title](bool) {
+  auto make_texture_row = [this, target_id, current_sp, document, parent, texture_label, apply_all](
+                              std::uint64_t Material::* field, bool srgb, TextureUsage usage,
+                              int slot, const QString& dialog_title) {
+    auto* combo = new QComboBox(parent);
+    auto fill_combo = [this, document, combo, texture_label, usage](std::uint64_t current_id) {
+      const QSignalBlocker block(combo);
+      combo->clear();
+      combo->addItem(tr("None"), static_cast<qulonglong>(0));
+      if (document == nullptr) {
+        combo->setCurrentIndex(0);
+        return;
+      }
+      std::vector<std::uint64_t> ids;
+      ids.reserve(document->textures().size());
+      for (const auto& [tid, tex] : document->textures()) {
+        if (tid == current_id || tex.usage == usage || tex.usage == TextureUsage::Unknown) {
+          ids.push_back(tid);
+        }
+      }
+      std::sort(ids.begin(), ids.end());
+      for (const std::uint64_t tid : ids) {
+        const TextureAsset* tex = document->texture(tid);
+        if (tex == nullptr) {
+          continue;
+        }
+        combo->addItem(texture_label(*tex), static_cast<qulonglong>(tid));
+      }
+      int idx = combo->findData(static_cast<qulonglong>(current_id));
+      if (idx < 0 && current_id != 0) {
+        if (const TextureAsset* tex = document->texture(current_id)) {
+          combo->addItem(texture_label(*tex), static_cast<qulonglong>(current_id));
+          idx = combo->count() - 1;
+        }
+      }
+      combo->setCurrentIndex(idx >= 0 ? idx : 0);
+    };
+    fill_combo(current_sp.get()->*field);
+
+    auto apply_texture = [this, target_id, current_sp, field, apply_all](std::uint64_t tid) {
+      if (current_sp.get()->*field == tid) {
+        return;
+      }
+      current_sp.get()->*field = tid;
+      if (apply_all->isChecked() && current_sp->id != 0) {
+        emit material_shared_updated(*current_sp);
+        return;
+      }
+      current_sp->id = 0;
+      current_sp->name.clear();
+      emit material_edited(target_id, *current_sp);
+    };
+
+    connect(combo, &QComboBox::currentIndexChanged, this, [combo, apply_texture](int index) {
+      if (index < 0) {
+        return;
+      }
+      apply_texture(static_cast<std::uint64_t>(combo->itemData(index).toULongLong()));
+    });
+
+    auto* import_btn = new QPushButton(tr("Import..."), parent);
+    connect(import_btn, &QPushButton::clicked, this,
+            [this, target_id, apply_all, srgb, usage, slot, dialog_title](bool) {
               const QString path = QFileDialog::getOpenFileName(
                   this, dialog_title, QString(), tr("Images (*.png *.jpg *.jpeg *.bmp)"));
               if (path.isEmpty()) {
                 return;
               }
-              QImage image(path);
-              if (image.isNull()) {
+              auto asset = load_texture_image(path, usage, srgb);
+              if (!asset) {
                 return;
               }
-              image = image.convertToFormat(QImage::Format_RGBA8888);
-              TextureAsset asset{};
-              asset.width = static_cast<std::uint32_t>(image.width());
-              asset.height = static_cast<std::uint32_t>(image.height());
-              asset.srgb = srgb;
-              const auto* bits = image.constBits();
-              asset.rgba.assign(bits, bits + image.sizeInBytes());
-              const std::uint64_t tid = document->add_texture(std::move(asset)).id;
-              current_sp.get()->*field = tid;
-              current_sp->id = 0;  // 改贴图 → 新建自定义材质
-              current_sp->name.clear();
-              button->setText(texture_label(tid));
-              clear->setEnabled(true);
-              emit material_edited(entity_id, *current_sp);
+              emit texture_import_requested(static_cast<quint64>(target_id), std::move(*asset), slot,
+                                            apply_all->isChecked());
             });
-    connect(clear, &QPushButton::clicked, this,
-            [this, entity_id, current_sp, button, clear, texture_label, field](bool) {
-              current_sp.get()->*field = 0;
-              current_sp->id = 0;
-              current_sp->name.clear();
-              button->setText(texture_label(0));
-              clear->setEnabled(false);
-              emit material_edited(entity_id, *current_sp);
-            });
+
     auto* row = new QWidget(parent);
     auto* layout = new QHBoxLayout(row);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(4);
-    layout->addWidget(button, 1);
-    layout->addWidget(clear);
-    return std::pair{row, std::pair{button, clear}};
+    layout->addWidget(combo, 1);
+    layout->addWidget(import_btn);
+    return std::pair{row, std::pair{combo, fill_combo}};
   };
-  const auto albedo_row =
-      make_texture_row(&Material::albedo_texture_id, true, tr("Select albedo texture"));
-  const auto normal_row =
-      make_texture_row(&Material::normal_texture_id, false, tr("Select normal texture"));
+  const auto albedo_row = make_texture_row(&Material::albedo_texture_id, true, TextureUsage::Albedo,
+                                           0, tr("Select albedo texture"));
+  const auto normal_row = make_texture_row(&Material::normal_texture_id, false, TextureUsage::Normal,
+                                           1, tr("Select normal texture"));
+  const auto orm_row =
+      make_texture_row(&Material::orm_texture_id, false, TextureUsage::Orm, 2, tr("Select ORM texture"));
 
-  // 刷新颜色色块 + 数值 spinbox + 贴图按钮（不触发它们的 valueChanged/clicked 回环）。
-  auto refresh_widgets = [color_button, rough_spin, metal_spin, color_style, texture_label,
-                          albedo_row, normal_row](const Material& m) {
+  auto refresh_widgets = [color_button, rough_spin, metal_spin, world_spin, uv_spin, color_style,
+                          albedo_row, normal_row, orm_row, apply_all](const Material& m) {
     const QSignalBlocker b0(color_button);
     const QSignalBlocker b1(rough_spin);
     const QSignalBlocker b2(metal_spin);
+    const QSignalBlocker b3(world_spin);
+    const QSignalBlocker b4(uv_spin);
     color_button->setStyleSheet(
         color_style(QColor::fromRgbF(m.base_color.x, m.base_color.y, m.base_color.z)));
     rough_spin->setValue(m.roughness);
     metal_spin->setValue(m.metallic);
-    albedo_row.second.first->setText(texture_label(m.albedo_texture_id));
-    albedo_row.second.second->setEnabled(m.albedo_texture_id != 0);
-    normal_row.second.first->setText(texture_label(m.normal_texture_id));
-    normal_row.second.second->setEnabled(m.normal_texture_id != 0);
+    world_spin->setValue(m.tex.world_scale);
+    uv_spin->setValue(m.tex.scale.x);
+    albedo_row.second.second(m.albedo_texture_id);
+    normal_row.second.second(m.normal_texture_id);
+    orm_row.second.second(m.orm_texture_id);
+    apply_all->setEnabled(m.id != 0);
   };
 
   connect(color_button, &QPushButton::clicked, this,
-          [this, entity_id, current_sp, color_button, color_style](bool) {
+          [this, current_sp, color_button, color_style, commit_edit](bool) {
             const QColor initial = QColor::fromRgbF(current_sp->base_color.x,
                                                     current_sp->base_color.y,
                                                     current_sp->base_color.z);
@@ -521,30 +618,33 @@ void PropertyPanel::add_material_editor(QWidget* parent, QVBoxLayout* column,
             current_sp->base_color = {static_cast<float>(chosen.redF()),
                                       static_cast<float>(chosen.greenF()),
                                       static_cast<float>(chosen.blueF())};
-            current_sp->id = 0;  // 改色 → 新建自定义材质
-            current_sp->name.clear();
             color_button->setStyleSheet(color_style(chosen));
-            emit material_edited(entity_id, *current_sp);
+            commit_edit();
           });
 
   connect(rough_spin, &QDoubleSpinBox::valueChanged, this,
-          [this, entity_id, current_sp](double value) {
+          [current_sp, commit_edit](double value) {
             current_sp->roughness = static_cast<float>(value);
-            current_sp->id = 0;
-            current_sp->name.clear();
-            emit material_edited(entity_id, *current_sp);
+            commit_edit();
           });
-
   connect(metal_spin, &QDoubleSpinBox::valueChanged, this,
-          [this, entity_id, current_sp](double value) {
+          [current_sp, commit_edit](double value) {
             current_sp->metallic = static_cast<float>(value);
-            current_sp->id = 0;
-            current_sp->name.clear();
-            emit material_edited(entity_id, *current_sp);
+            commit_edit();
           });
+  connect(world_spin, &QDoubleSpinBox::valueChanged, this,
+          [current_sp, commit_edit](double value) {
+            current_sp->tex.world_scale = static_cast<float>(value);
+            commit_edit();
+          });
+  connect(uv_spin, &QDoubleSpinBox::valueChanged, this, [current_sp, commit_edit](double value) {
+    const auto s = static_cast<float>(value);
+    current_sp->tex.scale = {s, s};
+    commit_edit();
+  });
 
   connect(combo, &QComboBox::currentIndexChanged, this,
-          [this, combo, entity_id, current_sp, materials, refresh_widgets](int index) {
+          [this, combo, target_id, current_sp, materials, refresh_widgets, apply_all](int index) {
             if (index < 0) {
               return;
             }
@@ -553,17 +653,32 @@ void PropertyPanel::add_material_editor(QWidget* parent, QVBoxLayout* column,
             if (it == materials->end()) {
               return;
             }
-            *current_sp = it->second;  // 引用库材质（保留 id）
+            *current_sp = it->second;
+            apply_all->setChecked(true);
+            apply_all->setEnabled(true);
             refresh_widgets(*current_sp);
-            emit material_edited(entity_id, *current_sp);
+            emit material_edited(target_id, *current_sp);
           });
 
+  auto* unique_btn = new QPushButton(tr("Make unique copy"), parent);
+  connect(unique_btn, &QPushButton::clicked, this, [this, target_id, current_sp, apply_all](bool) {
+    apply_all->setChecked(false);
+    current_sp->id = 0;
+    current_sp->name.clear();
+    emit material_edited(target_id, *current_sp);
+  });
+
   form->addRow(tr("Preset"), combo);
+  form->addRow(QString(), apply_all);
+  form->addRow(QString(), unique_btn);
   form->addRow(tr("Color"), color_button);
   form->addRow(tr("Roughness"), rough_spin);
   form->addRow(tr("Metallic"), metal_spin);
+  form->addRow(tr("World scale"), world_spin);
+  form->addRow(tr("UV scale"), uv_spin);
   form->addRow(tr("Albedo texture"), albedo_row.first);
   form->addRow(tr("Normal texture"), normal_row.first);
+  form->addRow(tr("ORM texture"), orm_row.first);
 
   column->addLayout(form);
 }

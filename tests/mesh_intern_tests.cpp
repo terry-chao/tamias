@@ -29,6 +29,7 @@ TEST(MeshIntern, IdenticalColumnsShareOneAsset) {
   EXPECT_EQ(doc.entities().size(), 8u);
   EXPECT_EQ(doc.meshes().size(), 1u);
   EXPECT_EQ(doc.scene().nodes().size(), 8u);
+  EXPECT_NE(doc.tess_cache().set_for(shared).coarse, 0u);
 }
 
 TEST(MeshIntern, ImportIdenticalCubesShareOneAsset) {

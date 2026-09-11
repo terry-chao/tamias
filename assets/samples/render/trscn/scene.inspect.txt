@@ -1,4 +1,4 @@
 source: 未命名.trscn
-meshes=1  textures=2  items=1  tris=12  digest=413df9fb7b89430f
+meshes=1  textures=2  items=1  tris=12  digest=1dc2b2ab1373784f
 view mode=1  size=2304x1242  distance=2.16506
 item node=1 mesh=1 tris=12 aabb=(-0.5,0,-0.5)-(0.5,1,0.5) color=(0.72,0.66,0.56) albedo=2 normal=7

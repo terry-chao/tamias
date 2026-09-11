@@ -13,6 +13,9 @@ add_library(tamias_command STATIC
   set_feature_param_command.cpp
   edit_entity_grip_command.cpp
   set_material_command.cpp
+  import_texture_command.cpp
+  replace_texture_command.cpp
+  update_material_command.cpp
   set_location_command.cpp
   command_system.cpp
   register_commands.cpp

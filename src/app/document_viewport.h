@@ -3,6 +3,8 @@
 #include "engine/core/native_window_handle.h"
 #include "engine/document/document.h"
 #include "command/command_system.h"
+#include "engine/render/material.h"
+#include "engine/render/texture_asset.h"
 #include "engine/render/render_runtime.h"
 #include "engine/document/document_io.h"
 #include "engine/math/camera.h"
@@ -25,6 +27,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -62,6 +65,9 @@ class DocumentViewport final : public QWidget {
                         const std::string& param_name, double value);
   // 给实体分配/新建材质（走 set_material 命令，可撤销；供属性面板调用）。
   void set_entity_material(std::uint64_t entity_id, const Material& material);
+  std::uint64_t import_texture(TextureAsset asset);
+  void replace_texture(std::uint64_t id, TextureAsset asset);
+  void update_library_material(const Material& material);
   void create_storey(const std::string& name, double elevation);
   void set_active_storey(std::uint64_t storey_id);
   void set_entity_location(std::uint64_t entity_id, std::uint64_t storey_id,
@@ -190,7 +196,7 @@ class DocumentViewport final : public QWidget {
   BoxSelectOverlay* box_select_overlay_ = nullptr;
   bool alive_ = true;
   bool has_cursor_ = false;
-  std::unordered_set<std::uint64_t> uploaded_textures_;  // 已上传过的纹理资产 id
+  std::unordered_map<std::uint64_t, std::uint64_t> uploaded_textures_;  // asset id -> generation
   std::unordered_set<std::uint64_t> hidden_ids_;
   std::unordered_set<std::uint64_t> isolated_ids_;
   std::unordered_set<EntityKind> hidden_kinds_;

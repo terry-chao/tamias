@@ -113,7 +113,7 @@ std::optional<PickHit> Bvh::closest_hit(const Ray& ray, const Document& doc,
       if (accept && !accept(sn->id)) {
         continue;
       }
-      const MeshAsset* asset = doc.mesh(sn->mesh_asset_id);
+      const MeshAsset* asset = doc.resolved_mesh(sn->mesh_asset_id);
       if (!asset) {
         continue;
       }

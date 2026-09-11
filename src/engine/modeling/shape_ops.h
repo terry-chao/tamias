@@ -17,6 +17,7 @@ class Shape {
   virtual ~Shape() = default;
   [[nodiscard]] virtual std::string backend_name() const = 0;
   [[nodiscard]] virtual Result<MeshCpu> tessellate(double linear_deflection = 0.1) const = 0;
+  [[nodiscard]] virtual Aabb bounds() const = 0;
 };
 
 class IShapeOps {
@@ -44,6 +45,7 @@ class MeshShape final : public Shape {
   explicit MeshShape(MeshCpu mesh) : mesh_(std::move(mesh)) {}
   [[nodiscard]] std::string backend_name() const override { return "mesh"; }
   [[nodiscard]] Result<MeshCpu> tessellate(double) const override { return mesh_; }
+  [[nodiscard]] Aabb bounds() const override { return mesh_.bounds; }
 
  private:
   MeshCpu mesh_;

@@ -23,6 +23,7 @@ struct PushConstants {
 @group(0) @binding(5) var cube_samp: sampler;
 @group(0) @binding(6) var prefilter_tex: texture_cube<f32>;
 @group(0) @binding(7) var brdf_lut: texture_2d<f32>;
+@group(0) @binding(8) var orm_tex: texture_2d<f32>;
 )WGSL";
 
 inline std::string_view mesh_vert() {
@@ -37,6 +38,7 @@ struct VsIn {
   @location(6) inst_row2: vec4<f32>,
   @location(7) inst_color: vec4<f32>,
   @location(8) inst_material: vec4<f32>,
+  @location(9) inst_tex_st: vec4<f32>,
 };
 struct VsOut {
   @builtin(position) position: vec4<f32>,
@@ -48,6 +50,7 @@ struct VsOut {
   @location(5) color: vec3<f32>,
   @location(6) rough_metal: vec2<f32>,
   @location(7) opacity: f32,
+  @location(8) world_scale: f32,
 };
 @vertex
 fn main(input: VsIn) -> VsOut {
@@ -59,12 +62,13 @@ fn main(input: VsIn) -> VsOut {
   o.normal = vec3<f32>(dot(input.inst_row0.xyz, input.normal),
                        dot(input.inst_row1.xyz, input.normal),
                        dot(input.inst_row2.xyz, input.normal));
-  o.uv = input.uv;
+  o.uv = input.uv * input.inst_tex_st.xy + input.inst_tex_st.zw;
   o.color = input.inst_color.rgb * input.color;
   o.selected = input.inst_material.z;
   o.mode = pc.eye_pos_mode.w;
   o.rough_metal = input.inst_material.xy;
   o.opacity = input.inst_color.a;
+  o.world_scale = input.inst_material.w;
   o.position = pc.mvp * vec4<f32>(world, 1.0);
   return o;
 }
@@ -83,6 +87,7 @@ struct FsIn {
   @location(5) color: vec3<f32>,
   @location(6) rough_metal: vec2<f32>,
   @location(7) opacity: f32,
+  @location(8) world_scale: f32,
 };
 
 fn shaded_simple(n: vec3<f32>, l: vec3<f32>, base: vec3<f32>) -> vec3<f32> {
@@ -90,8 +95,8 @@ fn shaded_simple(n: vec3<f32>, l: vec3<f32>, base: vec3<f32>) -> vec3<f32> {
   return base * ndotl;
 }
 
-fn sample_triplanar_albedo(world_pos: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
-  let wp = world_pos * 2.0;
+fn sample_triplanar_albedo(world_pos: vec3<f32>, n: vec3<f32>, world_scale: f32) -> vec3<f32> {
+  let wp = world_pos * world_scale;
   var blend = abs(n);
   blend = pow(blend, vec3<f32>(4.0));
   blend = blend / max(blend.x + blend.y + blend.z, 1e-6);
@@ -103,8 +108,8 @@ fn sample_triplanar_albedo(world_pos: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
 
 fn unpack_normal(rgb: vec3<f32>) -> vec3<f32> { return rgb * 2.0 - 1.0; }
 
-fn sample_triplanar_normal(world_pos: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
-  let wp = world_pos * 2.0;
+fn sample_triplanar_normal(world_pos: vec3<f32>, n: vec3<f32>, world_scale: f32) -> vec3<f32> {
+  let wp = world_pos * world_scale;
   var blend = abs(n);
   blend = pow(blend, vec3<f32>(4.0));
   blend = blend / max(blend.x + blend.y + blend.z, 1e-6);
@@ -134,8 +139,19 @@ fn sample_uv_normal(n: vec3<f32>, world_pos: vec3<f32>, uv: vec2<f32>) -> vec3<f
   return normalize(t * tnormal.x + b * tnormal.y + n * tnormal.z);
 }
 
+fn sample_triplanar_orm(world_pos: vec3<f32>, n: vec3<f32>, world_scale: f32) -> vec3<f32> {
+  let wp = world_pos * world_scale;
+  var blend = abs(n);
+  blend = pow(blend, vec3<f32>(4.0));
+  blend = blend / max(blend.x + blend.y + blend.z, 1e-6);
+  let cx = textureSample(orm_tex, tex_samp, wp.zy).rgb;
+  let cy = textureSample(orm_tex, tex_samp, wp.xz).rgb;
+  let cz = textureSample(orm_tex, tex_samp, wp.xy).rgb;
+  return cx * blend.x + cy * blend.y + cz * blend.z;
+}
+
 fn shaded_realistic(n: vec3<f32>, l: vec3<f32>, v: vec3<f32>, base: vec3<f32>, rough: f32,
-                    metal: f32, opacity: f32) -> vec4<f32> {
+                    metal: f32, opacity: f32, ao: f32) -> vec4<f32> {
   let PI = 3.14159265;
   let ndotl = max(dot(n, l), 0.0);
   let ndotv = max(dot(n, v), 1e-4);
@@ -148,7 +164,7 @@ fn shaded_realistic(n: vec3<f32>, l: vec3<f32>, v: vec3<f32>, base: vec3<f32>, r
   let f0 = mix(vec3<f32>(0.04), base, metal);
   let F = f0 + (vec3<f32>(1.0) - f0) * pow(1.0 - vdoth, 5.0);
   let transmissive = select(0.0, 1.0, opacity < 0.999 && metal < 0.5);
-  var kd = base * (1.0 - metal);
+  var kd = base * (1.0 - metal) * ao;
   if (transmissive > 0.5) {
     kd *= opacity;
   }
@@ -204,7 +220,7 @@ fn main(input: FsIn) -> @location(0) vec4<f32> {
     discard;
   }
   if (pc.material.w > 0.5) {
-    n = select(sample_triplanar_normal(input.world_pos, n),
+    n = select(sample_triplanar_normal(input.world_pos, n, input.world_scale),
                sample_uv_normal(n, input.world_pos, input.uv), pc.lighting.w > 0.5);
     n = normalize(n);
     if (dot(n, v) < 0.0) {
@@ -214,14 +230,24 @@ fn main(input: FsIn) -> @location(0) vec4<f32> {
   let l = normalize(pc.light_dir_selected.xyz);
   var base = pc.color.rgb * input.color;
   if (pc.material.z > 0.5) {
-    base = select(sample_triplanar_albedo(input.world_pos, n),
+    base = select(sample_triplanar_albedo(input.world_pos, n, input.world_scale),
                   textureSample(albedo_tex, tex_samp, input.uv).rgb, pc.lighting.w > 0.5);
+  }
+  var rough = input.rough_metal.x;
+  var metal = input.rough_metal.y;
+  var ao = 1.0;
+  if (pc.light_dir_selected.w > 0.5) {
+    let orm = select(sample_triplanar_orm(input.world_pos, n, input.world_scale),
+                     textureSample(orm_tex, tex_samp, input.uv).rgb, pc.lighting.w > 0.5);
+    ao = orm.r;
+    rough = orm.g;
+    metal = orm.b;
   }
   var lit_rgb: vec3<f32>;
   var lit_a = 1.0;
   if (input.mode > 1.5) {
-    let pbr = shaded_realistic(n, l, v, base, input.rough_metal.x, input.rough_metal.y,
-                               clamp(input.opacity, 0.0, 1.0));
+    let pbr = shaded_realistic(n, l, v, base, rough, metal,
+                               clamp(input.opacity, 0.0, 1.0), ao);
     lit_rgb = pbr.rgb;
     lit_a = pbr.a;
   } else {

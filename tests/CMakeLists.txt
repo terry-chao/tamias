@@ -1,7 +1,7 @@
 add_executable(tamias_tests smoke_tests.cpp location_tests.cpp ifc_spatial_tree_tests.cpp plugin_host_tests.cpp
   scene_graph_tests.cpp ibl_tests.cpp host/session_test.cpp render_scene_tests.cpp
   command_dispatch_tests.cpp feature_boolean_tests.cpp camera_controller_tests.cpp import_tests.cpp
-  timing_session_tests.cpp mesh_intern_tests.cpp)
+  timing_session_tests.cpp mesh_intern_tests.cpp mesh_lod_tests.cpp texture_library_tests.cpp)
 target_link_libraries(tamias_tests
   PRIVATE
     tamias::io

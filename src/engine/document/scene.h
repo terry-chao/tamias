@@ -21,6 +21,7 @@ struct SceneNode {
   std::uint64_t parent = 0;               // 0 = root (no parent)
   std::vector<std::uint64_t> children;    // derived cache, rebuilt by recompute_world()
   std::uint64_t mesh_asset_id = 0;        // 0 = grouping node (no geometry)
+  std::uint64_t material_id = 0;          // 导入网格无 Entity 时用；有 Entity 时以 Entity 为准
   Mat4 local_transform = Mat4::identity();
   Mat4 world_transform = Mat4::identity();  // cached: parent chain accumulation
   Vec3 color{0.75f, 0.78f, 0.82f};

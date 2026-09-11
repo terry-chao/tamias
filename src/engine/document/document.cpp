@@ -1,249 +1,35 @@
 #include "engine/document/document.h"
 
 #include "engine/math/math.h"
+#include "engine/modeling/occt_geom_builder.h"
+#include "engine/render/builtin_textures.h"
+#include "engine/render/mesh_lod.h"
 #include "entity/entity_grip.h"
 #include "entity/kind_display_color.h"
 
 #include <algorithm>
-#include <cmath>
 #include <string>
 
 namespace tamias {
 
-namespace {
-
-constexpr std::uint32_t kMaterialTextureSize = 512;
-
-std::uint8_t linear_to_srgb_u8(float linear) {
-  const float x = std::clamp(linear, 0.f, 1.f);
-  const float srgb = x <= 0.0031308f ? 12.92f * x
-                                     : 1.055f * std::pow(x, 1.f / 2.4f) - 0.055f;
-  return static_cast<std::uint8_t>(std::clamp(srgb, 0.f, 1.f) * 255.f);
+Document::~Document() {
+  TessWorker::instance().cancel_all();
+  TessWorker::instance().wait_idle();
 }
-
-float material_hash(std::uint32_t x, std::uint32_t y) {
-  std::uint32_t n = x * 374761393u + y * 668265263u;
-  n = (n ^ (n >> 13)) * 1274126177u;
-  n ^= n >> 16;
-  return static_cast<float>(n & 0xFFFFu) / 65535.0f;
-}
-
-int wrap_period(int x, int period) {
-  int r = x % period;
-  if (r < 0) {
-    r += period;
-  }
-  return r;
-}
-
-float value_noise(float x, float y, int period) {
-  const int x0 = static_cast<int>(std::floor(x));
-  const int y0 = static_cast<int>(std::floor(y));
-  const float fx = x - static_cast<float>(x0);
-  const float fy = y - static_cast<float>(y0);
-  const float u = fx * fx * (3.f - 2.f * fx);
-  const float v = fy * fy * (3.f - 2.f * fy);
-  const float n00 = material_hash(static_cast<std::uint32_t>(wrap_period(x0, period)),
-                                  static_cast<std::uint32_t>(wrap_period(y0, period)));
-  const float n10 = material_hash(static_cast<std::uint32_t>(wrap_period(x0 + 1, period)),
-                                  static_cast<std::uint32_t>(wrap_period(y0, period)));
-  const float n01 = material_hash(static_cast<std::uint32_t>(wrap_period(x0, period)),
-                                  static_cast<std::uint32_t>(wrap_period(y0 + 1, period)));
-  const float n11 = material_hash(static_cast<std::uint32_t>(wrap_period(x0 + 1, period)),
-                                  static_cast<std::uint32_t>(wrap_period(y0 + 1, period)));
-  const float nx0 = n00 + (n10 - n00) * u;
-  const float nx1 = n01 + (n11 - n01) * u;
-  return nx0 + (nx1 - nx0) * v;
-}
-
-float fbm_uv(float u, float v, int base_cells, int octaves) {
-  float sum = 0.f;
-  float amp = 1.f;
-  float norm = 0.f;
-  int cells = base_cells;
-  for (int i = 0; i < octaves; ++i) {
-    sum += amp * value_noise(u * static_cast<float>(cells), v * static_cast<float>(cells), cells);
-    norm += amp;
-    amp *= 0.5f;
-    cells *= 2;
-  }
-  return sum / std::max(norm, 1e-6f);
-}
-
-template <typename Fn>
-TextureAsset make_material_texture(Fn&& color_at) {
-  TextureAsset texture;
-  texture.width = kMaterialTextureSize;
-  texture.height = kMaterialTextureSize;
-  texture.rgba.resize(static_cast<std::size_t>(kMaterialTextureSize) *
-                      kMaterialTextureSize * 4);
-  for (std::uint32_t y = 0; y < kMaterialTextureSize; ++y) {
-    for (std::uint32_t x = 0; x < kMaterialTextureSize; ++x) {
-      const Vec3 linear = color_at(x, y);
-      const std::size_t i =
-          (static_cast<std::size_t>(y) * kMaterialTextureSize + x) * 4;
-      texture.rgba[i + 0] = linear_to_srgb_u8(linear.x);
-      texture.rgba[i + 1] = linear_to_srgb_u8(linear.y);
-      texture.rgba[i + 2] = linear_to_srgb_u8(linear.z);
-      texture.rgba[i + 3] = 255;
-    }
-  }
-  return texture;
-}
-
-template <typename HeightFn>
-TextureAsset make_normal_texture(HeightFn&& height_at, float strength) {
-  TextureAsset texture;
-  texture.width = kMaterialTextureSize;
-  texture.height = kMaterialTextureSize;
-  texture.srgb = false;
-  texture.rgba.resize(static_cast<std::size_t>(kMaterialTextureSize) *
-                      kMaterialTextureSize * 4);
-  const auto wrap = [](int v) {
-    const int n = static_cast<int>(kMaterialTextureSize);
-    int r = v % n;
-    if (r < 0) {
-      r += n;
-    }
-    return static_cast<std::uint32_t>(r);
-  };
-  for (std::uint32_t y = 0; y < kMaterialTextureSize; ++y) {
-    for (std::uint32_t x = 0; x < kMaterialTextureSize; ++x) {
-      const float hL = height_at(wrap(static_cast<int>(x) - 1), y);
-      const float hR = height_at(wrap(static_cast<int>(x) + 1), y);
-      const float hD = height_at(x, wrap(static_cast<int>(y) - 1));
-      const float hU = height_at(x, wrap(static_cast<int>(y) + 1));
-      Vec3 n = normalize(Vec3{(hL - hR) * strength, (hD - hU) * strength, 1.f});
-      const std::size_t i =
-          (static_cast<std::size_t>(y) * kMaterialTextureSize + x) * 4;
-      texture.rgba[i + 0] = static_cast<std::uint8_t>((n.x * 0.5f + 0.5f) * 255.f);
-      texture.rgba[i + 1] = static_cast<std::uint8_t>((n.y * 0.5f + 0.5f) * 255.f);
-      texture.rgba[i + 2] = static_cast<std::uint8_t>((n.z * 0.5f + 0.5f) * 255.f);
-      texture.rgba[i + 3] = 255;
-    }
-  }
-  return texture;
-}
-
-}  // namespace
 
 void Document::seed_default_materials() {
-  constexpr float kPi = 3.14159265358979f;
-  constexpr float kInvSize = 1.f / static_cast<float>(kMaterialTextureSize);
-
-  // 512×512 平滑 FBM，避免 8/16 像素色块；纹理以 sRGB 编码，采样时由 GPU 转线性。
-  const std::uint64_t default_tex_id =
-      add_texture(make_material_texture([](std::uint32_t x, std::uint32_t y) {
-        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
-        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
-        const float mottling = fbm_uv(u, v, 12, 5);
-        const float grain = material_hash(x, y);
-        const float t = 0.72f + 0.04f * mottling + 0.018f * grain;
-        return Vec3{t, t, t};
-      })).id;
-
-  const std::uint64_t concrete_tex_id =
-      add_texture(make_material_texture([](std::uint32_t x, std::uint32_t y) {
-        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
-        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
-        const float mottling = fbm_uv(u, v, 10, 6);
-        const float aggregate = value_noise(u * 64.f, v * 64.f, 64);
-        const float sand = material_hash(x, y);
-        const float t = 0.58f + 0.10f * mottling + 0.05f * aggregate + 0.035f * sand;
-        return Vec3{t * 1.08f, t * 1.00f, t * 0.90f};
-      })).id;
-
-  const std::uint64_t steel_tex_id =
-      add_texture(make_material_texture([](std::uint32_t x, std::uint32_t y) {
-        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
-        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
-        const float grain = material_hash(x, y);
-        const float warp = 0.12f * fbm_uv(u, v, 16, 4);
-        const float streak =
-            0.5f + 0.5f * std::sin(2.f * kPi * (u * 72.f + warp) + 0.35f * std::sin(2.f * kPi * v * 9.f));
-        const float t = 0.54f + 0.035f * grain + 0.055f * streak;
-        return Vec3{t, t, t};
-      })).id;
-
-  const std::uint64_t wood_tex_id =
-      add_texture(make_material_texture([](std::uint32_t x, std::uint32_t y) {
-        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
-        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
-        const float warp = 0.28f * fbm_uv(u, v, 8, 5);
-        const float grain =
-            std::sin(2.f * kPi * (u * 28.f + warp) + 1.35f * std::sin(2.f * kPi * v * 6.f)) +
-            0.16f * std::sin(2.f * kPi * (u * 54.f + 0.4f * warp));
-        const float pores = material_hash(x, y);
-        const float shade = 0.78f + 0.14f * (0.5f + 0.5f * grain) + 0.04f * pores;
-        return Vec3{0.58f * shade, 0.39f * shade, 0.22f * shade};
-      })).id;
-
-  const std::uint64_t plaster_tex_id =
-      add_texture(make_material_texture([](std::uint32_t x, std::uint32_t y) {
-        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
-        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
-        const float mottling = fbm_uv(u, v, 14, 5);
-        const float grain = material_hash(x, y);
-        const float t = 0.88f + 0.025f * mottling + 0.02f * grain;
-        return Vec3{t, t * 0.995f, t * 0.98f};
-      })).id;
-
-  const std::uint64_t default_n_id =
-      add_texture(make_normal_texture(
-                      [](std::uint32_t x, std::uint32_t y) {
-                        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
-                        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
-                        return fbm_uv(u, v, 12, 5) * 0.75f + material_hash(x, y) * 0.25f;
-                      },
-                      1.8f))
-          .id;
-  const std::uint64_t concrete_n_id =
-      add_texture(make_normal_texture(
-                      [](std::uint32_t x, std::uint32_t y) {
-                        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
-                        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
-                        return fbm_uv(u, v, 10, 6) * 0.65f + value_noise(u * 64.f, v * 64.f, 64) * 0.35f;
-                      },
-                      4.f))
-          .id;
-  const std::uint64_t wood_n_id =
-      add_texture(make_normal_texture(
-                      [kPi](std::uint32_t x, std::uint32_t y) {
-                        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
-                        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
-                        const float warp = 0.28f * fbm_uv(u, v, 8, 5);
-                        return 0.5f + 0.5f * std::sin(2.f * kPi * (u * 28.f + warp));
-                      },
-                      3.5f))
-          .id;
-  const std::uint64_t steel_n_id =
-      add_texture(make_normal_texture(
-                      [kPi](std::uint32_t x, std::uint32_t y) {
-                        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
-                        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
-                        const float warp = 0.12f * fbm_uv(u, v, 16, 4);
-                        return 0.5f + 0.5f * std::sin(2.f * kPi * (u * 72.f + warp));
-                      },
-                      1.6f))
-          .id;
-  const std::uint64_t plaster_n_id =
-      add_texture(make_normal_texture(
-                      [](std::uint32_t x, std::uint32_t y) {
-                        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
-                        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
-                        return fbm_uv(u, v, 14, 5) * 0.85f + material_hash(x, y) * 0.15f;
-                      },
-                      2.4f))
-          .id;
-  const std::uint64_t glass_n_id =
-      add_texture(make_normal_texture(
-                      [](std::uint32_t x, std::uint32_t y) {
-                        const float u = (static_cast<float>(x) + 0.5f) * kInvSize;
-                        const float v = (static_cast<float>(y) + 0.5f) * kInvSize;
-                        return fbm_uv(u, v, 3, 3);
-                      },
-                      0.45f))
-          .id;
+  auto add_named = [this](std::string_view key) { return add_texture(make_builtin_texture(key)).id; };
+  const std::uint64_t default_tex_id = add_named(kBuiltinDefaultAlbedo);
+  const std::uint64_t concrete_tex_id = add_named(kBuiltinConcreteAlbedo);
+  const std::uint64_t steel_tex_id = add_named(kBuiltinSteelAlbedo);
+  const std::uint64_t wood_tex_id = add_named(kBuiltinWoodAlbedo);
+  const std::uint64_t plaster_tex_id = add_named(kBuiltinPlasterAlbedo);
+  const std::uint64_t default_n_id = add_named(kBuiltinDefaultNormal);
+  const std::uint64_t concrete_n_id = add_named(kBuiltinConcreteNormal);
+  const std::uint64_t wood_n_id = add_named(kBuiltinWoodNormal);
+  const std::uint64_t steel_n_id = add_named(kBuiltinSteelNormal);
+  const std::uint64_t plaster_n_id = add_named(kBuiltinPlasterNormal);
+  const std::uint64_t glass_n_id = add_named(kBuiltinGlassNormal);
 
   auto seed = [this](std::string name, Vec3 color, float roughness, float metallic,
                      std::uint64_t albedo = 0, std::uint64_t normal = 0, float opacity = 1.f) {
@@ -263,6 +49,43 @@ void Document::seed_default_materials() {
   seed("Glass", {0.52f, 0.76f, 0.84f}, 0.05f, 0.0f, 0, glass_n_id, 0.16f);
   seed("Wood", {0.55f, 0.40f, 0.26f}, 0.7f, 0.0f, wood_tex_id, wood_n_id);
   seed("Plaster", {0.92f, 0.90f, 0.85f}, 0.95f, 0.0f, plaster_tex_id, plaster_n_id);
+}
+
+std::uint32_t Document::material_user_count(std::uint64_t id) const {
+  if (id == 0) {
+    return 0;
+  }
+  std::uint32_t n = 0;
+  for (const auto& [unused, entity] : entities_) {
+    (void)unused;
+    if (entity && entity->material_id == id) {
+      ++n;
+    }
+  }
+  for (const SceneNode& node : scene_.nodes()) {
+    if (node.material_id == id && entity(node.id) == nullptr) {
+      ++n;
+    }
+  }
+  return n;
+}
+
+void Document::mark_material_users_dirty(std::uint64_t material_id) {
+  if (material_id == 0) {
+    return;
+  }
+  scene_.bump_generation();
+  for (const auto& [unused, entity] : entities_) {
+    (void)unused;
+    if (entity && entity->material_id == material_id) {
+      scene_.mark_dirty(entity->id);
+    }
+  }
+  for (const SceneNode& node : scene_.nodes()) {
+    if (node.material_id == material_id) {
+      scene_.mark_dirty(node.id);
+    }
+  }
 }
 
 Storey& Document::add_storey(std::string name, double elevation) {
@@ -341,6 +164,123 @@ bool Document::sync_entity_location(std::uint64_t entity_id) {
   return true;
 }
 
+void Document::drop_unref_mesh(std::uint64_t id) {
+  if (id == 0 || mesh_referenced(id) || tess_cache_.uses_asset(id) ||
+      import_shapes_.count(id) != 0) {
+    return;
+  }
+  remove_mesh(id);
+}
+
+void Document::bind_work_lod(std::uint64_t geometry_id) {
+  if (geometry_id == 0) {
+    return;
+  }
+  tess_cache_.bind(geometry_id, MeshLod::Work, geometry_id);
+}
+
+void Document::ensure_feature_coarse_lod(Entity& entity) {
+  if (entity.mesh_asset_id == 0 || entity.is_sketch_entity()) {
+    return;
+  }
+  const std::uint64_t geometry_id = entity.mesh_asset_id;
+  bind_work_lod(geometry_id);
+  if (tess_cache_.set_for(geometry_id).coarse != 0) {
+    return;
+  }
+  if (const MeshAsset* work = mesh(geometry_id); work != nullptr && work->cpu.line_list) {
+    return;
+  }
+  auto coarse = entity.createGeom(kMeshLodCoarseDeflection);
+  if (!coarse) {
+    return;
+  }
+  if (coarse->line_list || coarse->indices.empty()) {
+    return;
+  }
+  MeshAsset& stored = intern_mesh(entity.name, std::move(*coarse));
+  tess_cache_.bind(geometry_id, MeshLod::Coarse, stored.id);
+}
+
+void Document::invalidate_geometry_lods(std::uint64_t geometry_id) {
+  if (geometry_id == 0) {
+    return;
+  }
+  const LodMeshSet set = tess_cache_.set_for(geometry_id);
+  tess_cache_.invalidate(geometry_id);
+  TessWorker::instance().cancel_geometry(geometry_id);
+  if (set.coarse != 0 && set.coarse != geometry_id) {
+    drop_unref_mesh(set.coarse);
+  }
+  if (set.close != 0 && set.close != geometry_id) {
+    drop_unref_mesh(set.close);
+  }
+  if (set.work != 0 && set.work != geometry_id) {
+    drop_unref_mesh(set.work);
+  }
+}
+
+std::function<Result<MeshCpu>()> Document::make_tess_fn(std::uint64_t geometry_id,
+                                                        MeshLod lod) const {
+  if (const Entity* e = entity_for_mesh(geometry_id); e != nullptr && !e->is_sketch_entity()) {
+    FeatureModel model = e->model;
+    const double deflection = mesh_lod_deflection(lod, false);
+    return [model = std::move(model), deflection]() {
+      return geometry_builder().build(model, deflection);
+    };
+  }
+  if (const auto it = import_shapes_.find(geometry_id); it != import_shapes_.end() &&
+                                                        it->second != nullptr) {
+    Shape* shape = it->second.get();
+    const double deflection = mesh_lod_deflection(lod, true);
+    return [shape, deflection]() { return shape->tessellate(deflection); };
+  }
+  return {};
+}
+
+void Document::enqueue_lod_request(LodRequest request) {
+  if (request.geometry_id == 0 || request.lod == MeshLod::Box) {
+    return;
+  }
+  const std::uint64_t existing = tess_cache_.mesh_for(request.geometry_id, request.lod);
+  if (existing != 0) {
+    if (const MeshAsset* m = mesh(existing); m != nullptr && !m->cpu.vertices.empty()) {
+      return;
+    }
+    if (request.lod == MeshLod::Work && existing == request.geometry_id) {
+      if (const MeshAsset* m = mesh(existing); m != nullptr && !m->cpu.vertices.empty()) {
+        return;
+      }
+    }
+  }
+  if (tess_cache_.pending(request.geometry_id, request.lod)) {
+    return;
+  }
+  auto run = make_tess_fn(request.geometry_id, request.lod);
+  if (!run) {
+    return;
+  }
+  tess_cache_.mark_pending(request.geometry_id, request.lod);
+  TessWorker::instance().enqueue(request.geometry_id, request.lod, std::move(run));
+}
+
+std::vector<std::uint64_t> Document::apply_completed_tess_jobs() {
+  std::vector<std::uint64_t> uploaded;
+  for (TessJobResult& job : TessWorker::instance().take_completed()) {
+    tess_cache_.clear_pending(job.geometry_id, job.lod);
+    if (!job.mesh) {
+      continue;
+    }
+    if (!mesh_referenced(job.geometry_id) && import_shapes_.count(job.geometry_id) == 0) {
+      continue;
+    }
+    MeshAsset& stored = intern_mesh("lod", std::move(*job.mesh));
+    tess_cache_.bind(job.geometry_id, job.lod, stored.id);
+    uploaded.push_back(stored.id);
+  }
+  return uploaded;
+}
+
 void Document::register_mesh_hash(MeshAsset& asset) {
   if (asset.content_hash == 0) {
     asset.content_hash = mesh_content_hash(asset.cpu);
@@ -408,9 +348,15 @@ bool Document::replace_entity_mesh(std::uint64_t entity_id, MeshCpu cpu) {
     scene_.bump_generation();
     scene_.mark_dirty(entity_id);
   }
-  if (old_id != stored.id && !mesh_referenced(old_id)) {
-    remove_mesh(old_id);
+  if (old_id != stored.id) {
+    if (!mesh_referenced(old_id)) {
+      invalidate_geometry_lods(old_id);
+      if (!tess_cache_.uses_asset(old_id)) {
+        remove_mesh(old_id);
+      }
+    }
   }
+  ensure_feature_coarse_lod(*target);
   return true;
 }
 
@@ -455,6 +401,10 @@ Entity* Document::add_entity(std::unique_ptr<Entity> entity, MeshCpu mesh) {
       }
     }
   }
+  if (SceneNode* n = scene_.find(raw->id)) {
+    n->material_id = raw->material_id;
+  }
+  ensure_feature_coarse_lod(*raw);
   recompute_scene();
   mark_dirty();
   return raw;
@@ -470,7 +420,10 @@ void Document::remove_entity(std::uint64_t id) {
   entities_.erase(it);
   scene_.remove_node(id);
   if (!mesh_referenced(mesh_id)) {
-    remove_mesh(mesh_id);
+    invalidate_geometry_lods(mesh_id);
+    if (!tess_cache_.uses_asset(mesh_id)) {
+      remove_mesh(mesh_id);
+    }
   }
   recompute_scene();
   mark_dirty();
@@ -494,8 +447,11 @@ void Document::insert_entity(std::unique_ptr<Entity> entity, MeshAsset mesh) {
   scene_.insert_node(std::move(node));
 
   entities_[id] = std::move(entity);
-  if (Entity* raw = entities_[id].get(); raw != nullptr && raw->grips.empty()) {
-    sync_entity_grips(*raw);
+  if (Entity* raw = entities_[id].get(); raw != nullptr) {
+    if (raw->grips.empty()) {
+      sync_entity_grips(*raw);
+    }
+    ensure_feature_coarse_lod(*raw);
   }
   recompute_scene();
   mark_dirty();
@@ -542,21 +498,28 @@ std::vector<SceneDrawItem> Document::render_items(const Frustum* frustum) const 
     item.color = node.color;
     item.category_color = kImportDisplayColor;
     item.selected = node.selected;
-    if (const Entity* e = entity(node.id); e != nullptr) {
+    const Entity* e = entity(node.id);
+    std::uint64_t material_id = 0;
+    if (e != nullptr) {
       item.category_color = display_color_for_kind(e->kind());
-      if (e->material_id != 0) {
-        if (const Material* m = material(e->material_id)) {
-          item.color = m->base_color;
-          item.roughness = m->roughness;
-          item.metallic = m->metallic;
-          item.opacity = m->opacity;
-          item.albedo_texture_id = m->albedo_texture_id;
-          item.normal_texture_id = m->normal_texture_id;
-        }
-      } else if (e->is_sketch_entity()) {
-        // 草图用青色，与混凝土灰、选中蓝分开。
+      material_id = e->material_id;
+      if (e->is_sketch_entity() && material_id == 0) {
         item.color = display_color_for_kind(e->kind());
         item.lines = true;
+      }
+    } else {
+      material_id = node.material_id;
+    }
+    if (material_id != 0) {
+      if (const Material* m = material(material_id)) {
+        item.color = m->base_color;
+        item.roughness = m->roughness;
+        item.metallic = m->metallic;
+        item.opacity = m->opacity;
+        item.albedo_texture_id = m->albedo_texture_id;
+        item.normal_texture_id = m->normal_texture_id;
+        item.orm_texture_id = m->orm_texture_id;
+        item.tex = m->tex;
       }
     }
     if (const MeshAsset* asset = mesh(node.mesh_asset_id); asset != nullptr && asset->cpu.line_list) {
@@ -578,7 +541,7 @@ RenderScene Document::capture_render_scene(RenderScene::View view, const Frustum
     }
   }
   std::unordered_map<std::uint64_t, TextureAsset> textures;
-  for (const auto& [id, tex] : textures_) {
+  for (const auto& [id, tex] : textures_.assets()) {
     textures.emplace(id, tex);
   }
   if (render_snapshot_) {
@@ -616,19 +579,65 @@ Document document_from_render_scene(RenderScene scene) {
   return doc;
 }
 
-std::uint64_t Document::add_import_mesh(std::string name, MeshCpu mesh, Mat4 transform,
-                                        Vec3 color) {
+std::uint64_t Document::add_import_mesh(std::string name, MeshCpu mesh, Mat4 transform, Vec3 color,
+                                        std::uint64_t material_id) {
   MeshAsset& stored_mesh = intern_mesh(std::move(name), std::move(mesh));
 
   SceneNode node{};
   node.name = stored_mesh.name;
   node.mesh_asset_id = stored_mesh.id;
+  node.material_id = material_id;
+  node.local_transform = transform;
+  node.color = color;
+  scene_.add_node(std::move(node));
+  bind_work_lod(stored_mesh.id);
+  recompute_scene();
+  mark_dirty();
+  return stored_mesh.id;
+}
+
+std::uint64_t Document::add_import_shape(std::string name, std::unique_ptr<Shape> shape,
+                                        Mat4 transform, Vec3 color) {
+  if (!shape) {
+    return 0;
+  }
+  MeshAsset shell{};
+  shell.name = name;
+  shell.cpu.bounds = shape->bounds();
+  MeshAsset& stored = add_mesh(std::move(shell));
+  import_shapes_[stored.id] = std::move(shape);
+
+  SceneNode node{};
+  node.name = std::move(name);
+  node.mesh_asset_id = stored.id;
   node.local_transform = transform;
   node.color = color;
   scene_.add_node(std::move(node));
   recompute_scene();
   mark_dirty();
-  return stored_mesh.id;
+  return stored.id;
+}
+
+Shape* Document::import_shape(std::uint64_t geometry_id) {
+  const auto it = import_shapes_.find(geometry_id);
+  return it == import_shapes_.end() ? nullptr : it->second.get();
+}
+
+const MeshAsset* Document::resolved_mesh(std::uint64_t geometry_id) const {
+  if (geometry_id == 0) {
+    return nullptr;
+  }
+  const LodMeshSet set = tess_cache_.set_for(geometry_id);
+  const std::uint64_t candidates[] = {set.close, set.work, set.coarse, geometry_id};
+  for (const std::uint64_t id : candidates) {
+    if (id == 0) {
+      continue;
+    }
+    if (const MeshAsset* asset = mesh(id); asset != nullptr && !asset->cpu.vertices.empty()) {
+      return asset;
+    }
+  }
+  return mesh(geometry_id);
 }
 
 }  // namespace tamias

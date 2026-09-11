@@ -4,7 +4,9 @@
 #include "engine/core/log.h"
 #include "engine/profile/timing_scope.h"
 
+#include <Bnd_Box.hxx>
 #include <BRep_Builder.hxx>
+#include <BRepBndLib.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <BRep_Tool.hxx>
@@ -166,6 +168,7 @@ class OcctShape final : public Shape {
 
       const int n_tris = tri->NbTriangles();
       mesh.indices.reserve(mesh.indices.size() + static_cast<std::size_t>(n_tris) * 3);
+      const std::uint32_t face_first = static_cast<std::uint32_t>(mesh.indices.size());
       for (int i = 1; i <= n_tris; ++i) {
         int n1 = 0;
         int n2 = 0;
@@ -191,6 +194,12 @@ class OcctShape final : public Shape {
           mesh.vertices[i2].normal = n;
         }
       }
+      MeshFaceRange range{};
+      range.first_index = face_first;
+      range.index_count = static_cast<std::uint32_t>(mesh.indices.size()) - face_first;
+      if (range.index_count != 0) {
+        mesh.faces.push_back(range);
+      }
     }
 
     if (mesh.indices.empty()) {
@@ -205,7 +214,41 @@ class OcctShape final : public Shape {
       v.normal = {n.x, n.z, -n.y};
     }
     recompute_bounds(mesh);
+    recompute_face_bounds(mesh);
     return mesh;
+  }
+
+  [[nodiscard]] Aabb bounds() const override {
+    if (shape_.IsNull()) {
+      return {};
+    }
+    Bnd_Box box;
+    BRepBndLib::Add(shape_, box);
+    if (box.IsVoid()) {
+      return {};
+    }
+    Standard_Real xmin = 0;
+    Standard_Real ymin = 0;
+    Standard_Real zmin = 0;
+    Standard_Real xmax = 0;
+    Standard_Real ymax = 0;
+    Standard_Real zmax = 0;
+    box.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+    const Vec3 corners[8] = {
+        {static_cast<float>(xmin), static_cast<float>(ymin), static_cast<float>(zmin)},
+        {static_cast<float>(xmax), static_cast<float>(ymin), static_cast<float>(zmin)},
+        {static_cast<float>(xmin), static_cast<float>(ymax), static_cast<float>(zmin)},
+        {static_cast<float>(xmax), static_cast<float>(ymax), static_cast<float>(zmin)},
+        {static_cast<float>(xmin), static_cast<float>(ymin), static_cast<float>(zmax)},
+        {static_cast<float>(xmax), static_cast<float>(ymin), static_cast<float>(zmax)},
+        {static_cast<float>(xmin), static_cast<float>(ymax), static_cast<float>(zmax)},
+        {static_cast<float>(xmax), static_cast<float>(ymax), static_cast<float>(zmax)},
+    };
+    Aabb out{};
+    for (const Vec3& c : corners) {
+      out.expand({c.x, c.z, -c.y});
+    }
+    return out;
   }
 
   [[nodiscard]] const TopoDS_Shape& shape() const { return shape_; }

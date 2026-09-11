@@ -837,6 +837,10 @@ Remove it from Recent?</source>
         <translation>属性</translation>
     </message>
     <message>
+        <source>Texture Library</source>
+        <translation>纹理库</translation>
+    </message>
+    <message>
         <source>No document open</source>
         <translation>未打开文档</translation>
     </message>
@@ -1620,6 +1624,14 @@ Plugin ID: %4</source>
         <translation>金属度</translation>
     </message>
     <message>
+        <source>World scale</source>
+        <translation>世界缩放</translation>
+    </message>
+    <message>
+        <source>UV scale</source>
+        <translation>UV 缩放</translation>
+    </message>
+    <message>
         <source>Albedo texture</source>
         <translation>反照率贴图</translation>
     </message>
@@ -1656,6 +1668,30 @@ Plugin ID: %4</source>
         <translation>选择法线贴图</translation>
     </message>
     <message>
+        <source>Select ORM texture</source>
+        <translation>选择 ORM 贴图</translation>
+    </message>
+    <message>
+        <source>ORM texture</source>
+        <translation>ORM 贴图</translation>
+    </message>
+    <message>
+        <source>Import...</source>
+        <translation>导入...</translation>
+    </message>
+    <message>
+        <source>Make unique copy</source>
+        <translation>复制为独立材质</translation>
+    </message>
+    <message>
+        <source>Apply to all objects using this material</source>
+        <translation>应用到使用此材质的全部对象</translation>
+    </message>
+    <message>
+        <source>Imported mesh — %1</source>
+        <translation>导入网格 — %1</translation>
+    </message>
+    <message>
         <source>Images (*.png *.jpg *.jpeg *.bmp)</source>
         <translation>图片 (*.png *.jpg *.jpeg *.bmp)</translation>
     </message>
@@ -1682,6 +1718,59 @@ Plugin ID: %4</source>
     <message>
         <source>Plaster</source>
         <translation>石膏</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::TextureLibraryPanel</name>
+    <message>
+        <source>Import...</source>
+        <translation>导入...</translation>
+    </message>
+    <message>
+        <source>Replace...</source>
+        <translation>替换...</translation>
+    </message>
+    <message>
+        <source>Import texture</source>
+        <translation>导入贴图</translation>
+    </message>
+    <message>
+        <source>Replace texture</source>
+        <translation>替换贴图</translation>
+    </message>
+    <message>
+        <source>Images (*.png *.jpg *.jpeg *.bmp)</source>
+        <translation>图片 (*.png *.jpg *.jpeg *.bmp)</translation>
+    </message>
+    <message>
+        <source>Texture #%1</source>
+        <translation>贴图 #%1</translation>
+    </message>
+    <message>
+        <source> (built-in)</source>
+        <translation> （内置）</translation>
+    </message>
+    <message>
+        <source>%1
+%2  %3×%4  refs %5</source>
+        <translation>%1
+%2  %3×%4  引用 %5</translation>
+    </message>
+    <message>
+        <source>Albedo</source>
+        <translation>反照率</translation>
+    </message>
+    <message>
+        <source>Normal</source>
+        <translation>法线</translation>
+    </message>
+    <message>
+        <source>ORM</source>
+        <translation>ORM</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>未知</translation>
     </message>
 </context>
 <context>

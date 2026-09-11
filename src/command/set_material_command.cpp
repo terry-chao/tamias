@@ -8,10 +8,11 @@ SetMaterialCommand::SetMaterialCommand(Document& document, std::uint64_t entity_
 
 Result<void> SetMaterialCommand::execute() {
   Entity* entity = document_->entity(entity_id_);
-  if (entity == nullptr) {
+  SceneNode* node = document_->scene().find(entity_id_);
+  if (entity == nullptr && node == nullptr) {
     return Err("SetMaterialCommand: entity not found");
   }
-  old_material_id_ = entity->material_id;
+  old_material_id_ = entity != nullptr ? entity->material_id : node->material_id;
 
   // id != 0 且已存在 → 引用现有材质；否则新建入库（Document 分配新 id）。
   if (material_.id != 0 && document_->material(material_.id) != nullptr) {
@@ -22,7 +23,12 @@ Result<void> SetMaterialCommand::execute() {
     new_material_id_ = document_->add_material(std::move(fresh)).id;
   }
 
-  entity->material_id = new_material_id_;
+  if (entity != nullptr) {
+    entity->material_id = new_material_id_;
+  }
+  if (node != nullptr) {
+    node->material_id = new_material_id_;
+  }
   document_->mark_scene_dirty(entity_id_);
   document_->mark_dirty();
   return {};
@@ -31,17 +37,23 @@ Result<void> SetMaterialCommand::execute() {
 void SetMaterialCommand::undo() {
   if (Entity* entity = document_->entity(entity_id_)) {
     entity->material_id = old_material_id_;
-    document_->mark_scene_dirty(entity_id_);
-    document_->mark_dirty();
   }
+  if (SceneNode* node = document_->scene().find(entity_id_)) {
+    node->material_id = old_material_id_;
+  }
+  document_->mark_scene_dirty(entity_id_);
+  document_->mark_dirty();
 }
 
 void SetMaterialCommand::redo() {
   if (Entity* entity = document_->entity(entity_id_)) {
     entity->material_id = new_material_id_;
-    document_->mark_scene_dirty(entity_id_);
-    document_->mark_dirty();
   }
+  if (SceneNode* node = document_->scene().find(entity_id_)) {
+    node->material_id = new_material_id_;
+  }
+  document_->mark_scene_dirty(entity_id_);
+  document_->mark_dirty();
 }
 
 }  // namespace tamias

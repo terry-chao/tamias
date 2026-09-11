@@ -168,6 +168,13 @@ void expect_item_eq(const SceneDrawItem& a, const SceneDrawItem& b) {
   EXPECT_FLOAT_EQ(a.opacity, b.opacity);
   EXPECT_EQ(a.albedo_texture_id, b.albedo_texture_id);
   EXPECT_EQ(a.normal_texture_id, b.normal_texture_id);
+  EXPECT_EQ(a.orm_texture_id, b.orm_texture_id);
+  EXPECT_FLOAT_EQ(a.tex.scale.x, b.tex.scale.x);
+  EXPECT_FLOAT_EQ(a.tex.scale.y, b.tex.scale.y);
+  EXPECT_FLOAT_EQ(a.tex.offset.x, b.tex.offset.x);
+  EXPECT_FLOAT_EQ(a.tex.offset.y, b.tex.offset.y);
+  EXPECT_FLOAT_EQ(a.tex.rotation, b.tex.rotation);
+  EXPECT_FLOAT_EQ(a.tex.world_scale, b.tex.world_scale);
   EXPECT_EQ(a.selected, b.selected);
   EXPECT_EQ(a.lines, b.lines);
 }
@@ -194,6 +201,10 @@ RenderScene handmade_scene() {
   item.opacity = 0.9f;
   item.albedo_texture_id = 11;
   item.selected = true;
+  item.tex.scale = {2.f, 3.f};
+  item.tex.offset = {0.1f, 0.2f};
+  item.tex.rotation = 0.5f;
+  item.tex.world_scale = 4.f;
   scene.meshes.emplace(7, std::move(cube));
   scene.textures.emplace(11, make_tiny_texture(11));
   scene.items.push_back(item);
@@ -401,6 +412,8 @@ TEST(RenderScene, HydrateKeepsBakedMaterial) {
   EXPECT_FLOAT_EQ(items[0].metallic, 0.4f);
   EXPECT_FLOAT_EQ(items[0].opacity, 0.9f);
   EXPECT_EQ(items[0].albedo_texture_id, 11u);
+  EXPECT_FLOAT_EQ(items[0].tex.world_scale, 4.f);
+  EXPECT_FLOAT_EQ(items[0].tex.scale.x, 2.f);
   expect_vec3_eq(items[0].color, {0.1f, 0.2f, 0.3f});
   EXPECT_EQ(doc.textures().size(), 1u);
   ASSERT_NE(doc.texture(11), nullptr);
@@ -446,6 +459,7 @@ TEST(RenderScene, InspectMentionsDigestAndItems) {
   EXPECT_NE(text.find("v[0]"), std::string::npos);
   EXPECT_NE(text.find("transform:"), std::string::npos);
   EXPECT_NE(text.find("roughness="), std::string::npos);
+  EXPECT_NE(text.find("world_scale="), std::string::npos);
 }
 
 TEST(RenderSceneIo, UnicodePathRoundTrip) {
@@ -578,7 +592,8 @@ TEST(RenderSceneGolden, ScansRepositoryFixtures) {
     }
     std::uint64_t gpu_tex = 1;
     for (const auto& item : scene->items) {
-      for (std::uint64_t tex_id : {item.albedo_texture_id, item.normal_texture_id}) {
+      for (std::uint64_t tex_id :
+           {item.albedo_texture_id, item.normal_texture_id, item.orm_texture_id}) {
         if (tex_id == 0 || f.texture_asset_to_gpu.contains(tex_id)) {
           continue;
         }

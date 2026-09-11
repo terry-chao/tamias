@@ -3,6 +3,9 @@
 #include "app_settings.h"
 #include "bim/wall_size.h"
 #include "command/edit_entity_grip_command.h"
+#include "command/import_texture_command.h"
+#include "command/replace_texture_command.h"
+#include "command/update_material_command.h"
 #include "engine/core/log.h"
 #include "engine/math/grid.h"
 #include "engine/modeling/curve_geom.h"
@@ -306,20 +309,30 @@ void DocumentViewport::sync_coord_readout() {
   if (!coord_label_) {
     return;
   }
+  QString text;
   if (!has_cursor_) {
     const Vec3 target = camera_.target();
-    coord_label_->setText(tr("X %1  Y %2  Z %3")
-                              .arg(target.x, 0, 'f', 3)
-                              .arg(target.y, 0, 'f', 3)
-                              .arg(target.z, 0, 'f', 3));
+    text = tr("X %1  Y %2  Z %3")
+               .arg(target.x, 0, 'f', 3)
+               .arg(target.y, 0, 'f', 3)
+               .arg(target.z, 0, 'f', 3);
   } else {
     const Vec3 p = grid_snap_active() ? cursor_ground_position(last_mouse_)
                                       : cursor_world_position(last_mouse_);
-    coord_label_->setText(tr("X %1  Y %2  Z %3")
-                              .arg(p.x, 0, 'f', 3)
-                              .arg(p.y, 0, 'f', 3)
-                              .arg(p.z, 0, 'f', 3));
+    text = tr("X %1  Y %2  Z %3")
+               .arg(p.x, 0, 'f', 3)
+               .arg(p.y, 0, 'f', 3)
+               .arg(p.z, 0, 'f', 3);
   }
+  if (render_thread_) {
+    const RenderFrameStats stats = render_thread_->last_stats();
+    text += tr("\ndraw %1  tri %2  gpu %3MB  tess %4")
+                .arg(stats.draws)
+                .arg(stats.triangles)
+                .arg(static_cast<double>(stats.gpu_mesh_bytes) / (1024.0 * 1024.0), 0, 'f', 1)
+                .arg(document_->pending_tessellate_count() + stats.lod_requests);
+  }
+  coord_label_->setText(text);
   layout_overlays();
 }
 
@@ -538,6 +551,17 @@ void DocumentViewport::submit_current_frame() {
   if (surface_->width() < 2 || surface_->height() < 2) {
     return;
   }
+  if (render_thread_) {
+    for (const std::uint64_t id : document_->apply_completed_tess_jobs()) {
+      if (const MeshAsset* asset = document_->mesh(id);
+          asset != nullptr && !asset->cpu.vertices.empty()) {
+        render_thread_->request_upload_mesh(id, asset->cpu);
+      }
+    }
+    for (const LodRequest& req : render_thread_->take_lod_requests()) {
+      document_->enqueue_lod_request(req);
+    }
+  }
   ensure_gl_surface();
   const auto dpr = devicePixelRatioF();
   const auto w = static_cast<std::uint32_t>(surface_->width() * dpr);
@@ -559,11 +583,13 @@ void DocumentViewport::submit_current_frame() {
   frame.proj = camera_.proj_matrix(aspect);
   frame.eye_position = camera_.eye_position();
   frame.view_distance = camera_.distance();
+  frame.fovy = camera_.fovy();
   frame.mode = mode_;
   refresh_floors();
   // 留存场景图的同步源必须是全量清单（无视锥剔除）；剔除/可见性过滤移到渲染
   // 线程录制时按节点判断，树本身保持完整。
   frame.items = document_->render_items();
+  frame.lod_sets = document_->tess_cache().snapshot();
   std::vector<std::uint64_t> hidden;
   hidden.reserve(frame.items.size());
   for (const auto& item : frame.items) {
@@ -1225,13 +1251,56 @@ void DocumentViewport::set_entity_material(std::uint64_t entity_id, const Materi
            {"base_color", material.base_color},
            {"roughness", static_cast<double>(material.roughness)},
            {"metallic", static_cast<double>(material.metallic)},
+           {"opacity", static_cast<double>(material.opacity)},
            {"albedo_texture_id", static_cast<std::int64_t>(material.albedo_texture_id)},
-           {"normal_texture_id", static_cast<std::int64_t>(material.normal_texture_id)}});
+           {"normal_texture_id", static_cast<std::int64_t>(material.normal_texture_id)},
+           {"orm_texture_id", static_cast<std::int64_t>(material.orm_texture_id)},
+           {"tex_scale_x", static_cast<double>(material.tex.scale.x)},
+           {"tex_scale_y", static_cast<double>(material.tex.scale.y)},
+           {"tex_offset_x", static_cast<double>(material.tex.offset.x)},
+           {"tex_offset_y", static_cast<double>(material.tex.offset.y)},
+           {"tex_rotation", static_cast<double>(material.tex.rotation)},
+           {"tex_world_scale", static_cast<double>(material.tex.world_scale)}});
       r) {
     request_redraw();
   } else {
     log_error(r.error());
   }
+}
+
+std::uint64_t DocumentViewport::import_texture(TextureAsset asset) {
+  auto cmd = std::make_unique<ImportTextureCommand>(*document_, std::move(asset));
+  ImportTextureCommand* raw = cmd.get();
+  if (auto r = raw->execute(); !r) {
+    log_error(r.error());
+    return 0;
+  }
+  const std::uint64_t id = raw->texture_id();
+  session_->command_system().push_executed(std::move(cmd));
+  request_redraw();
+  emit document_changed();
+  return id;
+}
+
+void DocumentViewport::replace_texture(std::uint64_t id, TextureAsset asset) {
+  auto cmd = std::make_unique<ReplaceTextureCommand>(*document_, id, std::move(asset));
+  if (auto r = cmd->execute(); !r) {
+    log_error(r.error());
+    return;
+  }
+  session_->command_system().push_executed(std::move(cmd));
+  request_redraw();
+  emit document_changed();
+}
+
+void DocumentViewport::update_library_material(const Material& material) {
+  auto cmd = std::make_unique<UpdateMaterialCommand>(*document_, material);
+  if (auto r = cmd->execute(); !r) {
+    log_error(r.error());
+    return;
+  }
+  session_->command_system().push_executed(std::move(cmd));
+  request_redraw();
 }
 
 void DocumentViewport::create_storey(const std::string& name, double elevation) {
@@ -1331,9 +1400,10 @@ void DocumentViewport::resync_all_meshes() {
   }
   for (const auto& [unused, asset] : document_->meshes()) {
     (void)unused;
-    if (auto gpu = render_thread_->upload_mesh(asset.id, asset.cpu); !gpu) {
-      log_error(gpu.error());
+    if (asset.cpu.vertices.empty() || asset.cpu.indices.empty()) {
+      continue;
     }
+    render_thread_->request_upload_mesh(asset.id, asset.cpu);
   }
 }
 
@@ -1341,16 +1411,24 @@ void DocumentViewport::resync_textures() {
   if (!render_thread_) {
     return;
   }
+  auto forget_evicted = [this]() {
+    for (const std::uint64_t id : render_thread_->take_evicted_texture_ids()) {
+      uploaded_textures_.erase(id);
+    }
+  };
+  forget_evicted();
   for (const auto& [id, asset] : document_->textures()) {
-    if (uploaded_textures_.count(id)) {
+    if (auto it = uploaded_textures_.find(id);
+        it != uploaded_textures_.end() && it->second == asset.generation) {
       continue;
     }
     if (auto gpu = render_thread_->upload_texture(id, asset); !gpu) {
       log_error(gpu.error());
     } else {
-      uploaded_textures_.insert(id);
+      uploaded_textures_[id] = asset.generation;
     }
   }
+  forget_evicted();
 }
 
 void DocumentViewport::undo() {

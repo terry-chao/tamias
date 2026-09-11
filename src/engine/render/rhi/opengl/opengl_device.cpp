@@ -1014,6 +1014,7 @@ void OpenGLCommandList::draw_indexed(const DrawIndexedDesc& desc) {
         {6, 4, offsetof(GpuInstance, row2)},
         {7, 4, offsetof(GpuInstance, color)},
         {8, 4, offsetof(GpuInstance, material)},
+        {9, 4, offsetof(GpuInstance, tex_st)},
     };
     for (const auto& attr : inst_attrs) {
       gl::EnableVertexAttribArray(attr.index);
@@ -1022,7 +1023,7 @@ void OpenGLCommandList::draw_indexed(const DrawIndexedDesc& desc) {
       gl::VertexAttribDivisor(attr.index, 1);
     }
   } else {
-    for (GLuint i = 4; i <= 8; ++i) {
+    for (GLuint i = 4; i <= 9; ++i) {
       gl::DisableVertexAttribArray(i);
       gl::VertexAttribDivisor(i, 0);
     }

@@ -8,6 +8,8 @@ add_library(tamias_render STATIC
   render_scene_debug.cpp
   render_scene_io.cpp
   render_scene_golden.cpp
+  texture_mips.cpp
+  builtin_textures.cpp
 )
 add_library(tamias::render ALIAS tamias_render)
 target_include_directories(tamias_render PUBLIC ${CMAKE_SOURCE_DIR}/src)

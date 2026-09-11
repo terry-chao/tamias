@@ -65,6 +65,13 @@ void fnv_item(std::uint64_t& h, const SceneDrawItem& item) {
   fnv_f32(h, item.opacity);
   fnv_u64(h, item.albedo_texture_id);
   fnv_u64(h, item.normal_texture_id);
+  fnv_u64(h, item.orm_texture_id);
+  fnv_f32(h, item.tex.scale.x);
+  fnv_f32(h, item.tex.scale.y);
+  fnv_f32(h, item.tex.offset.x);
+  fnv_f32(h, item.tex.offset.y);
+  fnv_f32(h, item.tex.rotation);
+  fnv_f32(h, item.tex.world_scale);
   fnv_bool(h, item.selected);
   fnv_bool(h, item.lines);
 }
@@ -144,6 +151,7 @@ RenderScene bake_render_scene(std::vector<SceneDrawItem> items,
     out.meshes.emplace(item.mesh_asset_id, it->second);
     take_texture(out, item.albedo_texture_id, textures);
     take_texture(out, item.normal_texture_id, textures);
+    take_texture(out, item.orm_texture_id, textures);
     out.items.push_back(std::move(item));
   }
   return out;
@@ -353,10 +361,15 @@ std::string inspect_render_scene(const RenderScene& scene) {
     if (item.normal_texture_id != 0) {
       out << " normal=" << item.normal_texture_id;
     }
+    if (item.orm_texture_id != 0) {
+      out << " orm=" << item.orm_texture_id;
+    }
     out << '\n';
     out << "  category=(" << item.category_color.x << ',' << item.category_color.y << ','
         << item.category_color.z << ") roughness=" << item.roughness
-        << " metallic=" << item.metallic << " opacity=" << item.opacity << '\n';
+        << " metallic=" << item.metallic << " opacity=" << item.opacity
+        << " uv_scale=" << item.tex.scale.x << ',' << item.tex.scale.y
+        << " world_scale=" << item.tex.world_scale << '\n';
     out << "  translation=" << item.transform(0, 3) << ' ' << item.transform(1, 3) << ' '
         << item.transform(2, 3) << '\n';
     out << "  transform:\n";

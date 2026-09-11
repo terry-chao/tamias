@@ -4,12 +4,17 @@
 #include "engine/document/mesh_asset.h"
 #include "engine/document/scene.h"
 #include "entity/entity.h"
+#include "engine/document/texture_library.h"
 #include "engine/render/material.h"
 #include "engine/render/render_scene.h"
-#include "engine/render/render_types.h"
+#include "engine/document/tess_cache.h"
+#include "engine/modeling/shape_ops.h"
+#include "engine/modeling/tess_worker.h"
+#include "engine/render/lod_request.h"
 
 #include <algorithm>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -23,6 +28,11 @@ class Document {
   explicit Document(std::string name = "Untitled") : name_(std::move(name)) {
     seed_default_materials();
   }
+  ~Document();
+  Document(const Document&) = delete;
+  Document& operator=(const Document&) = delete;
+  Document(Document&&) noexcept = default;
+  Document& operator=(Document&&) noexcept = default;
 
   [[nodiscard]] const std::string& name() const { return name_; }
   void set_name(std::string name) { name_ = std::move(name); }
@@ -119,50 +129,47 @@ class Document {
   [[nodiscard]] const std::unordered_map<std::uint64_t, Material>& materials() const {
     return materials_;
   }
+  [[nodiscard]] std::uint32_t material_user_count(std::uint64_t id) const;
+  void mark_material_users_dirty(std::uint64_t material_id);
   [[nodiscard]] std::uint64_t next_material_id() const { return next_material_id_; }
   void set_next_material_id(std::uint64_t id) {
     next_material_id_ = std::max<std::uint64_t>(1, id);
   }
 
-  // ===== 纹理资产（RGBA8 字节，解码在 app 层）=====
+  // ===== 纹理库（共享 RGBA8 资产，材质槽存 texture_id）=====
 
-  TextureAsset& add_texture(TextureAsset asset) {
-    asset.id = next_texture_id_++;
-    auto& stored = textures_[asset.id];
-    stored = std::move(asset);
-    return stored;
+  TextureAsset& add_texture(TextureAsset asset) { return textures_.add(std::move(asset)); }
+  TextureAsset& insert_texture(TextureAsset asset) { return textures_.insert(std::move(asset)); }
+  // 按像素指纹复用，避免同一 PNG 入库两次。
+  TextureAsset& import_texture(TextureAsset asset) { return textures_.import(std::move(asset)); }
+  Result<void> replace_texture(std::uint64_t id, TextureAsset incoming) {
+    return textures_.replace(id, std::move(incoming));
   }
-  TextureAsset& insert_texture(TextureAsset asset) {
-    if (asset.id == 0) {
-      asset.id = next_texture_id_++;
-    } else {
-      next_texture_id_ = std::max(next_texture_id_, asset.id + 1);
-    }
-    auto& stored = textures_[asset.id];
-    stored = std::move(asset);
-    return stored;
+  const TextureAsset* texture(std::uint64_t id) const { return textures_.find(id); }
+  const TextureAsset* texture_by_hash(std::uint64_t hash) const {
+    return textures_.find_by_hash(hash);
   }
-  const TextureAsset* texture(std::uint64_t id) const {
-    auto it = textures_.find(id);
-    return it == textures_.end() ? nullptr : &it->second;
-  }
+  bool remove_texture(std::uint64_t id) { return textures_.remove(id); }
   [[nodiscard]] const std::unordered_map<std::uint64_t, TextureAsset>& textures() const {
-    return textures_;
+    return textures_.assets();
   }
+  [[nodiscard]] std::uint32_t texture_ref_count(std::uint64_t id) const {
+    return textures_.ref_count(id, materials_);
+  }
+  // 未被材质引用的贴图。换材质后不要自动调用：撤销还需要旧像素。
+  std::uint32_t remove_unused_textures() { return textures_.remove_unused(materials_); }
   // 打开渲染快照时换成快照里的贴图，丢掉默认材质的 512² 纹理。
   void replace_textures(std::unordered_map<std::uint64_t, TextureAsset> textures) {
-    textures_ = std::move(textures);
-    next_texture_id_ = 1;
-    for (const auto& [id, _] : textures_) {
-      next_texture_id_ = std::max(next_texture_id_, id + 1);
-    }
+    textures_.replace_all(std::move(textures));
   }
-  [[nodiscard]] std::uint64_t next_texture_id() const { return next_texture_id_; }
-  void set_next_texture_id(std::uint64_t id) {
-    next_texture_id_ = std::max<std::uint64_t>(1, id);
-  }
+  [[nodiscard]] std::uint64_t next_texture_id() const { return textures_.next_id(); }
+  void set_next_texture_id(std::uint64_t id) { textures_.set_next_id(id); }
 
   void clear_content() {
+    TessWorker::instance().cancel_all();
+    TessWorker::instance().wait_idle();
+    tess_cache_.clear();
+    import_shapes_.clear();
     scene_.clear();
     meshes_.clear();
     mesh_by_hash_.clear();
@@ -180,6 +187,18 @@ class Document {
 
   // 换实体网格：intern 新网，旧网若无引用则删。改参数 / 倒角必须走这里，禁止原地覆盖。
   bool replace_entity_mesh(std::uint64_t entity_id, MeshCpu cpu);
+
+  [[nodiscard]] TessCache& tess_cache() { return tess_cache_; }
+  [[nodiscard]] const TessCache& tess_cache() const { return tess_cache_; }
+  void bind_work_lod(std::uint64_t geometry_id);
+  void ensure_feature_coarse_lod(Entity& entity);
+  void invalidate_geometry_lods(std::uint64_t geometry_id);
+  void enqueue_lod_request(LodRequest request);
+  // Apply finished tessellate jobs; returns newly interned mesh asset ids to upload.
+  std::vector<std::uint64_t> apply_completed_tess_jobs();
+  [[nodiscard]] std::uint32_t pending_tessellate_count() const {
+    return tess_cache_.pending_count();
+  }
 
   // ===== 领域实体 API（封装 SceneNode，command/app 不直接碰节点）=====
 
@@ -267,8 +286,11 @@ class Document {
     if (node == nullptr || node->mesh_asset_id == 0) {
       return nullptr;
     }
-    return mesh(node->mesh_asset_id);
+    return resolved_mesh(node->mesh_asset_id);
   }
+
+  // Prefer tessellated Work/Close over the empty import shell.
+  [[nodiscard]] const MeshAsset* resolved_mesh(std::uint64_t geometry_id) const;
 
   // ===== 渲染快照（app 不再遍历 SceneNode）=====
   // 传入 frustum 时丢掉世界包围盒完全在视锥外的叶子；nullptr 保持全量清单。
@@ -283,7 +305,12 @@ class Document {
   }
 
   // ===== 导入网格（无实体，如 STEP/OBJ/glTF）=====
-  std::uint64_t add_import_mesh(std::string name, MeshCpu mesh, Mat4 transform, Vec3 color);
+  std::uint64_t add_import_mesh(std::string name, MeshCpu mesh, Mat4 transform, Vec3 color,
+                                std::uint64_t material_id = 0);
+  // CAD 导入：保留 Shape，首帧只放包围盒，按需 tessellate。
+  std::uint64_t add_import_shape(std::string name, std::unique_ptr<Shape> shape, Mat4 transform,
+                                Vec3 color);
+  [[nodiscard]] Shape* import_shape(std::uint64_t geometry_id);
 
   // Sync each node's local bounds from its mesh, then recompute the whole scene's
   // world transforms + world bounds. Call after load or any transform/parent edit.
@@ -321,6 +348,9 @@ class Document {
   void register_mesh_hash(MeshAsset& asset);
   void unregister_mesh_hash(const MeshAsset& asset);
   [[nodiscard]] bool mesh_referenced(std::uint64_t id) const;
+  void drop_unref_mesh(std::uint64_t id);
+  [[nodiscard]] std::function<Result<MeshCpu>()> make_tess_fn(std::uint64_t geometry_id,
+                                                             MeshLod lod) const;
 
   std::string name_;
   std::filesystem::path path_;
@@ -330,11 +360,12 @@ class Document {
   std::unordered_map<std::uint64_t, std::uint64_t> mesh_by_hash_;
   std::unordered_map<std::uint64_t, std::unique_ptr<Entity>> entities_;
   std::unordered_map<std::uint64_t, Material> materials_;
-  std::unordered_map<std::uint64_t, TextureAsset> textures_;
+  TextureLibrary textures_;
+  std::unordered_map<std::uint64_t, std::unique_ptr<Shape>> import_shapes_;
+  TessCache tess_cache_;
   std::optional<RenderScene> render_snapshot_;
   std::uint64_t next_mesh_id_ = 1;
   std::uint64_t next_material_id_ = 1;
-  std::uint64_t next_texture_id_ = 1;
   bool dirty_ = false;
 };
 

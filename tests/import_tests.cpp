@@ -99,6 +99,31 @@ void expect_cad_mesh(const Result<std::unique_ptr<Shape>>& shape, const char* la
   EXPECT_TRUE(mesh->bounds.valid()) << label;
 }
 
+TEST(MeshIo, ObjReadsUvAndAlbedoPath) {
+  const auto dir = temp_dir();
+  const auto obj = dir / "uvcube.obj";
+  const auto mtl = dir / "uvcube.mtl";
+  {
+    std::ofstream out(mtl);
+    ASSERT_TRUE(out);
+    out << "newmtl brick\nKd 1 0 0\nmap_Kd brick.png\n";
+  }
+  {
+    std::ofstream out(obj);
+    ASSERT_TRUE(out);
+    out << "mtllib uvcube.mtl\nusemtl brick\n";
+    out << "v 0 0 0\nv 1 0 0\nv 0 1 0\n";
+    out << "vt 0 0\nvt 1 0\nvt 0 1\n";
+    out << "f 1/1 2/2 3/3\n";
+  }
+  auto model = load_obj_model(obj);
+  ASSERT_TRUE(model) << model.error();
+  EXPECT_TRUE(model->mesh.has_texcoord);
+  ASSERT_FALSE(model->mesh.vertices.empty());
+  EXPECT_NEAR(model->mesh.vertices[1].uv.x, 1.f, 1e-5f);
+  EXPECT_NE(model->albedo_path.find("brick.png"), std::string::npos);
+}
+
 TEST(MeshIo, LoadsMinimalGlbTriangle) {
   const auto path = temp_dir() / "tri.glb";
   write_bytes(path, make_triangle_glb());

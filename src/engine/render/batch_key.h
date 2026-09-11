@@ -14,12 +14,13 @@ struct BatchKey {
   PipelineState* pipeline = nullptr;
   Texture* albedo = nullptr;
   Texture* normal = nullptr;
+  Texture* orm = nullptr;
   bool lines = false;
   bool transparent = false;
 
   [[nodiscard]] bool operator==(const BatchKey& o) const {
     return gpu_mesh_id == o.gpu_mesh_id && pipeline == o.pipeline && albedo == o.albedo &&
-           normal == o.normal && lines == o.lines && transparent == o.transparent;
+           normal == o.normal && orm == o.orm && lines == o.lines && transparent == o.transparent;
   }
 };
 
@@ -29,6 +30,7 @@ struct BatchKeyHash {
     h ^= std::hash<const void*>{}(k.pipeline) + 0x9e3779b9 + (h << 6) + (h >> 2);
     h ^= std::hash<const void*>{}(k.albedo) + 0x9e3779b9 + (h << 6) + (h >> 2);
     h ^= std::hash<const void*>{}(k.normal) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    h ^= std::hash<const void*>{}(k.orm) + 0x9e3779b9 + (h << 6) + (h >> 2);
     h ^= std::hash<bool>{}(k.lines) + 0x9e3779b9 + (h << 6) + (h >> 2);
     h ^= std::hash<bool>{}(k.transparent) + 0x9e3779b9 + (h << 6) + (h >> 2);
     return h;

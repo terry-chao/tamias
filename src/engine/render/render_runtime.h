@@ -6,7 +6,12 @@
 #include "engine/math/camera.h"
 #include "engine/render/material.h"
 #include "engine/render/debug_vertex_overlay.h"
+#include "engine/render/lod_mesh_set.h"
+#include "engine/render/lod_request.h"
+#include "engine/render/mesh_lod.h"
+#include "engine/render/render_frame_stats.h"
 #include "engine/render/render_types.h"
+#include "engine/render/resident_cache.h"
 
 #include <atomic>
 #include <condition_variable>
@@ -46,6 +51,8 @@ struct FrameSubmission {
   std::optional<Vec3> snap_point;              // 网格交点捕捉标记
   std::vector<Vec3> debug_line_segments;       // 调试 AABB 等，成对线段
   std::optional<DebugVertexOverlay> debug_vertex;  // 检查器点选的网格顶点
+  float fovy = 0.8f;
+  std::unordered_map<std::uint64_t, LodMeshSet> lod_sets;
   float clear_color[4] = {0.14f, 0.18f, 0.24f, 1.f};
 };
 
@@ -82,8 +89,13 @@ class RenderThread {
   // Upload mesh on the render thread and map it from a semantic asset id; returns
   // the assigned GPU mesh id. The semantic side refers to geometry by asset id.
   Result<std::uint64_t> upload_mesh(std::uint64_t asset_id, MeshCpu mesh);
-  // 上传纹理资产（幂等：已缓存则直接返回已有 GPU 纹理 id）。
+  void request_upload_mesh(std::uint64_t asset_id, MeshCpu mesh);
+  std::vector<LodRequest> take_lod_requests();
+  [[nodiscard]] RenderFrameStats last_stats() const;
+  // 上传纹理资产（幂等：同一 asset_id + generation 命中缓存则直接返回）。
   Result<std::uint64_t> upload_texture(std::uint64_t asset_id, TextureAsset asset);
+  // LRU 逐出的贴图资产 id；视口据此清 uploaded_textures_ 以便重新上传。
+  std::vector<std::uint64_t> take_evicted_texture_ids();
   void submit_frame(std::uint64_t channel_id, FrameSubmission frame);
   void resize_surface(std::uint64_t channel_id, NativeWindowHandle window, std::uint32_t w,
                       std::uint32_t h);
@@ -104,6 +116,7 @@ class RenderThread {
     std::unique_ptr<RenderNode> scene_root;
     std::uint64_t scene_generation = 0;
     std::unordered_map<std::uint64_t, TransformNode*> scene_nodes;
+    std::unordered_map<std::uint64_t, MeshLod> lod_by_node;
   };
 
   void thread_main();
@@ -111,6 +124,9 @@ class RenderThread {
   void drain_once();
   Result<void> ensure_pipelines();
   Result<void> draw_channel(std::uint64_t id, ChannelState& channel, const FrameSubmission& frame);
+  Result<std::uint64_t> upload_mesh_on_thread(std::uint64_t asset_id, MeshCpu mesh);
+  void evict_resident();
+  void evict_texture_resident();
 
   RenderDeviceConfig config_{};
   std::unique_ptr<RHIDevice> device_;
@@ -122,6 +138,8 @@ class RenderThread {
   std::unique_ptr<PipelineState> entity_line_pipeline_;
   std::unique_ptr<PipelineState> blend_pipeline_;
   GpuMesh axes_mesh_;
+  GpuMesh lod_box_mesh_;
+  std::uint64_t lod_box_gpu_id_ = 0;
   std::unique_ptr<ShaderModule> sky_vs_;
   std::unique_ptr<ShaderModule> sky_fs_;
   std::unique_ptr<PipelineState> sky_pipeline_;
@@ -133,10 +151,16 @@ class RenderThread {
   GpuMesh preview_line_mesh_;
   std::unordered_map<std::uint64_t, GpuMesh> meshes_;
   std::unordered_map<std::uint64_t, std::uint64_t> asset_to_gpu_;  // asset id -> gpu mesh id
+  ResidentCache resident_;
+  ResidentCache texture_resident_{512ull * 1024ull * 1024ull};
+  std::vector<LodRequest> pending_lod_requests_;
+  std::vector<std::uint64_t> pending_evicted_texture_ids_;
+  RenderFrameStats last_stats_;
   std::unordered_map<std::uint64_t, GpuTexture> textures_;
   std::unordered_map<std::uint64_t, std::uint64_t> texture_asset_to_gpu_;  // asset id -> gpu texture id
   std::unique_ptr<Texture> default_texture_;  // 1x1 白纹理，无贴图物体兜底
   std::unique_ptr<Texture> default_normal_;   // 1x1 平坦法线
+  std::unique_ptr<Texture> default_orm_;      // 1x1 AO=1 / rough≈0.6 / metal=0
   std::unique_ptr<Texture> ibl_irradiance_;
   std::unique_ptr<Texture> ibl_prefilter_;
   std::unique_ptr<Texture> ibl_brdf_lut_;
@@ -149,7 +173,7 @@ class RenderThread {
   std::uint64_t next_texture_id_ = 1;
   std::uint64_t next_channel_id_ = 1;
 
-  std::mutex mutex_;
+  mutable std::mutex mutex_;
   std::condition_variable cv_;
   std::thread thread_;
   std::atomic<bool> running_{false};

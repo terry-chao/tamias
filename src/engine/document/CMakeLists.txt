@@ -2,6 +2,7 @@ add_library(tamias_document STATIC
   scene.cpp
   document.cpp
   document_io.cpp
+  texture_library.cpp
   picking.cpp
   ${CMAKE_SOURCE_DIR}/src/bim/bim_model.cpp
   ${CMAKE_SOURCE_DIR}/src/bim/host_geometry.cpp

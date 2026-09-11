@@ -2,6 +2,7 @@
 
 #include "engine/core/fs_utf8.h"
 #include "engine/core/log.h"
+#include "engine/io/imported_model.h"
 
 #if !defined(__EMSCRIPTEN__)
 #if defined(_MSC_VER)
@@ -99,6 +100,9 @@ Vec3 parse_base_color_factor(const std::string& material_json) {
   if (bracket == std::string::npos) {
     return {1.f, 1.f, 1.f};
   }
+  if (bracket + 1 >= material_json.size()) {
+    return {1.f, 1.f, 1.f};
+  }
   char* end = nullptr;
   const float r = static_cast<float>(std::strtod(material_json.c_str() + bracket + 1, &end));
   if (!end) {
@@ -115,6 +119,44 @@ Vec3 parse_base_color_factor(const std::string& material_json) {
   return {r, g, b};
 }
 
+float parse_json_number(const std::string& json, std::string_view key, float fallback) {
+  const auto pos = json.find(key);
+  if (pos == std::string::npos) {
+    return fallback;
+  }
+  const auto colon = json.find(':', pos + key.size());
+  if (colon == std::string::npos) {
+    return fallback;
+  }
+  char* end = nullptr;
+  const float value = static_cast<float>(std::strtod(json.c_str() + colon + 1, &end));
+  if (end == json.c_str() + colon + 1) {
+    return fallback;
+  }
+  return value;
+}
+
+std::optional<int> parse_texture_index(const std::string& json, std::string_view key) {
+  const auto pos = json.find(key);
+  if (pos == std::string::npos) {
+    return std::nullopt;
+  }
+  const auto index_key = json.find("\"index\"", pos);
+  if (index_key == std::string::npos || index_key > pos + 120) {
+    return std::nullopt;
+  }
+  const auto colon = json.find(':', index_key);
+  if (colon == std::string::npos) {
+    return std::nullopt;
+  }
+  char* end = nullptr;
+  const int value = static_cast<int>(std::strtol(json.c_str() + colon + 1, &end, 10));
+  if (end == json.c_str() + colon + 1) {
+    return std::nullopt;
+  }
+  return value;
+}
+
 template <typename T>
 bool read_pod(std::istream& in, T& value) {
   in.read(reinterpret_cast<char*>(&value), sizeof(T));
@@ -122,7 +164,7 @@ bool read_pod(std::istream& in, T& value) {
 }
 
 // Minimal GLB loader: triangulated POSITION (+ optional NORMAL) meshes only.
-Result<MeshCpu> load_glb(const std::filesystem::path& path) {
+Result<ImportedModel> load_glb_model(const std::filesystem::path& path) {
   std::ifstream in(path, std::ios::binary);
   if (!in) {
     return Err("failed to open GLB");
@@ -205,13 +247,21 @@ Result<MeshCpu> load_glb(const std::filesystem::path& path) {
   }
 
   Vec3 base_color{1.f, 1.f, 1.f};
-  // Look for "material" on the first primitive (near POSITION / indices).
+  float roughness = 0.6f;
+  float metallic = 0.0f;
+  std::optional<std::string> material_json;
   const auto prim_window_end = std::min(json.size(), indices_key + 120);
   const auto material_key = json.find("\"material\"", meshes_pos);
   if (material_key != std::string::npos && material_key < prim_window_end) {
     if (const auto mat_idx = find_number_after("\"material\"", material_key)) {
       if (auto mat_obj = nth_json_object(json, "\"materials\"", static_cast<int>(*mat_idx))) {
+        material_json = *mat_obj;
         base_color = parse_base_color_factor(*mat_obj);
+        const auto pbr = mat_obj->find("\"pbrMetallicRoughness\"");
+        if (pbr != std::string::npos) {
+          roughness = parse_json_number(mat_obj->substr(pbr), "\"roughnessFactor\"", roughness);
+          metallic = parse_json_number(mat_obj->substr(pbr), "\"metallicFactor\"", metallic);
+        }
       }
     }
   }
@@ -395,8 +445,52 @@ Result<MeshCpu> load_glb(const std::filesystem::path& path) {
   }
 
   recompute_bounds(mesh);
+  ImportedModel model;
+  model.mesh = std::move(mesh);
+  model.base_color = base_color;
+  model.roughness = roughness;
+  model.metallic = metallic;
+  if (material_json) {
+    auto image_bytes = [&](int texture_index) -> std::vector<std::uint8_t> {
+      auto tex_obj = nth_json_object(json, "\"textures\"", texture_index);
+      if (!tex_obj) {
+        return {};
+      }
+      const int source = static_cast<int>(parse_json_number(*tex_obj, "\"source\"", -1.f));
+      if (source < 0) {
+        return {};
+      }
+      auto img_obj = nth_json_object(json, "\"images\"", source);
+      if (!img_obj) {
+        return {};
+      }
+      const int view = static_cast<int>(parse_json_number(*img_obj, "\"bufferView\"", -1.f));
+      if (view < 0) {
+        return {};
+      }
+      std::uint64_t off = 0, len = 0;
+      if (!buffer_view_offset(view, off, len) || off + len > bin.size()) {
+        return {};
+      }
+      const auto* begin = reinterpret_cast<const std::uint8_t*>(bin.data() + off);
+      return {begin, begin + static_cast<std::size_t>(len)};
+    };
+    if (auto idx = parse_texture_index(*material_json, "\"baseColorTexture\"")) {
+      model.albedo_bytes = image_bytes(*idx);
+    }
+    if (auto idx = parse_texture_index(*material_json, "\"normalTexture\"")) {
+      model.normal_bytes = image_bytes(*idx);
+    }
+    std::optional<int> orm_idx = parse_texture_index(*material_json, "\"metallicRoughnessTexture\"");
+    if (!orm_idx) {
+      orm_idx = parse_texture_index(*material_json, "\"occlusionTexture\"");
+    }
+    if (orm_idx) {
+      model.orm_bytes = image_bytes(*orm_idx);
+    }
+  }
   log_info("Loaded GLB mesh");
-  return mesh;
+  return model;
 }
 
 }  // namespace
@@ -530,7 +624,7 @@ Result<MeshCpu> load_mesh_bytes(std::span<const std::byte> bytes, std::string_vi
   return Err("unsupported in-memory mesh format: " + std::string(extension));
 }
 
-Result<MeshCpu> load_obj(const std::filesystem::path& path) {
+Result<ImportedModel> load_obj_model(const std::filesystem::path& path) {
 #if defined(__EMSCRIPTEN__)
   std::ifstream in(path, std::ios::binary);
   if (!in) {
@@ -546,9 +640,14 @@ Result<MeshCpu> load_obj(const std::filesystem::path& path) {
       return Err("failed to read OBJ: " + path_to_utf8(path));
     }
   }
-  return load_obj_bytes(bytes);
+  auto loaded = load_obj_bytes(bytes);
+  if (!loaded) {
+    return Err(loaded.error());
+  }
+  ImportedModel model;
+  model.mesh = std::move(*loaded);
+  return model;
 #else
-  // Optional MTL so samples without companion .mtl still load.
   auto result = rapidobj::ParseFile(path, rapidobj::MaterialLibrary::Default(rapidobj::Load::Optional));
   if (result.error) {
     return Err("OBJ load failed: " + result.error.code.message());
@@ -557,9 +656,34 @@ Result<MeshCpu> load_obj(const std::filesystem::path& path) {
     return Err("OBJ triangulate failed");
   }
 
-  MeshCpu mesh;
+  ImportedModel model;
+  MeshCpu& mesh = model.mesh;
   const auto& positions = result.attributes.positions;
   const auto& normals = result.attributes.normals;
+  const auto& texcoords = result.attributes.texcoords;
+  const auto dir = path.parent_path();
+  auto resolve_tex = [&](const std::string& name) -> std::string {
+    if (name.empty()) {
+      return {};
+    }
+    return path_to_utf8(dir / name);
+  };
+  if (!result.materials.empty()) {
+    const auto& mtl = result.materials.front();
+    model.base_color = {mtl.diffuse[0], mtl.diffuse[1], mtl.diffuse[2]};
+    if (mtl.roughness > 0.f) {
+      model.roughness = mtl.roughness;
+    }
+    model.metallic = mtl.metallic;
+    if (mtl.dissolve > 0.f && mtl.dissolve < 1.f) {
+      model.opacity = mtl.dissolve;
+    }
+    model.albedo_path = resolve_tex(mtl.diffuse_texname);
+    model.normal_path = resolve_tex(!mtl.normal_texname.empty() ? mtl.normal_texname : mtl.bump_texname);
+    if (!mtl.metallic_texname.empty() && mtl.metallic_texname == mtl.roughness_texname) {
+      model.orm_path = resolve_tex(mtl.metallic_texname);
+    }
+  }
   for (const auto& shape : result.shapes) {
     std::size_t index_offset = 0;
     for (std::size_t fi = 0; fi < shape.mesh.num_face_vertices.size(); ++fi) {
@@ -587,6 +711,12 @@ Result<MeshCpu> load_obj(const std::filesystem::path& path) {
                            normals[static_cast<std::size_t>(idx.normal_index) * 3 + 1],
                            normals[static_cast<std::size_t>(idx.normal_index) * 3 + 2]};
         }
+        if (idx.texcoord_index >= 0 &&
+            static_cast<std::size_t>(idx.texcoord_index) * 2 + 1 < texcoords.size()) {
+          tri[v].uv = {texcoords[static_cast<std::size_t>(idx.texcoord_index) * 2 + 0],
+                       1.f - texcoords[static_cast<std::size_t>(idx.texcoord_index) * 2 + 1]};
+          mesh.has_texcoord = true;
+        }
         tri[v].color = face_color;
       }
       if (length(tri[0].normal) < 1e-6f) {
@@ -608,16 +738,47 @@ Result<MeshCpu> load_obj(const std::filesystem::path& path) {
     return Err("OBJ contained no triangles");
   }
   recompute_bounds(mesh);
-  return mesh;
+  return model;
 #endif
+}
+
+Result<MeshCpu> load_obj(const std::filesystem::path& path) {
+  auto model = load_obj_model(path);
+  if (!model) {
+    return Err(model.error());
+  }
+  return std::move(model->mesh);
 }
 
 Result<MeshCpu> load_gltf(const std::filesystem::path& path) {
   const auto ext = path_extension_lower(path);
   if (ext == ".glb") {
-    return load_glb(path);
+    auto model = load_glb_model(path);
+    if (!model) {
+      return Err(model.error());
+    }
+    return std::move(model->mesh);
   }
   return Err("ASCII .gltf is not supported yet; please use .glb or .obj");
+}
+
+Result<ImportedModel> load_gltf_model(const std::filesystem::path& path) {
+  const auto ext = path_extension_lower(path);
+  if (ext == ".glb") {
+    return load_glb_model(path);
+  }
+  return Err("ASCII .gltf is not supported yet; please use .glb or .obj");
+}
+
+Result<ImportedModel> load_mesh_model(const std::filesystem::path& path) {
+  const auto ext = path_extension_lower(path);
+  if (ext == ".obj") {
+    return load_obj_model(path);
+  }
+  if (ext == ".gltf" || ext == ".glb") {
+    return load_gltf_model(path);
+  }
+  return Err("unsupported mesh format: " + ext);
 }
 
 Result<MeshCpu> load_mesh_file(const std::filesystem::path& path) {

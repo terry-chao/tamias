@@ -3,8 +3,10 @@
 #include "engine/core/log.h"
 #include "engine/render/batch_key.h"
 #include "engine/render/gpu_instance.h"
+#include "engine/render/mesh_lod.h"
 
 #include <cstddef>
+#include <optional>
 #include <span>
 #include <string>
 
@@ -70,6 +72,8 @@ void BindMaterialCommand::record(SceneGraphDrawContext& ctx) {
   ctx.material_opacity = opacity;
   ctx.material_albedo_texture_id = albedo_texture_id;
   ctx.material_normal_texture_id = normal_texture_id;
+  ctx.material_orm_texture_id = orm_texture_id;
+  ctx.material_tex = tex;
 }
 
 std::unique_ptr<StateCommand> BindMaterialCommand::clone() const {
@@ -129,23 +133,105 @@ void RecordCommands::apply(DrawableNode& node) {
     return;  // 按语义节点 id 隐藏（视口 floor/类别/isolate 过滤）
   }
 
-  const Mat4 world = matrix_stack_.back();
+  const float projected_px = projected_aabb_pixels(node.bounds, ctx_.eye_position, ctx_.fovy,
+                                                   ctx_.framebuffer_height);
+  const bool lod_enabled = ctx_.lod_sets != nullptr || ctx_.lod_box_mesh != nullptr;
+  std::optional<MeshLod> previous;
+  MeshLod lod = MeshLod::Work;
+  if (lod_enabled) {
+    if (ctx_.lod_hysteresis != nullptr) {
+      const auto it = ctx_.lod_hysteresis->find(node.node_id);
+      if (it != ctx_.lod_hysteresis->end()) {
+        previous = it->second;
+      }
+    }
+    lod = select_mesh_lod(projected_px, previous, ctx_.selected, ctx_.lines);
+    if (ctx_.lod_hysteresis != nullptr) {
+      (*ctx_.lod_hysteresis)[node.node_id] = lod;
+    }
+    if (mesh_lod_skip_draw(projected_px, ctx_.selected)) {
+      return;
+    }
+  }
 
-  // 解析网格资产：asset id -> gpu mesh id -> GpuMesh。
+  Mat4 world = matrix_stack_.back();
+
+  // 解析网格资产：asset id -> gpu mesh id -> GpuMesh。LOD 在录制期选档，不改场景图。
   if (ctx_.asset_to_gpu == nullptr || ctx_.meshes == nullptr) {
     return;
   }
-  const auto gpu_it = ctx_.asset_to_gpu->find(node.mesh_asset_id);
-  if (gpu_it == ctx_.asset_to_gpu->end()) {
-    return;
-  }
-  const auto mesh_it = ctx_.meshes->find(gpu_it->second);
-  if (mesh_it == ctx_.meshes->end()) {
-    return;
-  }
-  const GpuMesh& mesh = mesh_it->second;
 
-  const bool as_lines = ctx_.lines || mesh.line_list;
+  const auto lod_asset = [&](MeshLod level) -> std::uint64_t {
+    if (ctx_.lod_sets != nullptr) {
+      const auto it = ctx_.lod_sets->find(node.mesh_asset_id);
+      if (it != ctx_.lod_sets->end()) {
+        const std::uint64_t id = it->second.asset(level);
+        if (id != 0) {
+          return id;
+        }
+      }
+    }
+    return level == MeshLod::Work ? node.mesh_asset_id : 0;
+  };
+  const auto gpu_for_asset = [&](std::uint64_t asset_id)
+      -> std::pair<const GpuMesh*, std::uint64_t> {
+    if (asset_id == 0) {
+      return {nullptr, 0};
+    }
+    const auto gpu_it = ctx_.asset_to_gpu->find(asset_id);
+    if (gpu_it == ctx_.asset_to_gpu->end()) {
+      return {nullptr, 0};
+    }
+    const auto mesh_it = ctx_.meshes->find(gpu_it->second);
+    if (mesh_it == ctx_.meshes->end()) {
+      return {nullptr, 0};
+    }
+    return {&mesh_it->second, gpu_it->second};
+  };
+  const auto request_lod = [&](MeshLod level) {
+    if (ctx_.lod_requests == nullptr || level == MeshLod::Box) {
+      return;
+    }
+    ctx_.lod_requests->push_back(LodRequest{node.mesh_asset_id, level});
+  };
+
+  const GpuMesh* mesh = nullptr;
+  std::uint64_t gpu_mesh_id = 0;
+  MeshLod draw_lod = lod;
+  if (draw_lod == MeshLod::Box && ctx_.lod_box_mesh == nullptr) {
+    draw_lod = MeshLod::Work;  // 无 L0 盒时保持旧路径：直接画工作网
+  }
+  if (draw_lod == MeshLod::Box) {
+    world = lod_box_world_matrix(node.bounds);
+    mesh = ctx_.lod_box_mesh;
+    gpu_mesh_id = ctx_.lod_box_gpu_id;
+  } else {
+    auto found = gpu_for_asset(lod_asset(draw_lod));
+    if (found.first == nullptr && draw_lod == MeshLod::Work) {
+      request_lod(MeshLod::Work);
+      found = gpu_for_asset(lod_asset(MeshLod::Coarse));
+    } else if (found.first == nullptr && draw_lod == MeshLod::Coarse) {
+      request_lod(MeshLod::Coarse);
+      found = gpu_for_asset(lod_asset(MeshLod::Work));
+    }
+    if (found.first != nullptr) {
+      mesh = found.first;
+      gpu_mesh_id = found.second;
+      if (gpu_for_asset(lod_asset(draw_lod)).first == nullptr) {
+        request_lod(draw_lod);
+      }
+    } else if (ctx_.lod_box_mesh != nullptr) {
+      request_lod(draw_lod);
+      world = lod_box_world_matrix(node.bounds);
+      mesh = ctx_.lod_box_mesh;
+      gpu_mesh_id = ctx_.lod_box_gpu_id;
+    }
+  }
+  if (mesh == nullptr) {
+    return;
+  }
+
+  const bool as_lines = ctx_.lines || mesh->line_list;
   const bool use_material = !as_lines && ctx_.mode_value > 1.5f;
   const bool transmissive = use_material && ctx_.material_opacity < 0.999f;
   if (ctx_.transparent_pass) {
@@ -158,8 +244,10 @@ void RecordCommands::apply(DrawableNode& node) {
 
   Texture* bound_albedo = ctx_.default_texture;
   Texture* bound_normal = ctx_.default_normal != nullptr ? ctx_.default_normal : ctx_.default_texture;
+  Texture* bound_orm = ctx_.default_orm != nullptr ? ctx_.default_orm : ctx_.default_texture;
   bool has_albedo = false;
   bool has_normal = false;
+  bool has_orm = false;
   if (use_material && ctx_.texture_asset_to_gpu != nullptr && ctx_.textures != nullptr) {
     if (ctx_.material_albedo_texture_id != 0) {
       const auto tex_it = ctx_.texture_asset_to_gpu->find(ctx_.material_albedo_texture_id);
@@ -178,6 +266,16 @@ void RecordCommands::apply(DrawableNode& node) {
         if (gtex_it != ctx_.textures->end()) {
           bound_normal = gtex_it->second.texture.get();
           has_normal = true;
+        }
+      }
+    }
+    if (ctx_.material_orm_texture_id != 0) {
+      const auto tex_it = ctx_.texture_asset_to_gpu->find(ctx_.material_orm_texture_id);
+      if (tex_it != ctx_.texture_asset_to_gpu->end()) {
+        const auto gtex_it = ctx_.textures->find(tex_it->second);
+        if (gtex_it != ctx_.textures->end()) {
+          bound_orm = gtex_it->second.texture.get();
+          has_orm = true;
         }
       }
     }
@@ -213,20 +311,26 @@ void RecordCommands::apply(DrawableNode& node) {
       make_gpu_instance(world, color, use_material ? ctx_.material_opacity : 1.f,
                         use_material ? ctx_.material_roughness : 0.6f,
                         use_material ? ctx_.material_metallic : 0.f, ctx_.selected);
+  if (use_material) {
+    apply_texture_transform(instance, ctx_.material_tex);
+  }
 
   PendingBatch batch{};
-  batch.key.gpu_mesh_id = gpu_it->second;
+  batch.key.gpu_mesh_id = gpu_mesh_id;
   batch.key.pipeline = pipeline;
   batch.key.albedo = bound_albedo;
   batch.key.normal = bound_normal;
+  batch.key.orm = bound_orm;
   batch.key.lines = as_lines;
   batch.key.transparent = transmissive;
   batch.pipeline = pipeline;
   batch.albedo = bound_albedo;
   batch.normal = bound_normal;
-  batch.mesh = &mesh;
+  batch.orm = bound_orm;
+  batch.mesh = mesh;
   batch.has_albedo = has_albedo;
   batch.has_normal = has_normal;
+  batch.has_orm = has_orm;
   batch.as_lines = as_lines;
 
   if (transmissive) {
@@ -261,6 +365,9 @@ void RecordCommands::flush_batch(PendingBatch& batch) {
   }
   if (batch.normal != nullptr) {
     ctx_.command_list->set_texture(*batch.normal, kTextureSlotNormal);
+  }
+  if (batch.orm != nullptr) {
+    ctx_.command_list->set_texture(*batch.orm, kTextureSlotOrm);
   }
 
   if (ctx_.recorded_instances != nullptr) {
@@ -300,7 +407,7 @@ void RecordCommands::flush_batch(PendingBatch& batch) {
   pc.light_dir_selected[0] = 0.45f;
   pc.light_dir_selected[1] = 0.35f;
   pc.light_dir_selected[2] = 0.82f;
-  pc.light_dir_selected[3] = 0.f;
+  pc.light_dir_selected[3] = batch.has_orm ? 1.f : 0.f;
   pc.eye_pos_mode[0] = ctx_.eye_position.x;
   pc.eye_pos_mode[1] = ctx_.eye_position.y;
   pc.eye_pos_mode[2] = ctx_.eye_position.z;
@@ -316,6 +423,12 @@ void RecordCommands::flush_batch(PendingBatch& batch) {
   draw.index_count = batch.mesh->index_count;
   draw.instance_count = static_cast<std::uint32_t>(batch.instances.size());
   ctx_.command_list->draw_indexed(draw);
+  if (ctx_.stats != nullptr) {
+    ++ctx_.stats->draws;
+    if (!batch.as_lines) {
+      ctx_.stats->triangles += (batch.mesh->index_count / 3) * draw.instance_count;
+    }
+  }
 }
 
 void RecordCommands::flush_all() {
@@ -340,6 +453,8 @@ void bind_item_material(BindMaterialCommand& material, const SceneDrawItem& item
   material.opacity = item.opacity;
   material.albedo_texture_id = item.albedo_texture_id;
   material.normal_texture_id = item.normal_texture_id;
+  material.orm_texture_id = item.orm_texture_id;
+  material.tex = item.tex;
 }
 
 // 单个 item 的子树：Transform(world) → StateGroup(材质/选中/线条) → Drawable。

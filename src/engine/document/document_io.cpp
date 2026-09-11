@@ -7,6 +7,7 @@
 #include "engine/graphics/mesh.h"
 #include "engine/io/binary_archive.h"
 #include "engine/io/mesh_binary.h"
+#include "engine/render/builtin_textures.h"
 #include "entity/entity_grip.h"
 
 #include <algorithm>
@@ -20,12 +21,15 @@ namespace tamias {
 namespace {
 
 constexpr char kMagic[4] = {'T', 'M', 'A', 'S'};
-constexpr std::uint32_t kFormatVersion = 10;
+constexpr std::uint32_t kFormatVersion = 13;
 constexpr std::uint32_t kMinFormatVersion = 5;
 constexpr std::uint32_t kGripsFormatVersion = 7;
 constexpr std::uint32_t kLocationFormatVersion = 8;
 constexpr std::uint32_t kSrgbTextureFormatVersion = 9;
 constexpr std::uint32_t kOpacityFormatVersion = 10;
+constexpr std::uint32_t kTextureMetaFormatVersion = 11;
+constexpr std::uint32_t kTextureTransformFormatVersion = 12;
+constexpr std::uint32_t kBuiltinOrmFormatVersion = 13;
 
 constexpr std::uint32_t fourcc(char a, char b, char c, char d) {
   return static_cast<std::uint32_t>(static_cast<std::uint8_t>(a)) |
@@ -317,7 +321,28 @@ Result<void> write_material(BinaryWriter& w, const Material& m) {
   if (auto r = w.write_u64(m.normal_texture_id); !r) {
     return r;
   }
-  return w.write_f32(m.opacity);
+  if (auto r = w.write_f32(m.opacity); !r) {
+    return r;
+  }
+  if (auto r = w.write_f32(m.tex.scale.x); !r) {
+    return r;
+  }
+  if (auto r = w.write_f32(m.tex.scale.y); !r) {
+    return r;
+  }
+  if (auto r = w.write_f32(m.tex.offset.x); !r) {
+    return r;
+  }
+  if (auto r = w.write_f32(m.tex.offset.y); !r) {
+    return r;
+  }
+  if (auto r = w.write_f32(m.tex.rotation); !r) {
+    return r;
+  }
+  if (auto r = w.write_f32(m.tex.world_scale); !r) {
+    return r;
+  }
+  return w.write_u64(m.orm_texture_id);
 }
 
 Result<void> read_material(BinaryReader& r, Material& m, std::uint32_t version) {
@@ -370,6 +395,44 @@ Result<void> read_material(BinaryReader& r, Material& m, std::uint32_t version) 
     m.metallic = 0.f;
     m.base_color = {0.52f, 0.76f, 0.84f};
   }
+  m.tex = TextureTransform{};
+  if (version >= kTextureTransformFormatVersion) {
+    auto sx = r.read_f32();
+    if (!sx) {
+      return Err(sx.error());
+    }
+    auto sy = r.read_f32();
+    if (!sy) {
+      return Err(sy.error());
+    }
+    auto ox = r.read_f32();
+    if (!ox) {
+      return Err(ox.error());
+    }
+    auto oy = r.read_f32();
+    if (!oy) {
+      return Err(oy.error());
+    }
+    auto rot = r.read_f32();
+    if (!rot) {
+      return Err(rot.error());
+    }
+    auto world = r.read_f32();
+    if (!world) {
+      return Err(world.error());
+    }
+    m.tex.scale = {*sx, *sy};
+    m.tex.offset = {*ox, *oy};
+    m.tex.rotation = *rot;
+    m.tex.world_scale = *world;
+  }
+  if (version >= kBuiltinOrmFormatVersion) {
+    auto orm = r.read_u64();
+    if (!orm) {
+      return Err(orm.error());
+    }
+    m.orm_texture_id = *orm;
+  }
   return {};
 }
 
@@ -383,15 +446,32 @@ Result<void> write_texture_asset(BinaryWriter& w, const TextureAsset& t) {
   if (auto r = w.write_u32(t.height); !r) {
     return r;
   }
-  if (auto r = w.write_u64(static_cast<std::uint64_t>(t.rgba.size())); !r) {
+  const bool skip_pixels = omit_builtin_pixels(t);
+  const std::uint64_t nbytes = skip_pixels ? 0 : static_cast<std::uint64_t>(t.rgba.size());
+  if (auto r = w.write_u64(nbytes); !r) {
     return r;
   }
-  if (!t.rgba.empty()) {
+  if (nbytes > 0) {
     if (auto r = w.write_bytes(t.rgba.data(), t.rgba.size()); !r) {
       return r;
     }
   }
-  return w.write_u8(t.srgb ? 1 : 0);
+  if (auto r = w.write_u8(t.srgb ? 1 : 0); !r) {
+    return r;
+  }
+  if (auto r = w.write_string(t.name); !r) {
+    return r;
+  }
+  if (auto r = w.write_string(t.source_path); !r) {
+    return r;
+  }
+  if (auto r = w.write_u64(t.content_hash); !r) {
+    return r;
+  }
+  if (auto r = w.write_u8(static_cast<std::uint8_t>(t.usage)); !r) {
+    return r;
+  }
+  return w.write_string(t.builtin_key);
 }
 
 Result<void> read_texture_asset(BinaryReader& r, TextureAsset& t, std::uint32_t version) {
@@ -430,6 +510,46 @@ Result<void> read_texture_asset(BinaryReader& r, TextureAsset& t, std::uint32_t 
       return Err(flag.error());
     }
     t.srgb = *flag != 0;
+  }
+  t.name.clear();
+  t.source_path.clear();
+  t.content_hash = 0;
+  t.usage = TextureUsage::Unknown;
+  t.generation = 1;
+  if (version >= kTextureMetaFormatVersion) {
+    auto name = r.read_string();
+    if (!name) {
+      return Err(name.error());
+    }
+    t.name = std::move(*name);
+    auto source = r.read_string();
+    if (!source) {
+      return Err(source.error());
+    }
+    t.source_path = std::move(*source);
+    auto hash = r.read_u64();
+    if (!hash) {
+      return Err(hash.error());
+    }
+    t.content_hash = *hash;
+    auto usage = r.read_u8();
+    if (!usage) {
+      return Err(usage.error());
+    }
+    t.usage = static_cast<TextureUsage>(*usage);
+  } else {
+    t.usage = t.srgb ? TextureUsage::Albedo : TextureUsage::Normal;
+  }
+  t.builtin_key.clear();
+  if (version >= kBuiltinOrmFormatVersion) {
+    auto key = r.read_string();
+    if (!key) {
+      return Err(key.error());
+    }
+    t.builtin_key = std::move(*key);
+  }
+  if (!hydrate_builtin_texture(t)) {
+    stamp_builtin_key(t);
   }
   return {};
 }
@@ -678,10 +798,13 @@ Result<void> write_scene_node(BinaryWriter& w, const SceneNode& node) {
   if (auto r = write_mat4(w, node.local_transform); !r) {
     return r;
   }
-  return write_vec3(w, node.color);
+  if (auto r = write_vec3(w, node.color); !r) {
+    return r;
+  }
+  return w.write_u64(node.material_id);
 }
 
-Result<void> read_scene_node(BinaryReader& r, SceneNode& node) {
+Result<void> read_scene_node(BinaryReader& r, SceneNode& node, std::uint32_t version) {
   auto id = r.read_u64();
   if (!id) {
     return Err(id.error());
@@ -706,7 +829,18 @@ Result<void> read_scene_node(BinaryReader& r, SceneNode& node) {
   if (auto res = read_mat4(r, node.local_transform); !res) {
     return res;
   }
-  return read_vec3(r, node.color);
+  if (auto res = read_vec3(r, node.color); !res) {
+    return res;
+  }
+  node.material_id = 0;
+  if (version >= kBuiltinOrmFormatVersion) {
+    auto mat = r.read_u64();
+    if (!mat) {
+      return Err(mat.error());
+    }
+    node.material_id = *mat;
+  }
+  return {};
 }
 
 Result<void> write_viewport(BinaryWriter& w, const ViewportState& vp) {
@@ -940,7 +1074,7 @@ Result<Document> read_document_body(BinaryReader& r) {
   }
   for (std::uint64_t i = 0; i < *node_count; ++i) {
     SceneNode node{};
-    if (auto res = read_scene_node(r, node); !res) {
+    if (auto res = read_scene_node(r, node, kFormatVersion); !res) {
       return Err(res.error());
     }
     document.scene().insert_node(std::move(node));
@@ -1358,7 +1492,7 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes) 
       nodes.reserve(static_cast<std::size_t>(*count));
       for (std::uint64_t n = 0; n < *count; ++n) {
         SceneNode node{};
-        if (auto res = read_scene_node(chunk_r, node); !res) {
+        if (auto res = read_scene_node(chunk_r, node, *version); !res) {
           return Err(res.error());
         }
         nodes.push_back(std::move(node));

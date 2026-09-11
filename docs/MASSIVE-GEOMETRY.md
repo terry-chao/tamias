@@ -13,9 +13,9 @@
 | 问题 | 结论 |
 |---|---|
 | 几十亿三角能塞进 GPU 吗？ | **不能。** 以 Tamias 当前 `Vertex`（44 字节）计，10 亿三角即使焊接后也是几十 GB，工作站显存装不下，更不可能 CPU+GPU 各留一份。 |
-| Tamias 现在会先卡在哪？ | **Draw call**，不是三角本身。`RecordCommands` 对每个可见叶子一次 `draw_indexed`；RHI 已有 `instance_count` 但未用。一万根同型号柱 = 一万次提交。 |
+| Tamias 现在会先卡在哪？ | **语义树规模与 BVH 视锥二期**，不是「没合批」。G1 已 intern + GPU instancing；G3 录制期选档；G4 异步 upload + 显存 LRU。一万根同型号柱近处 1 次 draw。 |
 | 几何源头该是什么？ | **BRep / 特征树是真相，三角是缓存。** CAD 比游戏更适合「按屏幕误差重离散」，不必先上 Nanite。 |
-| 渲染侧该拿什么？ | 仍是展平投影 + 加速结构。**不要把语义树复制进 GPU。** 空间 BVH、实例表、LOD cluster 都不是场景图。 |
+| 渲染侧该拿什么？ | 仍是展平投影 + 加速结构。**不要把语义树复制进 GPU。LOD 不是场景图节点。** 空间 BVH、实例表、LOD cluster 都不是场景图。 |
 | 一帧的硬顶是什么？ | **驻留三角受屏幕约束**（约 1000–3000 万提交、2000 次以内 draw），模型规模无上限，靠流式 + LOD。 |
 
 ---
@@ -36,19 +36,19 @@
 
 ## 2. 贴着现有代码：现在会在哪爆
 
-| 环节 | 现状 | 几十亿时发生什么 |
+| 环节 | 现状 | 几十亿时还缺什么 |
 |---|---|---|
-| 离散 | `BRepMesh_IncrementalMesh` 固定 deflection（特征默认 0.05，导入 0.1） | 整栋楼按近距精度三角化；OCCT **已经按 Face 出网**，随后被拍扁成一份 `MeshCpu` |
-| 资产 | 一节点一份 `MeshAsset`；`add_import_mesh` 不共享 | 一万根相同柱 = 一万份 CPU 网格 + 一万份 GPU buffer |
+| 离散 | 特征预 intern L1（粗 deflection）；STEP/IGES/BREP 开档只算 `Shape::bounds()`，按 `LodRequest` 在 OCCT 单 worker 里懒离散 | 隐藏楼层不打网已落地；整网 L1/L2，Face cluster 只留了范围，尚未按面流式 |
+| 资产 | `intern_mesh` 按指纹共享；`TessCache` 把 `(geometry_id, MeshLod)` 映射到具体 `MeshAsset` | 三角汤（demo cube / 已拍扁导入网）不能重离散，只有 L0 + 原网 |
 | 语义树 | `Scene::find` 线性扫；`recompute_world()` 全量 | 十万节点时，改一根柱也扫全树 |
-| 展平 | `render_items()` 扫全部有网格的节点，一期只丢「整盒在视锥外」 | 树扁（墙全 `parent=0`）时仍是 O(构件数)；清单本身可以上百万条 |
-| 录制 | `RecordCommands::apply(Drawable)` 一叶子一次 `draw_indexed` | GPU 还没忙，CPU 已经被 draw call 打死 |
-| 上传 | `upload_mesh` 进渲染线程队列，**阻塞 UI 直到写完** | 打开大 STEP 时界面冻住 |
-| 驻留 | `meshes_` 只增不淘汰；`MeshCpu` 永远留在 Document | CPU 一份 + GPU 一份，内存先于帧率爆 |
-| 拾取 | 物体级 BVH，叶子再扫该网格全部三角 | 单个 5000 万三角零件点选会卡；拾取树不参与绘制剔除（[视锥剔除](FRUSTUM-CULLING.md) 三期才复用） |
-| RHI | `DrawIndexedDesc.instance_count` 已有，默认 1 | 合批的挂钩已经留了，渲染侧没接 |
+| 展平 | `render_items()` 全量清单（无视锥），好让留存树完整 | 树扁时仍是 O(构件数)；清单本身可以上百万条 |
+| 录制 | `RecordCommands` 视锥 + 隐藏 + 屏幕误差选档；合批键是 `gpu_mesh_id`，同几何同档 instance | 远近不同档自然拆成两批；G6 MDI 还没做 |
+| 上传 | `request_upload_mesh` 提交即返回；缺网画已驻留的更粗档或 L0 盒 | 打开大 STEP 首帧出盒/粗网，L2 流式补 |
+| 驻留 | `ResidentCache` 默认 2GB LRU，淘汰 GPU buffer | 非编辑对象的 CPU `MeshCpu` 仍留在 Document |
+| 拾取 | 物体级 BVH；叶子打 `resolved_mesh`（Work/Close，不打 L0 盒当边） | 单个 5000 万三角零件点选仍会卡；拾取树不参与绘制剔除 |
+| RHI | `instance_count` + instance 缓冲已接 | G6 indirect 仍未做 |
 
-一句话：**当前路径按「每个实体一份全精度三角 + 每帧每个可见实体一次 draw」设计，这个假设在 BIM 一万构件就会破，更不必说「几十亿三角」。**
+一句话：**G1/G3/G4 已经把「一物体一份全精度网 + 一次 draw + 阻塞 upload」拆开了。** 剩下的硬顶是扁平语义树、无 BRep 的超大三角汤（G5）、以及 CPU 录两万次 draw（G6）。
 
 ---
 
@@ -129,35 +129,38 @@ BIM 里「三角多」经常是「同一段墙截面复制了八千次」。G1 �
 
 目标：镜头在一层房间里，整栋十万构件 → 可见集合几百到几千。
 
-### G3 自适应离散（CAD 独有，比 Nanite 更对口）
+### G3 自适应离散（已落地选档 + 懒离散；Face 流式后做）
 
-固定 `deflection = 0.05` 是近距编辑精度。两百米外的厂房用这个值，等于主动制造几十亿三角。
+**LOD 不是场景图节点，也不是 `SceneNode` 字段。** `mesh_asset_id` 仍是几何身份；相机一动换网如果写进 `render_items()` / 脏标记，留存树每帧都会被打脏。档次选择发生在 `RecordCommands`（已有 `eye_position`、视锥、`Drawable.bounds`）。合批键已经是 `gpu_mesh_id`：同几何同档仍 instance；远近不同档自然拆成两批。
 
-屏幕空间误差：
+固定 `deflection = 0.05` 只作为 **L2 工作网**。屏幕误差（与 `grid_snap_world_radius` 同源）：
 
 ```
-linear_deflection ≈ pixel_error * world_size_of_one_pixel
-world_size_of_one_pixel = 2 * distance * tan(fov/2) / framebuffer_height
+world_per_pixel ≈ 2 * tan(fovy/2) * dist(eye, aabb_center) / framebuffer_height
+projected_px ≈ aabb_world_short_edge / world_per_pixel
 ```
 
-落地形态：
+落地档次（离散四档，不用每帧连续 deflection）：
 
 | LOD | 何时 | 怎么来 |
 |---|---|---|
-| L0 包围盒 / 简化体 | 投影 < ~4 px | 不用三角，画 AABB 或预计算凸包 |
-| L1 粗网 | 远景、总图 | 大 deflection 从 **同一 BRep** 再 tessellate |
-| L2 工作网 | 视口里正常编辑 | 当前默认 deflection |
-| L3 特写 | 选中、剖面、测量 | 更小 deflection，只对选中零件 |
+| L0 Box | 投影短边 < ~4px（<1px 直接不画） | 共享单位盒 instance，缩放到世界 AABB |
+| L1 Coarse | 远景（< ~80px） | 特征约 12× 工作 deflection 再 tessellate；导入约 1.6 |
+| L2 Work | 视口里正常编辑 | 特征 0.05，导入 0.1 |
+| L3 Close | 选中 / 剖面 / 测量 | 更小 deflection，接口已留，后做 |
 
-滞回：升 LOD 的距离阈值和降 LOD 错开，避免相机微动时来回打网。隐藏楼层 / 关掉的专业：**根本不离散**。
+滞回在渲染线程 `ChannelState.lod_by_node`（升档 1.25×、降档 0.8×）。草图 `line_list` **永不 LOD**。隐藏集（楼层 / 类别 / isolate）本来就不录制，也就不发 tessellate 请求。选中至少抬到 L2。
 
-OCCT 已经按 Face 出 `Poly_Triangulation`（见 `tessellate_shape` 的 `TopExp_Explorer(..., TopAbs_FACE)`）。**不要再拍成一块 MeshCpu。** 每个 Face 自带包围盒，天然是 cluster：远距离按面剔除、剖切按面加载、拾取可先打到面再落到 BRep。
+几何源：特征走 `Entity::createGeom(deflection)`（不缓存 BRep）；CAD 导入 Document 持有 `unique_ptr<Shape>`；三角汤只有 L0 + 原网。改参数走 `replace_entity_mesh`：该 `geometry_id` 无场景引用时丢掉全部 LOD 缓存。
 
-### G4 压缩与驻留预算
+`tessellate_shape` 已按 Face 记下 `MeshCpu.faces` 范围与每面 AABB，**不改顶点格式、不改 `.tdoc` 序列化**。远距离按面剔除 / 剖切按面加载是下一刀，不要和整网 L1/L2 绑死。
 
-- 顶点相对 AABB 量化为 16-bit；法线 octahedron；颜色若走材质就不要存进顶点（现在每顶点 12 字节颜色，CAD 网格经常是白的）。
-- `MeshCpu`：非正在编辑的对象，upload 后可丢 CPU 副本；点选走量化网或直接打 BRep。
-- GPU：`ResidentCache`，显存预算（例如 2–4 GB），LRU 淘汰。上传改成「提交任务即返回」，下一帧缺网格就画粗 LOD，禁止 `upload_mesh` 卡住 Qt。
+### G4 压缩与驻留预算（异步 upload + LRU 已落地；量化后做）
+
+- GPU：`ResidentCache` 默认 2GB，LRU 淘汰 buffer。`request_upload_mesh` 提交即返回；`asset_to_gpu_` 有了才能画细档，否则继续粗档 / L0 盒。
+- 调试 overlay（坐标读数第二行）：draw 数、提交三角、GPU 网格字节、pending tessellate。
+- 顶点相对 AABB 量化为 16-bit、法线 octahedron、去掉每顶点颜色：**还没做**。
+- 非正在编辑的对象，upload 后丢 CPU 副本：**还没做**；点选走 `resolved_mesh`（工作网），精确查询走 BRep / 特征。
 - 文档侧：大 tessellation 缓存跟 [ROADMAP.md](ROADMAP.md) 已定的 LevelDB 走，不要塞进整文件 `binary_archive`。
 
 ### G5 超大三角汤（无 BRep 的导入网）
@@ -200,15 +203,15 @@ CPU 录两万次 draw 仍会顶满。下一步：
 
 ## 7. 分期与验收（可执行）
 
-与路线图「大模型渲染」对齐，但把「几十亿」需要的项写死。G1–G3 未完成前，不要开工 Nanite。
+与路线图「大模型渲染」对齐。G1 / G3a–b / G4 已落地；G5 前不要开工 Nanite。
 
 | 阶段 | 内容 | 验收（比感觉重要） |
 |---|---|---|
-| **G0 仪表** | 每帧：draw 数、提交三角、视锥后三角、GPU 网格字节、upload 等待 | 状态栏或调试 overlay 能读到；没有数不要优化 |
+| **G0 仪表** | 每帧：draw 数、提交三角、GPU 网格字节、pending tessellate | 视口坐标读数第二行能读到 |
 | **G1 实例+合批** | 共享 `mesh_asset_id`；分桶 + `instance_count`；instance 矩阵缓冲 | 1 万同几何实例 ≤ 个位数 draw；帧时间不再随实例数线性涨 |
-| **G2 剔除补全** | 语义树剪枝 + BVH 视锥 + 亚像素丢弃 | 十万扁平散件、镜头看一角：提交集合掉一个数量级 |
-| **G3 自适应离散** | 屏幕误差 → deflection；L1/L2 两档；Face 级 cluster 保留 | 同一 STEP：远景三角数随距离下降；拉近不破洞（滞回） |
-| **G4 驻留** | 显存预算 LRU；异步 upload；非编辑对象可丢 `MeshCpu` | 打开超大模型不冻 UI；显存曲线有顶 |
+| **G2 剔除补全** | 语义树剪枝 + BVH 视锥；亚像素丢弃已在录制期（<1px skip） | 十万扁平散件、镜头看一角：提交集合掉一个数量级 |
+| **G3 自适应离散** | 屏幕误差 → 离散四档；L1 预 intern / 懒离散；Face 范围已记录 | 同一 STEP：远景三角数随距离下降；拉近不破洞（滞回） |
+| **G4 驻留** | 显存预算 LRU；异步 upload；缺网降粗档 | 打开超大模型不冻 UI；显存曲线有顶 |
 | **G5 meshlet** | 无 BRep 大网切簇 | 单网格 5e7 三角，只看见局部时 GPU 网远小于全量 |
 | **G6 indirect** | Vulkan MultiDrawIndirect；GL 保持 G1 | 可见实例过万时 CPU 录制不再是主因 |
 
@@ -225,6 +228,7 @@ CPU 录两万次 draw 仍会顶满。下一步：
 ## 8. 明确不做（避免把方案做歪）
 
 - **不把语义树搬进 GPU。** 楼层、GUID、Pset 继续只在 Document / BIM。
+- **不把 LOD 写成场景图节点。** 档次是录制期策略 + 几何缓存，不进 `SceneNode`，相机动不 `bump_generation`。
 - **不先做 Nanite。** 有 BRep 时，重离散比 cluster DAG 便宜、可编辑、能对上特征树。
 - **不为 IFC 另开一条三角通道。** 几何仍走 OCCT；IFC 只提供实例与共享关系（`IfcMappedItem` → `mesh_asset_id` 复用）。
 - **不建三套空间树当真相源。** 语义树管归属；一张 BVH 管空间。Octree 不是必须的。
@@ -237,14 +241,17 @@ CPU 录两万次 draw 仍会顶满。下一步：
 
 | 文件 | 现在干什么 | 方案落点 |
 |---|---|---|
-| [mesh.h](https://github.com/terry-chao/tamias/blob/main/src/engine/graphics/mesh.h) `Vertex` / `MeshCpu` | 44 字节顶点，整网一份 AABB | 量化顶点；Face/cluster 子范围 |
-| [occt_feature.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt_feature.cpp) `tessellate_shape` | 按 Face 遍历后拍扁 | 保留 Face 范围 + 每面 AABB；按 deflection 多档缓存 |
-| [mesh_asset.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/mesh_asset.h) | 一资产一份 CPU 网 | 引用计数 / 几何指纹复用 |
-| [scene.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/scene.h) | 语义树，线性 find | 以后实例只持 `geometry_id`；find 改索引 |
-| [document.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.cpp) `render_items` | 全扫 + 一期视锥 | 大数据量改为 BVH 查询产出；不要每帧 vector 拷几百万 item |
-| [scene_graph.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene_graph.cpp) `RecordCommands` | 一叶子一 draw | G1 分桶 + instancing |
-| [device.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/device.h) `DrawIndexedDesc` | `instance_count` 已留 | 接 instance buffer / shader |
-| [picking.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/picking.h) | 物体 BVH，只给点选 | G2 复用视锥；大网加 cluster 层 |
-| [render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.cpp) `upload_mesh` | 阻塞到 GPU 写完 | G4 异步 + LRU |
+| [mesh.h](https://github.com/terry-chao/tamias/blob/main/src/engine/graphics/mesh.h) `Vertex` / `MeshCpu` | 44 字节顶点；`faces` 为 Face 范围 + AABB | 量化顶点；按面流式加载 |
+| [mesh_lod.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/mesh_lod.h) | `MeshLod` + `select_mesh_lod` 滞回 | 连续 deflection / Close 档 |
+| [tess_cache.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/tess_cache.h) | `(geometry_id, lod) → MeshAsset` | 落盘 |
+| [occt_feature.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt_feature.cpp) `tessellate_shape` | 按 Face 出网并记下范围 | 按 deflection 多档 + 按面剔除 |
+| [tess_worker.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/tess_worker.cpp) | OCCT 单线程队列 | — |
+| [mesh_asset.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/mesh_asset.h) | 一资产一份 CPU 网；intern 按指纹 | 引用计数 / 几何指纹复用 |
+| [scene.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/scene.h) | 语义树，线性 find；`mesh_asset_id` = 几何身份 | find 改索引 |
+| [document.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.cpp) | 持有导入 `Shape`；`replace_entity_mesh` 失效 LOD | BVH 查询产出清单 |
+| [scene_graph.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene_graph.cpp) `RecordCommands` | 视锥 + 选档 + 合批 | G6 MDI |
+| [resident_cache.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/resident_cache.h) | GPU LRU 2GB | 可配预算；丢 CPU 副本 |
+| [render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.cpp) | `request_upload_mesh` 非阻塞；缺网降档 | — |
+| [picking.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/picking.h) | 物体 BVH + `resolved_mesh` | G2 复用视锥；大网加 cluster 层 |
 | [FRUSTUM-CULLING.md](FRUSTUM-CULLING.md) | 一期已落地 | G2 的设计原文 |
-| [ROADMAP.md](ROADMAP.md) §5 / 支撑线 | 「大模型渲染」一句话 | 本文把那句话拆成 G0–G6 |
+| [ROADMAP.md](ROADMAP.md) §5 / 支撑线 | 「大模型渲染」 | 本文把那句话拆成 G0–G6 |

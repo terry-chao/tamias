@@ -325,6 +325,7 @@ void WebGLCommandList::draw_indexed(const DrawIndexedDesc& desc) {
         {6, 4, offsetof(GpuInstance, row2)},
         {7, 4, offsetof(GpuInstance, color)},
         {8, 4, offsetof(GpuInstance, material)},
+        {9, 4, offsetof(GpuInstance, tex_st)},
     };
     for (const auto& attr : inst_attrs) {
       glEnableVertexAttribArray(attr.index);
@@ -333,7 +334,7 @@ void WebGLCommandList::draw_indexed(const DrawIndexedDesc& desc) {
       glVertexAttribDivisor(attr.index, 1);
     }
   } else {
-    for (GLuint i = 4; i <= 8; ++i) {
+    for (GLuint i = 4; i <= 9; ++i) {
       glDisableVertexAttribArray(i);
       glVertexAttribDivisor(i, 0);
     }
@@ -595,6 +596,12 @@ Result<std::unique_ptr<PipelineState>> WebGLDevice::create_pipeline(const Pipeli
   if (brdf >= 0) {
     glUseProgram(program);
     glUniform1i(brdf, 4);
+    glUseProgram(0);
+  }
+  const GLint orm = glGetUniformLocation(program, "orm_tex");
+  if (orm >= 0) {
+    glUseProgram(program);
+    glUniform1i(orm, 5);
     glUseProgram(0);
   }
   return std::make_unique<WebGLPipeline>(program, desc.depth_test, desc.depth_write, desc.blend,

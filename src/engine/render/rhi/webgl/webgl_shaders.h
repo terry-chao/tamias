@@ -28,6 +28,7 @@ layout(location = 5) in vec4 a_inst_row1;
 layout(location = 6) in vec4 a_inst_row2;
 layout(location = 7) in vec4 a_inst_color;
 layout(location = 8) in vec4 a_inst_material;
+layout(location = 9) in vec4 a_inst_tex_st;
 out vec3 v_normal;
 out vec2 v_uv;
 out float v_selected;
@@ -36,18 +37,20 @@ out float v_mode;
 out vec3 v_color;
 out vec2 v_rough_metal;
 out float v_opacity;
+out float v_world_scale;
 void main() {
   vec4 hp = vec4(a_position, 1.0);
   vec3 world = vec3(dot(a_inst_row0, hp), dot(a_inst_row1, hp), dot(a_inst_row2, hp));
   v_world_pos = world;
   v_normal = vec3(dot(a_inst_row0.xyz, a_normal), dot(a_inst_row1.xyz, a_normal),
                   dot(a_inst_row2.xyz, a_normal));
-  v_uv = a_uv;
+  v_uv = a_uv * a_inst_tex_st.xy + a_inst_tex_st.zw;
   v_color = a_inst_color.rgb * a_color;
   v_selected = a_inst_material.z;
   v_mode = pc.eye_pos_mode.w;
   v_rough_metal = a_inst_material.xy;
   v_opacity = a_inst_color.a;
+  v_world_scale = a_inst_material.w;
   gl_Position = pc.mvp * vec4(world, 1.0);
 }
 )GLSL";
@@ -62,6 +65,7 @@ uniform sampler2D normal_tex;
 uniform samplerCube irradiance_tex;
 uniform samplerCube prefilter_tex;
 uniform sampler2D brdf_lut;
+uniform sampler2D orm_tex;
 in vec3 v_normal;
 in vec2 v_uv;
 in float v_selected;
@@ -70,6 +74,7 @@ in float v_mode;
 in vec3 v_color;
 in vec2 v_rough_metal;
 in float v_opacity;
+in float v_world_scale;
 out vec4 frag_color;
 
 vec3 shaded_simple(vec3 n, vec3 l, vec3 base) {
@@ -77,8 +82,8 @@ vec3 shaded_simple(vec3 n, vec3 l, vec3 base) {
   return base * ndotl;
 }
 
-vec3 sample_triplanar_albedo(vec3 world_pos, vec3 n) {
-  vec3 wp = world_pos * 2.0;
+vec3 sample_triplanar_albedo(vec3 world_pos, vec3 n, float world_scale) {
+  vec3 wp = world_pos * world_scale;
   vec3 blend = abs(n);
   blend = pow(blend, vec3(4.0));
   blend = blend / max(blend.x + blend.y + blend.z, 1e-6);
@@ -90,8 +95,8 @@ vec3 sample_triplanar_albedo(vec3 world_pos, vec3 n) {
 
 vec3 unpack_normal(vec3 rgb) { return rgb * 2.0 - 1.0; }
 
-vec3 sample_triplanar_normal(vec3 world_pos, vec3 n) {
-  vec3 wp = world_pos * 2.0;
+vec3 sample_triplanar_normal(vec3 world_pos, vec3 n, float world_scale) {
+  vec3 wp = world_pos * world_scale;
   vec3 blend = abs(n);
   blend = pow(blend, vec3(4.0));
   blend = blend / max(blend.x + blend.y + blend.z, 1e-6);
@@ -121,7 +126,19 @@ vec3 sample_uv_normal(vec3 n, vec3 world_pos, vec2 uv) {
   return normalize(t * tnormal.x + b * tnormal.y + n * tnormal.z);
 }
 
-vec4 shaded_realistic(vec3 n, vec3 l, vec3 v, vec3 base, float rough, float metal, float opacity) {
+vec3 sample_triplanar_orm(vec3 world_pos, vec3 n, float world_scale) {
+  vec3 wp = world_pos * world_scale;
+  vec3 blend = abs(n);
+  blend = pow(blend, vec3(4.0));
+  blend = blend / max(blend.x + blend.y + blend.z, 1e-6);
+  vec3 cx = texture(orm_tex, wp.zy).rgb;
+  vec3 cy = texture(orm_tex, wp.xz).rgb;
+  vec3 cz = texture(orm_tex, wp.xy).rgb;
+  return cx * blend.x + cy * blend.y + cz * blend.z;
+}
+
+vec4 shaded_realistic(vec3 n, vec3 l, vec3 v, vec3 base, float rough, float metal, float opacity,
+                      float ao) {
   const float PI = 3.14159265;
   float ndotl = max(dot(n, l), 0.0);
   float ndotv = max(dot(n, v), 1e-4);
@@ -134,7 +151,7 @@ vec4 shaded_realistic(vec3 n, vec3 l, vec3 v, vec3 base, float rough, float meta
   vec3 f0 = mix(vec3(0.04), base, metal);
   vec3 F = f0 + (vec3(1.0) - f0) * pow(1.0 - vdoth, 5.0);
   float transmissive = (opacity < 0.999 && metal < 0.5) ? 1.0 : 0.0;
-  vec3 kd = base * (1.0 - metal);
+  vec3 kd = base * (1.0 - metal) * ao;
   if (transmissive > 0.5) {
     kd *= opacity;
   }
@@ -192,7 +209,7 @@ void main() {
   }
   if (pc.material.w > 0.5) {
     n = pc.lighting.w > 0.5 ? sample_uv_normal(n, v_world_pos, v_uv)
-                            : sample_triplanar_normal(v_world_pos, n);
+                            : sample_triplanar_normal(v_world_pos, n, v_world_scale);
     n = normalize(n);
     if (dot(n, v) < 0.0) {
       n = -n;
@@ -202,13 +219,22 @@ void main() {
   vec3 base = pc.color.rgb * v_color;
   if (pc.material.z > 0.5) {
     base = pc.lighting.w > 0.5 ? texture(albedo_tex, v_uv).rgb
-                               : sample_triplanar_albedo(v_world_pos, n);
+                               : sample_triplanar_albedo(v_world_pos, n, v_world_scale);
+  }
+  float rough = v_rough_metal.x;
+  float metal = v_rough_metal.y;
+  float ao = 1.0;
+  if (pc.light_dir_selected.w > 0.5) {
+    vec3 orm = pc.lighting.w > 0.5 ? texture(orm_tex, v_uv).rgb
+                                   : sample_triplanar_orm(v_world_pos, n, v_world_scale);
+    ao = orm.r;
+    rough = orm.g;
+    metal = orm.b;
   }
   vec3 lit_rgb;
   float lit_a = 1.0;
   if (v_mode > 1.5) {
-    vec4 pbr = shaded_realistic(n, l, v, base, v_rough_metal.x, v_rough_metal.y,
-                                clamp(v_opacity, 0.0, 1.0));
+    vec4 pbr = shaded_realistic(n, l, v, base, rough, metal, clamp(v_opacity, 0.0, 1.0), ao);
     lit_rgb = pbr.rgb;
     lit_a = pbr.a;
   } else {

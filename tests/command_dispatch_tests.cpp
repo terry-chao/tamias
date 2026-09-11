@@ -1,11 +1,15 @@
 #include "command/command_system.h"
+#include "command/import_texture_command.h"
+#include "command/update_material_command.h"
 #include "engine/document/document.h"
 #include "engine/modeling/feature.h"
+#include "engine/render/texture_asset.h"
 #include "entity/entity.h"
 
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <memory>
 #include <utility>
 
 namespace tamias {
@@ -159,6 +163,50 @@ TEST(CommandDispatch, SetMaterialUndoRestoresIdWithoutNewMesh) {
   EXPECT_EQ(box->material_id, old_mat);
   cmd.system.redo();
   EXPECT_NE(box->material_id, old_mat);
+}
+
+TEST(CommandDispatch, ImportTextureUndoRemovesAdded) {
+  Cmd cmd("import-tex");
+  const std::size_t before = cmd.doc.textures().size();
+  TextureAsset tex;
+  tex.width = 2;
+  tex.height = 2;
+  tex.srgb = true;
+  tex.usage = TextureUsage::Albedo;
+  tex.name = "paint";
+  tex.rgba.assign(16, 40);
+  auto import = std::make_unique<ImportTextureCommand>(cmd.doc, std::move(tex));
+  ASSERT_TRUE(import->execute());
+  const std::uint64_t id = import->texture_id();
+  EXPECT_EQ(cmd.doc.textures().size(), before + 1);
+  cmd.system.push_executed(std::move(import));
+  cmd.system.undo();
+  EXPECT_EQ(cmd.doc.texture(id), nullptr);
+  EXPECT_EQ(cmd.doc.textures().size(), before);
+  cmd.system.redo();
+  ASSERT_NE(cmd.doc.texture(id), nullptr);
+  EXPECT_EQ(cmd.doc.texture(id)->name, "paint");
+}
+
+TEST(CommandDispatch, UpdateMaterialSharedUndo) {
+  Cmd cmd("update-mat");
+  ASSERT_TRUE(cmd.system.dispatch(cmd.doc, "create_box", {{"origin", Vec3{0.f, 0.f, 0.f}}}));
+  Entity* box = cmd.doc.entities().begin()->second.get();
+  ASSERT_NE(box, nullptr);
+  Material shared{};
+  shared.name = "SharedPaint";
+  shared.base_color = {0.5f, 0.4f, 0.3f};
+  const std::uint64_t mat_id = cmd.doc.add_material(std::move(shared)).id;
+  box->material_id = mat_id;
+  Material edited = *cmd.doc.material(mat_id);
+  const Vec3 old_color = edited.base_color;
+  edited.base_color = {0.1f, 0.2f, 0.3f};
+  auto update = std::make_unique<UpdateMaterialCommand>(cmd.doc, edited);
+  ASSERT_TRUE(update->execute());
+  EXPECT_FLOAT_EQ(cmd.doc.material(box->material_id)->base_color.x, 0.1f);
+  cmd.system.push_executed(std::move(update));
+  cmd.system.undo();
+  EXPECT_FLOAT_EQ(cmd.doc.material(box->material_id)->base_color.x, old_color.x);
 }
 
 TEST(CommandDispatch, ChamferUndoRedo) {

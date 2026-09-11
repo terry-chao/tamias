@@ -34,7 +34,7 @@ struct RenderScene {
     bool orthographic = false;
   };
 
-  std::uint32_t version = 1;
+  std::uint32_t version = 3;
   std::string source;
   View view;
   std::unordered_map<std::uint64_t, MeshCpu> meshes;
@@ -42,7 +42,7 @@ struct RenderScene {
   std::vector<SceneDrawItem> items;
 };
 
-// 只保留被 items 引用且能在 meshes 里找到的条目；贴图只保留 albedo/normal 引用到的。
+// 只保留被 items 引用且能在 meshes 里找到的条目；贴图只保留 albedo/normal/ORM 引用到的。
 // items 按 node_id 排序。
 RenderScene bake_render_scene(
     std::vector<SceneDrawItem> items, const std::unordered_map<std::uint64_t, MeshCpu>& meshes,

@@ -1,5 +1,5 @@
 source: 未命名
-version=1  meshes=1  textures=2  items=1  tris=12  digest=413df9fb7b89430f
+version=1  meshes=1  textures=2  items=1  tris=12  digest=1dc2b2ab1373784f
 view mode=1(shaded)  size=2304x1242  distance=2.16506338
 
 ==== VIEW ====
@@ -180,7 +180,7 @@ tex id=7 size=512x512 srgb=0 bytes=1048576
 
 ==== DRAWS ====
 item[0] item node=1 mesh=1 verts=24 tris=12 aabb=(-0.5 0 -0.5)-(0.5 1 0.5) color=(0.720000029,0.660000026,0.560000002) albedo=2 normal=7
-  category=(0.620000005,0.680000007,0.75999999) roughness=0.920000017 metallic=0 opacity=1
+  category=(0.620000005,0.680000007,0.75999999) roughness=0.920000017 metallic=0 opacity=1 uv_scale=1,1 world_scale=2
   translation=0 0 0
   transform:
     1 0 0 0

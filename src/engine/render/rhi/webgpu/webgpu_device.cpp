@@ -542,6 +542,7 @@ void WebGpuCommandList::begin_render_pass(SwapChain& swap_chain, const float cle
   textures_[2] = device_->dummy_cube();
   textures_[3] = device_->dummy_cube();
   textures_[4] = device_->dummy_2d();
+  textures_[5] = device_->dummy_2d();
   bind_dirty_ = true;
 }
 
@@ -578,7 +579,7 @@ void WebGpuCommandList::rebuild_bind_group() {
     wgpuBindGroupRelease(bind_group_);
     bind_group_ = nullptr;
   }
-  WGPUBindGroupEntry entries[8];
+  WGPUBindGroupEntry entries[9];
   for (auto& e : entries) {
     e = WGPU_BIND_GROUP_ENTRY_INIT;
   }
@@ -602,9 +603,11 @@ void WebGpuCommandList::rebuild_bind_group() {
   entries[6].textureView = textures_[3] ? textures_[3]->view() : device_->dummy_cube()->view();
   entries[7].binding = 7;
   entries[7].textureView = textures_[4] ? textures_[4]->view() : device_->dummy_2d()->view();
+  entries[8].binding = 8;
+  entries[8].textureView = textures_[5] ? textures_[5]->view() : device_->dummy_2d()->view();
   WGPUBindGroupDescriptor desc = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
   desc.layout = device_->bind_group_layout();
-  desc.entryCount = 8;
+  desc.entryCount = 9;
   desc.entries = entries;
   bind_group_ = wgpuDeviceCreateBindGroup(device_->device(), &desc);
   bind_dirty_ = false;
@@ -725,7 +728,7 @@ Result<void> WebGpuDevice::ensure_surface(const NativeWindowHandle& window) {
 }
 
 Result<void> WebGpuDevice::create_layout() {
-  WGPUBindGroupLayoutEntry entries[8];
+  WGPUBindGroupLayoutEntry entries[9];
   for (auto& e : entries) {
     e = WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT;
   }
@@ -760,8 +763,12 @@ Result<void> WebGpuDevice::create_layout() {
   entries[7].visibility = WGPUShaderStage_Fragment;
   entries[7].texture.sampleType = WGPUTextureSampleType_Float;
   entries[7].texture.viewDimension = WGPUTextureViewDimension_2D;
+  entries[8].binding = 8;
+  entries[8].visibility = WGPUShaderStage_Fragment;
+  entries[8].texture.sampleType = WGPUTextureSampleType_Float;
+  entries[8].texture.viewDimension = WGPUTextureViewDimension_2D;
   WGPUBindGroupLayoutDescriptor bgl = WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT;
-  bgl.entryCount = 8;
+  bgl.entryCount = 9;
   bgl.entries = entries;
   bind_group_layout_ = wgpuDeviceCreateBindGroupLayout(device_, &bgl);
   if (!bind_group_layout_) {
@@ -1036,7 +1043,7 @@ Result<std::unique_ptr<PipelineState>> WebGpuDevice::create_pipeline(const Pipel
   layouts[0].attributeCount = 4;
   layouts[0].attributes = attrs;
 
-  WGPUVertexAttribute inst_attrs[5];
+  WGPUVertexAttribute inst_attrs[6];
   for (auto& a : inst_attrs) {
     a = WGPU_VERTEX_ATTRIBUTE_INIT;
   }
@@ -1055,10 +1062,13 @@ Result<std::unique_ptr<PipelineState>> WebGpuDevice::create_pipeline(const Pipel
   inst_attrs[4].format = WGPUVertexFormat_Float32x4;
   inst_attrs[4].offset = offsetof(GpuInstance, material);
   inst_attrs[4].shaderLocation = 8;
+  inst_attrs[5].format = WGPUVertexFormat_Float32x4;
+  inst_attrs[5].offset = offsetof(GpuInstance, tex_st);
+  inst_attrs[5].shaderLocation = 9;
   layouts[1] = WGPU_VERTEX_BUFFER_LAYOUT_INIT;
   layouts[1].stepMode = WGPUVertexStepMode_Instance;
   layouts[1].arrayStride = sizeof(GpuInstance);
-  layouts[1].attributeCount = 5;
+  layouts[1].attributeCount = 6;
   layouts[1].attributes = inst_attrs;
 
   WGPUBlendState blend = WGPU_BLEND_STATE_INIT;

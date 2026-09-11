@@ -251,10 +251,18 @@ void register_commands(CommandRegistry& registry) {
     }
     material.roughness = static_cast<float>(arg_double(args, "roughness", 0.6));
     material.metallic = static_cast<float>(arg_double(args, "metallic", 0.0));
+    material.opacity = static_cast<float>(arg_double(args, "opacity", 1.0));
     material.albedo_texture_id =
         static_cast<std::uint64_t>(arg_int(args, "albedo_texture_id", 0));
     material.normal_texture_id =
         static_cast<std::uint64_t>(arg_int(args, "normal_texture_id", 0));
+    material.orm_texture_id = static_cast<std::uint64_t>(arg_int(args, "orm_texture_id", 0));
+    material.tex.scale.x = static_cast<float>(arg_double(args, "tex_scale_x", 1.0));
+    material.tex.scale.y = static_cast<float>(arg_double(args, "tex_scale_y", 1.0));
+    material.tex.offset.x = static_cast<float>(arg_double(args, "tex_offset_x", 0.0));
+    material.tex.offset.y = static_cast<float>(arg_double(args, "tex_offset_y", 0.0));
+    material.tex.rotation = static_cast<float>(arg_double(args, "tex_rotation", 0.0));
+    material.tex.world_scale = static_cast<float>(arg_double(args, "tex_world_scale", 2.0));
     return std::make_unique<SetMaterialCommand>(
         doc, static_cast<std::uint64_t>(arg_int(args, "entity_id", 0)), std::move(material));
   });

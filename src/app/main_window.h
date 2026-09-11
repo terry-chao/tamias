@@ -27,6 +27,7 @@ namespace tamias {
 class PropertyPanel;
 class HandleInspector;
 class RenderSceneInspector;
+class TextureLibraryPanel;
 class TimingPanel;
 class PluginManager;
 class RibbonGroup;
@@ -54,6 +55,7 @@ class MainWindow final : public QMainWindow {
   void refresh_property_panel();
   void refresh_handle_inspector();
   void refresh_render_scene_inspector();
+  void refresh_texture_library_panel();
   void dump_render_scene_debug();
 
  private:
@@ -119,7 +121,9 @@ class MainWindow final : public QMainWindow {
   PropertyPanel* property_panel_ = nullptr;
   HandleInspector* handle_inspector_ = nullptr;
   RenderSceneInspector* render_scene_inspector_ = nullptr;
+  TextureLibraryPanel* texture_library_panel_ = nullptr;
   QDockWidget* render_scene_dock_ = nullptr;
+  QDockWidget* texture_library_dock_ = nullptr;
   TimingPanel* timing_panel_ = nullptr;
   QDockWidget* timing_dock_ = nullptr;
   QAction* timing_record_action_ = nullptr;
