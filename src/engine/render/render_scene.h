@@ -40,6 +40,8 @@ struct RenderScene {
   std::unordered_map<std::uint64_t, MeshCpu> meshes;
   std::unordered_map<std::uint64_t, TextureAsset> textures;
   std::vector<SceneDrawItem> items;
+  // 捕获时视口隐藏的语义节点（楼层 / 类别 / isolate）。旧文件缺省为空 = 全显示。
+  std::vector<std::uint64_t> hidden_node_ids;
 };
 
 // 只保留被 items 引用且能在 meshes 里找到的条目；贴图只保留 albedo/normal/ORM 引用到的。

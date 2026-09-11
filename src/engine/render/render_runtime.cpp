@@ -283,8 +283,6 @@ void RenderThread::stop() {
   ibl_irradiance_.reset();
   ibl_prefilter_.reset();
   ibl_brdf_lut_.reset();
-  instance_buffer_.reset();
-  instance_write_offset_ = 0;
   shaded_pipeline_.reset();
   wire_pipeline_.reset();
   line_pipeline_.reset();
@@ -1023,21 +1021,23 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
   channel.command_list->set_scissor(0, 0, channel.swap_chain->width(), channel.swap_chain->height());
   const Mat4 clip = device_->clip_space_correction_matrix();
   const Mat4 view_proj = clip * frame.proj * frame.view;
-  instance_write_offset_ = 0;
-  {
-    const auto estimated = (std::max)(
-        static_cast<std::uint64_t>((frame.items.size() + 4096u) * sizeof(GpuInstance)),
-        static_cast<std::uint64_t>(1024 * 1024));
-    if (!instance_buffer_ || instance_buffer_->desc().size < estimated) {
-      BufferDesc d{};
-      d.size = estimated;
-      d.usage = BufferDesc::Usage::Vertex;
-      d.host_visible = true;
-      if (auto created = device_->create_buffer(d)) {
-        instance_buffer_ = std::move(*created);
-      }
+  // 每通道两槽 ping-pong，避免 frames-in-flight 写同一段 host-visible instance 数据。
+  constexpr std::uint32_t kInstanceSlots = 2;
+  const auto estimated = (std::max)(
+      static_cast<std::uint64_t>((frame.items.size() + 4096u) * sizeof(GpuInstance)),
+      static_cast<std::uint64_t>(1024 * 1024));
+  const auto total = estimated * kInstanceSlots;
+  if (!channel.instance_buffer || channel.instance_buffer->desc().size < total) {
+    BufferDesc d{};
+    d.size = total;
+    d.usage = BufferDesc::Usage::Vertex;
+    d.host_visible = true;
+    if (auto created = device_->create_buffer(d)) {
+      channel.instance_buffer = std::move(*created);
     }
   }
+  channel.instance_slot = (channel.instance_slot + 1u) % kInstanceSlots;
+  channel.instance_write_offset = static_cast<std::uint64_t>(channel.instance_slot) * estimated;
 
   auto bind_mesh_sets = [&]() {
     if (default_texture_) {
@@ -1060,18 +1060,21 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     }
   };
   auto upload_instances = [&](std::span<const GpuInstance> insts) -> bool {
-    if (insts.empty() || !instance_buffer_) {
+    if (insts.empty() || !channel.instance_buffer) {
       return false;
     }
     const auto bytes = static_cast<std::uint64_t>(insts.size_bytes());
-    if (instance_write_offset_ + bytes > instance_buffer_->desc().size) {
+    if (channel.instance_write_offset + bytes > channel.instance_buffer->desc().size) {
       return false;
     }
-    if (auto w = instance_buffer_->write(instance_write_offset_, std::as_bytes(insts)); !w) {
+    if (auto w = channel.instance_buffer->write(channel.instance_write_offset,
+                                                std::as_bytes(insts));
+        !w) {
       return false;
     }
-    channel.command_list->set_instance_buffer(*instance_buffer_, instance_write_offset_);
-    instance_write_offset_ += bytes;
+    channel.command_list->set_instance_buffer(*channel.instance_buffer,
+                                              channel.instance_write_offset);
+    channel.instance_write_offset += bytes;
     return true;
   };
   auto bind_identity_instance = [&]() {
@@ -1198,25 +1201,25 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     ctx.texture_asset_to_gpu = &texture_asset_to_gpu_;
     ctx.texture_diag_logged = &logged_texture_diag_;
     ctx.grow_instance_buffer = [&](std::uint64_t bytes) -> Buffer* {
-      if (instance_buffer_ && instance_buffer_->desc().size >= bytes) {
-        return instance_buffer_.get();
+      if (channel.instance_buffer && channel.instance_buffer->desc().size >= bytes) {
+        return channel.instance_buffer.get();
       }
-      if (instance_write_offset_ != 0) {
-        return instance_buffer_.get();
+      if (channel.instance_write_offset != 0) {
+        return channel.instance_buffer.get();
       }
       BufferDesc d{};
-      d.size = (std::max)(bytes, static_cast<std::uint64_t>(256 * sizeof(GpuInstance)));
+      d.size = (std::max)(bytes * 2, static_cast<std::uint64_t>(256 * sizeof(GpuInstance) * 2));
       d.usage = BufferDesc::Usage::Vertex;
       d.host_visible = true;
       auto created = device_->create_buffer(d);
       if (!created) {
-        return instance_buffer_.get();
+        return channel.instance_buffer.get();
       }
-      instance_buffer_ = std::move(*created);
-      return instance_buffer_.get();
+      channel.instance_buffer = std::move(*created);
+      return channel.instance_buffer.get();
     };
-    ctx.instance_buffer = instance_buffer_.get();
-    ctx.instance_write_offset = &instance_write_offset_;
+    ctx.instance_buffer = channel.instance_buffer.get();
+    ctx.instance_write_offset = &channel.instance_write_offset;
     std::vector<LodRequest> lod_requests;
     RenderFrameStats stats{};
     ctx.lod_sets = &frame.lod_sets;

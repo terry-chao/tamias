@@ -12,6 +12,7 @@
 #include <QMainWindow>
 #include <QStackedWidget>
 #include <QTabWidget>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <vector>
@@ -26,7 +27,7 @@ namespace tamias {
 
 class PropertyPanel;
 class HandleInspector;
-class RenderSceneInspector;
+class SceneDebuggerWindow;
 class TextureLibraryPanel;
 class TimingPanel;
 class PluginManager;
@@ -54,11 +55,7 @@ class MainWindow final : public QMainWindow {
   void activate_open_document(int index);
   void refresh_property_panel();
   void refresh_handle_inspector();
-  void refresh_render_scene_inspector();
   void refresh_texture_library_panel();
-  void dump_render_scene_debug();
-  void dump_selected_render_draw();
-  void sync_render_scene_selection();
 
  private:
   void showEvent(QShowEvent* event) override;
@@ -81,6 +78,10 @@ class MainWindow final : public QMainWindow {
   bool write_render_scene_document(const QString& path, bool show_inspect);
   bool export_render_scene();
   bool pin_render_scene_golden();
+  void debug_current_frame();
+  void ensure_scene_debugger();
+  void open_scene_debugger(RenderScene scene, const std::filesystem::path& path = {},
+                           DocumentViewport* source = nullptr);
   void notify_save_success(const QString& path);
   void set_render_mode(RenderMode mode);
   void sync_render_mode_actions();
@@ -122,9 +123,8 @@ class MainWindow final : public QMainWindow {
   QActionGroup* create_group_ = nullptr;
   PropertyPanel* property_panel_ = nullptr;
   HandleInspector* handle_inspector_ = nullptr;
-  RenderSceneInspector* render_scene_inspector_ = nullptr;
+  SceneDebuggerWindow* scene_debugger_ = nullptr;
   TextureLibraryPanel* texture_library_panel_ = nullptr;
-  QDockWidget* render_scene_dock_ = nullptr;
   QDockWidget* texture_library_dock_ = nullptr;
   TimingPanel* timing_panel_ = nullptr;
   QDockWidget* timing_dock_ = nullptr;

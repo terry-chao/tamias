@@ -214,6 +214,24 @@ RenderScene::View DocumentViewport::capture_render_scene_view() const {
   return view;
 }
 
+std::vector<std::uint64_t> DocumentViewport::capture_hidden_node_ids() const {
+  std::vector<std::uint64_t> hidden;
+  for (const auto& item : document_->render_items()) {
+    if (!node_visible_in_view(item.node_id)) {
+      hidden.push_back(item.node_id);
+    }
+  }
+  std::sort(hidden.begin(), hidden.end());
+  hidden.erase(std::unique(hidden.begin(), hidden.end()), hidden.end());
+  return hidden;
+}
+
+RenderScene DocumentViewport::capture_debug_scene() const {
+  RenderScene scene = document_->capture_render_scene(capture_render_scene_view());
+  scene.hidden_node_ids = capture_hidden_node_ids();
+  return scene;
+}
+
 void DocumentViewport::apply_viewport_state(const ViewportState& state) {
   stop_view_animation();
   camera_.set_target(state.target);

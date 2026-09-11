@@ -148,30 +148,32 @@ RenderSceneInspector::RenderSceneInspector(QWidget* parent) : QWidget(parent) {
   summary_layout->addWidget(summary_digest_);
   summary_layout->addWidget(summary_camera_);
 
-  auto* actions = new QGridLayout();
-  actions->setContentsMargins(0, 4, 0, 0);
-  actions->setHorizontalSpacing(6);
-  actions->setVerticalSpacing(6);
-  auto* refresh_btn = new QPushButton(tr("Refresh"), summary);
+  auto* actions = new QWidget(summary);
+  actions_ = actions;
+  auto* actions_layout = new QGridLayout(actions);
+  actions_layout->setContentsMargins(0, 4, 0, 0);
+  actions_layout->setHorizontalSpacing(6);
+  actions_layout->setVerticalSpacing(6);
+  auto* refresh_btn = new QPushButton(tr("Refresh"), actions);
   refresh_btn->setToolTip(tr("Recapture the current viewport's cooked draw list"));
-  auto* save_btn = new QPushButton(tr("Save snapshot…"), summary);
+  auto* save_btn = new QPushButton(tr("Save snapshot…"), actions);
   save_btn->setToolTip(
       tr("Write a .trscn plus inspect.txt / OBJ / PPM. Does not change the current document."));
-  auto* pin_btn = new QPushButton(tr("Pin for tests…"), summary);
+  auto* pin_btn = new QPushButton(tr("Pin for tests…"), actions);
   pin_btn->setToolTip(
       tr("Write assets/samples/render/<name>/ and run RenderSceneGolden*"));
-  auto* dump_btn = new QPushButton(tr("Write debug files…"), summary);
+  auto* dump_btn = new QPushButton(tr("Write debug files…"), actions);
   dump_btn->setToolTip(
       tr("Write inspect.txt, OBJ meshes, and PPM textures. From a live view, also writes scene.trscn."));
   connect(refresh_btn, &QPushButton::clicked, this, &RenderSceneInspector::refresh_requested);
   connect(save_btn, &QPushButton::clicked, this, &RenderSceneInspector::save_requested);
   connect(pin_btn, &QPushButton::clicked, this, &RenderSceneInspector::pin_requested);
   connect(dump_btn, &QPushButton::clicked, this, &RenderSceneInspector::dump_requested);
-  actions->addWidget(refresh_btn, 0, 0);
-  actions->addWidget(save_btn, 0, 1);
-  actions->addWidget(pin_btn, 1, 0);
-  actions->addWidget(dump_btn, 1, 1);
-  summary_layout->addLayout(actions);
+  actions_layout->addWidget(refresh_btn, 0, 0);
+  actions_layout->addWidget(save_btn, 0, 1);
+  actions_layout->addWidget(pin_btn, 1, 0);
+  actions_layout->addWidget(dump_btn, 1, 1);
+  summary_layout->addWidget(actions);
   body_layout->addWidget(summary);
 
   auto* split = new QSplitter(Qt::Vertical, body_);
@@ -309,6 +311,10 @@ RenderSceneInspector::RenderSceneInspector(QWidget* parent) : QWidget(parent) {
 void RenderSceneInspector::show_scene(const RenderScene& scene) {
   scene_ = scene;
   has_scene_ = true;
+  if (isolate_ != nullptr) {
+    QSignalBlocker block(isolate_);
+    isolate_->setChecked(false);
+  }
   rebuild();
 }
 
@@ -318,6 +324,12 @@ void RenderSceneInspector::clear() {
   rebuild();
   emit overlay_cleared();
   emit vertex_overlay_cleared();
+}
+
+void RenderSceneInspector::set_actions_visible(bool visible) {
+  if (actions_ != nullptr) {
+    actions_->setVisible(visible);
+  }
 }
 
 void RenderSceneInspector::select_node(quint64 node_id) {
@@ -372,11 +384,12 @@ void RenderSceneInspector::rebuild() {
           .arg(mode_name(*this, scene_.view.mode))
           .arg(scene_.view.width)
           .arg(scene_.view.height));
-  summary_counts_->setText(tr("%1 draws · %2 meshes · %3 textures · %4 tris")
+  summary_counts_->setText(tr("%1 draws · %2 meshes · %3 textures · %4 tris · %5 hidden")
                                .arg(scene_.items.size())
                                .arg(scene_.meshes.size())
                                .arg(scene_.textures.size())
-                               .arg(render_scene_triangle_count(scene_)));
+                               .arg(render_scene_triangle_count(scene_))
+                               .arg(scene_.hidden_node_ids.size()));
   summary_digest_->setText(tr("digest  %1").arg(digest));
   summary_camera_->setText(tr("eye %1\ntarget %2\ndistance %3")
                                .arg(fmt_vec(scene_.view.eye_position), fmt_vec(scene_.view.target))

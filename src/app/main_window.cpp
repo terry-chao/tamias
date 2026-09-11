@@ -13,7 +13,6 @@
 #include "engine/modeling/occt_shape_ops.h"
 #include "engine/modeling/shape_ops.h"
 #include "handle_inspector.h"
-#include "render_scene_inspector.h"
 #include "plugin/plugin_host.h"
 #include "plugin/plugin_manager.h"
 #include "plugin_manager_dialog.h"
@@ -24,6 +23,7 @@
 #include "ribbon_bar.h"
 #include "ribbon_group.h"
 #include "ribbon_page.h"
+#include "scene_debugger_window.h"
 #include "settings_dialog.h"
 #include "texture_image.h"
 #include "texture_library_panel.h"
@@ -154,7 +154,6 @@ MainWindow::MainWindow(QWidget* parent)
     sync_render_mode_actions();
     refresh_property_panel();
     refresh_handle_inspector();
-    refresh_render_scene_inspector();
     refresh_texture_library_panel();
     bind_plugin_session();
   });
@@ -200,14 +199,19 @@ MainWindow::MainWindow(QWidget* parent)
   pin_render_action->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+P")));
   pin_render_action->setToolTip(
       tr("Write the current view to assets/samples/render/<name>/ and run RenderSceneGolden*"));
-  connect(pin_render_action, &QAction::triggered, this, [this] {
-    if (render_scene_dock_ != nullptr) {
-      render_scene_dock_->show();
-      render_scene_dock_->raise();
-    }
-    pin_render_scene_golden();
-  });
+  connect(pin_render_action, &QAction::triggered, this, &MainWindow::pin_render_scene_golden);
   addAction(pin_render_action);
+
+  auto* debug_scene_action = new QAction(tr("Debug This Frame"), this);
+  debug_scene_action->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+D")));
+  debug_scene_action->setToolTip(
+      tr("Capture the current viewport's draw list and open the scene debugger"));
+  connect(debug_scene_action, &QAction::triggered, this, &MainWindow::debug_current_frame);
+  addAction(debug_scene_action);
+  auto* debug_scene_alias = new QAction(this);
+  debug_scene_alias->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+I")));
+  connect(debug_scene_alias, &QAction::triggered, this, &MainWindow::debug_current_frame);
+  addAction(debug_scene_alias);
 
   auto* frame_all_action = new QAction(ribbon_icon(QStringLiteral(":/icons/frame_all.svg")),
                                       tr("Fit All"), this);
@@ -514,23 +518,6 @@ MainWindow::MainWindow(QWidget* parent)
   handle_toggle->setToolTip(tr("Inspect the selected component's document handle"));
   addAction(handle_toggle);
 
-  render_scene_inspector_ = new RenderSceneInspector(this);
-  render_scene_inspector_->setMinimumWidth(360);
-  render_scene_dock_ = new QDockWidget(tr("Render Scene"), this);
-  render_scene_dock_->setObjectName(QStringLiteral("renderSceneDock"));
-  render_scene_dock_->setWidget(render_scene_inspector_);
-  render_scene_dock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
-  render_scene_dock_->setMinimumWidth(360);
-  addDockWidget(Qt::LeftDockWidgetArea, render_scene_dock_);
-  render_scene_dock_->hide();
-  auto* render_scene_toggle = render_scene_dock_->toggleViewAction();
-  render_scene_toggle->setText(tr("Render Scene"));
-  render_scene_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/shaded.svg")));
-  render_scene_toggle->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+I")));
-  render_scene_toggle->setToolTip(
-      tr("Debug the cooked draw list: meshes, textures, AABB overlay, snapshot / pin"));
-  addAction(render_scene_toggle);
-
   timing_panel_ = new TimingPanel(this);
   timing_panel_->setMinimumWidth(360);
   timing_dock_ = new QDockWidget(tr("Timing"), this);
@@ -571,77 +558,8 @@ MainWindow::MainWindow(QWidget* parent)
     }
   });
 
-  auto clear_render_debug = [this] {
-    if (auto* vp = current_viewport()) {
-      vp->set_debug_overlay(std::nullopt, std::nullopt);
-      vp->set_debug_vertex(std::nullopt);
-    }
-  };
-  auto render_scene_open = [this] {
-    return render_scene_dock_ != nullptr && render_scene_dock_->isVisible();
-  };
-  connect(render_scene_inspector_, &RenderSceneInspector::overlay_requested, this,
-          [this, render_scene_open](Aabb box, quint64 node_id, bool isolate) {
-            if (!render_scene_open()) {
-              return;
-            }
-            if (auto* vp = current_viewport()) {
-              vp->set_debug_overlay(box, isolate ? std::optional<std::uint64_t>{node_id}
-                                                 : std::nullopt);
-            }
-          });
-  connect(render_scene_inspector_, &RenderSceneInspector::overlay_cleared, this,
-          [clear_render_debug] { clear_render_debug(); });
-  connect(render_scene_inspector_, &RenderSceneInspector::vertex_overlay_requested, this,
-          [this, render_scene_open](const DebugVertexOverlay& vertex) {
-            if (!render_scene_open()) {
-              return;
-            }
-            if (auto* vp = current_viewport()) {
-              vp->set_debug_vertex(vertex);
-            }
-            statusBar()->showMessage(
-                tr("Vertex %1  world %2  n %3  uv (%4, %5)  color %6")
-                    .arg(vertex.index)
-                    .arg(QStringLiteral("(%1, %2, %3)")
-                             .arg(vertex.world.x, 0, 'g', 5)
-                             .arg(vertex.world.y, 0, 'g', 5)
-                             .arg(vertex.world.z, 0, 'g', 5))
-                    .arg(QStringLiteral("(%1, %2, %3)")
-                             .arg(vertex.normal.x, 0, 'g', 4)
-                             .arg(vertex.normal.y, 0, 'g', 4)
-                             .arg(vertex.normal.z, 0, 'g', 4))
-                    .arg(vertex.uv.x, 0, 'g', 4)
-                    .arg(vertex.uv.y, 0, 'g', 4)
-                    .arg(QStringLiteral("(%1, %2, %3)")
-                             .arg(vertex.color.x, 0, 'g', 3)
-                             .arg(vertex.color.y, 0, 'g', 3)
-                             .arg(vertex.color.z, 0, 'g', 3)),
-                8000);
-          });
-  connect(render_scene_inspector_, &RenderSceneInspector::vertex_overlay_cleared, this, [this] {
-    if (auto* vp = current_viewport()) {
-      vp->set_debug_vertex(std::nullopt);
-    }
-  });
-  connect(render_scene_inspector_, &RenderSceneInspector::dump_requested, this,
-          &MainWindow::dump_render_scene_debug);
-  connect(render_scene_inspector_, &RenderSceneInspector::save_requested, this,
-          &MainWindow::export_render_scene);
-  connect(render_scene_inspector_, &RenderSceneInspector::pin_requested, this,
-          &MainWindow::pin_render_scene_golden);
-  connect(render_scene_inspector_, &RenderSceneInspector::dump_selected_requested, this,
-          &MainWindow::dump_selected_render_draw);
-  connect(render_scene_inspector_, &RenderSceneInspector::refresh_requested, this,
-          &MainWindow::refresh_render_scene_inspector);
-  connect(render_scene_dock_, &QDockWidget::visibilityChanged, this,
-          [this, clear_render_debug](bool visible) {
-            if (visible) {
-              refresh_render_scene_inspector();
-            } else {
-              clear_render_debug();
-            }
-          });
+  debug_scene_action->setIcon(ribbon_icon(QStringLiteral(":/icons/shaded.svg")));
+  debug_scene_action->setText(tr("Scene Debugger"));
 
   auto* ribbon = new RibbonBar(this);
   ribbon->add_quick_action(undo_action);
@@ -707,7 +625,7 @@ MainWindow::MainWindow(QWidget* parent)
   panels_group->add_action(property_toggle);
   panels_group->add_action(texture_toggle);
   panels_group->add_action(handle_toggle);
-  panels_group->add_action(render_scene_toggle);
+  panels_group->add_action(debug_scene_action);
   panels_group->add_action(timing_toggle);
 
   RibbonGroup* workspace_group =
@@ -986,7 +904,6 @@ void MainWindow::show_documents() {
   // current_viewport() is still null and the texture library would stay empty.
   refresh_property_panel();
   refresh_handle_inspector();
-  refresh_render_scene_inspector();
   refresh_texture_library_panel();
 }
 
@@ -1171,10 +1088,6 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
   connect(vp, &DocumentViewport::selection_changed, this, &MainWindow::refresh_handle_inspector);
   connect(vp, &DocumentViewport::document_changed, this, &MainWindow::refresh_handle_inspector);
   connect(vp, &DocumentViewport::document_changed, this,
-          &MainWindow::refresh_render_scene_inspector);
-  connect(vp, &DocumentViewport::selection_changed, this,
-          &MainWindow::sync_render_scene_selection);
-  connect(vp, &DocumentViewport::document_changed, this,
           &MainWindow::refresh_texture_library_panel);
   connect(vp, &DocumentViewport::selection_changed, this,
           &MainWindow::refresh_texture_library_panel);
@@ -1232,38 +1145,16 @@ bool MainWindow::open_path(const QString& path) {
       QMessageBox::critical(this, tr("Open"), QString::fromStdString(loaded.error()));
       return false;
     }
-    ViewportState vp_storage;
-    vp_storage.target = loaded->view.target;
-    vp_storage.distance = loaded->view.view_distance;
-    vp_storage.yaw = loaded->view.yaw;
-    vp_storage.pitch = loaded->view.pitch;
-    vp_storage.fovy = loaded->view.fovy;
-    vp_storage.znear = loaded->view.znear;
-    vp_storage.zfar = loaded->view.zfar;
-    vp_storage.render_mode = static_cast<ViewRenderMode>(loaded->view.mode);
-    auto document = std::make_shared<Document>(document_from_render_scene(std::move(*loaded)));
-    document->set_path(file);
-    document->set_name(path_to_utf8(file.filename()));
-    add_document_tab(document, &vp_storage);
-
-    const MeshCpu* thumb_mesh = nullptr;
-    if (!document->meshes().empty()) {
-      thumb_mesh = &document->meshes().begin()->second.cpu;
+    QString thumb_path;
+    if (!loaded->meshes.empty()) {
+      const QImage thumb = render_mesh_thumbnail(loaded->meshes.begin()->second);
+      thumb_path = save_mesh_thumbnail(info.absoluteFilePath(), thumb);
     }
-    if (thumb_mesh) {
-      const QImage thumb = render_mesh_thumbnail(*thumb_mesh);
-      const QString thumb_path = save_mesh_thumbnail(info.absoluteFilePath(), thumb);
-      recent_.add(info.absoluteFilePath(), thumb_path);
-    } else {
-      recent_.add(info.absoluteFilePath(), QString());
-    }
+    open_scene_debugger(std::move(*loaded), file, nullptr);
+    recent_.add(info.absoluteFilePath(), thumb_path);
     refresh_home();
-    statusBar()->showMessage(
-        tr("Loaded render scene %1 (read-only draw list)").arg(info.absoluteFilePath()), 5000);
-    if (render_scene_dock_) {
-      render_scene_dock_->show();
-    }
-    refresh_render_scene_inspector();
+    statusBar()->showMessage(tr("Opened render scene in debugger: %1").arg(info.absoluteFilePath()),
+                             5000);
     return true;
   }
 
@@ -1520,7 +1411,7 @@ bool MainWindow::export_render_scene() {
     out_path += QStringLiteral(".trscn");
   }
   const QString abs_path = QFileInfo(out_path).absoluteFilePath();
-  const RenderScene scene = vp->document().capture_render_scene(vp->capture_render_scene_view());
+  const RenderScene scene = vp->capture_debug_scene();
   if (auto r = save_render_scene(qstring_to_path(abs_path), scene); !r) {
     QMessageBox::critical(this, tr("Render Scene"), QString::fromStdString(r.error()));
     return false;
@@ -1587,7 +1478,7 @@ bool MainWindow::pin_render_scene_golden() {
     overwrite = true;
   }
 
-  const RenderScene scene = vp->document().capture_render_scene(vp->capture_render_scene_view());
+  const RenderScene scene = vp->capture_debug_scene();
   auto meta = save_render_scene_golden(root, slug, scene, overwrite);
   if (!meta) {
     QMessageBox::critical(this, tr("Pin"), QString::fromStdString(meta.error()));
@@ -1628,7 +1519,7 @@ bool MainWindow::write_render_scene_document(const QString& path, bool show_insp
   const QString abs_path = QFileInfo(out_path).absoluteFilePath();
   const auto file = qstring_to_path(abs_path);
   Document& document = vp->document();
-  const RenderScene scene = document.capture_render_scene(vp->capture_render_scene_view());
+  const RenderScene scene = vp->capture_debug_scene();
   if (auto r = save_render_scene(file, scene); !r) {
     QMessageBox::critical(this, show_inspect ? tr("Export") : tr("Save"),
                           QString::fromStdString(r.error()));
@@ -1845,129 +1736,27 @@ void MainWindow::refresh_texture_library_panel() {
   texture_library_panel_->set_document(vp != nullptr ? &vp->document() : nullptr);
 }
 
-void MainWindow::refresh_render_scene_inspector() {
-  if (render_scene_inspector_ == nullptr) {
+void MainWindow::ensure_scene_debugger() {
+  if (scene_debugger_ != nullptr) {
     return;
   }
-  if (render_scene_dock_ != nullptr && !render_scene_dock_->isVisible()) {
-    return;
-  }
-  DocumentViewport* vp = current_viewport();
-  if (vp == nullptr) {
-    render_scene_inspector_->clear();
-    return;
-  }
-  Document& doc = vp->document();
-  if (const RenderScene* snap = doc.render_snapshot()) {
-    render_scene_inspector_->show_scene(*snap);
-  } else {
-    render_scene_inspector_->show_scene(doc.capture_render_scene(vp->capture_render_scene_view()));
-  }
-  sync_render_scene_selection();
+  const RenderDeviceConfig config = AppSettings::instance().render_device_config();
+  scene_debugger_ = new SceneDebuggerWindow(RenderThreadPool::instance().acquire(config), this);
 }
 
-void MainWindow::sync_render_scene_selection() {
-  if (render_scene_inspector_ == nullptr) {
-    return;
-  }
-  if (render_scene_dock_ != nullptr && !render_scene_dock_->isVisible()) {
-    return;
-  }
-  DocumentViewport* vp = current_viewport();
-  if (vp == nullptr) {
-    return;
-  }
-  const std::vector<std::uint64_t> ids = vp->document().selected_ids();
-  if (ids.empty()) {
-    return;
-  }
-  render_scene_inspector_->select_node(ids.front());
+void MainWindow::open_scene_debugger(RenderScene scene, const std::filesystem::path& path,
+                                     DocumentViewport* source) {
+  ensure_scene_debugger();
+  scene_debugger_->open_scene(std::move(scene), path, source);
 }
 
-void MainWindow::dump_render_scene_debug() {
+void MainWindow::debug_current_frame() {
   auto* vp = current_viewport();
   if (vp == nullptr) {
-    QMessageBox::information(this, tr("Render Scene"), tr("Open a document first."));
+    QMessageBox::information(this, tr("Scene Debugger"), tr("Open a document first."));
     return;
   }
-  Document& doc = vp->document();
-  const RenderScene* shown =
-      render_scene_inspector_ != nullptr ? render_scene_inspector_->current_scene() : nullptr;
-  const RenderScene scene = shown != nullptr
-                                ? *shown
-                                : (doc.render_snapshot()
-                                       ? *doc.render_snapshot()
-                                       : doc.capture_render_scene(vp->capture_render_scene_view()));
-  std::filesystem::path target;
-  if (!doc.path().empty() && is_render_scene_path(doc.path())) {
-    target = doc.path();
-  } else {
-    const QString dir = QFileDialog::getExistingDirectory(
-        this, tr("Write render-scene debug files"), QString());
-    if (dir.isEmpty()) {
-      return;
-    }
-    target = qstring_to_path(dir) / "scene.trscn";
-    if (auto r = save_render_scene(target, scene); !r) {
-      QMessageBox::critical(this, tr("Render Scene"), QString::fromStdString(r.error()));
-      return;
-    }
-  }
-  if (auto r = write_render_scene_debug_sidecars(target, scene); !r) {
-    QMessageBox::critical(this, tr("Render Scene"), QString::fromStdString(r.error()));
-    return;
-  }
-  std::filesystem::path inspect = target;
-  inspect.replace_extension(".inspect.txt");
-  std::filesystem::path debug = target;
-  debug.replace_extension(".debug");
-  statusBar()->showMessage(
-      tr("Wrote %1 and %2").arg(path_to_qstring(inspect), path_to_qstring(debug)), 8000);
-  reveal_path(debug);
-}
-
-void MainWindow::dump_selected_render_draw() {
-  auto* vp = current_viewport();
-  if (vp == nullptr || render_scene_inspector_ == nullptr) {
-    QMessageBox::information(this, tr("Render Scene"), tr("Open a document first."));
-    return;
-  }
-  const int index = render_scene_inspector_->current_draw_index();
-  if (index < 0) {
-    QMessageBox::information(this, tr("Render Scene"), tr("Select a draw first."));
-    return;
-  }
-  Document& doc = vp->document();
-  const RenderScene* shown = render_scene_inspector_->current_scene();
-  const RenderScene scene = shown != nullptr
-                                ? *shown
-                                : (doc.render_snapshot()
-                                       ? *doc.render_snapshot()
-                                       : doc.capture_render_scene(vp->capture_render_scene_view()));
-  if (index >= static_cast<int>(scene.items.size())) {
-    QMessageBox::information(this, tr("Render Scene"), tr("Select a draw first."));
-    return;
-  }
-  const SceneDrawItem& item = scene.items[static_cast<std::size_t>(index)];
-  const QString suggested =
-      QStringLiteral("draw_%1_node_%2.obj").arg(index).arg(item.node_id);
-  const QString path = QFileDialog::getSaveFileName(
-      this, tr("Write this draw as OBJ"), suggested, tr("Wavefront OBJ (*.obj)"));
-  if (path.isEmpty()) {
-    return;
-  }
-  QString out_path = path;
-  if (!out_path.endsWith(QStringLiteral(".obj"), Qt::CaseInsensitive)) {
-    out_path += QStringLiteral(".obj");
-  }
-  if (auto r = write_render_scene_debug_draw(qstring_to_path(out_path), scene,
-                                             static_cast<std::size_t>(index));
-      !r) {
-    QMessageBox::critical(this, tr("Render Scene"), QString::fromStdString(r.error()));
-    return;
-  }
-  statusBar()->showMessage(tr("Wrote %1").arg(out_path), 8000);
-  reveal_path(qstring_to_path(QFileInfo(out_path).absolutePath()));
+  open_scene_debugger(vp->capture_debug_scene(), {}, vp);
 }
 
 void MainWindow::frame_all() {

@@ -997,6 +997,22 @@ Click an object to select it, or use a create tool</source>
         <translation>对照绘制清单：网格、贴图、包围盒，以及保存快照 / 钉进测试</translation>
     </message>
     <message>
+        <source>Debug This Frame</source>
+        <translation>调试这一帧</translation>
+    </message>
+    <message>
+        <source>Capture the current viewport's draw list and open the scene debugger</source>
+        <translation>捕获当前视口的绘制清单并打开场景调试器</translation>
+    </message>
+    <message>
+        <source>Scene Debugger</source>
+        <translation>场景调试器</translation>
+    </message>
+    <message>
+        <source>Opened render scene in debugger: %1</source>
+        <translation>已在调试器中打开渲染场景：%1</translation>
+    </message>
+    <message>
         <source>Vertex %1  world %2  n %3  uv (%4, %5)  color %6</source>
         <translation>顶点 %1  世界坐标 %2  法线 %3  uv (%4, %5)  颜色 %6</translation>
     </message>
@@ -1063,6 +1079,341 @@ Meshes / textures: %2
     <message>
         <source>Start recording, then stop to inspect the timeline</source>
         <translation>点录制，操作模型，再点停止查看时间线</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::SceneDebuggerWindow</name>
+    <message>
+        <source>Scene Debugger</source>
+        <translation>场景调试器</translation>
+    </message>
+    <message>
+        <source>Scene Debugger — %1</source>
+        <translation>场景调试器 — %1</translation>
+    </message>
+    <message>
+        <source>Scene</source>
+        <translation>场景</translation>
+    </message>
+    <message>
+        <source>Open…</source>
+        <translation>打开…</translation>
+    </message>
+    <message>
+        <source>Save…</source>
+        <translation>保存…</translation>
+    </message>
+    <message>
+        <source>Recapture</source>
+        <translation>重新捕获</translation>
+    </message>
+    <message>
+        <source>Pin for tests…</source>
+        <translation>钉进测试…</translation>
+    </message>
+    <message>
+        <source>Write debug files…</source>
+        <translation>写出调试文件…</translation>
+    </message>
+    <message>
+        <source>Compare…</source>
+        <translation>对比…</translation>
+    </message>
+    <message>
+        <source>Wire</source>
+        <translation>线框</translation>
+    </message>
+    <message>
+        <source>Shaded</source>
+        <translation>着色</translation>
+    </message>
+    <message>
+        <source>Realistic</source>
+        <translation>真实感</translation>
+    </message>
+    <message>
+        <source>Axes</source>
+        <translation>坐标轴</translation>
+    </message>
+    <message>
+        <source>Captured hidden</source>
+        <translation>捕获的隐藏</translation>
+    </message>
+    <message>
+        <source>Apply the hidden node set stored in the snapshot (floors / isolate)</source>
+        <translation>应用快照里保存的隐藏节点（楼层 / 隔离）</translation>
+    </message>
+    <message>
+        <source>#</source>
+        <translation>#</translation>
+    </message>
+    <message>
+        <source>Node / draw</source>
+        <translation>节点 / 绘制</translation>
+    </message>
+    <message>
+        <source>Mesh / idx</source>
+        <translation>网格 / 索引</translation>
+    </message>
+    <message>
+        <source>Tris / inst</source>
+        <translation>三角 / 实例</translation>
+    </message>
+    <message>
+        <source>Reason / pipe</source>
+        <translation>原因 / 管线</translation>
+    </message>
+    <message>
+        <source>Pass</source>
+        <translation>通道</translation>
+    </message>
+    <message>
+        <source>Draws: all</source>
+        <translation>绘制：全部</translation>
+    </message>
+    <message>
+        <source>Draws: none</source>
+        <translation>绘制：无</translation>
+    </message>
+    <message>
+        <source>Draws: all (%1)</source>
+        <translation>绘制：全部（%1）</translation>
+    </message>
+    <message>
+        <source>Draws: 0 / %1</source>
+        <translation>绘制：0 / %1</translation>
+    </message>
+    <message>
+        <source>Draws: %1 / %2</source>
+        <translation>绘制：%1 / %2</translation>
+    </message>
+    <message>
+        <source>Open a .trscn or capture the current view.</source>
+        <translation>打开 .trscn，或从当前视口捕获。</translation>
+    </message>
+    <message>
+        <source>No scene loaded.</source>
+        <translation>尚未加载场景。</translation>
+    </message>
+    <message>
+        <source>Cargo: drawn %1  hidden %2  isolated %3  stepped %4  culled %5
+Recorded draw_indexed: %6</source>
+        <translation>货单：已绘制 %1  隐藏 %2  隔离 %3  单步未到 %4  剔除 %5
+已录制 draw_indexed：%6</translation>
+    </message>
+    <message>
+        <source>item</source>
+        <translation>货单</translation>
+    </message>
+    <message>
+        <source>— recorded draws —</source>
+        <translation>— 已录制绘制 —</translation>
+    </message>
+    <message>
+        <source>draw_indexed</source>
+        <translation>绘制调用</translation>
+    </message>
+    <message>
+        <source>drawn</source>
+        <translation>已绘制</translation>
+    </message>
+    <message>
+        <source>hidden</source>
+        <translation>隐藏</translation>
+    </message>
+    <message>
+        <source>isolated</source>
+        <translation>隔离</translation>
+    </message>
+    <message>
+        <source>stepped</source>
+        <translation>单步未到</translation>
+    </message>
+    <message>
+        <source>culled</source>
+        <translation>视锥剔除</translation>
+    </message>
+    <message>
+        <source>unknown</source>
+        <translation>未知</translation>
+    </message>
+    <message>
+        <source>transparent</source>
+        <translation>半透明</translation>
+    </message>
+    <message>
+        <source>opaque</source>
+        <translation>不透明</translation>
+    </message>
+    <message>
+        <source>shaded</source>
+        <translation>着色</translation>
+    </message>
+    <message>
+        <source>wire</source>
+        <translation>线框</translation>
+    </message>
+    <message>
+        <source>lines</source>
+        <translation>线条</translation>
+    </message>
+    <message>
+        <source>Open Render Scene</source>
+        <translation>打开渲染场景</translation>
+    </message>
+    <message>
+        <source>Render Scene (*.trscn)</source>
+        <translation>渲染场景 (*.trscn)</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>打开</translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation>保存</translation>
+    </message>
+    <message>
+        <source>Save Render Scene Snapshot</source>
+        <translation>保存渲染场景快照</translation>
+    </message>
+    <message>
+        <source>Scene saved, but debug dump failed:
+%1</source>
+        <translation>场景已保存，但调试文件写出失败：
+%1</translation>
+    </message>
+    <message>
+        <source>Saved %1  digest=%2</source>
+        <translation>已保存 %1  digest=%2</translation>
+    </message>
+    <message>
+        <source>Pin</source>
+        <translation>钉入</translation>
+    </message>
+    <message>
+        <source>Source tree not found. Pin is for a local checkout:
+%1</source>
+        <translation>找不到源码目录。钉入仅适用于本地检出：
+%1</translation>
+    </message>
+    <message>
+        <source>Pin Render Scene for Tests</source>
+        <translation>钉进测试</translation>
+    </message>
+    <message>
+        <source>Fixture name (letters, digits, '-' '_'; saved under assets/samples/render/):</source>
+        <translation>夹具名（字母数字、'-'、'_'；保存到 assets/samples/render/）：</translation>
+    </message>
+    <message>
+        <source>Name must start with a letter and use only A–Z, a–z, 0–9, '-' or '_'.</source>
+        <translation>名称必须以字母开头，且只能包含 A–Z、a–z、0–9、'-' 或 '_'。</translation>
+    </message>
+    <message>
+        <source>Golden "%1" already exists.
+Overwrite scene.trscn and sidecar files?</source>
+        <translation>金样“%1”已存在。
+是否覆盖 scene.trscn 及附属文件？</translation>
+    </message>
+    <message>
+        <source>Full dump: %1
+Meshes / textures: %2
+
+</source>
+        <translation>全量 dump：%1
+网格 / 贴图：%2
+
+</translation>
+    </message>
+    <message>
+        <source>Pinned golden %1  digest=%2</source>
+        <translation>已钉入金样 %1  digest=%2</translation>
+    </message>
+    <message>
+        <source>Pinned %1 but RenderSceneGolden* failed</source>
+        <translation>已钉入 %1，但 RenderSceneGolden* 失败</translation>
+    </message>
+    <message>
+        <source>Debug files</source>
+        <translation>调试文件</translation>
+    </message>
+    <message>
+        <source>Write debug files</source>
+        <translation>写出调试文件</translation>
+    </message>
+    <message>
+        <source>Wrote sidecars next to %1</source>
+        <translation>已在 %1 旁写出附属文件</translation>
+    </message>
+    <message>
+        <source>OBJ</source>
+        <translation>OBJ</translation>
+    </message>
+    <message>
+        <source>Select a draw first.</source>
+        <translation>请先选一条绘制。</translation>
+    </message>
+    <message>
+        <source>Write this draw as OBJ</source>
+        <translation>将此条写成 OBJ</translation>
+    </message>
+    <message>
+        <source>Wavefront OBJ (*.obj)</source>
+        <translation>Wavefront OBJ (*.obj)</translation>
+    </message>
+    <message>
+        <source>Wrote %1</source>
+        <translation>已写出 %1</translation>
+    </message>
+    <message>
+        <source>This session is from a file. Open a document and capture again.</source>
+        <translation>当前会话来自文件。请打开文档后再捕获。</translation>
+    </message>
+    <message>
+        <source>Compare</source>
+        <translation>对比</translation>
+    </message>
+    <message>
+        <source>Compare with Render Scene</source>
+        <translation>与渲染场景对比</translation>
+    </message>
+    <message>
+        <source>Current</source>
+        <translation>当前</translation>
+    </message>
+    <message>
+        <source>Compare scenes</source>
+        <translation>对比场景</translation>
+    </message>
+    <message>
+        <source>%1  digest=%2  items=%3  meshes=%4  hidden=%5
+</source>
+        <translation>%1  digest=%2  条目=%3  网格=%4  隐藏=%5
+</translation>
+    </message>
+    <message>
+        <source>digest: match
+</source>
+        <translation>digest：一致
+</translation>
+    </message>
+    <message>
+        <source>digest: DIFFER
+</source>
+        <translation>digest：不一致
+</translation>
+    </message>
+    <message>
+        <source>item count %1 vs %2
+</source>
+        <translation>条目数 %1 vs %2
+</translation>
+    </message>
+    <message>
+        <source>item[%1] node %2/%3 mesh %4/%5
+</source>
+        <translation>条目[%1] 节点 %2/%3 网格 %4/%5
+</translation>
     </message>
 </context>
 <context>
@@ -1230,6 +1581,10 @@ Meshes / textures: %2
     <message>
         <source>%1 draws · %2 meshes · %3 textures · %4 tris</source>
         <translation>%1 条绘制 · %2 个网格 · %3 张贴图 · %4 三角</translation>
+    </message>
+    <message>
+        <source>%1 draws · %2 meshes · %3 textures · %4 tris · %5 hidden</source>
+        <translation>%1 条绘制 · %2 个网格 · %3 张贴图 · %4 三角 · %5 隐藏</translation>
     </message>
     <message>
         <source>digest  %1</source>

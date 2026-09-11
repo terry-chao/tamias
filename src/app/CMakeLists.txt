@@ -22,6 +22,8 @@ add_executable(tamias
   render_scene_inspector.cpp
   document_viewport.cpp
   box_select_overlay.cpp
+  replay_viewport.cpp
+  scene_debugger_window.cpp
   golden_test_runner.cpp
   handle_inspector.cpp
   property_panel.cpp

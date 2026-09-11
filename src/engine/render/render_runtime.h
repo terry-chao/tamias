@@ -117,6 +117,12 @@ class RenderThread {
     std::uint64_t scene_generation = 0;
     std::unordered_map<std::uint64_t, TransformNode*> scene_nodes;
     std::unordered_map<std::uint64_t, MeshLod> lod_by_node;
+    // 每通道独立实例缓冲。文档视口和场景调试器共享 RenderThread 时，
+    // 若共用一块 host-visible buffer，后画的通道会盖掉先画通道仍在 GPU
+    // 上的 AABB / 网格 instance 数据，黄线就会隔帧闪。
+    std::unique_ptr<Buffer> instance_buffer;
+    std::uint64_t instance_write_offset = 0;
+    std::uint32_t instance_slot = 0;  // 与 Vulkan frames-in-flight 对齐的 ping-pong
   };
 
   void thread_main();
@@ -166,8 +172,6 @@ class RenderThread {
   std::unique_ptr<Texture> ibl_brdf_lut_;
   float ibl_max_mip_ = 4.f;
   bool logged_texture_diag_ = false;  // 只打一次贴图诊断日志
-  std::unique_ptr<Buffer> instance_buffer_;  // 可增长 host-visible 实例顶点缓冲
-  std::uint64_t instance_write_offset_ = 0;
   std::unordered_map<std::uint64_t, ChannelState> channels_;
   std::uint64_t next_mesh_id_ = 1;
   std::uint64_t next_texture_id_ = 1;

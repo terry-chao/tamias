@@ -196,6 +196,15 @@ std::string render_scene_digest(const RenderScene& scene) {
   for (const auto& item : scene.items) {
     fnv_item(h, item);
   }
+  if (!scene.hidden_node_ids.empty()) {
+    std::vector<std::uint64_t> hidden = scene.hidden_node_ids;
+    std::sort(hidden.begin(), hidden.end());
+    hidden.erase(std::unique(hidden.begin(), hidden.end()), hidden.end());
+    fnv_u64(h, static_cast<std::uint64_t>(hidden.size()));
+    for (std::uint64_t id : hidden) {
+      fnv_u64(h, id);
+    }
+  }
   return hex_u64(h);
 }
 
@@ -247,7 +256,20 @@ std::string inspect_render_scene(const RenderScene& scene) {
       << "  digest=" << render_scene_digest(scene) << '\n';
   out << "view mode=" << static_cast<int>(scene.view.mode) << '(' << render_mode_name(scene.view.mode)
       << ")  size=" << scene.view.width << 'x' << scene.view.height
-      << "  distance=" << scene.view.view_distance << '\n';
+      << "  distance=" << scene.view.view_distance
+      << "  hidden=" << scene.hidden_node_ids.size() << '\n';
+  if (!scene.hidden_node_ids.empty()) {
+    out << "hidden_node_ids=";
+    std::vector<std::uint64_t> hidden = scene.hidden_node_ids;
+    std::sort(hidden.begin(), hidden.end());
+    for (std::size_t i = 0; i < hidden.size(); ++i) {
+      if (i != 0) {
+        out << ',';
+      }
+      out << hidden[i];
+    }
+    out << '\n';
+  }
 
   out << "\n==== VIEW ====\n";
   out << "eye=";

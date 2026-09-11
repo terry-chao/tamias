@@ -8,6 +8,8 @@ add_library(tamias_render STATIC
   render_scene_debug.cpp
   render_scene_io.cpp
   render_scene_golden.cpp
+  scene_debug_player.cpp
+  scene_debug_log.cpp
   texture_mips.cpp
   builtin_textures.cpp
 )

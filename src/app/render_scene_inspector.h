@@ -29,6 +29,7 @@ class RenderSceneInspector final : public QWidget {
   void show_scene(const RenderScene& scene);
   void clear();
   void select_node(quint64 node_id);
+  void set_actions_visible(bool visible);
   [[nodiscard]] int current_draw_index() const;
   [[nodiscard]] const RenderScene* current_scene() const {
     return has_scene_ ? &scene_ : nullptr;
@@ -69,6 +70,7 @@ class RenderSceneInspector final : public QWidget {
   QLabel* summary_counts_ = nullptr;
   QLabel* summary_digest_ = nullptr;
   QLabel* summary_camera_ = nullptr;
+  QWidget* actions_ = nullptr;
 
   QLineEdit* filter_ = nullptr;
   QTableWidget* draws_ = nullptr;

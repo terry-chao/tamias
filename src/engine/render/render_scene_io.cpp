@@ -31,6 +31,7 @@ constexpr std::uint32_t kChunkView = fourcc('V', 'I', 'E', 'W');
 constexpr std::uint32_t kChunkMesh = fourcc('M', 'E', 'S', 'H');
 constexpr std::uint32_t kChunkDraw = fourcc('D', 'R', 'A', 'W');
 constexpr std::uint32_t kChunkTex = fourcc('T', 'E', 'X', 'T');
+constexpr std::uint32_t kChunkHidn = fourcc('H', 'I', 'D', 'N');
 
 Result<void> write_vec3(BinaryWriter& w, const Vec3& v) {
   if (auto r = w.write_f32(v.x); !r) {
@@ -516,7 +517,8 @@ Result<std::vector<std::uint8_t>> serialize_render_scene(const RenderScene& scen
     }
   }
 
-  const std::uint32_t chunk_count = scene.textures.empty() ? 4u : 5u;
+  const std::uint32_t chunk_count =
+      4u + (scene.textures.empty() ? 0u : 1u) + (scene.hidden_node_ids.empty() ? 0u : 1u);
 
   BinaryWriter file;
   if (auto r = file.write_bytes(kMagic, 4); !r) {
@@ -542,6 +544,23 @@ Result<std::vector<std::uint8_t>> serialize_render_scene(const RenderScene& scen
   }
   if (!scene.textures.empty()) {
     if (auto r = append_chunk(file, kChunkTex, tex_w.data()); !r) {
+      return Err(r.error());
+    }
+  }
+  if (!scene.hidden_node_ids.empty()) {
+    BinaryWriter hidn_w;
+    std::vector<std::uint64_t> hidden = scene.hidden_node_ids;
+    std::sort(hidden.begin(), hidden.end());
+    hidden.erase(std::unique(hidden.begin(), hidden.end()), hidden.end());
+    if (auto r = hidn_w.write_u64(static_cast<std::uint64_t>(hidden.size())); !r) {
+      return Err(r.error());
+    }
+    for (std::uint64_t id : hidden) {
+      if (auto r = hidn_w.write_u64(id); !r) {
+        return Err(r.error());
+      }
+    }
+    if (auto r = append_chunk(file, kChunkHidn, hidn_w.data()); !r) {
       return Err(r.error());
     }
   }
@@ -656,6 +675,19 @@ Result<RenderScene> deserialize_render_scene(std::span<const std::uint8_t> bytes
           return Err(res.error());
         }
         scene.textures.emplace(tex_id, std::move(tex));
+      }
+    } else if (*id == kChunkHidn) {
+      auto count = chunk_r.read_u64();
+      if (!count) {
+        return Err(count.error());
+      }
+      scene.hidden_node_ids.resize(static_cast<std::size_t>(*count));
+      for (auto& hid : scene.hidden_node_ids) {
+        auto node = chunk_r.read_u64();
+        if (!node) {
+          return Err(node.error());
+        }
+        hid = *node;
       }
     }
   }
