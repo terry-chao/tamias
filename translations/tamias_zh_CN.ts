@@ -965,6 +965,14 @@ Click an object to select it, or use a create tool</source>
         <translation>检查器</translation>
     </message>
     <message>
+        <source>Handle Inspector</source>
+        <translation>句柄检查器</translation>
+    </message>
+    <message>
+        <source>Inspect the selected component's document handle</source>
+        <translation>查看选中构件的文档句柄</translation>
+    </message>
+    <message>
         <source>About</source>
         <translation>关于</translation>
     </message>
@@ -1718,6 +1726,169 @@ Plugin ID: %4</source>
     <message>
         <source>Plaster</source>
         <translation>石膏</translation>
+    </message>
+    <message>
+        <source>Unassigned</source>
+        <translation>未指定</translation>
+    </message>
+    <message>
+        <source>Storey</source>
+        <translation>楼层</translation>
+    </message>
+    <message>
+        <source>Elevation Offset</source>
+        <translation>标高偏移</translation>
+    </message>
+    <message>
+        <source>B-spline</source>
+        <translation>B 样条</translation>
+    </message>
+    <message>
+        <source>NURBS</source>
+        <translation>NURBS</translation>
+    </message>
+    <message>
+        <source>Degree</source>
+        <translation>次数</translation>
+    </message>
+    <message>
+        <source>Weight %1</source>
+        <translation>权重 %1</translation>
+    </message>
+    <message>
+        <source>No selection</source>
+        <translation>未选择对象</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::HandleInspector</name>
+    <message>
+        <source>Handle</source>
+        <translation>句柄</translation>
+    </message>
+    <message>
+        <source>Kind</source>
+        <translation>类型</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>名称</translation>
+    </message>
+    <message>
+        <source>Mesh</source>
+        <translation>网格</translation>
+    </message>
+    <message>
+        <source>Relations</source>
+        <translation>关联</translation>
+    </message>
+    <message>
+        <source>No relations</source>
+        <translation>无关联</translation>
+    </message>
+    <message>
+        <source>Click a component to inspect its document handle</source>
+        <translation>点击构件以查看其文档句柄</translation>
+    </message>
+    <message>
+        <source>No selection</source>
+        <translation>未选择对象</translation>
+    </message>
+    <message>
+        <source>Imported mesh</source>
+        <translation>导入网格</translation>
+    </message>
+    <message>
+        <source>No relations on this component</source>
+        <translation>此构件无关联</translation>
+    </message>
+    <message>
+        <source>Wall</source>
+        <translation>墙</translation>
+    </message>
+    <message>
+        <source>Box</source>
+        <translation>立方体</translation>
+    </message>
+    <message>
+        <source>Cylinder</source>
+        <translation>圆柱</translation>
+    </message>
+    <message>
+        <source>Beam</source>
+        <translation>梁</translation>
+    </message>
+    <message>
+        <source>Column</source>
+        <translation>柱</translation>
+    </message>
+    <message>
+        <source>Slab</source>
+        <translation>板</translation>
+    </message>
+    <message>
+        <source>Door</source>
+        <translation>门</translation>
+    </message>
+    <message>
+        <source>Window</source>
+        <translation>窗</translation>
+    </message>
+    <message>
+        <source>Line</source>
+        <translation>直线</translation>
+    </message>
+    <message>
+        <source>Polyline</source>
+        <translation>折线</translation>
+    </message>
+    <message>
+        <source>Circle</source>
+        <translation>圆</translation>
+    </message>
+    <message>
+        <source>Arc</source>
+        <translation>圆弧</translation>
+    </message>
+    <message>
+        <source>Bezier</source>
+        <translation>贝塞尔</translation>
+    </message>
+    <message>
+        <source>Rectangle</source>
+        <translation>矩形</translation>
+    </message>
+    <message>
+        <source>B-spline</source>
+        <translation>B 样条</translation>
+    </message>
+    <message>
+        <source>NURBS</source>
+        <translation>NURBS</translation>
+    </message>
+    <message>
+        <source>Entity</source>
+        <translation>实体</translation>
+    </message>
+    <message>
+        <source>Hosted on</source>
+        <translation>依附于</translation>
+    </message>
+    <message>
+        <source>Relation</source>
+        <translation>关联</translation>
+    </message>
+    <message>
+        <source>yes</source>
+        <translation>是</translation>
+    </message>
+    <message>
+        <source>no</source>
+        <translation>否</translation>
+    </message>
+    <message>
+        <source>id %1  %2  %3 → %4  along=%5  sill=%6  valid=%7</source>
+        <translation>id %1  %2  %3 → %4  沿墙=%5  窗台高=%6  有效=%7</translation>
     </message>
 </context>
 <context>

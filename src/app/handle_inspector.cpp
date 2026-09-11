@@ -15,54 +15,65 @@
 namespace tamias {
 namespace {
 
-const char* kind_name(EntityKind kind) {
+QString kind_name(const HandleInspector& self, EntityKind kind) {
   switch (kind) {
     case EntityKind::Wall:
-      return "Wall";
+      return self.tr("Wall");
     case EntityKind::Box:
-      return "Box";
+      return self.tr("Box");
     case EntityKind::Cylinder:
-      return "Cylinder";
+      return self.tr("Cylinder");
     case EntityKind::Beam:
-      return "Beam";
+      return self.tr("Beam");
     case EntityKind::Column:
-      return "Column";
+      return self.tr("Column");
     case EntityKind::Slab:
-      return "Slab";
+      return self.tr("Slab");
     case EntityKind::Door:
-      return "Door";
+      return self.tr("Door");
     case EntityKind::Window:
-      return "Window";
+      return self.tr("Window");
     case EntityKind::Line:
-      return "Line";
+      return self.tr("Line");
     case EntityKind::Polyline:
-      return "Polyline";
+      return self.tr("Polyline");
     case EntityKind::Circle:
-      return "Circle";
+      return self.tr("Circle");
     case EntityKind::Arc:
-      return "Arc";
+      return self.tr("Arc");
     case EntityKind::Bezier:
-      return "Bezier";
+      return self.tr("Bezier");
     case EntityKind::Rectangle:
-      return "Rectangle";
+      return self.tr("Rectangle");
     case EntityKind::BSpline:
-      return "BSpline";
+      return self.tr("B-spline");
     case EntityKind::Nurbs:
-      return "Nurbs";
+      return self.tr("NURBS");
   }
-  return "Entity";
+  return self.tr("Entity");
 }
 
-const char* relation_kind_name(RelationKind kind) {
+QString relation_kind_name(const HandleInspector& self, RelationKind kind) {
   switch (kind) {
     case RelationKind::HostedOn:
-      return "HostedOn";
+      return self.tr("Hosted on");
   }
-  return "Relation";
+  return self.tr("Relation");
 }
 
 QString handle_text(std::uint64_t id) {
   return QStringLiteral("%1  (0x%2)").arg(id).arg(id, 0, 16);
+}
+
+QString format_relation(const HandleInspector& self, const Relation& rel) {
+  return self.tr("id %1  %2  %3 → %4  along=%5  sill=%6  valid=%7")
+      .arg(rel.id)
+      .arg(relation_kind_name(self, rel.kind))
+      .arg(rel.from)
+      .arg(rel.to)
+      .arg(rel.placement.along, 0, 'f', 3)
+      .arg(rel.placement.sill, 0, 'f', 3)
+      .arg(rel.valid ? self.tr("yes") : self.tr("no"));
 }
 
 }  // namespace
@@ -121,7 +132,7 @@ void HandleInspector::show_selection(const Document* document, std::uint64_t nod
 
   const Entity* entity = document->entity(node_id);
   if (entity != nullptr) {
-    kind_->setText(QString::fromLatin1(kind_name(entity->kind())));
+    kind_->setText(kind_name(*this, entity->kind()));
   } else {
     kind_->setText(tr("Imported mesh"));
   }
@@ -129,24 +140,10 @@ void HandleInspector::show_selection(const Document* document, std::uint64_t nod
   QStringList lines;
   if (entity != nullptr) {
     if (const Relation* host = document->bim().host_of(entity->id)) {
-      lines << QStringLiteral("id %1  %2  %3 → %4  along=%5  sill=%6  valid=%7")
-                   .arg(host->id)
-                   .arg(QString::fromLatin1(relation_kind_name(host->kind)))
-                   .arg(host->from)
-                   .arg(host->to)
-                   .arg(host->placement.along, 0, 'f', 3)
-                   .arg(host->placement.sill, 0, 'f', 3)
-                   .arg(host->valid ? QStringLiteral("yes") : QStringLiteral("no"));
+      lines << format_relation(*this, *host);
     }
     for (const Relation* dep : document->bim().dependents(entity->id)) {
-      lines << QStringLiteral("id %1  %2  %3 → %4  along=%5  sill=%6  valid=%7")
-                   .arg(dep->id)
-                   .arg(QString::fromLatin1(relation_kind_name(dep->kind)))
-                   .arg(dep->from)
-                   .arg(dep->to)
-                   .arg(dep->placement.along, 0, 'f', 3)
-                   .arg(dep->placement.sill, 0, 'f', 3)
-                   .arg(dep->valid ? QStringLiteral("yes") : QStringLiteral("no"));
+      lines << format_relation(*this, *dep);
     }
   }
   if (lines.isEmpty()) {
