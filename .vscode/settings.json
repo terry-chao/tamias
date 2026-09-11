@@ -6,6 +6,11 @@
   "cmake.buildPreset": "debug",
   "cmake.buildBeforeRun": true,
   "cmake.saveBeforeBuild": true,
+  "cmake.debugConfig": {
+    "type": "cppvsdbg",
+    "preLaunchTask": "Tamias: 编译",
+    "preRestartTask": "Tamias: 编译"
+  },
   "cmake.outputLogEncoding": "auto",
   "cmake.environment": {
     "VSLANG": "1033",

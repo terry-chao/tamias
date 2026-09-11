@@ -2,7 +2,26 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "Tamias: 结束调试进程",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/.vscode/predebug.ps1\"",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "showReuseMessage": false,
+        "close": true,
+        "echo": false
+      },
+      "problemMatcher": [],
+      "detail": "结束正在运行的调试构建，避免 Restart 时无法覆盖 tamias.exe"
+    },
+    {
       "label": "Tamias: 编译",
+      "dependsOn": ["Tamias: 结束调试进程"],
+      "dependsOrder": "sequence",
       "type": "cmake",
       "command": "build",
       "preset": "${command:cmake.activeBuildPresetName}",
@@ -15,11 +34,12 @@
       },
       "presentation": {
         "reveal": "silent",
+        "panel": "shared",
         "close": true,
         "showReuseMessage": false
       },
       "problemMatcher": [],
-      "detail": "调试前编译最新的 tamias 目标"
+      "detail": "调试前结束旧进程并编译最新的 tamias 目标"
     },
     {
       "label": "Tamias: 打包 MSI",

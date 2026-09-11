@@ -6,9 +6,10 @@
       "type": "cppvsdbg",
       "request": "launch",
       "preLaunchTask": "Tamias: 编译",
-      "program": "${command:cmake.launchTargetPath}",
+      "preRestartTask": "Tamias: 编译",
+      "program": "${command:cmake.getLaunchTargetPath}",
       "args": [],
-      "cwd": "${command:cmake.launchTargetDirectory}",
+      "cwd": "${command:cmake.getLaunchTargetDirectory}",
       "environment": [
         {
           "name": "PATH",
