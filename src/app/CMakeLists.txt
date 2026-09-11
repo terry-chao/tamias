@@ -42,16 +42,24 @@ execute_process(
           -DTAMIAS_VERSION=${PROJECT_VERSION}
           -P "${CMAKE_SOURCE_DIR}/cmake/TamiasGitVersion.cmake"
 )
-add_custom_target(tamias_git_version
+set(_tamias_version_depends "${CMAKE_SOURCE_DIR}/cmake/TamiasGitVersion.cmake")
+if(EXISTS "${CMAKE_SOURCE_DIR}/.git/HEAD")
+  list(APPEND _tamias_version_depends "${CMAKE_SOURCE_DIR}/.git/HEAD")
+endif()
+add_custom_command(
+  OUTPUT "${TAMIAS_VERSION_HEADER}"
   COMMAND "${CMAKE_COMMAND}"
           -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
           -DOUTPUT_FILE=${TAMIAS_VERSION_HEADER}
           -DTAMIAS_VERSION=${PROJECT_VERSION}
           -P "${CMAKE_SOURCE_DIR}/cmake/TamiasGitVersion.cmake"
-  BYPRODUCTS "${TAMIAS_VERSION_HEADER}"
+  DEPENDS ${_tamias_version_depends}
   COMMENT "Refreshing Tamias version header from git"
+  VERBATIM
 )
-add_dependencies(tamias tamias_git_version)
+set_source_files_properties(main.cpp about_dialog.cpp PROPERTIES
+  OBJECT_DEPENDS "${TAMIAS_VERSION_HEADER}"
+)
 
 set(TAMIAS_TS_FILES
   ${CMAKE_SOURCE_DIR}/translations/tamias_zh_CN.ts

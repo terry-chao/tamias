@@ -18,8 +18,8 @@ if(MSVC)
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
   add_compile_options(/utf-8 /MP /FS /W4 /permissive- /EHsc)
   # CMake 把 CMAKE_CL_SHOWINCLUDES_PREFIX 按控制台 ACP 写入 ninja。
-  # CMake Tools 里 cl /utf-8 吐出的是 UTF-8「注意: 包含文件:  」。
-  # 下面这串是把那段 UTF-8 当 GBK 解开后的字形，写进 ninja 的字节才是 UTF-8。
+  # cl /utf-8 只改源文件编码，/showIncludes 仍跟控制台代码页走：CP936 输出 GBK，
+  # UTF-8 控制台输出 UTF-8。Ninja 前缀写成 UTF-8，编译用 cl_utf8_launcher 切到 65001。
   if(CMAKE_GENERATOR MATCHES "Ninja")
     set(_tamias_showinc "娉ㄦ剰: 鍖呭惈鏂囦欢:  ")
     unset(CMAKE_CL_SHOWINCLUDES_PREFIX)
@@ -29,6 +29,21 @@ if(MSVC)
     set(CMAKE_C_CL_SHOWINCLUDES_PREFIX "${_tamias_showinc}")
     set(CMAKE_CXX_CL_SHOWINCLUDES_PREFIX "${_tamias_showinc}")
     unset(_tamias_showinc)
+    set(_tamias_cl_utf8_src "${CMAKE_CURRENT_SOURCE_DIR}/cmake/cl_utf8_launcher.c")
+    set(_tamias_cl_utf8 "${CMAKE_BINARY_DIR}/cl_utf8_launcher.exe")
+    if("${_tamias_cl_utf8_src}" IS_NEWER_THAN "${_tamias_cl_utf8}")
+      execute_process(
+        COMMAND "${CMAKE_CXX_COMPILER}" /nologo /O1 /Fe${_tamias_cl_utf8} "${_tamias_cl_utf8_src}"
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+        RESULT_VARIABLE _tamias_cl_utf8_rc
+        OUTPUT_VARIABLE _tamias_cl_utf8_out
+        ERROR_VARIABLE _tamias_cl_utf8_out
+      )
+      if(NOT _tamias_cl_utf8_rc EQUAL 0)
+        message(WARNING "cl_utf8_launcher failed to build:\n${_tamias_cl_utf8_out}")
+        unset(_tamias_cl_utf8)
+      endif()
+    endif()
   endif()
   # CMake 4 leaves CMAKE_<LANG>_FLAGS_<CONFIG> empty; vcpkg also blanks
   # CMAKE_MSVC_DEBUG_INFORMATION_FORMAT. RelWithDebInfo then has no /Zi or
@@ -53,6 +68,24 @@ option(TAMIAS_ENABLE_WEBGPU_BACKEND "Build the browser WebGPU RHI backend (Emscr
 option(TAMIAS_ENABLE_OCCT "Build OCCT modeling and IfcOpenShell." ON)
 option(TAMIAS_BUILD_TESTS "Build unit tests." ON)
 option(TAMIAS_USE_FETCHCONTENT "Fetch third-party libs with FetchContent when not found." ON)
+option(TAMIAS_COMPILER_CACHE "Use sccache/ccache as compiler launcher when found." ON)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/TamiasPch.cmake")
+
+if(TAMIAS_COMPILER_CACHE AND NOT CMAKE_CXX_COMPILER_LAUNCHER AND NOT EMSCRIPTEN)
+  find_program(TAMIAS_COMPILER_CACHE_PROGRAM NAMES sccache ccache)
+endif()
+if(MSVC AND CMAKE_GENERATOR MATCHES "Ninja" AND DEFINED _tamias_cl_utf8)
+  set(_tamias_launchers "${_tamias_cl_utf8}")
+  if(TAMIAS_COMPILER_CACHE AND TAMIAS_COMPILER_CACHE_PROGRAM)
+    list(APPEND _tamias_launchers "${TAMIAS_COMPILER_CACHE_PROGRAM}")
+  endif()
+  set(CMAKE_C_COMPILER_LAUNCHER "${_tamias_launchers}")
+  set(CMAKE_CXX_COMPILER_LAUNCHER "${_tamias_launchers}")
+  unset(_tamias_launchers)
+elseif(TAMIAS_COMPILER_CACHE AND TAMIAS_COMPILER_CACHE_PROGRAM AND NOT CMAKE_CXX_COMPILER_LAUNCHER AND NOT EMSCRIPTEN)
+  set(CMAKE_C_COMPILER_LAUNCHER "${TAMIAS_COMPILER_CACHE_PROGRAM}")
+  set(CMAKE_CXX_COMPILER_LAUNCHER "${TAMIAS_COMPILER_CACHE_PROGRAM}")
+endif()
 
 if(EMSCRIPTEN)
   set(TAMIAS_ENABLE_VULKAN_BACKEND OFF CACHE BOOL "Vulkan is unavailable on WebAssembly." FORCE)
@@ -109,9 +142,18 @@ if(NOT EMSCRIPTEN)
   include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/TamiasPackage.cmake")
 endif()
 
+tamias_apply_build_acceleration()
+
 message(STATUS "Tamias Vulkan backend: ${TAMIAS_ENABLE_VULKAN_BACKEND}")
 message(STATUS "Tamias OpenGL backend: ${TAMIAS_ENABLE_OPENGL_BACKEND}")
 message(STATUS "Tamias WebGL backend: ${TAMIAS_ENABLE_WEBGL_BACKEND}")
 message(STATUS "Tamias WebGPU backend: ${TAMIAS_ENABLE_WEBGPU_BACKEND}")
 message(STATUS "Tamias OCCT: ${TAMIAS_OCCT_ROOT}")
 message(STATUS "Tamias IfcOpenShell: IfcParse schemas=${TAMIAS_IFC_SCHEMAS}")
+message(STATUS "Tamias PCH: ${TAMIAS_PCH_ACTIVE} (option ${TAMIAS_ENABLE_PCH})")
+message(STATUS "Tamias unity build: ${TAMIAS_UNITY_BUILD}")
+if(CMAKE_CXX_COMPILER_LAUNCHER)
+  message(STATUS "Tamias compiler cache: ${CMAKE_CXX_COMPILER_LAUNCHER}")
+else()
+  message(STATUS "Tamias compiler cache: OFF")
+endif()

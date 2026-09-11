@@ -50,6 +50,9 @@ Use the `linux` preset with vcpkg (`linux-desktop` feature) or install Qt6/Vulka
 | `TAMIAS_USE_FETCHCONTENT` | ON | Fetch gtest when not found |
 | `TAMIAS_QT_PREFIX` | (empty) | Windows system Qt prefix; set by the `msvc` preset |
 | `TAMIAS_BUILD_MSI` | ON (Windows) | Add the `tamias_msi` target |
+| `TAMIAS_ENABLE_PCH` | ON | Precompiled headers (`src/pch.h`, plus Qt/gtest). **Off** on Windows `Ninja Multi-Config` (CMake's `.pch` is phony and would rebuild every file each build) |
+| `TAMIAS_UNITY_BUILD` | OFF | Batch several `.cpp` into one TU (faster clean build, worse incremental) |
+| `TAMIAS_COMPILER_CACHE` | ON | If `sccache` or `ccache` is on PATH, wrap `cl`/`c++` (helps **clean** rebuilds). Empty incremental builds should be `ninja: no work to do` without a cache. |
 
 ### OCCT (required, via vcpkg)
 

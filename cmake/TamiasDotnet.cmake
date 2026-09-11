@@ -115,7 +115,15 @@ function(tamias_publish_csharp target)
     return()
   endif()
 
-  add_custom_target(tamias_csharp ALL
+  file(GLOB_RECURSE _cs_inputs
+    "${CMAKE_SOURCE_DIR}/plugin-sdk/csharp/*.cs"
+    "${CMAKE_SOURCE_DIR}/plugin-sdk/csharp/*.csproj"
+    "${CMAKE_SOURCE_DIR}/plugins/csharp/*.cs"
+    "${CMAKE_SOURCE_DIR}/plugins/csharp/*.csproj"
+  )
+  set(_csharp_stamp "${CMAKE_CURRENT_BINARY_DIR}/tamias_csharp-$<CONFIG>.stamp")
+  add_custom_command(
+    OUTPUT "${_csharp_stamp}"
     COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:${target}>/managed
     COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:${target}>/plugins
     COMMAND "${TAMIAS_DOTNET}" publish "${_host_csproj}"
@@ -130,10 +138,13 @@ function(tamias_publish_csharp target)
             -c $<IF:$<CONFIG:Debug>,Debug,Release>
             --nologo
             -o $<TARGET_FILE_DIR:${target}>/plugins
+    COMMAND ${CMAKE_COMMAND} -E touch "${_csharp_stamp}"
+    DEPENDS ${_cs_inputs}
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/plugin-sdk/csharp"
     COMMENT "Publishing C# plugin host and sample plugins"
     VERBATIM
   )
+  add_custom_target(tamias_csharp DEPENDS "${_csharp_stamp}")
   add_dependencies(${target} tamias_csharp)
   tamias_copy_nethost(${target})
 endfunction()
