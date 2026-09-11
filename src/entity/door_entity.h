@@ -1,15 +1,15 @@
 #pragma once
 
-#include "entity/family_entity.h"
+#include "entity/opening_entity.h"
 
 namespace tamias {
 
-// 门：点在墙上时写入 HostedOn 关联，随墙重造型；开洞布尔后续接入。
-class DoorEntity final : public FamilyEntity {
+// 门：开洞实体，点在墙上时写入 HostedOn 关联，随墙重造型并切穿宿主墙。
+class DoorEntity final : public OpeningEntity {
  public:
-  DoorEntity() : FamilyEntity(EntityKind::Door, "Single-Flush Door") {}
+  DoorEntity() : OpeningEntity(EntityKind::Door, "Single-Flush Door", 0.0) {}
   explicit DoorEntity(Vec3 position, double width = 1.0, double height = 2.1,
-                      double thickness = 0.05);
+                      double thickness = 0.05, double sill = 0.0);
 };
 
 }  // namespace tamias

@@ -20,8 +20,8 @@ std::shared_ptr<Document> make_doc() {
 TEST(SessionTest, DispatchUndoRedo) {
   register_commands(command_registry());
   Session session(make_doc());
-  ASSERT_TRUE(session.dispatch("create_box", {}));
-  // create_box 是单点交互命令：喂一个点完成放置。
+  ASSERT_TRUE(session.dispatch("create_column", {}));
+  // create_column 是单点交互命令：喂一个点完成放置。
   auto done = session.command_system().feed_point(Vec3{0.f, 0.f, 0.f});
   ASSERT_TRUE(done && *done);
   EXPECT_EQ(session.document().entities().size(), 1u);
@@ -40,7 +40,7 @@ TEST(SessionTest, DispatchUndoRedo) {
 TEST(SessionTest, SelectionHelpers) {
   register_commands(command_registry());
   Session session(make_doc());
-  ASSERT_TRUE(session.dispatch("create_box", {}));
+  ASSERT_TRUE(session.dispatch("create_column", {}));
   auto done = session.command_system().feed_point(Vec3{0.f, 0.f, 0.f});
   ASSERT_TRUE(done && *done);
   ASSERT_FALSE(session.document().entities().empty());
@@ -79,7 +79,7 @@ TEST(SessionTest, ListenerSeesSelectionToolAndUndo) {
   ASSERT_EQ(events.size(), 1u);
   EXPECT_EQ(events.back(), HostEvent::ToolChanged);
 
-  ASSERT_TRUE(session.dispatch("create_box", {}));
+  ASSERT_TRUE(session.dispatch("create_column", {}));
   auto done = session.command_system().feed_point(Vec3{0.f, 0.f, 0.f});
   ASSERT_TRUE(done && *done);
   const std::uint64_t id = session.document().entities().begin()->first;
@@ -93,7 +93,7 @@ TEST(SessionTest, ListenerSeesSelectionToolAndUndo) {
 TEST(SessionTest, ResetDocumentClearsCommandStack) {
   register_commands(command_registry());
   Session session(make_doc());
-  ASSERT_TRUE(session.dispatch("create_box", {}));
+  ASSERT_TRUE(session.dispatch("create_column", {}));
   auto done = session.command_system().feed_point(Vec3{0.f, 0.f, 0.f});
   ASSERT_TRUE(done && *done);
   EXPECT_TRUE(session.can_undo());

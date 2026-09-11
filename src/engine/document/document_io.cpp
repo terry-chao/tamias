@@ -1,5 +1,6 @@
 #include "document_io.h"
 
+#include "bim/host_update.h"
 #include "bim/line_location.h"
 #include "bim/point_location.h"
 #include "bim/surface_location.h"
@@ -1158,6 +1159,13 @@ Result<Document> read_document_body(BinaryReader& r) {
   document.set_next_material_id(*next_material);
   document.set_next_texture_id(*next_texture);
   document.recompute_scene();
+  for (const auto& [id, entity] : document.entities()) {
+    if (entity != nullptr &&
+        (entity->kind() == EntityKind::Wall || entity->kind() == EntityKind::StructuralWall) &&
+        !document.bim().dependents(id).empty()) {
+      (void)remesh_host_openings(document, id);
+    }
+  }
   document.clear_dirty();
   return document;
 }

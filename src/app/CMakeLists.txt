@@ -19,6 +19,7 @@ add_executable(tamias
   plugin_prompt_dialog.cpp
   about_dialog.cpp
   pin_result_dialog.cpp
+  selection_accent_delegate.cpp
   render_scene_inspector.cpp
   document_viewport.cpp
   box_select_overlay.cpp

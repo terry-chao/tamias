@@ -32,6 +32,7 @@ constexpr std::uint32_t kChunkMesh = fourcc('M', 'E', 'S', 'H');
 constexpr std::uint32_t kChunkDraw = fourcc('D', 'R', 'A', 'W');
 constexpr std::uint32_t kChunkTex = fourcc('T', 'E', 'X', 'T');
 constexpr std::uint32_t kChunkHidn = fourcc('H', 'I', 'D', 'N');
+constexpr std::uint32_t kChunkSgrf = fourcc('S', 'G', 'R', 'F');
 
 Result<void> write_vec3(BinaryWriter& w, const Vec3& v) {
   if (auto r = w.write_f32(v.x); !r) {
@@ -437,6 +438,193 @@ Result<void> read_texture(BinaryReader& r, std::uint64_t& id, TextureAsset& tex)
   return {};
 }
 
+Result<void> write_debug_graph(BinaryWriter& w, const RenderSceneDebugGraph& graph) {
+  if (auto r = w.write_u64(static_cast<std::uint64_t>(graph.nodes.size())); !r) {
+    return r;
+  }
+  for (const RenderSceneNodeDebug& node : graph.nodes) {
+    if (auto r = w.write_u64(node.id); !r) {
+      return r;
+    }
+    if (auto r = w.write_string(node.name); !r) {
+      return r;
+    }
+    if (auto r = w.write_u64(node.parent); !r) {
+      return r;
+    }
+    if (auto r = w.write_u64(static_cast<std::uint64_t>(node.children.size())); !r) {
+      return r;
+    }
+    for (std::uint64_t child : node.children) {
+      if (auto r = w.write_u64(child); !r) {
+        return r;
+      }
+    }
+    if (auto r = w.write_u64(node.mesh_asset_id); !r) {
+      return r;
+    }
+    if (auto r = write_mat4(w, node.local_transform); !r) {
+      return r;
+    }
+    if (auto r = write_mat4(w, node.world_transform); !r) {
+      return r;
+    }
+    if (auto r = write_aabb(w, node.local_bounds); !r) {
+      return r;
+    }
+    if (auto r = write_aabb(w, node.world_bounds); !r) {
+      return r;
+    }
+    if (auto r = w.write_bool(node.selected); !r) {
+      return r;
+    }
+  }
+
+  if (auto r = w.write_u64(static_cast<std::uint64_t>(graph.lod_sets.size())); !r) {
+    return r;
+  }
+  std::vector<std::uint64_t> geometry_ids;
+  geometry_ids.reserve(graph.lod_sets.size());
+  for (const auto& [id, _] : graph.lod_sets) {
+    geometry_ids.push_back(id);
+  }
+  std::sort(geometry_ids.begin(), geometry_ids.end());
+  for (std::uint64_t id : geometry_ids) {
+    const LodMeshSet& set = graph.lod_sets.at(id);
+    if (auto r = w.write_u64(id); !r) {
+      return r;
+    }
+    if (auto r = w.write_u64(set.coarse); !r) {
+      return r;
+    }
+    if (auto r = w.write_u64(set.work); !r) {
+      return r;
+    }
+    if (auto r = w.write_u64(set.close); !r) {
+      return r;
+    }
+  }
+
+  if (auto r = w.write_u64(static_cast<std::uint64_t>(graph.lod_by_node.size())); !r) {
+    return r;
+  }
+  for (const auto& [node_id, lod] : graph.lod_by_node) {
+    if (auto r = w.write_u64(node_id); !r) {
+      return r;
+    }
+    if (auto r = w.write_u8(static_cast<std::uint8_t>(lod)); !r) {
+      return r;
+    }
+  }
+  return {};
+}
+
+Result<void> read_debug_graph(BinaryReader& r, RenderSceneDebugGraph& graph) {
+  auto node_count = r.read_u64();
+  if (!node_count) {
+    return Err(node_count.error());
+  }
+  graph.nodes.resize(static_cast<std::size_t>(*node_count));
+  for (RenderSceneNodeDebug& node : graph.nodes) {
+    auto id = r.read_u64();
+    if (!id) {
+      return Err(id.error());
+    }
+    node.id = *id;
+    auto name = r.read_string();
+    if (!name) {
+      return Err(name.error());
+    }
+    node.name = std::move(*name);
+    auto parent = r.read_u64();
+    if (!parent) {
+      return Err(parent.error());
+    }
+    node.parent = *parent;
+    auto child_count = r.read_u64();
+    if (!child_count) {
+      return Err(child_count.error());
+    }
+    node.children.resize(static_cast<std::size_t>(*child_count));
+    for (std::uint64_t& child : node.children) {
+      auto child_v = r.read_u64();
+      if (!child_v) {
+        return Err(child_v.error());
+      }
+      child = *child_v;
+    }
+    auto mesh_id = r.read_u64();
+    if (!mesh_id) {
+      return Err(mesh_id.error());
+    }
+    node.mesh_asset_id = *mesh_id;
+    if (auto res = read_mat4(r, node.local_transform); !res) {
+      return res;
+    }
+    if (auto res = read_mat4(r, node.world_transform); !res) {
+      return res;
+    }
+    if (auto res = read_aabb(r, node.local_bounds); !res) {
+      return res;
+    }
+    if (auto res = read_aabb(r, node.world_bounds); !res) {
+      return res;
+    }
+    auto selected = r.read_bool();
+    if (!selected) {
+      return Err(selected.error());
+    }
+    node.selected = *selected;
+  }
+
+  auto lod_set_count = r.read_u64();
+  if (!lod_set_count) {
+    return Err(lod_set_count.error());
+  }
+  for (std::uint64_t i = 0; i < *lod_set_count; ++i) {
+    auto id = r.read_u64();
+    if (!id) {
+      return Err(id.error());
+    }
+    LodMeshSet set{};
+    auto coarse = r.read_u64();
+    if (!coarse) {
+      return Err(coarse.error());
+    }
+    set.coarse = *coarse;
+    auto work = r.read_u64();
+    if (!work) {
+      return Err(work.error());
+    }
+    set.work = *work;
+    auto close = r.read_u64();
+    if (!close) {
+      return Err(close.error());
+    }
+    set.close = *close;
+    graph.lod_sets.emplace(*id, set);
+  }
+
+  auto lod_count = r.read_u64();
+  if (!lod_count) {
+    return Err(lod_count.error());
+  }
+  for (std::uint64_t i = 0; i < *lod_count; ++i) {
+    auto node_id = r.read_u64();
+    if (!node_id) {
+      return Err(node_id.error());
+    }
+    auto lod = r.read_u8();
+    if (!lod) {
+      return Err(lod.error());
+    }
+    if (*lod <= static_cast<std::uint8_t>(MeshLod::Close)) {
+      graph.lod_by_node[*node_id] = static_cast<MeshLod>(*lod);
+    }
+  }
+  return {};
+}
+
 }  // namespace
 
 Result<std::vector<std::uint8_t>> serialize_render_scene(const RenderScene& scene) {
@@ -518,7 +706,8 @@ Result<std::vector<std::uint8_t>> serialize_render_scene(const RenderScene& scen
   }
 
   const std::uint32_t chunk_count =
-      4u + (scene.textures.empty() ? 0u : 1u) + (scene.hidden_node_ids.empty() ? 0u : 1u);
+      4u + (scene.textures.empty() ? 0u : 1u) + (scene.hidden_node_ids.empty() ? 0u : 1u) +
+      (scene.debug_graph.empty() ? 0u : 1u);
 
   BinaryWriter file;
   if (auto r = file.write_bytes(kMagic, 4); !r) {
@@ -561,6 +750,15 @@ Result<std::vector<std::uint8_t>> serialize_render_scene(const RenderScene& scen
       }
     }
     if (auto r = append_chunk(file, kChunkHidn, hidn_w.data()); !r) {
+      return Err(r.error());
+    }
+  }
+  if (!scene.debug_graph.empty()) {
+    BinaryWriter graph_w;
+    if (auto r = write_debug_graph(graph_w, scene.debug_graph); !r) {
+      return Err(r.error());
+    }
+    if (auto r = append_chunk(file, kChunkSgrf, graph_w.data()); !r) {
       return Err(r.error());
     }
   }
@@ -688,6 +886,10 @@ Result<RenderScene> deserialize_render_scene(std::span<const std::uint8_t> bytes
           return Err(node.error());
         }
         hid = *node;
+      }
+    } else if (*id == kChunkSgrf) {
+      if (auto res = read_debug_graph(chunk_r, scene.debug_graph); !res) {
+        return Err(res.error());
       }
     }
   }

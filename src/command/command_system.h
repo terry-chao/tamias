@@ -36,7 +36,7 @@ class CommandRegistry {
 
 [[nodiscard]] CommandRegistry& command_registry();
 
-// 启动时调用：注册所有命令（create_wall / create_box / create_cylinder / set_param）。
+// 启动时调用：注册所有命令（create_wall / create_column / set_param 等）。
 void register_commands(CommandRegistry& registry);
 
 // 命令系统：按名分发命令，统一管 undo 栈。每视口一份（undo 按文档隔离）。
@@ -49,6 +49,8 @@ class CommandSystem {
                                       const CommandArgs& args);
   // 给 pending 命令喂一个交互点；返回 true 表示命令已完成。
   [[nodiscard]] Result<bool> feed_point(Vec3 point, std::uint64_t picked_entity_id = 0);
+  // 光标悬停：更新门窗等跟墙预览，不提交。
+  void hover(Vec3 point, std::uint64_t picked_entity_id = 0);
   // 给 pending 命令发「确认」（折线 Enter / 双击）。返回 true 表示已完成。
   [[nodiscard]] Result<bool> confirm();
   void cancel();  // 取消 pending

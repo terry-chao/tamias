@@ -191,6 +191,9 @@ QString PropertyPanel::param_label(EntityKind entity_kind, FeatureKind feature_k
     case EntityKind::Door:
     case EntityKind::Window:
       if (feature_kind == FeatureKind::RectProfile) {
+        if (is("sill")) {
+          return tr("Sill Height");
+        }
         if (is("width")) {
           return tr("Width");
         }

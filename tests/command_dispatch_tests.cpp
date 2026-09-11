@@ -49,23 +49,15 @@ TEST(CommandDispatch, CreateBeamFromPointsUndoRedo) {
   expect_undo_clears(cmd);
 }
 
-TEST(CommandDispatch, CreateColumnCylinderDoorFromOrigin) {
+TEST(CommandDispatch, CreateColumnFromOrigin) {
   Cmd cmd("prims");
-  struct Case {
-    const char* name;
-    EntityKind kind;
-  };
-  for (const Case c : {Case{"create_column", EntityKind::Column},
-                       Case{"create_cylinder", EntityKind::Cylinder},
-                       Case{"create_door", EntityKind::Door}}) {
-    auto r = cmd.system.dispatch(cmd.doc, c.name, {{"origin", Vec3{1.f, 0.f, 2.f}}});
-    ASSERT_TRUE(r) << c.name << ": " << r.error();
-    EXPECT_FALSE(cmd.system.has_pending());
-    ASSERT_EQ(cmd.doc.entities().size(), 1u) << c.name;
-    EXPECT_EQ(cmd.doc.entities().begin()->second->kind(), c.kind);
-    cmd.system.undo();
-    EXPECT_EQ(cmd.doc.entities().size(), 0u);
-  }
+  auto r = cmd.system.dispatch(cmd.doc, "create_column", {{"origin", Vec3{1.f, 0.f, 2.f}}});
+  ASSERT_TRUE(r) << r.error();
+  EXPECT_FALSE(cmd.system.has_pending());
+  ASSERT_EQ(cmd.doc.entities().size(), 1u);
+  EXPECT_EQ(cmd.doc.entities().begin()->second->kind(), EntityKind::Column);
+  cmd.system.undo();
+  EXPECT_EQ(cmd.doc.entities().size(), 0u);
 }
 
 TEST(CommandDispatch, CreateArcAndRectangleFromPoints) {
@@ -141,7 +133,7 @@ TEST(CommandDispatch, SetLocationChangesElevationOffset) {
 
 TEST(CommandDispatch, SetMaterialUndoRestoresIdWithoutNewMesh) {
   Cmd cmd("mat");
-  ASSERT_TRUE(cmd.system.dispatch(cmd.doc, "create_box", {{"origin", Vec3{0.f, 0.f, 0.f}}}));
+  ASSERT_TRUE(cmd.system.dispatch(cmd.doc, "create_column", {{"origin", Vec3{0.f, 0.f, 0.f}}}));
   const std::uint64_t eid = cmd.doc.entities().begin()->first;
   Entity* box = cmd.doc.entity(eid);
   ASSERT_NE(box, nullptr);
@@ -190,7 +182,7 @@ TEST(CommandDispatch, ImportTextureUndoRemovesAdded) {
 
 TEST(CommandDispatch, UpdateMaterialSharedUndo) {
   Cmd cmd("update-mat");
-  ASSERT_TRUE(cmd.system.dispatch(cmd.doc, "create_box", {{"origin", Vec3{0.f, 0.f, 0.f}}}));
+  ASSERT_TRUE(cmd.system.dispatch(cmd.doc, "create_column", {{"origin", Vec3{0.f, 0.f, 0.f}}}));
   Entity* box = cmd.doc.entities().begin()->second.get();
   ASSERT_NE(box, nullptr);
   Material shared{};
@@ -211,7 +203,7 @@ TEST(CommandDispatch, UpdateMaterialSharedUndo) {
 
 TEST(CommandDispatch, ChamferUndoRedo) {
   Cmd cmd("chamfer");
-  ASSERT_TRUE(cmd.system.dispatch(cmd.doc, "create_box", {{"origin", Vec3{0.f, 0.f, 0.f}}}));
+  ASSERT_TRUE(cmd.system.dispatch(cmd.doc, "create_column", {{"origin", Vec3{0.f, 0.f, 0.f}}}));
   const std::uint64_t eid = cmd.doc.entities().begin()->first;
   EXPECT_EQ(cmd.doc.entity(eid)->model.features().size(), 2u);
 
@@ -231,9 +223,11 @@ TEST(CommandDispatch, ChamferUndoRedo) {
 
 TEST(CommandDispatch, BooleanCommonAndCutUndo) {
   Cmd cmd("bool-ops");
-  ASSERT_TRUE(cmd.system.dispatch(cmd.doc, "create_box", {{"origin", Vec3{0.f, 0.f, 0.f}}}));
+  ASSERT_TRUE(cmd.system.dispatch(cmd.doc, "create_column", {{"origin", Vec3{0.f, 0.f, 0.f}}}));
   const std::uint64_t box = cmd.doc.entities().begin()->first;
-  ASSERT_TRUE(cmd.system.dispatch(cmd.doc, "create_cylinder", {{"origin", Vec3{0.f, 0.f, 0.f}}}));
+  ASSERT_TRUE(cmd.system.dispatch(cmd.doc, "create_column",
+                                  {{"origin", Vec3{0.f, 0.f, 0.f}},
+                                   {"sub_type", std::string("circle")}}));
   std::uint64_t cyl = 0;
   for (const auto& [id, unused] : cmd.doc.entities()) {
     (void)unused;

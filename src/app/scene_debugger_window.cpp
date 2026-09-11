@@ -9,6 +9,7 @@
 #include "qt_path.h"
 #include "render_scene_inspector.h"
 #include "replay_viewport.h"
+#include "selection_accent_delegate.h"
 
 #include <QAbstractItemView>
 #include <QAction>
@@ -225,6 +226,7 @@ SceneDebuggerWindow::SceneDebuggerWindow(std::shared_ptr<RenderThread> render_th
   commands_->setSelectionBehavior(QAbstractItemView::SelectRows);
   commands_->setEditTriggers(QAbstractItemView::NoEditTriggers);
   commands_->setAlternatingRowColors(true);
+  commands_->setItemDelegate(new RowAccentDelegate(commands_));
   commands_layout->addWidget(commands_);
 
   auto* replay_wrap = new QWidget(this);

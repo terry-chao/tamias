@@ -92,6 +92,8 @@ class RenderThread {
   void request_upload_mesh(std::uint64_t asset_id, MeshCpu mesh);
   std::vector<LodRequest> take_lod_requests();
   [[nodiscard]] RenderFrameStats last_stats() const;
+  // 最近一次 draw_channel 中每个语义节点实际选中的 LOD（调试器用）。
+  [[nodiscard]] std::unordered_map<std::uint64_t, MeshLod> last_lod_by_node() const;
   // 上传纹理资产（幂等：同一 asset_id + generation 命中缓存则直接返回）。
   Result<std::uint64_t> upload_texture(std::uint64_t asset_id, TextureAsset asset);
   // LRU 逐出的贴图资产 id；视口据此清 uploaded_textures_ 以便重新上传。
@@ -162,6 +164,7 @@ class RenderThread {
   std::vector<LodRequest> pending_lod_requests_;
   std::vector<std::uint64_t> pending_evicted_texture_ids_;
   RenderFrameStats last_stats_;
+  std::unordered_map<std::uint64_t, MeshLod> last_lod_by_node_;
   std::unordered_map<std::uint64_t, GpuTexture> textures_;
   std::unordered_map<std::uint64_t, std::uint64_t> texture_asset_to_gpu_;  // asset id -> gpu texture id
   std::unique_ptr<Texture> default_texture_;  // 1x1 白纹理，无贴图物体兜底

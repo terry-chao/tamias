@@ -258,6 +258,40 @@ TEST(RenderSceneIo, FileRoundTrip) {
   std::filesystem::remove(path, ec);
 }
 
+TEST(RenderSceneIo, DebugGraphRoundTrip) {
+  RenderScene original = handmade_scene();
+  RenderSceneNodeDebug root;
+  root.id = 1;
+  root.name = "root";
+  root.children = {2};
+  RenderSceneNodeDebug leaf;
+  leaf.id = 2;
+  leaf.name = "leaf";
+  leaf.parent = 1;
+  leaf.mesh_asset_id = 7;
+  leaf.local_transform = translate({1.f, 2.f, 3.f});
+  leaf.world_transform = leaf.local_transform;
+  leaf.local_bounds = original.meshes.at(7).bounds;
+  leaf.world_bounds = leaf.local_bounds;
+  leaf.selected = true;
+  original.debug_graph.nodes = {root, leaf};
+  original.debug_graph.lod_sets[7] = LodMeshSet{.coarse = 8, .work = 7, .close = 9};
+  original.debug_graph.lod_by_node[2] = MeshLod::Coarse;
+
+  auto bytes = serialize_render_scene(original);
+  ASSERT_TRUE(bytes) << bytes.error();
+  auto loaded = deserialize_render_scene(*bytes);
+  ASSERT_TRUE(loaded) << loaded.error();
+  ASSERT_EQ(loaded->debug_graph.nodes.size(), 2u);
+  EXPECT_EQ(loaded->debug_graph.nodes[0].name, "root");
+  EXPECT_EQ(loaded->debug_graph.nodes[0].children, std::vector<std::uint64_t>({2}));
+  EXPECT_EQ(loaded->debug_graph.nodes[1].parent, 1u);
+  EXPECT_EQ(loaded->debug_graph.lod_sets.at(7).coarse, 8u);
+  EXPECT_EQ(loaded->debug_graph.lod_sets.at(7).work, 7u);
+  EXPECT_EQ(loaded->debug_graph.lod_sets.at(7).close, 9u);
+  EXPECT_EQ(loaded->debug_graph.lod_by_node.at(2), MeshLod::Coarse);
+}
+
 TEST(RenderSceneIo, DigestStableAcrossRewrite) {
   const RenderScene original = handmade_scene();
   auto a = serialize_render_scene(original);

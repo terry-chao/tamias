@@ -29,6 +29,14 @@
         <translation>板</translation>
     </message>
     <message>
+        <source>Click a wall to place the window</source>
+        <translation>请点击墙面放置窗</translation>
+    </message>
+    <message>
+        <source>Click a wall to place the door</source>
+        <translation>请点击墙面放置门</translation>
+    </message>
+    <message>
         <source>Hide Selected</source>
         <translation>隐藏选中</translation>
     </message>
@@ -341,10 +349,6 @@
         <translation>绘制</translation>
     </message>
     <message>
-        <source>Primitives</source>
-        <translation>基本体</translation>
-    </message>
-    <message>
         <source>Building Components</source>
         <translation>建筑构件</translation>
     </message>
@@ -382,9 +386,8 @@
         <translation>未命名</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="92"/>
-        <source>New document with a cube</source>
-        <translation>新建含立方体的文档</translation>
+        <source>New document</source>
+        <translation>新建文档</translation>
     </message>
     <message>
         <location filename="../src/app/main_window.cpp" line="106"/>
@@ -491,29 +494,8 @@ Overwrite scene.trscn and sidecar files?</source>
         <translation>墙</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="136"/>
         <source>Create a wall: click start, then click end</source>
         <translation>创建墙：点击起点，再点击终点</translation>
-    </message>
-    <message>
-        <location filename="../src/app/main_window.cpp" line="144"/>
-        <source>Box</source>
-        <translation>立方体</translation>
-    </message>
-    <message>
-        <location filename="../src/app/main_window.cpp" line="146"/>
-        <source>Create a box: click to place</source>
-        <translation>创建立方体：点击放置</translation>
-    </message>
-    <message>
-        <location filename="../src/app/main_window.cpp" line="154"/>
-        <source>Cylinder</source>
-        <translation>圆柱</translation>
-    </message>
-    <message>
-        <location filename="../src/app/main_window.cpp" line="156"/>
-        <source>Create a cylinder: click to place</source>
-        <translation>创建圆柱：点击放置</translation>
     </message>
     <message>
         <source>Beam</source>
@@ -1803,6 +1785,118 @@ distance %3</source>
     <message>
         <source>(unnamed)</source>
         <translation>（未命名）</translation>
+    </message>
+    <message>
+        <source>Type</source>
+        <translation>类型</translation>
+    </message>
+    <message>
+        <source>LOD</source>
+        <translation>LOD</translation>
+    </message>
+    <message>
+        <source>Meshes</source>
+        <translation>网格</translation>
+    </message>
+    <message>
+        <source>Textures</source>
+        <translation>贴图</translation>
+    </message>
+    <message>
+        <source>Hidden</source>
+        <translation>隐藏</translation>
+    </message>
+    <message>
+        <source>Nodes</source>
+        <translation>节点</translation>
+    </message>
+    <message>
+        <source>LOD sets</source>
+        <translation>LOD 集</translation>
+    </message>
+    <message>
+        <source>Digest</source>
+        <translation>摘要</translation>
+    </message>
+    <message>
+        <source>Camera</source>
+        <translation>相机</translation>
+    </message>
+    <message>
+        <source>Projection</source>
+        <translation>投影</translation>
+    </message>
+    <message>
+        <source>World bounds</source>
+        <translation>世界范围</translation>
+    </message>
+    <message>
+        <source>Semantic tree from the live capture. Group nodes show the parent chain; leaves reference the mesh drawn by the render-scene graph.</source>
+        <translation>来自实时捕获的语义树。分组节点展示父级链；叶子节点引用渲染场景图绘制的网格。</translation>
+    </message>
+    <message>
+        <source>Scene Graph</source>
+        <translation>场景图</translation>
+    </message>
+    <message>
+        <source>Leaf</source>
+        <translation>叶子</translation>
+    </message>
+    <message>
+        <source>Group</source>
+        <translation>分组</translation>
+    </message>
+    <message>
+        <source>Root</source>
+        <translation>根</translation>
+    </message>
+    <message>
+        <source>%1 draws · %2 meshes · %3 textures · %4 tris · %5 hidden · %6 nodes · %7 LOD sets</source>
+        <translation>%1 条绘制 · %2 个网格 · %3 张贴图 · %4 三角 · %5 隐藏 · %6 节点 · %7 个 LOD 集</translation>
+    </message>
+    <message>
+        <source>box</source>
+        <translation>盒体</translation>
+    </message>
+    <message>
+        <source>coarse</source>
+        <translation>粗</translation>
+    </message>
+    <message>
+        <source>work</source>
+        <translation>工作</translation>
+    </message>
+    <message>
+        <source>close</source>
+        <translation>精细</translation>
+    </message>
+    <message>
+        <source>?</source>
+        <translation>?</translation>
+    </message>
+    <message>
+        <source>node-%1</source>
+        <translation>节点-%1</translation>
+    </message>
+    <message>
+        <source>cur %1</source>
+        <translation>当前 %1</translation>
+    </message>
+    <message>
+        <source>est %1</source>
+        <translation>估算 %1</translation>
+    </message>
+    <message>
+        <source>C:%1</source>
+        <translation>粗:%1</translation>
+    </message>
+    <message>
+        <source>W:%1</source>
+        <translation>工作:%1</translation>
+    </message>
+    <message>
+        <source>X:%1</source>
+        <translation>精细:%1</translation>
     </message>
 </context>
 <context>

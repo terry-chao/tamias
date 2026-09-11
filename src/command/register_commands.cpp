@@ -78,16 +78,6 @@ std::vector<Vec3> placement_points(const CommandArgs& args) {
   return points;
 }
 
-std::unique_ptr<CreatePrimitiveCommand> make_primitive(Document& doc, PrimitiveKind kind,
-                                                       const CommandArgs& args) {
-  auto points = placement_points(args);
-  const auto host_id = static_cast<std::uint64_t>(arg_int(args, "host_id", 0));
-  if (!points.empty()) {
-    return std::make_unique<CreatePrimitiveCommand>(doc, kind, points[0], host_id);
-  }
-  return std::make_unique<CreatePrimitiveCommand>(doc, kind);
-}
-
 std::unique_ptr<CreateSketchCommand> make_sketch(Document& doc, SketchKind kind,
                                                  const CommandArgs& args) {
   auto points = arg_points(args, "points");
@@ -168,14 +158,6 @@ void register_commands(CommandRegistry& registry) {
     return std::make_unique<CreateBeamCommand>(doc, width, depth);
   });
 
-  registry.register_command("create_box", [](Document& doc, const CommandArgs& args) {
-    return make_primitive(doc, PrimitiveKind::Box, args);
-  });
-
-  registry.register_command("create_cylinder", [](Document& doc, const CommandArgs& args) {
-    return make_primitive(doc, PrimitiveKind::Cylinder, args);
-  });
-
   registry.register_command("create_column", [](Document& doc, const CommandArgs& args) {
     auto points = placement_points(args);
     const auto host_id = static_cast<std::uint64_t>(arg_int(args, "host_id", 0));
@@ -252,24 +234,30 @@ void register_commands(CommandRegistry& registry) {
     const double width = arg_double(args, "width", 1.0);
     const double height = arg_double(args, "height", 2.1);
     const double thickness = arg_double(args, "thickness", 0.05);
+    const double sill = arg_double(args, "sill", 0.0);
     auto points = placement_points(args);
     const auto host_id = static_cast<std::uint64_t>(arg_int(args, "host_id", 0));
     if (!points.empty()) {
-      auto cmd = std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Door, points[0],
-                                                           host_id);
-      // 带参数的脚本式门：通过复制构造保留尺寸不便，故用交互式 + 预设点近似。
-      return cmd;
+      return std::make_unique<CreatePrimitiveCommand>(
+          doc, PrimitiveKind::Door, points[0], host_id, width, height, thickness, sill);
     }
     return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Door, width, height,
-                                                     thickness);
+                                                     thickness, sill);
   });
 
   registry.register_command("create_window", [](Document& doc, const CommandArgs& args) {
     const double width = arg_double(args, "width", 1.2);
     const double height = arg_double(args, "height", 1.2);
     const double thickness = arg_double(args, "thickness", 0.08);
+    const double sill = arg_double(args, "sill", 0.9);
+    auto points = placement_points(args);
+    const auto host_id = static_cast<std::uint64_t>(arg_int(args, "host_id", 0));
+    if (!points.empty()) {
+      return std::make_unique<CreatePrimitiveCommand>(
+          doc, PrimitiveKind::Window, points[0], host_id, width, height, thickness, sill);
+    }
     return std::make_unique<CreatePrimitiveCommand>(doc, PrimitiveKind::Window, width, height,
-                                                     thickness);
+                                                     thickness, sill);
   });
 
   registry.register_command("create_line", [](Document& doc, const CommandArgs& args) {

@@ -1,6 +1,7 @@
 #include "bim/host_geometry.h"
 
 #include "engine/modeling/feature.h"
+#include "entity/opening_entity.h"
 
 #include <algorithm>
 #include <cmath>
@@ -66,26 +67,61 @@ void set_opening_thickness(Entity& opening, double thickness) {
   }
 }
 
-bool can_host_opening(const Entity& host, const Entity& guest) {
-  if (host.kind() != EntityKind::Wall) {
-    return false;
-  }
-  return guest.kind() == EntityKind::Window || guest.kind() == EntityKind::Door;
+bool is_wall_host(const Entity& host) {
+  return host.kind() == EntityKind::Wall || host.kind() == EntityKind::StructuralWall;
 }
 
-HostPlacement placement_from_world(const Entity& wall, const Entity& guest, Vec3 world_point) {
+bool can_host_opening(const Entity& host, const Entity& guest) {
+  if (!is_wall_host(host)) {
+    return false;
+  }
+  return is_opening_entity(guest);
+}
+
+HostPlacement placement_from_world(const Entity& wall, const OpeningSize& /*opening*/, Vec3 world_point,
+                                   double sill_height) {
   const WallSize size = wall_size(wall);
-  const OpeningSize opening = opening_size(guest);
   const Vec3 local = invert_affine(wall.local_transform) * world_point;
   HostPlacement placement{};
   placement.along = static_cast<double>(local.z) / size.length + 0.5;
-  // 点击点当作开口中心，窗台 = 点击高度 − 半窗高。
-  placement.sill = static_cast<double>(local.y) - opening.height * 0.5;
+  placement.sill = sill_height;
   placement.offset = static_cast<double>(local.x);
-  if (guest.kind() == EntityKind::Door) {
-    placement.sill = 0.0;
-  }
   return placement;
+}
+
+HostPlacement placement_from_world(const Entity& wall, const Entity& guest, Vec3 world_point) {
+  return placement_from_world(wall, opening_size(guest), world_point,
+                              opening_sill_height(guest));
+}
+
+std::vector<Vec3> opening_preview_polyline(const Entity& wall, const OpeningSize& opening,
+                                           Vec3 world_point, double sill_height) {
+  const WallSize size = wall_size(wall);
+  HostPlacement placement = placement_from_world(wall, opening, world_point, sill_height);
+  align_placement(placement, size, opening);
+
+  const Vec3 hit_local = invert_affine(wall.local_transform) * world_point;
+  const float half_t = static_cast<float>(size.thickness * 0.5);
+  const float x0 = hit_local.x >= 0.f ? half_t : -half_t;
+  const float x1 = -x0;
+  const double zc = (placement.along - 0.5) * size.length;
+  const double hw = opening.width * 0.5;
+  const double y0 = placement.sill;
+  const double y1 = placement.sill + opening.height;
+
+  auto xf = [&](float x, double y, double z) {
+    return wall.local_transform * Vec3{x, static_cast<float>(y), static_cast<float>(z)};
+  };
+  const Vec3 f0 = xf(x0, y0, zc - hw);
+  const Vec3 f1 = xf(x0, y0, zc + hw);
+  const Vec3 f2 = xf(x0, y1, zc + hw);
+  const Vec3 f3 = xf(x0, y1, zc - hw);
+  const Vec3 b0 = xf(x1, y0, zc - hw);
+  const Vec3 b1 = xf(x1, y0, zc + hw);
+  const Vec3 b2 = xf(x1, y1, zc + hw);
+  const Vec3 b3 = xf(x1, y1, zc - hw);
+  // 近面闭合矩形 + 一条穿墙边 + 远面闭合矩形。
+  return {f0, f1, f2, f3, f0, b0, b3, b2, b1, b0};
 }
 
 void align_placement(HostPlacement& placement, const WallSize& wall, const OpeningSize& opening) {

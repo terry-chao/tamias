@@ -6,8 +6,6 @@ namespace tamias {
 enum class ToolMode {
   None,
   Wall,
-  Box,
-  Cylinder,
   Beam,
   Column,
   Slab,

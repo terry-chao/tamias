@@ -194,9 +194,10 @@ ComponentSpec door_spec() {
     param("width", "宽度", 1.0, 0.3, 6.0, 0.05),
     param("height", "高度", 2.1, 1.0, 6.0, 0.05),
     param("thickness", "厚度", 0.05, 0.02, 0.5, 0.01),
+    param("sill", "离地高度", 0.0, 0.0, 6.0, 0.05),
   };
   s.pick_points = 1;
-  s.pick_hint = QStringLiteral("点击墙上的放置点（门需贴墙）");
+  s.pick_hint = QStringLiteral("点击墙面放置（门必须开在墙上）");
   s.section = rect_section("width", "height", SectionPreviewKind::Door);
   return s;
 }
@@ -219,9 +220,10 @@ ComponentSpec window_spec() {
     param("width", "宽度", 1.2, 0.3, 6.0, 0.05),
     param("height", "高度", 1.2, 0.3, 6.0, 0.05),
     param("thickness", "厚度", 0.08, 0.02, 0.5, 0.01),
+    param("sill", "离地高度", 0.9, 0.0, 6.0, 0.05),
   };
   s.pick_points = 1;
-  s.pick_hint = QStringLiteral("点击墙上的放置点（窗需贴墙）");
+  s.pick_hint = QStringLiteral("点击墙面放置（窗必须开在墙上）");
   s.section = rect_section("width", "height", SectionPreviewKind::Window);
   return s;
 }

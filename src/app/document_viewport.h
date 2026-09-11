@@ -29,6 +29,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace tamias {
@@ -58,7 +59,7 @@ class DocumentViewport final : public QWidget {
   [[nodiscard]] std::vector<std::uint64_t> capture_hidden_node_ids() const;
   [[nodiscard]] RenderScene capture_debug_scene() const;
   void apply_viewport_state(const ViewportState& state);
-  // 设置当前创建工具（None / Wall / Box / Cylinder）。
+  // 设置当前创建工具（None / Wall / 梁柱等；有规格的构件走绘制面板武装）。
   void set_tool(ToolMode mode);
   // 用绘制面板确认的参数武装一个创建命令（取消旧 pending，按 args dispatch）。
   void arm_create(ToolMode mode, const CommandArgs& args);
@@ -140,6 +141,10 @@ class DocumentViewport final : public QWidget {
   // 绘制实体时吸附到地面网格交点（门/窗贴墙拾取除外）。
   [[nodiscard]] bool grid_snap_active() const;
   [[nodiscard]] std::uint64_t pick_node_at(const QPoint& pos) const;
+  // 布置门窗：沿视线找最近的墙（忽略楼板等遮挡）。
+  [[nodiscard]] std::optional<std::pair<std::uint64_t, Vec3>> pick_wall_at(const QPoint& pos) const;
+  [[nodiscard]] bool is_opening_placement_tool() const;
+  void update_opening_hover(const QPoint& pos);
   void show_entity_context_menu(const QPoint& global_pos);
   void adjust_selected_param(double delta);
   void run_command(const std::string& name, const CommandArgs& args, bool notify = true);

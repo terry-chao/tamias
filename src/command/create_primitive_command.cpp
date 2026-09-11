@@ -1,16 +1,26 @@
 #include "create_primitive_command.h"
 
+#include "bim/host_geometry.h"
 #include "bim/host_update.h"
-#include "entity/box_entity.h"
 #include "entity/column_entity.h"
-#include "entity/cylinder_entity.h"
 #include "entity/door_entity.h"
+#include "entity/entity.h"
 #include "entity/window_entity.h"
 
 namespace tamias {
+namespace {
+
+bool is_opening_kind(PrimitiveKind kind) {
+  return kind == PrimitiveKind::Window || kind == PrimitiveKind::Door;
+}
+
+}  // namespace
 
 CreatePrimitiveCommand::CreatePrimitiveCommand(Document& document, PrimitiveKind kind)
     : document_(&document), kind_(kind) {
+  if (is_opening_kind(kind_)) {
+    opening_sill_ = kind_ == PrimitiveKind::Door ? 0.0 : 0.9;
+  }
   if (kind_ == PrimitiveKind::Column) {
     work_plane_y_ = static_cast<float>(
         document.bim().storey_elevation(document.bim().active_storey_id()));
@@ -23,6 +33,17 @@ CreatePrimitiveCommand::CreatePrimitiveCommand(Document& document, PrimitiveKind
   position_ = position;
   host_id_ = host_id;
   scripted_ = true;
+}
+
+CreatePrimitiveCommand::CreatePrimitiveCommand(Document& document, PrimitiveKind kind,
+                                               Vec3 position, std::uint64_t host_id,
+                                               double width, double height,
+                                               double thickness, double sill)
+    : CreatePrimitiveCommand(document, kind, position, host_id) {
+  opening_width_ = width;
+  opening_height_ = height;
+  opening_thickness_ = thickness;
+  opening_sill_ = sill;
 }
 
 CreatePrimitiveCommand::CreatePrimitiveCommand(Document& document, ColumnShape shape,
@@ -54,37 +75,68 @@ CreatePrimitiveCommand::CreatePrimitiveCommand(Document& document, PrimitiveKind
   opening_thickness_ = thickness;
 }
 
+CreatePrimitiveCommand::CreatePrimitiveCommand(Document& document, PrimitiveKind kind,
+                                               double width, double height, double thickness,
+                                               double sill)
+    : CreatePrimitiveCommand(document, kind) {
+  opening_width_ = width;
+  opening_height_ = height;
+  opening_thickness_ = thickness;
+  opening_sill_ = sill;
+}
+
 Result<bool> CreatePrimitiveCommand::on_point(Vec3 point) { return on_pick(point, 0); }
 
 Result<bool> CreatePrimitiveCommand::on_pick(Vec3 point, std::uint64_t picked_entity_id) {
+  if (is_opening_kind(kind_)) {
+    const Entity* host = document_->entity(picked_entity_id);
+    if (host == nullptr || !is_wall_host(*host)) {
+      return false;  // 还没点到墙，继续等
+    }
+  }
   position_ = point;
   host_id_ = picked_entity_id;
-  return true;  // 单点，齐了
+  return true;
+}
+
+void CreatePrimitiveCommand::on_hover(Vec3 point, std::uint64_t picked_entity_id) {
+  hover_point_ = point;
+  hover_host_id_ = 0;
+  if (!is_opening_kind(kind_)) {
+    return;
+  }
+  const Entity* host = document_->entity(picked_entity_id);
+  if (host != nullptr && is_wall_host(*host)) {
+    hover_host_id_ = host->id;
+  }
+}
+
+std::vector<Vec3> CreatePrimitiveCommand::preview_polyline(Vec3 cursor) const {
+  (void)cursor;
+  if (!is_opening_kind(kind_) || hover_host_id_ == 0) {
+    return {};
+  }
+  const Entity* host = document_->entity(hover_host_id_);
+  if (host == nullptr) {
+    return {};
+  }
+  OpeningSize size{};
+  size.width = opening_width_;
+  size.height = opening_height_;
+  size.thickness = opening_thickness_;
+  return opening_preview_polyline(*host, size, hover_point_, opening_sill_);
 }
 
 Result<void> CreatePrimitiveCommand::execute() {
+  if (is_opening_kind(kind_)) {
+    const Entity* host = document_->entity(host_id_);
+    if (host == nullptr || !is_wall_host(*host)) {
+      return Err("Window and door must be placed on a wall");
+    }
+  }
+
   Entity* added = nullptr;
   switch (kind_) {
-    case PrimitiveKind::Box: {
-      BoxEntity box(position_);
-      auto geometry = box.createGeom();
-      if (!geometry) {
-        return Err(geometry.error());
-      }
-      added = document_->add_entity(std::make_unique<BoxEntity>(std::move(box)),
-                                    std::move(*geometry));
-      break;
-    }
-    case PrimitiveKind::Cylinder: {
-      CylinderEntity cylinder(position_);
-      auto geometry = cylinder.createGeom();
-      if (!geometry) {
-        return Err(geometry.error());
-      }
-      added = document_->add_entity(std::make_unique<CylinderEntity>(std::move(cylinder)),
-                                    std::move(*geometry));
-      break;
-    }
     case PrimitiveKind::Column: {
       std::unique_ptr<ColumnEntity> column;
       if (column_shape_ == ColumnShape::Circular) {
@@ -103,7 +155,8 @@ Result<void> CreatePrimitiveCommand::execute() {
       break;
     }
     case PrimitiveKind::Door: {
-      DoorEntity door(position_, opening_width_, opening_height_, opening_thickness_);
+      DoorEntity door(position_, opening_width_, opening_height_, opening_thickness_,
+                      opening_sill_);
       auto geometry = door.createGeom();
       if (!geometry) {
         return Err(geometry.error());
@@ -113,7 +166,8 @@ Result<void> CreatePrimitiveCommand::execute() {
       break;
     }
     case PrimitiveKind::Window: {
-      WindowEntity window(position_, opening_width_, opening_height_, opening_thickness_);
+      WindowEntity window(position_, opening_width_, opening_height_, opening_thickness_,
+                          opening_sill_);
       auto geometry = window.createGeom();
       if (!geometry) {
         return Err(geometry.error());
@@ -127,11 +181,13 @@ Result<void> CreatePrimitiveCommand::execute() {
     return Err("CreatePrimitiveCommand: add primitive failed");
   }
 
-  if ((kind_ == PrimitiveKind::Window || kind_ == PrimitiveKind::Door) && host_id_ != 0) {
-    if (auto r = bind_opening_to_host(*document_, added->id, host_id_, position_); r) {
-      if (const Relation* rel = document_->bim().host_of(added->id)) {
-        relation_ = *rel;
-      }
+  if (is_opening_kind(kind_)) {
+    if (auto r = bind_opening_to_host(*document_, added->id, host_id_, position_); !r) {
+      document_->remove_entity(added->id);
+      return r;
+    }
+    if (const Relation* rel = document_->bim().host_of(added->id)) {
+      relation_ = *rel;
     }
   }
 
@@ -143,8 +199,12 @@ Result<void> CreatePrimitiveCommand::execute() {
 }
 
 void CreatePrimitiveCommand::undo() {
+  const std::uint64_t host_id = relation_ ? relation_->to : 0;
   if (entity_) {
     document_->remove_entity(entity_->id);
+  }
+  if (host_id != 0) {
+    (void)remesh_host_openings(*document_, host_id);
   }
 }
 

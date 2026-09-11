@@ -29,6 +29,11 @@ class Command {
     (void)picked_entity_id;
     return on_point(point);
   }
+  // 光标悬停（门窗跟墙预览）。默认忽略。
+  virtual void on_hover(Vec3 point, std::uint64_t picked_entity_id) {
+    (void)point;
+    (void)picked_entity_id;
+  }
   // 交互式命令的「起点」（供视口画预览线）。默认无起点。
   virtual bool has_start() const { return false; }
   virtual Vec3 start() const { return {}; }

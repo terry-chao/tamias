@@ -10,6 +10,7 @@
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_MakePolygon.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
+#include <BRepBuilderAPI_Transform.hxx>
 #include <BRepFilletAPI_MakeChamfer.hxx>
 #include <BRepFilletAPI_MakeFillet.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
@@ -323,6 +324,23 @@ static Result<MeshCpu> evaluate_feature_model_impl(const FeatureModel& model,
           return Err("Chamfer failed");
         }
         s = chamfer.Shape();
+        break;
+      }
+      case FeatureKind::Transform: {
+        if (f.inputs.empty()) {
+          return Err("Transform feature has no shape input");
+        }
+        const auto it = shapes.find(f.inputs[0]);
+        if (it == shapes.end()) {
+          return Err("Transform references a missing shape");
+        }
+        // Tamias Y-up (tx,ty,tz) → OCCT Z-up (tx, -tz, ty)，与 tessellate 的逆变换一致。
+        const double tx = model.param(f.id, "tx", 0.0);
+        const double ty = model.param(f.id, "ty", 0.0);
+        const double tz = model.param(f.id, "tz", 0.0);
+        gp_Trsf tr;
+        tr.SetTranslation(gp_Vec(tx, -tz, ty));
+        s = BRepBuilderAPI_Transform(it->second, tr, Standard_True).Shape();
         break;
       }
       default:

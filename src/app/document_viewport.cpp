@@ -1,6 +1,7 @@
 #include "document_viewport.h"
 
 #include "app_settings.h"
+#include "bim/host_geometry.h"
 #include "bim/wall_size.h"
 #include "command/edit_entity_grip_command.h"
 #include "command/import_texture_command.h"
@@ -230,6 +231,9 @@ std::vector<std::uint64_t> DocumentViewport::capture_hidden_node_ids() const {
 RenderScene DocumentViewport::capture_debug_scene() const {
   RenderScene scene = document_->capture_render_scene(capture_render_scene_view());
   scene.hidden_node_ids = capture_hidden_node_ids();
+  if (render_thread_ != nullptr) {
+    scene.debug_graph.lod_by_node = render_thread_->last_lod_by_node();
+  }
   return scene;
 }
 
@@ -686,6 +690,9 @@ void DocumentViewport::submit_current_frame() {
       }
     }
   } else {
+    if (is_opening_placement_tool() && command_system_.has_pending() && has_cursor_) {
+      update_opening_hover(last_mouse_);
+    }
     frame.preview_polyline = command_system_.preview_polyline(cursor);
     frame.preview_control_polyline = command_system_.preview_control_polyline(cursor);
     frame.preview_points = command_system_.preview_points(cursor);
@@ -763,32 +770,25 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
       request_redraw();
       return;
     }
-    if (session_->tool_mode() == ToolMode::Slab && !plan_view_) {
-      refuse_slab_outside_plan(true);
-      set_tool(ToolMode::None);
-      return;
-    }
     if (command_system_.has_pending()) {
+      if (session_->tool_mode() == ToolMode::Slab && !plan_view_) {
+        refuse_slab_outside_plan(true);
+        set_tool(ToolMode::None);
+        return;
+      }
       plugin_input_press_ = session_->tool_mode() == ToolMode::None;
       Vec3 point = cursor_ground_position(event->pos());
       std::uint64_t picked = 0;
-      if (session_->tool_mode() == ToolMode::Window ||
-          session_->tool_mode() == ToolMode::Door) {
-        const auto dpr = devicePixelRatioF();
-        const float aspect = static_cast<float>((std::max)(1, width())) /
-                             static_cast<float>((std::max)(1, height()));
-        const Ray ray =
-            camera_ray(camera_, aspect, static_cast<float>(event->pos().x() * dpr),
-                       static_cast<float>(event->pos().y() * dpr),
-                       static_cast<float>(width() * dpr), static_cast<float>(height() * dpr));
-        if (auto hit = bvh_.closest_hit(ray, *document_, [this](std::uint64_t id) {
-              return node_visible_in_view(id);
-            })) {
-          if (const Entity* host = document_->entity(hit->node_id);
-              host != nullptr && host->kind() == EntityKind::Wall) {
-            picked = host->id;
-            point = ray.origin + ray.direction * hit->t;
-          }
+      if (is_opening_placement_tool()) {
+        if (auto wall = pick_wall_at(event->pos())) {
+          picked = wall->first;
+          point = wall->second;
+        } else {
+          emit status_message(session_->tool_mode() == ToolMode::Door
+                                  ? tr("Click a wall to place the door")
+                                  : tr("Click a wall to place the window"));
+          request_redraw();
+          return;
         }
       }
       auto r = command_system_.feed_point(point, picked);  // 喂交互点给 pending 命令
@@ -865,6 +865,7 @@ void DocumentViewport::mouseMoveEvent(QMouseEvent* event) {
     return;
   }
   if (plugin_point_input_.active() || command_system_.has_pending()) {
+    update_opening_hover(event->pos());
     request_redraw();  // 更新网格捕捉点与预览线
     return;
   }
@@ -1045,18 +1046,14 @@ void DocumentViewport::refuse_slab_outside_plan(bool popup) {
 }
 
 void DocumentViewport::set_tool(ToolMode mode) {
-  if (mode == ToolMode::Slab && !plan_view_) {
-    refuse_slab_outside_plan(true);
-    emit tool_mode_changed(session_->tool_mode());
-    return;
-  }
+  unsetCursor();
   session_->set_tool(mode);
   cancel_plugin_point_input();
   command_system_.cancel();
   if (mode != ToolMode::None) {
     setFocus();
     // 有绘制规格的构件（墙/梁/柱/板/门/窗/结构墙/基础/幕墙）走面板武装，
-    // 点 icon 不立即绘制；其余（草图、基础体）沿用立即 dispatch。
+    // 点 icon 不立即绘制；其余（草图）沿用立即 dispatch。
     if (find_component_spec(mode) == nullptr) {
       dispatch_tool_command(mode);
     }
@@ -1076,9 +1073,11 @@ void DocumentViewport::arm_create(ToolMode mode, const CommandArgs& args) {
   command_system_.cancel();
   setFocus();
   const ComponentSpec* spec = find_component_spec(mode);
-  const std::string name = spec != nullptr ? spec->command.toStdString()
-                                            : std::string{"create_box"};
-  if (auto r = session_->dispatch(name, args); !r) {
+  if (spec == nullptr) {
+    log_error("arm_create: no component spec for tool");
+    return;
+  }
+  if (auto r = session_->dispatch(spec->command.toStdString(), args); !r) {
     log_error(r.error());
   }
   last_arm_mode_ = mode;
@@ -1110,14 +1109,6 @@ void DocumentViewport::dispatch_tool_command(ToolMode mode) {
                                           {{"thickness", kDefaultWallThickness},
                                            {"height", kDefaultWallHeight}});
         !r) {
-      log_error(r.error());
-    }
-  } else if (mode == ToolMode::Box) {
-    if (auto r = session_->dispatch("create_box", {}); !r) {
-      log_error(r.error());
-    }
-  } else if (mode == ToolMode::Cylinder) {
-    if (auto r = session_->dispatch("create_cylinder", {}); !r) {
       log_error(r.error());
     }
   } else if (mode == ToolMode::Beam) {
@@ -1200,6 +1191,7 @@ bool DocumentViewport::finish_pending_if_done(const Result<bool>& done) {
 }
 
 void DocumentViewport::cancel_tool() {
+  unsetCursor();
   if (plugin_point_input_.active()) {
     cancel_plugin_point_input();
     request_redraw();
@@ -1445,6 +1437,44 @@ std::uint64_t DocumentViewport::pick_node_at(const QPoint& pos) const {
     return hit->node_id;
   }
   return 0;
+}
+
+std::optional<std::pair<std::uint64_t, Vec3>> DocumentViewport::pick_wall_at(
+    const QPoint& pos) const {
+  const auto dpr = devicePixelRatioF();
+  const float aspect = static_cast<float>((std::max)(1, width())) /
+                       static_cast<float>((std::max)(1, height()));
+  const Ray ray =
+      camera_ray(camera_, aspect, static_cast<float>(pos.x() * dpr),
+                 static_cast<float>(pos.y() * dpr), static_cast<float>(width() * dpr),
+                 static_cast<float>(height() * dpr));
+  if (auto hit = bvh_.closest_hit(ray, *document_, [this](std::uint64_t id) {
+        if (!node_visible_in_view(id)) {
+          return false;
+        }
+        const Entity* entity = document_->entity(id);
+        return entity != nullptr && is_wall_host(*entity);
+      })) {
+    return std::pair<std::uint64_t, Vec3>{hit->node_id, ray.origin + ray.direction * hit->t};
+  }
+  return std::nullopt;
+}
+
+bool DocumentViewport::is_opening_placement_tool() const {
+  return session_->tool_mode() == ToolMode::Window || session_->tool_mode() == ToolMode::Door;
+}
+
+void DocumentViewport::update_opening_hover(const QPoint& pos) {
+  if (!is_opening_placement_tool() || !command_system_.has_pending()) {
+    return;
+  }
+  if (auto wall = pick_wall_at(pos)) {
+    command_system_.hover(wall->second, wall->first);
+    setCursor(Qt::CrossCursor);
+  } else {
+    command_system_.hover(cursor_ground_position(pos), 0);
+    setCursor(Qt::ForbiddenCursor);
+  }
 }
 
 void DocumentViewport::show_entity_context_menu(const QPoint& global_pos) {

@@ -5,7 +5,6 @@
 #include "bim/ifc_spatial_tree.h"
 #include "engine/core/log.h"
 #include "engine/document/document_io.h"
-#include "entity/box_entity.h"
 #include "engine/io/mesh_io.h"
 #include "engine/render/render_scene_golden.h"
 #include "golden_test_runner.h"
@@ -171,7 +170,7 @@ MainWindow::MainWindow(QWidget* parent)
   auto* new_action = new QAction(ribbon_icon(QStringLiteral(":/icons/new.svg")),
                                  tr("New"), this);
   new_action->setShortcut(QKeySequence::New);
-  new_action->setToolTip(tr("New document with a cube"));
+  new_action->setToolTip(tr("New document"));
   connect(new_action, &QAction::triggered, this, &MainWindow::new_document);
   addAction(new_action);
 
@@ -232,25 +231,6 @@ MainWindow::MainWindow(QWidget* parent)
   connect(wall_action_, &QAction::triggered, this, [this] { set_create_tool(ToolMode::Wall); });
   create_group_->addAction(wall_action_);
   addAction(wall_action_);
-
-  box_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/box.svg")),
-                           tr("Box"), this);
-  box_action_->setCheckable(true);
-  box_action_->setProperty("toolMode", static_cast<int>(ToolMode::Box));
-  box_action_->setToolTip(tr("Create a box: click to place"));
-  connect(box_action_, &QAction::triggered, this, [this] { set_create_tool(ToolMode::Box); });
-  create_group_->addAction(box_action_);
-  addAction(box_action_);
-
-  cylinder_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/cylinder.svg")),
-                                tr("Cylinder"), this);
-  cylinder_action_->setCheckable(true);
-  cylinder_action_->setProperty("toolMode", static_cast<int>(ToolMode::Cylinder));
-  cylinder_action_->setToolTip(tr("Create a cylinder: click to place"));
-  connect(cylinder_action_, &QAction::triggered, this,
-          [this] { set_create_tool(ToolMode::Cylinder); });
-  create_group_->addAction(cylinder_action_);
-  addAction(cylinder_action_);
 
   beam_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/beam.svg")),
                             tr("Beam"), this);
@@ -638,11 +618,6 @@ MainWindow::MainWindow(QWidget* parent)
   draw_group->add_action(bezier_action_);
   draw_group->add_action(bspline_action_);
 
-  RibbonGroup* primitives_group =
-      home_page->add_group(QStringLiteral("primitives"), tr("Primitives"));
-  primitives_group->add_action(box_action_);
-  primitives_group->add_action(cylinder_action_);
-
   RibbonGroup* architectural_group =
       home_page->add_group(QStringLiteral("architectural"), tr("Architectural"));
   architectural_group->add_action(wall_action_);
@@ -885,20 +860,6 @@ MainWindow::MainWindow(QWidget* parent)
 
   statusBar()->showMessage(tr("Ready — Open a model"));
   show_home();
-
-  // ===== TEMP DEBUG: auto-create a concrete box to diagnose black texture =====
-  {
-    auto doc = std::make_shared<Document>(tr("Untitled").toStdString());
-    BoxEntity box(Vec3{0.0f, 0.0f, 0.0f});
-    auto geom = box.createGeom();
-    if (geom) {
-      Entity* e = doc->add_entity(std::make_unique<BoxEntity>(std::move(box)),
-                                  std::move(*geom));
-      e->material_id = 2;  // Concrete (id=2 in seed_default_materials)
-      doc->recompute_scene();
-    }
-    add_document_tab(doc);
-  }
 }
 
 MainWindow::~MainWindow() {
@@ -1191,7 +1152,6 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
 
 void MainWindow::new_document() {
   auto document = std::make_shared<Document>(tr("Untitled").toStdString());
-  document->add_import_mesh("cube", make_demo_cube(), Mat4::identity(), {0.75f, 0.78f, 0.82f});
   add_document_tab(document);
 }
 

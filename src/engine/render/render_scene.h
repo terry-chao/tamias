@@ -3,6 +3,7 @@
 #include "engine/core/result.h"
 #include "engine/graphics/mesh.h"
 #include "engine/render/material.h"
+#include "engine/render/lod_mesh_set.h"
 #include "engine/render/render_types.h"
 
 #include <cstdint>
@@ -13,6 +14,32 @@
 #include <vector>
 
 namespace tamias {
+
+// Optional live-capture debug metadata. The render-scene file remains a cooked
+// draw snapshot; this chunk is only for the scene debugger's semantic-tree /
+// LOD inspection views. Old files and other readers may safely ignore it.
+struct RenderSceneNodeDebug {
+  std::uint64_t id = 0;
+  std::string name;
+  std::uint64_t parent = 0;
+  std::vector<std::uint64_t> children;
+  std::uint64_t mesh_asset_id = 0;
+  Mat4 local_transform = Mat4::identity();
+  Mat4 world_transform = Mat4::identity();
+  Aabb local_bounds{};
+  Aabb world_bounds{};
+  bool selected = false;
+};
+
+struct RenderSceneDebugGraph {
+  std::vector<RenderSceneNodeDebug> nodes;
+  std::unordered_map<std::uint64_t, LodMeshSet> lod_sets;
+  std::unordered_map<std::uint64_t, MeshLod> lod_by_node;
+
+  [[nodiscard]] bool empty() const {
+    return nodes.empty() && lod_sets.empty() && lod_by_node.empty();
+  }
+};
 
 // CPU 侧渲染快照：被引用的 MeshCpu + 已烘好的 SceneDrawItem + 相机。
 // 不是 .tdoc（无实体/特征），也不是 RenderDoc（无 GPU 命令）。
@@ -42,6 +69,8 @@ struct RenderScene {
   std::vector<SceneDrawItem> items;
   // 捕获时视口隐藏的语义节点（楼层 / 类别 / isolate）。旧文件缺省为空 = 全显示。
   std::vector<std::uint64_t> hidden_node_ids;
+  // 仅场景调试器使用：语义树、各几何的 LOD 缓存与捕获时选中的 LOD。
+  RenderSceneDebugGraph debug_graph;
 };
 
 // 只保留被 items 引用且能在 meshes 里找到的条目；贴图只保留 albedo/normal/ORM 引用到的。

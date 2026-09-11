@@ -64,6 +64,12 @@ Result<bool> CommandSystem::feed_point(Vec3 point, std::uint64_t picked_entity_i
   return false;  // 还没完
 }
 
+void CommandSystem::hover(Vec3 point, std::uint64_t picked_entity_id) {
+  if (pending_) {
+    pending_->on_hover(point, picked_entity_id);
+  }
+}
+
 Result<bool> CommandSystem::confirm() {
   if (!pending_) {
     return Err("CommandSystem: no pending command");

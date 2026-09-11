@@ -18,6 +18,7 @@
 #include "entity/family_entity.h"
 #include "entity/line_entity.h"
 #include "entity/nurbs_entity.h"
+#include "entity/opening_entity.h"
 #include "entity/polyline_entity.h"
 #include "entity/rectangle_entity.h"
 #include "entity/sketch_entity.h"
@@ -821,6 +822,8 @@ TEST(Entity, BuildingComponentsCreateGeom) {
   const SlabEntity slab({0.f, 0.f, 0.f}, 4.0, 3.0, 0.2);
   const DoorEntity door({0.f, 0.f, 0.f}, 1.0, 2.1, 0.05);
   const WindowEntity window({0.f, 0.f, 0.f}, 1.2, 1.2, 0.08);
+  EXPECT_TRUE(is_opening_entity(door));
+  EXPECT_TRUE(is_opening_entity(window));
 
   for (const Entity* e : {static_cast<const Entity*>(&beam),
                           static_cast<const Entity*>(&column),
@@ -885,14 +888,14 @@ TEST(CommandSystem, DispatchCreateWallFromPoints) {
   EXPECT_EQ(doc.entities().size(), 1u);
 }
 
-TEST(CommandSystem, DispatchCreateBoxFromOrigin) {
+TEST(CommandSystem, DispatchCreateColumnFromOrigin) {
   CommandRegistry registry;
   register_commands(registry);
   CommandSystem system(registry);
 
-  Document doc("scripted-box");
+  Document doc("scripted-column");
   CommandArgs args = {{"origin", Vec3{1.f, 0.f, 2.f}}};
-  auto r = system.dispatch(doc, "create_box", args);
+  auto r = system.dispatch(doc, "create_column", args);
   ASSERT_TRUE(r) << r.error();
   EXPECT_FALSE(system.has_pending());
   EXPECT_EQ(doc.entities().size(), 1u);
@@ -1509,10 +1512,10 @@ TEST(CommandSystem, BooleanUndoRedo) {
   CommandSystem system(registry);
   Document doc("cmd");
 
-  // 建两个盒子（同放置，布尔合并局部几何）。
-  ASSERT_TRUE(system.dispatch(doc, "create_box", {}));
+  // 建两个柱（同放置，布尔合并局部几何）。
+  ASSERT_TRUE(system.dispatch(doc, "create_column", {}));
   ASSERT_TRUE(system.feed_point({0.f, 0.f, 0.f}));
-  ASSERT_TRUE(system.dispatch(doc, "create_box", {}));
+  ASSERT_TRUE(system.dispatch(doc, "create_column", {}));
   ASSERT_TRUE(system.feed_point({0.f, 0.f, 0.f}));
   ASSERT_EQ(doc.entities().size(), 2u);
 
@@ -1543,7 +1546,7 @@ TEST(CommandSystem, DeleteEntityUndoRedo) {
   CommandSystem system(registry);
   Document doc("cmd");
 
-  ASSERT_TRUE(system.dispatch(doc, "create_box", {}));
+  ASSERT_TRUE(system.dispatch(doc, "create_column", {}));
   ASSERT_TRUE(system.feed_point({0.f, 0.f, 0.f}));
   ASSERT_EQ(doc.entities().size(), 1u);
   const std::uint64_t eid = doc.entities().begin()->first;
@@ -1577,6 +1580,15 @@ TEST(Bim, HostPlacementAlignAndValidity) {
   align_placement(placement, size, opening_size(window));
   EXPECT_TRUE(placement_is_valid(placement, size, opening_size(window)));
   EXPECT_NEAR(placement.along, 0.5, 0.05);
+  EXPECT_NEAR(placement.sill, window.sill_height(), 1e-9);
+
+  window.set_sill_height(0.6);
+  HostPlacement sill_placement = placement_from_world(wall, window, {0.f, 1.5f, 2.5f});
+  EXPECT_NEAR(sill_placement.sill, 0.6, 1e-9);
+
+  const DoorEntity door({0.f, 0.f, 0.f}, 1.0, 2.1, 0.05);
+  HostPlacement door_placement = placement_from_world(wall, door, {0.f, 1.5f, 2.5f});
+  EXPECT_NEAR(door_placement.sill, 0.0, 1e-9);
 
   HostPlacement overflow{};
   overflow.along = 0.05;
@@ -1628,7 +1640,74 @@ TEST(Bim, WallChangeNotifiesHostedWindow) {
   const Relation* after_rel = doc.bim().host_of(window_id);
   ASSERT_NE(after_rel, nullptr);
   EXPECT_TRUE(after_rel->valid);
-  EXPECT_NEAR(opening_size(*doc.entity(window_id)).thickness, 0.4, 1e-6);
+  EXPECT_NEAR(opening_size(*doc.entity(window_id)).width, 1.2, 1e-6);
+
+  const std::uint64_t window_profile_id = doc.entity(window_id)->model.features().front().id;
+  ASSERT_TRUE(system.dispatch(doc, "set_param",
+                              {{"entity_id", static_cast<std::int64_t>(window_id)},
+                               {"feature_id", static_cast<std::int64_t>(window_profile_id)},
+                               {"param_name", std::string("sill")},
+                               {"value", 0.6}}));
+  const Relation* sill_rel = doc.bim().host_of(window_id);
+  ASSERT_NE(sill_rel, nullptr);
+  EXPECT_NEAR(sill_rel->placement.sill, 0.6, 1e-9);
+
+  auto uncut = wall->createGeom();
+  ASSERT_TRUE(uncut) << uncut.error();
+  const MeshAsset* cut_mesh = doc.mesh(wall->mesh_asset_id);
+  ASSERT_NE(cut_mesh, nullptr);
+  EXPECT_NE(cut_mesh->cpu.indices.size(), uncut->indices.size());
+  const LodMeshSet lod_set = doc.tess_cache().set_for(wall->mesh_asset_id);
+  EXPECT_EQ(lod_set.coarse, wall->mesh_asset_id);
+}
+
+TEST(Bim, WindowRequiresWallHost) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+  Document doc("need-wall");
+
+  ASSERT_TRUE(system.dispatch(doc, "create_wall", {{"thickness", 0.2}, {"height", 3.0}}));
+  ASSERT_TRUE(system.feed_point({0.f, 0.f, 0.f}));
+  ASSERT_TRUE(system.feed_point({0.f, 0.f, 5.f}));
+  ASSERT_EQ(doc.entities().size(), 1u);
+
+  ASSERT_TRUE(system.dispatch(doc, "create_window", {}));
+  auto miss = system.feed_point({0.f, 1.5f, 2.5f});
+  ASSERT_TRUE(miss) << miss.error();
+  EXPECT_FALSE(*miss);
+  EXPECT_TRUE(system.has_pending());
+  EXPECT_EQ(doc.entities().size(), 1u);
+}
+
+TEST(Bim, WindowHoverPreviewOnWall) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+  Document doc("hover-window");
+
+  ASSERT_TRUE(system.dispatch(doc, "create_wall", {{"thickness", 0.2}, {"height", 3.0}}));
+  ASSERT_TRUE(system.feed_point({0.f, 0.f, 0.f}));
+  ASSERT_TRUE(system.feed_point({0.f, 0.f, 5.f}));
+  ASSERT_EQ(doc.entities().size(), 1u);
+  const std::uint64_t wall_id = doc.entities().begin()->first;
+  const Entity* wall = doc.entity(wall_id);
+  ASSERT_NE(wall, nullptr);
+
+  OpeningSize opening{};
+  opening.width = 1.2;
+  opening.height = 1.2;
+  const auto outline = opening_preview_polyline(*wall, opening, {0.f, 1.5f, 2.5f}, 0.9);
+  EXPECT_EQ(outline.size(), 10u);
+
+  ASSERT_TRUE(system.dispatch(doc, "create_window", {}));
+  EXPECT_TRUE(system.preview_polyline({0.f, 1.5f, 2.5f}).empty());
+  system.hover({0.f, 1.5f, 2.5f}, wall_id);
+  EXPECT_EQ(system.preview_polyline({0.f, 1.5f, 2.5f}).size(), 10u);
+  system.hover({10.f, 1.5f, 10.f}, 0);
+  EXPECT_TRUE(system.preview_polyline({10.f, 1.5f, 10.f}).empty());
+  ASSERT_TRUE(system.feed_point({0.f, 1.5f, 2.5f}, wall_id));
+  ASSERT_EQ(doc.entities().size(), 2u);
 }
 
 TEST(Bim, RelationRoundTrip) {

@@ -105,8 +105,6 @@ class MainWindow final : public QMainWindow {
   QAction* shaded_action_ = nullptr;
   QAction* realistic_action_ = nullptr;
   QAction* wall_action_ = nullptr;
-  QAction* box_action_ = nullptr;
-  QAction* cylinder_action_ = nullptr;
   QAction* beam_action_ = nullptr;
   QAction* column_action_ = nullptr;
   QAction* slab_action_ = nullptr;

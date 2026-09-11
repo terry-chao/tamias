@@ -33,11 +33,6 @@ public static class HostDraw
         Dispatch(host, "create_slab", args);
     }
 
-    public static void Box(this IHost host, PickPoint origin) => Primitive(host, "create_box", origin);
-
-    public static void Cylinder(this IHost host, PickPoint origin) =>
-        Primitive(host, "create_cylinder", origin);
-
     public static void Column(this IHost host, PickPoint origin) =>
         Primitive(host, "create_column", origin);
 

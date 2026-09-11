@@ -1,8 +1,11 @@
 #include "bim/host_update.h"
 
 #include "bim/host_geometry.h"
+#include "entity/opening_entity.h"
 #include "engine/core/log.h"
 #include "engine/document/document.h"
+#include "engine/modeling/feature.h"
+#include "engine/modeling/occt_geom_builder.h"
 
 #include <string>
 
@@ -37,10 +40,11 @@ Result<void> reshape_hosted(Document& document, Relation& relation) {
   }
 
   const WallSize wall = wall_size(*host);
-  set_opening_thickness(*guest, wall.thickness);
   const OpeningSize opening = opening_size(*guest);
 
+  relation.placement.sill = opening_sill_height(*guest);
   align_placement(relation.placement, wall, opening);
+  relation.placement.offset = 0.0;  // 开口居中穿墙
   relation.valid = placement_is_valid(relation.placement, wall, opening);
 
   sync_transform(document, *guest, hosted_transform(*host, relation.placement));
@@ -59,15 +63,90 @@ Result<void> reshape_hosted(Document& document, Relation& relation) {
 
 }  // namespace
 
-Result<void> notify_entity_changed(Document& document, std::uint64_t entity_id) {
-  auto deps = document.bim().dependents(entity_id);
-  if (deps.empty()) {
+FeatureModel hosted_openings_model(const Entity& host,
+                                   const std::vector<const Relation*>& openings,
+                                   const Document& document) {
+  FeatureModel model = host.model;
+  const Feature* output = model.output_feature();
+  if (output == nullptr) {
+    return model;
+  }
+  std::uint64_t current = output->id;
+  const WallSize wall = wall_size(host);
+  for (const Relation* relation : openings) {
+    if (relation == nullptr || !relation->valid) {
+      continue;
+    }
+    const Entity* guest = document.entity(relation->from);
+    if (guest == nullptr) {
+      continue;
+    }
+    const OpeningSize opening = opening_size(*guest);
+    // 切穿整面墙：厚度方向必须明显大于宿主墙，两端都要伸出墙面。
+    const double cut_thickness = wall.thickness + 0.20;
+    auto& profile = model.add_feature(
+        FeatureKind::RectProfile, {},
+        {{"width", cut_thickness}, {"height", opening.width}});
+    auto& extrude =
+        model.add_feature(FeatureKind::Extrude, {profile.id}, {{"depth", opening.height}});
+    auto& xform = model.add_feature(
+        FeatureKind::Transform, {extrude.id},
+        {{"tx", relation->placement.offset},
+         {"ty", relation->placement.sill},
+         {"tz", (relation->placement.along - 0.5) * wall.length}});
+    auto& cut = model.add_feature(
+        FeatureKind::Boolean, {current, xform.id},
+        {{"operation", static_cast<double>(static_cast<std::uint8_t>(BooleanOp::Cut))}});
+    current = cut.id;
+  }
+  return model;
+}
+
+Result<void> remesh_host_openings(Document& document, std::uint64_t host_id) {
+  Entity* host = document.entity(host_id);
+  if (host == nullptr) {
     return {};
   }
-  for (Relation* relation : deps) {
-    if (auto r = reshape_hosted(document, *relation); !r) {
+  if (!is_wall_host(*host)) {
+    return {};
+  }
+  std::vector<const Relation*> openings;
+  for (const Relation* relation : document.bim().dependents(host_id)) {
+    openings.push_back(relation);
+  }
+  FeatureModel model = hosted_openings_model(*host, openings, document);
+  auto mesh = geometry_builder().build(model, 0.05);
+  if (!mesh) {
+    return Err(mesh.error());
+  }
+  if (!document.replace_entity_mesh(host_id, std::move(*mesh))) {
+    return Err("host_update: host mesh asset not found");
+  }
+  return {};
+}
+
+Result<void> notify_entity_changed(Document& document, std::uint64_t entity_id) {
+  auto deps = document.bim().dependents(entity_id);
+  if (!deps.empty()) {
+    for (Relation* relation : deps) {
+      if (auto r = reshape_hosted(document, *relation); !r) {
+        return r;
+      }
+    }
+    if (auto r = remesh_host_openings(document, entity_id); !r) {
       return r;
     }
+  }
+  if (Relation* hosted = document.bim().host_of(entity_id)) {
+    if (auto r = reshape_hosted(document, *hosted); !r) {
+      return r;
+    }
+    if (auto r = remesh_host_openings(document, hosted->to); !r) {
+      return r;
+    }
+  }
+  if (deps.empty() && document.bim().host_of(entity_id) == nullptr) {
+    return {};
   }
   document.recompute_scene();
   document.mark_dirty();
@@ -93,6 +172,9 @@ Result<void> bind_opening_to_host(Document& document, std::uint64_t guest_id,
   relation.placement = placement_from_world(*host, *guest, world_point);
   Relation& stored = document.bim().add(std::move(relation));
   if (auto r = reshape_hosted(document, stored); !r) {
+    return r;
+  }
+  if (auto r = remesh_host_openings(document, host_id); !r) {
     return r;
   }
   document.recompute_scene();

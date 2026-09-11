@@ -16,6 +16,8 @@ class QPlainTextEdit;
 class QSplitter;
 class QTableWidget;
 class QTabWidget;
+class QTreeWidget;
+class QTreeWidgetItem;
 
 namespace tamias {
 
@@ -57,7 +59,10 @@ class RenderSceneInspector final : public QWidget {
   void on_vertex_selected();
   void on_triangle_selected();
   void on_face_selected();
+  void on_scene_tree_selected();
   void fill_selected_draw(int index);
+  void fill_scene_tree();
+  void select_scene_tree_node(quint64 node_id);
   void fill_vertices(std::uint64_t mesh_id);
   void fill_triangles(std::uint64_t mesh_id);
   void fill_faces(std::uint64_t mesh_id);
@@ -77,7 +82,13 @@ class RenderSceneInspector final : public QWidget {
   QWidget* body_ = nullptr;
 
   QLabel* summary_mode_ = nullptr;
-  QLabel* summary_counts_ = nullptr;
+  QLabel* summary_draws_ = nullptr;
+  QLabel* summary_meshes_ = nullptr;
+  QLabel* summary_textures_ = nullptr;
+  QLabel* summary_tris_ = nullptr;
+  QLabel* summary_hidden_ = nullptr;
+  QLabel* summary_nodes_ = nullptr;
+  QLabel* summary_lods_ = nullptr;
   QLabel* summary_digest_ = nullptr;
   QLabel* summary_camera_ = nullptr;
   QLabel* summary_camera2_ = nullptr;
@@ -87,6 +98,8 @@ class RenderSceneInspector final : public QWidget {
   QLineEdit* filter_ = nullptr;
   QTableWidget* draws_ = nullptr;
   QCheckBox* isolate_ = nullptr;
+  QTreeWidget* scene_tree_ = nullptr;
+  QWidget* scene_tree_page_ = nullptr;
 
   QLabel* field_node_ = nullptr;
   QLabel* field_mesh_ = nullptr;

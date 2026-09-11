@@ -1,5 +1,6 @@
 #include "engine/document/document.h"
 
+#include "bim/host_update.h"
 #include "engine/math/math.h"
 #include "engine/modeling/occt_geom_builder.h"
 #include "engine/render/builtin_textures.h"
@@ -185,13 +186,21 @@ void Document::ensure_feature_coarse_lod(Entity& entity) {
   }
   const std::uint64_t geometry_id = entity.mesh_asset_id;
   bind_work_lod(geometry_id);
+  const bool has_hosted_openings =
+      (entity.kind() == EntityKind::Wall || entity.kind() == EntityKind::StructuralWall) &&
+      !bim().dependents(entity.id).empty();
+  if (has_hosted_openings) {
+    // 有洞口时，粗档也用工作网格，避免远处 LOD 回到未扣洞的墙。
+    tess_cache_.bind(geometry_id, MeshLod::Coarse, geometry_id);
+    return;
+  }
   if (tess_cache_.set_for(geometry_id).coarse != 0) {
     return;
   }
   if (const MeshAsset* work = mesh(geometry_id); work != nullptr && work->cpu.line_list) {
     return;
   }
-  auto coarse = entity.createGeom(kMeshLodCoarseDeflection);
+  Result<MeshCpu> coarse = entity.createGeom(kMeshLodCoarseDeflection);
   if (!coarse) {
     return;
   }
@@ -223,7 +232,16 @@ void Document::invalidate_geometry_lods(std::uint64_t geometry_id) {
 std::function<Result<MeshCpu>()> Document::make_tess_fn(std::uint64_t geometry_id,
                                                         MeshLod lod) const {
   if (const Entity* e = entity_for_mesh(geometry_id); e != nullptr && !e->is_sketch_entity()) {
-    FeatureModel model = e->model;
+    FeatureModel model;
+    const bool has_hosted_openings =
+        (e->kind() == EntityKind::Wall || e->kind() == EntityKind::StructuralWall) &&
+        !bim().dependents(e->id).empty();
+    if (has_hosted_openings) {
+      const auto openings = bim().dependents(e->id);
+      model = hosted_openings_model(*e, openings, *this);
+    } else {
+      model = e->model;
+    }
     const double deflection = mesh_lod_deflection(lod, false);
     return [model = std::move(model), deflection]() {
       return geometry_builder().build(model, deflection);
@@ -391,6 +409,9 @@ Entity* Document::add_entity(std::unique_ptr<Entity> entity, MeshCpu mesh) {
       case EntityKind::Foundation:
         preset = "Concrete";
         break;
+      case EntityKind::Window:
+        preset = "Glass";
+        break;
       default:
         break;
     }
@@ -551,13 +572,49 @@ RenderScene Document::capture_render_scene(RenderScene::View view, const Frustum
       textures.emplace(id, tex);
     }
   }
-  return bake_render_scene(render_items(frustum), meshes, std::move(view), name_, textures);
+  RenderScene scene =
+      bake_render_scene(render_items(frustum), meshes, std::move(view), name_, textures);
+
+  RenderSceneDebugGraph graph;
+  graph.nodes.reserve(scene_.nodes().size());
+  for (const SceneNode& node : scene_.nodes()) {
+    RenderSceneNodeDebug debug{};
+    debug.id = node.id;
+    debug.name = node.name;
+    debug.parent = node.parent;
+    debug.children = node.children;
+    debug.mesh_asset_id = node.mesh_asset_id;
+    debug.local_transform = node.local_transform;
+    debug.world_transform = node.world_transform;
+    debug.local_bounds = node.local_bounds;
+    debug.world_bounds = node.world_bounds;
+    debug.selected = node.selected;
+    graph.nodes.push_back(std::move(debug));
+  }
+  graph.lod_sets = tess_cache_.snapshot();
+  for (const SceneNode& node : scene_.nodes()) {
+    if (node.mesh_asset_id == 0) {
+      continue;
+    }
+    bool lines = false;
+    if (const MeshAsset* asset = mesh(node.mesh_asset_id); asset != nullptr) {
+      lines = asset->cpu.line_list;
+    }
+    const float projected_px = projected_aabb_pixels(
+        node.world_bounds, scene.view.eye_position, scene.view.fovy,
+        static_cast<float>(std::max<std::uint32_t>(scene.view.height, 1u)));
+    graph.lod_by_node[node.id] =
+        select_mesh_lod(projected_px, std::nullopt, node.selected, lines);
+  }
+  scene.debug_graph = std::move(graph);
+  return scene;
 }
 
 void Document::set_render_snapshot(RenderScene scene) { render_snapshot_ = std::move(scene); }
 
 Document document_from_render_scene(RenderScene scene) {
   Document doc(scene.source.empty() ? "Render snapshot" : scene.source);
+  const RenderSceneDebugGraph graph = scene.debug_graph;
   for (auto& [id, mesh] : scene.meshes) {
     MeshAsset asset{};
     asset.id = id;
@@ -565,15 +622,32 @@ Document document_from_render_scene(RenderScene scene) {
     asset.cpu = mesh;
     doc.insert_mesh(std::move(asset));
   }
-  for (const auto& item : scene.items) {
-    SceneNode node{};
-    node.id = item.node_id;
-    node.name = "node-" + std::to_string(item.node_id);
-    node.mesh_asset_id = item.mesh_asset_id;
-    node.local_transform = item.transform;
-    node.color = item.color;
-    node.selected = item.selected;
-    doc.scene().insert_node(std::move(node));
+  if (!graph.nodes.empty()) {
+    for (const RenderSceneNodeDebug& debug : graph.nodes) {
+      SceneNode node{};
+      node.id = debug.id;
+      node.name = debug.name.empty() ? "node-" + std::to_string(debug.id) : debug.name;
+      node.parent = debug.parent;
+      node.children = debug.children;
+      node.mesh_asset_id = debug.mesh_asset_id;
+      node.local_transform = debug.local_transform;
+      node.world_transform = debug.world_transform;
+      node.local_bounds = debug.local_bounds;
+      node.world_bounds = debug.world_bounds;
+      node.selected = debug.selected;
+      doc.scene().insert_node(std::move(node));
+    }
+  } else {
+    for (const auto& item : scene.items) {
+      SceneNode node{};
+      node.id = item.node_id;
+      node.name = "node-" + std::to_string(item.node_id);
+      node.mesh_asset_id = item.mesh_asset_id;
+      node.local_transform = item.transform;
+      node.color = item.color;
+      node.selected = item.selected;
+      doc.scene().insert_node(std::move(node));
+    }
   }
   doc.replace_textures(scene.textures);
   doc.recompute_scene();

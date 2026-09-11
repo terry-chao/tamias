@@ -427,6 +427,11 @@ RenderFrameStats RenderThread::last_stats() const {
   return last_stats_;
 }
 
+std::unordered_map<std::uint64_t, MeshLod> RenderThread::last_lod_by_node() const {
+  std::scoped_lock lock(mutex_);
+  return last_lod_by_node_;
+}
+
 Result<std::uint64_t> RenderThread::upload_texture(std::uint64_t asset_id, TextureAsset asset) {
   auto promise = std::make_shared<std::promise<Result<std::uint64_t>>>();
   auto future = promise->get_future();
@@ -1242,6 +1247,7 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     {
       std::scoped_lock lock(mutex_);
       last_stats_ = stats;
+      last_lod_by_node_ = channel.lod_by_node;
       pending_lod_requests_.insert(pending_lod_requests_.end(), lod_requests.begin(),
                                    lod_requests.end());
     }

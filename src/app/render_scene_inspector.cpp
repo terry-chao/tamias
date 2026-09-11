@@ -1,5 +1,7 @@
 #include "render_scene_inspector.h"
 
+#include "selection_accent_delegate.h"
+
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QColor>
@@ -23,10 +25,15 @@
 #include <QStringList>
 #include <QTabWidget>
 #include <QTableWidget>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
+#include <QTreeWidgetItemIterator>
+#include <QVariant>
 #include <QVBoxLayout>
 #include <QWidget>
 
 #include <algorithm>
+#include <unordered_map>
 #include <vector>
 
 namespace tamias {
@@ -44,6 +51,64 @@ QString fmt_aabb(const Aabb& box) {
     return QStringLiteral("—");
   }
   return fmt_vec(box.min) + QStringLiteral("  →  ") + fmt_vec(box.max);
+}
+
+QString lod_name(MeshLod lod) {
+  switch (lod) {
+    case MeshLod::Box:
+      return QCoreApplication::translate("tamias::RenderSceneInspector", "box");
+    case MeshLod::Coarse:
+      return QCoreApplication::translate("tamias::RenderSceneInspector", "coarse");
+    case MeshLod::Work:
+      return QCoreApplication::translate("tamias::RenderSceneInspector", "work");
+    case MeshLod::Close:
+      return QCoreApplication::translate("tamias::RenderSceneInspector", "close");
+  }
+  return QCoreApplication::translate("tamias::RenderSceneInspector", "?");
+}
+
+MeshLod estimated_lod(const RenderScene& scene, const Aabb& bounds, bool selected, bool lines) {
+  const float px =
+      projected_aabb_pixels(bounds, scene.view.eye_position, scene.view.fovy,
+                            static_cast<float>(std::max<std::uint32_t>(scene.view.height, 1u)));
+  return select_mesh_lod(px, std::nullopt, selected, lines);
+}
+
+QString lod_set_text(const RenderScene& scene, std::uint64_t node_id,
+                     std::uint64_t mesh_asset_id, const Aabb& bounds, bool selected,
+                     bool lines) {
+  QStringList parts;
+  if (const auto it = scene.debug_graph.lod_by_node.find(node_id);
+      it != scene.debug_graph.lod_by_node.end()) {
+    parts << QCoreApplication::translate("tamias::RenderSceneInspector", "cur %1")
+                 .arg(lod_name(it->second));
+  } else if (bounds.valid() && mesh_asset_id != 0) {
+    parts << QCoreApplication::translate("tamias::RenderSceneInspector", "est %1")
+                 .arg(lod_name(estimated_lod(scene, bounds, selected, lines)));
+  }
+  if (mesh_asset_id != 0) {
+    if (const auto it = scene.debug_graph.lod_sets.find(mesh_asset_id);
+        it != scene.debug_graph.lod_sets.end()) {
+      const LodMeshSet& set = it->second;
+      QStringList assets;
+      if (set.coarse != 0) {
+        assets << QCoreApplication::translate("tamias::RenderSceneInspector", "C:%1")
+                      .arg(set.coarse);
+      }
+      if (set.work != 0) {
+        assets << QCoreApplication::translate("tamias::RenderSceneInspector", "W:%1")
+                      .arg(set.work);
+      }
+      if (set.close != 0) {
+        assets << QCoreApplication::translate("tamias::RenderSceneInspector", "X:%1")
+                      .arg(set.close);
+      }
+      if (!assets.isEmpty()) {
+        parts << assets.join(QStringLiteral(" "));
+      }
+    }
+  }
+  return parts.isEmpty() ? QStringLiteral("—") : parts.join(QStringLiteral("  ·  "));
 }
 
 QString mode_name(const RenderSceneInspector& self, RenderMode mode) {
@@ -95,6 +160,7 @@ QTableWidget* make_table(QWidget* parent, const QStringList& headers) {
   table->setShowGrid(false);
   table->setWordWrap(false);
   table->verticalHeader()->setDefaultSectionSize(26);
+  table->setItemDelegate(new RowAccentDelegate(table));
   return table;
 }
 
@@ -141,17 +207,35 @@ RenderSceneInspector::RenderSceneInspector(QWidget* parent) : QWidget(parent) {
     font.setPointSizeF(font.pointSizeF() + 1.5);
     summary_mode_->setFont(font);
   }
-  summary_counts_ = make_value(summary);
+  auto* stats_form = new QFormLayout();
+  stats_form->setContentsMargins(0, 6, 0, 0);
+  stats_form->setHorizontalSpacing(10);
+  stats_form->setVerticalSpacing(5);
+  stats_form->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+  stats_form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+
+  auto add_row = [&](const QString& caption, QLabel*& field) {
+    field = make_value(summary);
+    stats_form->addRow(caption, field);
+  };
+  add_row(tr("Draws"), summary_draws_);
+  add_row(tr("Meshes"), summary_meshes_);
+  add_row(tr("Textures"), summary_textures_);
+  add_row(tr("Triangles"), summary_tris_);
+  add_row(tr("Hidden"), summary_hidden_);
+  add_row(tr("Nodes"), summary_nodes_);
+  add_row(tr("LOD sets"), summary_lods_);
   summary_digest_ = make_value(summary);
   summary_camera_ = make_value(summary);
   summary_camera2_ = make_value(summary);
   summary_source_ = make_value(summary);
+  add_row(tr("Digest"), summary_digest_);
+  add_row(tr("Camera"), summary_camera_);
+  add_row(tr("Projection"), summary_camera2_);
+  add_row(tr("Source"), summary_source_);
+
   summary_layout->addWidget(summary_mode_);
-  summary_layout->addWidget(summary_counts_);
-  summary_layout->addWidget(summary_digest_);
-  summary_layout->addWidget(summary_camera_);
-  summary_layout->addWidget(summary_camera2_);
-  summary_layout->addWidget(summary_source_);
+  summary_layout->addLayout(stats_form);
 
   auto* actions = new QWidget(summary);
   actions_ = actions;
@@ -296,6 +380,34 @@ RenderSceneInspector::RenderSceneInspector(QWidget* parent) : QWidget(parent) {
 
   auto* extras = new QTabWidget(split);
   extras_ = extras;
+
+  scene_tree_page_ = new QWidget(extras);
+  auto* scene_tree_layout = new QVBoxLayout(scene_tree_page_);
+  scene_tree_layout->setContentsMargins(0, 0, 0, 0);
+  scene_tree_layout->setSpacing(6);
+  scene_tree_ = new QTreeWidget(scene_tree_page_);
+  scene_tree_->setColumnCount(5);
+  scene_tree_->setHeaderLabels(
+      {tr("Node"), tr("Type"), tr("Mesh"), tr("LOD"), tr("World bounds")});
+  scene_tree_->setAlternatingRowColors(true);
+  scene_tree_->setSelectionBehavior(QAbstractItemView::SelectRows);
+  scene_tree_->setSelectionMode(QAbstractItemView::SingleSelection);
+  scene_tree_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+  scene_tree_->setUniformRowHeights(true);
+  scene_tree_->header()->setStretchLastSection(true);
+  scene_tree_->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+  connect(scene_tree_, &QTreeWidget::itemSelectionChanged, this,
+          &RenderSceneInspector::on_scene_tree_selected);
+  auto* scene_tree_hint = new QLabel(
+      tr("Semantic tree from the live capture. Group nodes show the parent chain; "
+         "leaves reference the mesh drawn by the render-scene graph."),
+      scene_tree_page_);
+  scene_tree_hint->setWordWrap(true);
+  scene_tree_hint->setStyleSheet(QStringLiteral("color: palette(mid);"));
+  scene_tree_layout->addWidget(scene_tree_, 1);
+  scene_tree_layout->addWidget(scene_tree_hint);
+  extras->addTab(scene_tree_page_, tr("Scene Graph"));
+
   verts_page_ = new QWidget(extras);
   auto* verts_layout = new QVBoxLayout(verts_page_);
   verts_layout->setContentsMargins(0, 0, 0, 0);
@@ -408,6 +520,10 @@ void RenderSceneInspector::select_node(quint64 node_id) {
       if (auto* item = draws_->item(i, 0)) {
         draws_->scrollToItem(item);
       }
+      if (scene_tree_ != nullptr) {
+        const QSignalBlocker block(scene_tree_);
+        select_scene_tree_node(node_id);
+      }
       return;
     }
   }
@@ -428,6 +544,9 @@ void RenderSceneInspector::show_empty() {
   empty_->show();
   body_->hide();
   draws_->setRowCount(0);
+  if (scene_tree_ != nullptr) {
+    scene_tree_->clear();
+  }
   verts_->setRowCount(0);
   tris_->setRowCount(0);
   faces_->setRowCount(0);
@@ -451,13 +570,17 @@ void RenderSceneInspector::rebuild() {
           .arg(mode_name(*this, scene_.view.mode))
           .arg(scene_.view.width)
           .arg(scene_.view.height));
-  summary_counts_->setText(tr("%1 draws · %2 meshes · %3 textures · %4 tris · %5 hidden")
-                               .arg(scene_.items.size())
-                               .arg(scene_.meshes.size())
-                               .arg(scene_.textures.size())
-                               .arg(render_scene_triangle_count(scene_))
-                               .arg(scene_.hidden_node_ids.size()));
-  summary_digest_->setText(tr("digest  %1").arg(digest));
+  const std::size_t node_count = scene_.debug_graph.nodes.empty()
+                                     ? scene_.items.size()
+                                     : scene_.debug_graph.nodes.size();
+  summary_draws_->setText(QString::number(scene_.items.size()));
+  summary_meshes_->setText(QString::number(scene_.meshes.size()));
+  summary_textures_->setText(QString::number(scene_.textures.size()));
+  summary_tris_->setText(QString::number(render_scene_triangle_count(scene_)));
+  summary_hidden_->setText(QString::number(scene_.hidden_node_ids.size()));
+  summary_nodes_->setText(QString::number(node_count));
+  summary_lods_->setText(QString::number(scene_.debug_graph.lod_sets.size()));
+  summary_digest_->setText(digest);
   summary_camera_->setText(tr("eye %1\ntarget %2\ndistance %3")
                                .arg(fmt_vec(scene_.view.eye_position), fmt_vec(scene_.view.target))
                                .arg(scene_.view.view_distance, 0, 'g', 4));
@@ -474,6 +597,7 @@ void RenderSceneInspector::rebuild() {
                                 .arg(source_name.isEmpty() ? tr("(unnamed)") : source_name)
                                 .arg(scene_.version));
   dump_->setPlainText(QString::fromStdString(inspect_render_scene(scene_)));
+  fill_scene_tree();
 
   int select = draws_->currentRow();
   {
@@ -515,6 +639,114 @@ void RenderSceneInspector::rebuild() {
   }
   emit vertex_overlay_cleared();
   emit triangle_overlay_cleared();
+}
+
+void RenderSceneInspector::fill_scene_tree() {
+  if (scene_tree_ == nullptr) {
+    return;
+  }
+  scene_tree_->clear();
+  if (!has_scene_) {
+    return;
+  }
+
+  const auto make_item = [&](const QString& name, const QString& type, const QString& mesh,
+                             const QString& lod, const QString& bounds,
+                             std::uint64_t node_id) {
+    auto* item = new QTreeWidgetItem();
+    item->setText(0, name);
+    item->setText(1, type);
+    item->setText(2, mesh);
+    item->setText(3, lod);
+    item->setText(4, bounds);
+    item->setData(0, Qt::UserRole, QVariant::fromValue<qulonglong>(node_id));
+    item->setToolTip(0, name);
+    item->setToolTip(3, lod);
+    return item;
+  };
+
+  if (!scene_.debug_graph.nodes.empty()) {
+    std::unordered_map<std::uint64_t, QTreeWidgetItem*> by_id;
+    by_id.reserve(scene_.debug_graph.nodes.size());
+    for (const auto& node : scene_.debug_graph.nodes) {
+      const bool leaf = node.mesh_asset_id != 0;
+      const QString name = QString::fromStdString(node.name).trimmed().isEmpty()
+                               ? tr("node-%1").arg(node.id)
+                               : QString::fromStdString(node.name);
+      const QString type = leaf ? tr("Leaf") : tr("Group");
+      const QString mesh = leaf ? QString::number(node.mesh_asset_id) : QStringLiteral("—");
+      const QString lod = lod_set_text(scene_, node.id, node.mesh_asset_id, node.world_bounds,
+                                       node.selected, false);
+      const QString bounds = fmt_aabb(node.world_bounds);
+      auto* item = make_item(name, type, mesh, lod, bounds, node.id);
+      if (node.selected) {
+        QFont font = item->font(0);
+        font.setBold(true);
+        item->setFont(0, font);
+      }
+      by_id.emplace(node.id, item);
+    }
+    for (const auto& node : scene_.debug_graph.nodes) {
+      QTreeWidgetItem* item = by_id[node.id];
+      if (node.parent != 0) {
+        const auto parent_it = by_id.find(node.parent);
+        if (parent_it != by_id.end() && parent_it->second != item) {
+          parent_it->second->addChild(item);
+          continue;
+        }
+      }
+      scene_tree_->addTopLevelItem(item);
+    }
+    scene_tree_->expandAll();
+    return;
+  }
+
+  auto* root = make_item(tr("Scene"), tr("Root"), QStringLiteral("—"),
+                         QStringLiteral("—"), QStringLiteral("—"), 0);
+  scene_tree_->addTopLevelItem(root);
+  std::uint64_t previous = 0;
+  for (const auto& item : scene_.items) {
+    if (item.node_id == previous) {
+      continue;
+    }
+    previous = item.node_id;
+    const QString name = tr("node-%1").arg(item.node_id);
+    const QString lod =
+        lod_set_text(scene_, item.node_id, item.mesh_asset_id, item.bounds, item.selected, item.lines);
+    root->addChild(make_item(name, tr("Leaf"), QString::number(item.mesh_asset_id), lod,
+                             fmt_aabb(item.bounds), item.node_id));
+  }
+  root->setExpanded(true);
+}
+
+void RenderSceneInspector::select_scene_tree_node(quint64 node_id) {
+  if (scene_tree_ == nullptr || node_id == 0) {
+    return;
+  }
+  QTreeWidgetItemIterator it(scene_tree_);
+  while (*it != nullptr) {
+    QTreeWidgetItem* item = *it;
+    if (item->data(0, Qt::UserRole).toULongLong() == node_id) {
+      scene_tree_->setCurrentItem(item);
+      scene_tree_->scrollToItem(item);
+      return;
+    }
+    ++it;
+  }
+}
+
+void RenderSceneInspector::on_scene_tree_selected() {
+  if (scene_tree_ == nullptr || !has_scene_) {
+    return;
+  }
+  QTreeWidgetItem* item = scene_tree_->currentItem();
+  if (item == nullptr) {
+    return;
+  }
+  const std::uint64_t node_id = item->data(0, Qt::UserRole).toULongLong();
+  if (node_id != 0) {
+    select_node(static_cast<quint64>(node_id));
+  }
 }
 
 void RenderSceneInspector::apply_filter() {
