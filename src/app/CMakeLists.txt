@@ -39,7 +39,10 @@ add_executable(tamias
   timing_panel.cpp
   timing_timeline_widget.cpp
   view_cube_widget.cpp
-  viewport_tool_strip.cpp
+  viewport_tool_panel.cpp
+  entity_kind_catalog.cpp
+  visibility_panel.cpp
+  theme.cpp
   rhi_backends.cpp
   resources.qrc
 )

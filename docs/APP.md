@@ -16,6 +16,8 @@
 | 句柄检查（Ctrl+D） | `handle_inspector` |
 | ViewCube | `view_cube_widget` |
 | 属性面板（改特征参数） | `property_panel` |
+| 视口工具列（视口右侧通高，左列按钮 + 右侧功能页） | `viewport_tool_panel` |
+| 构件显隐页（按类别显隐，Ctrl+L） | `visibility_panel` / `entity_kind_catalog` |
 | 设置（含选 Vulkan / OpenGL） | `app_settings` / `settings_dialog` |
 | 登记 RHI 后端 | `rhi_backends.cpp` |
 

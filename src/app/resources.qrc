@@ -10,6 +10,9 @@
     <file alias="new.svg">../../assets/icons/new.svg</file>
     <file alias="open.svg">../../assets/icons/open.svg</file>
     <file alias="drawing.svg">../../assets/icons/drawing.svg</file>
+    <file alias="components.svg">../../assets/icons/components.svg</file>
+    <file alias="check.svg">../../assets/icons/check.svg</file>
+    <file alias="check_partial.svg">../../assets/icons/check_partial.svg</file>
     <file alias="undo.svg">../../assets/icons/undo.svg</file>
     <file alias="redo.svg">../../assets/icons/redo.svg</file>
     <file alias="wall.svg">../../assets/icons/wall.svg</file>

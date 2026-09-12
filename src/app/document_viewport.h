@@ -12,7 +12,7 @@
 #include "box_select_overlay.h"
 #include "view_cube_widget.h"
 #include "viewport_floor.h"
-#include "viewport_tool_strip.h"
+#include "viewport_tool_panel.h"
 #include "entity/entity_grip.h"
 #include "engine/modeling/feature.h"
 #include "host/session.h"
@@ -23,6 +23,7 @@
 #include <QPoint>
 #include <QTimer>
 #include <QWidget>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -33,6 +34,12 @@
 #include <vector>
 
 namespace tamias {
+
+// 当前文档里各类构件的数量，供可见性面板显示 "墙 12" 这样的计数。
+struct VisibilityCounts {
+  std::unordered_map<EntityKind, std::size_t> kinds;
+  std::size_t imported = 0;  // 无实体的导入网格（STEP / OBJ / glTF…）
+};
 
 class DocumentViewport final : public QWidget {
   Q_OBJECT
@@ -54,6 +61,24 @@ class DocumentViewport final : public QWidget {
   void hide_selected();
   void isolate_selected();
   void show_all_visible();
+  // ==== 按构件类别过滤（构件可见性面板用；勾选 = 显示）====
+  [[nodiscard]] const std::unordered_set<EntityKind>& hidden_kinds() const { return hidden_kinds_; }
+  void set_kind_hidden(EntityKind kind, bool hidden);
+  // 批量设置多个类别（面板整组勾选）：只重绘一次。
+  void set_kinds_hidden(const std::vector<EntityKind>& kinds, bool hidden);
+  // 只留这一类：其余类别与导入网格都隐藏；已隔离/单独隐藏的对象一并复位。
+  void isolate_kind(EntityKind kind);
+  // 相机框住该类全部构件。
+  void frame_kind(EntityKind kind);
+  [[nodiscard]] VisibilityCounts visibility_counts() const;
+  [[nodiscard]] bool imported_hidden() const;
+  void set_imported_hidden(bool hidden);
+  // 隔离（右键"隔离选中"）状态：面板要据此把被挡住的类别显示成未勾选。
+  [[nodiscard]] bool is_isolating() const { return !isolated_ids_.empty(); }
+  [[nodiscard]] std::unordered_set<EntityKind> isolated_kinds() const;
+  [[nodiscard]] bool has_active_filter() const;
+  // 开合视口右上角工具面板里的"构件显隐"页（Ribbon / 快捷键走这里）。
+  void toggle_visibility_panel();
   [[nodiscard]] ViewportState capture_viewport_state() const;
   [[nodiscard]] RenderScene::View capture_render_scene_view() const;
   [[nodiscard]] std::vector<std::uint64_t> capture_hidden_node_ids() const;
@@ -101,6 +126,7 @@ class DocumentViewport final : public QWidget {
   void document_changed();   // 文档内容/参数变化（undo/redo/命令执行后）
   void status_message(const QString& text);  // 状态栏提示（如三维中拒绝画板）
   void plugin_point_input_changed(bool active);
+  void visibility_changed();               // 隐藏/隔离/楼层过滤变化，面板据此刷新
 
  protected:
   void showEvent(QShowEvent* event) override;
@@ -130,12 +156,12 @@ class DocumentViewport final : public QWidget {
   void start_view_animation(float target_yaw, float target_pitch,
                            bool finish_orthographic = false);
   void stop_view_animation();
-  void populate_visibility_menu();
   void populate_floor_menu();
   void refresh_floors();
   void set_active_floor(int index);
-  void set_kind_hidden(EntityKind kind, bool hidden);
   [[nodiscard]] bool node_visible_in_view(std::uint64_t id) const;
+  // 导入网格（无 Entity 的 SceneNode）的节点 id。
+  [[nodiscard]] std::vector<std::uint64_t> imported_node_ids() const;
   [[nodiscard]] Vec3 cursor_world_position(const QPoint& pos) const;
   [[nodiscard]] Vec3 cursor_ground_position(const QPoint& pos) const;
   // 绘制实体时吸附到地面网格交点（门/窗贴墙拾取除外）。
@@ -179,7 +205,7 @@ class DocumentViewport final : public QWidget {
   NativeSurface* surface_ = nullptr;
   void* gl_hwnd_ = nullptr;  // Win32 OpenGL child HWND (UI-thread owned)
   ViewCubeWidget* view_cube_ = nullptr;
-  ViewportToolStrip* tool_strip_ = nullptr;
+  ViewportToolPanel* tool_panel_ = nullptr;
   QLabel* coord_label_ = nullptr;
   QTimer* view_anim_timer_ = nullptr;
   QElapsedTimer view_anim_clock_;

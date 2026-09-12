@@ -28,6 +28,8 @@
 #include <QInputDialog>
 #include <QKeyEvent>
 #include <QKeySequence>
+#include <QHBoxLayout>
+#include <QLayout>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
@@ -35,7 +37,6 @@
 #include <QShowEvent>
 #include <QResizeEvent>
 #include <QTimer>
-#include <QVBoxLayout>
 #include <QWheelEvent>
 
 #include <algorithm>
@@ -110,10 +111,15 @@ DocumentViewport::DocumentViewport(std::shared_ptr<Document> document,
   // show — manual setGeometry alone often leaves a tiny HWND at (0,0) until the
   // user resizes/interacts.
   surface_ = new NativeSurface(this);
-  auto* root = new QVBoxLayout(this);
+  // 左：三维区域；右：工具列（不悬浮，从上到下占满，右侧再往外才是停靠面板）。
+  auto* root = new QHBoxLayout(this);
   root->setContentsMargins(0, 0, 0, 0);
   root->setSpacing(0);
-  root->addWidget(surface_);
+  root->addWidget(surface_, 1);
+
+  tool_panel_ = new ViewportToolPanel(this);
+  tool_panel_->set_viewport(this);
+  root->addWidget(tool_panel_, 0);
 
   view_cube_ = new ViewCubeWidget(this);
   connect(view_cube_, &ViewCubeWidget::face_clicked, this, &DocumentViewport::on_view_cube_face);
@@ -127,14 +133,16 @@ DocumentViewport::DocumentViewport(std::shared_ptr<Document> document,
     request_redraw();
   });
 
-  tool_strip_ = new ViewportToolStrip(this);
-  connect(tool_strip_, &ViewportToolStrip::plan_view_toggled, this,
+  connect(tool_panel_, &ViewportToolPanel::plan_view_toggled, this,
           [this](bool plan) { set_plan_view(plan); });
-  connect(tool_strip_, &ViewportToolStrip::frame_all_clicked, this, &DocumentViewport::frame_scene);
-  connect(tool_strip_, &ViewportToolStrip::visibility_menu_about_to_show, this,
-          &DocumentViewport::populate_visibility_menu);
-  connect(tool_strip_, &ViewportToolStrip::floor_menu_about_to_show, this,
+  connect(tool_panel_, &ViewportToolPanel::frame_all_clicked, this,
+          &DocumentViewport::frame_scene);
+  connect(tool_panel_, &ViewportToolPanel::floor_menu_about_to_show, this,
           &DocumentViewport::populate_floor_menu);
+  connect(tool_panel_, &ViewportToolPanel::layout_changed, this, [this] {
+    layout_overlays();
+    request_redraw();  // 三维区域宽度变了，宽高比要重算
+  });
 
   view_anim_timer_ = new QTimer(this);
   view_anim_timer_->setInterval(16);
@@ -281,6 +289,10 @@ void DocumentViewport::request_redraw() {
 }
 
 void DocumentViewport::layout_overlays() {
+  // 工具列刚改过宽度的话，先把布局跑完再摆叠加层，否则 ViewCube 会用旧的三维区尺寸。
+  if (QLayout* box = layout()) {
+    box->activate();
+  }
   if (surface_) {
     surface_->lower();
     // Force HWND creation after layout so the first Vulkan present sees the
@@ -290,18 +302,16 @@ void DocumentViewport::layout_overlays() {
     }
   }
   constexpr int kMargin = 12;
+  // 叠加层只贴在三维区域上，不盖到右侧工具列。
+  const QRect area = surface_ ? surface_->geometry() : rect();
   if (view_cube_) {
-    view_cube_->move(width() - view_cube_->width() - kMargin, kMargin);
+    view_cube_->move(area.x() + area.width() - view_cube_->width() - kMargin,
+                     area.y() + kMargin);
     view_cube_->raise();
-  }
-  if (tool_strip_) {
-    const int strip_y = view_cube_ ? (kMargin + view_cube_->height() + 8) : kMargin;
-    tool_strip_->move(width() - tool_strip_->width() - kMargin, strip_y);
-    tool_strip_->raise();
   }
   if (coord_label_) {
     coord_label_->adjustSize();
-    coord_label_->move(kMargin, height() - coord_label_->height() - kMargin);
+    coord_label_->move(area.x() + kMargin, area.y() + area.height() - coord_label_->height() - kMargin);
     coord_label_->raise();
   }
   if (box_select_overlay_ && box_select_overlay_->isVisible()) {
@@ -1659,8 +1669,8 @@ void DocumentViewport::finish_box_select(const QPoint& pos, bool additive) {
 
 void DocumentViewport::set_plan_view(bool plan, bool restore_perspective) {
   if (plan_view_ == plan) {
-    if (tool_strip_) {
-      tool_strip_->set_plan_view(plan_view_);
+    if (tool_panel_) {
+      tool_panel_->set_plan_view(plan_view_);
     }
     return;
   }
@@ -1676,8 +1686,8 @@ void DocumentViewport::set_plan_view(bool plan, bool restore_perspective) {
       start_view_animation(persp_yaw_, persp_pitch_);
     }
   }
-  if (tool_strip_) {
-    tool_strip_->set_plan_view(plan_view_);
+  if (tool_panel_) {
+    tool_panel_->set_plan_view(plan_view_);
   }
   if (!plan_view_ && session_->tool_mode() == ToolMode::Slab) {
     set_tool(ToolMode::None);
@@ -1696,6 +1706,7 @@ void DocumentViewport::hide_selected() {
     isolated_ids_.erase(id);
   }
   request_redraw();
+  emit visibility_changed();
 }
 
 void DocumentViewport::isolate_selected() {
@@ -1709,13 +1720,16 @@ void DocumentViewport::isolate_selected() {
     hidden_ids_.erase(id);
   }
   request_redraw();
+  emit visibility_changed();
 }
 
 void DocumentViewport::show_all_visible() {
   hidden_ids_.clear();
   isolated_ids_.clear();
   hidden_kinds_.clear();
+  active_floor_ = -1;  // "全部显示"就是真的全部：楼层过滤也复位
   request_redraw();
+  emit visibility_changed();
 }
 
 void DocumentViewport::set_kind_hidden(EntityKind kind, bool hidden) {
@@ -1723,8 +1737,161 @@ void DocumentViewport::set_kind_hidden(EntityKind kind, bool hidden) {
     hidden_kinds_.insert(kind);
   } else {
     hidden_kinds_.erase(kind);
+    // 勾上 = 真的能看见：把这一类被单独隐藏的构件放回来。
+    for (const auto& [unused, entity] : document_->entities()) {
+      (void)unused;
+      if (entity != nullptr && entity->kind() == kind) {
+        hidden_ids_.erase(entity->id);
+      }
+    }
+  }
+  // 面板是唯一的显隐真相：碰过面板就撤掉逐件隔离，否则会出现"勾上却看不见"。
+  isolated_ids_.clear();
+  request_redraw();
+  emit visibility_changed();
+}
+
+void DocumentViewport::set_kinds_hidden(const std::vector<EntityKind>& kinds, bool hidden) {
+  bool changed = false;
+  for (const EntityKind kind : kinds) {
+    if (hidden) {
+      changed = hidden_kinds_.insert(kind).second || changed;
+    } else {
+      changed = hidden_kinds_.erase(kind) != 0 || changed;
+      for (const auto& [unused, entity] : document_->entities()) {
+        (void)unused;
+        if (entity != nullptr && entity->kind() == kind) {
+          changed = hidden_ids_.erase(entity->id) != 0 || changed;
+        }
+      }
+    }
+  }
+  changed = !isolated_ids_.empty() || changed;
+  isolated_ids_.clear();
+  if (!changed) {
+    return;
   }
   request_redraw();
+  emit visibility_changed();
+}
+
+void DocumentViewport::isolate_kind(EntityKind kind) {
+  // "只显示这一类" = 其余类别整体隐藏 + 导入网格隐藏；单件隐藏/隔离先复位，
+  // 否则会出现"勾上了却还是看不见"的困惑。
+  hidden_ids_.clear();
+  isolated_ids_.clear();
+  hidden_kinds_.clear();
+  for (const auto& [unused, entity] : document_->entities()) {
+    (void)unused;
+    if (entity != nullptr && entity->kind() != kind) {
+      hidden_kinds_.insert(entity->kind());
+    }
+  }
+  for (const std::uint64_t id : imported_node_ids()) {
+    hidden_ids_.insert(id);
+  }
+  request_redraw();
+  emit visibility_changed();
+}
+
+void DocumentViewport::frame_kind(EntityKind kind) {
+  Aabb box{};
+  bool any = false;
+  for (const auto& [unused, entity] : document_->entities()) {
+    (void)unused;
+    if (entity == nullptr || entity->kind() != kind) {
+      continue;
+    }
+    const SceneNode* node = document_->scene().find(entity->id);
+    if (node == nullptr || !node->world_bounds.valid()) {
+      continue;
+    }
+    if (!any) {
+      box = node->world_bounds;
+      any = true;
+    } else {
+      box.expand(node->world_bounds.min);
+      box.expand(node->world_bounds.max);
+    }
+  }
+  if (!any) {
+    return;
+  }
+  stop_view_animation();
+  camera_.frame_aabb(box);
+  request_redraw();
+}
+
+VisibilityCounts DocumentViewport::visibility_counts() const {
+  VisibilityCounts counts;
+  for (const auto& [unused, entity] : document_->entities()) {
+    (void)unused;
+    if (entity != nullptr) {
+      ++counts.kinds[entity->kind()];
+    }
+  }
+  counts.imported = imported_node_ids().size();
+  return counts;
+}
+
+bool DocumentViewport::imported_hidden() const {
+  for (const std::uint64_t id : imported_node_ids()) {
+    if (hidden_ids_.count(id) != 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void DocumentViewport::set_imported_hidden(bool hidden) {
+  bool changed = false;
+  for (const std::uint64_t id : imported_node_ids()) {
+    if (hidden) {
+      changed = hidden_ids_.insert(id).second || changed;
+    } else {
+      changed = hidden_ids_.erase(id) != 0 || changed;
+    }
+  }
+  if (!changed) {
+    if (isolated_ids_.empty()) {
+      return;
+    }
+  }
+  isolated_ids_.clear();
+  request_redraw();
+  emit visibility_changed();
+}
+
+std::unordered_set<EntityKind> DocumentViewport::isolated_kinds() const {
+  std::unordered_set<EntityKind> kinds;
+  for (const std::uint64_t id : isolated_ids_) {
+    const Entity* entity = document_->entity(id);
+    if (entity != nullptr) {
+      kinds.insert(entity->kind());
+    }
+  }
+  return kinds;
+}
+
+bool DocumentViewport::has_active_filter() const {
+  return !hidden_ids_.empty() || !isolated_ids_.empty() || !hidden_kinds_.empty() ||
+         active_floor_ >= 0;
+}
+
+void DocumentViewport::toggle_visibility_panel() {
+  if (tool_panel_ != nullptr) {
+    tool_panel_->toggle_visibility_page();
+  }
+}
+
+std::vector<std::uint64_t> DocumentViewport::imported_node_ids() const {
+  std::vector<std::uint64_t> ids;
+  for (const SceneNode& node : document_->scene().nodes()) {
+    if (node.mesh_asset_id != 0 && document_->entity(node.id) == nullptr) {
+      ids.push_back(node.id);
+    }
+  }
+  return ids;
 }
 
 void DocumentViewport::set_active_floor(int index) {
@@ -1737,6 +1904,7 @@ void DocumentViewport::set_active_floor(int index) {
   }
   active_floor_ = index;
   request_redraw();
+  emit visibility_changed();
 }
 
 void DocumentViewport::refresh_floors() {
@@ -1768,70 +1936,12 @@ bool DocumentViewport::node_visible_in_view(std::uint64_t id) const {
   return true;
 }
 
-void DocumentViewport::populate_visibility_menu() {
-  if (tool_strip_ == nullptr) {
-    return;
-  }
-  QMenu* menu = tool_strip_->visibility_menu();
-  menu->clear();
-  QAction* hide_act = menu->addAction(tr("Hide Selected"));
-  hide_act->setEnabled(!document_->selected_ids().empty());
-  connect(hide_act, &QAction::triggered, this, &DocumentViewport::hide_selected);
-  QAction* isolate_act = menu->addAction(tr("Isolate Selected"));
-  isolate_act->setEnabled(!document_->selected_ids().empty());
-  connect(isolate_act, &QAction::triggered, this, &DocumentViewport::isolate_selected);
-  QAction* show_act = menu->addAction(tr("Show All"));
-  show_act->setEnabled(!hidden_ids_.empty() || !isolated_ids_.empty() || !hidden_kinds_.empty());
-  connect(show_act, &QAction::triggered, this, &DocumentViewport::show_all_visible);
-
-  std::unordered_set<EntityKind> present;
-  for (const auto& [unused, entity] : document_->entities()) {
-    (void)unused;
-    if (entity) {
-      present.insert(entity->kind());
-    }
-  }
-  if (present.empty()) {
-    return;
-  }
-  menu->addSeparator();
-  QMenu* cats = menu->addMenu(tr("Categories"));
-  const auto add_kind = [this, cats, &present](EntityKind kind, const QString& label,
-                                               const QString& icon) {
-    if (present.count(kind) == 0) {
-      return;
-    }
-    QAction* act = cats->addAction(QIcon(icon), label);
-    act->setCheckable(true);
-    act->setChecked(hidden_kinds_.count(kind) == 0);
-    connect(act, &QAction::toggled, this, [this, kind](bool visible) {
-      set_kind_hidden(kind, !visible);
-    });
-  };
-  add_kind(EntityKind::Wall, tr("Walls"), QStringLiteral(":/icons/wall.svg"));
-  add_kind(EntityKind::Beam, tr("Beams"), QStringLiteral(":/icons/beam.svg"));
-  add_kind(EntityKind::Column, tr("Columns"), QStringLiteral(":/icons/column.svg"));
-  add_kind(EntityKind::Slab, tr("Slabs"), QStringLiteral(":/icons/slab.svg"));
-  add_kind(EntityKind::Door, tr("Doors"), QStringLiteral(":/icons/door.svg"));
-  add_kind(EntityKind::Window, tr("Windows"), QStringLiteral(":/icons/window.svg"));
-  add_kind(EntityKind::Box, tr("Boxes"), QStringLiteral(":/icons/box.svg"));
-  add_kind(EntityKind::Cylinder, tr("Cylinders"), QStringLiteral(":/icons/cylinder.svg"));
-  add_kind(EntityKind::Line, tr("Lines"), QStringLiteral(":/icons/line.svg"));
-  add_kind(EntityKind::Polyline, tr("Polylines"), QStringLiteral(":/icons/polyline.svg"));
-  add_kind(EntityKind::Circle, tr("Circles"), QStringLiteral(":/icons/circle.svg"));
-  add_kind(EntityKind::Arc, tr("Arcs"), QStringLiteral(":/icons/arc.svg"));
-  add_kind(EntityKind::Bezier, tr("Beziers"), QStringLiteral(":/icons/bezier.svg"));
-  add_kind(EntityKind::BSpline, tr("B-splines"), QStringLiteral(":/icons/bspline.svg"));
-  add_kind(EntityKind::Nurbs, tr("NURBS"), QStringLiteral(":/icons/nurbs.svg"));
-  add_kind(EntityKind::Rectangle, tr("Rectangles"), QStringLiteral(":/icons/rectangle.svg"));
-}
-
 void DocumentViewport::populate_floor_menu() {
-  if (tool_strip_ == nullptr) {
+  if (tool_panel_ == nullptr) {
     return;
   }
   refresh_floors();
-  QMenu* menu = tool_strip_->floor_menu();
+  QMenu* menu = tool_panel_->floor_menu();
   menu->clear();
 
   QAction* current_header = menu->addAction(tr("Current Storey"));

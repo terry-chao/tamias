@@ -118,7 +118,7 @@
     </message>
 </context>
 <context>
-    <name>tamias::ViewportToolStrip</name>
+    <name>tamias::ViewportToolPanel</name>
     <message>
         <source>Switch between 2D top view (Y up) and 3D perspective</source>
         <translation>在二维俯视（Y 朝上）与三维透视之间切换</translation>
@@ -132,8 +132,8 @@
         <translation>三维透视</translation>
     </message>
     <message>
-        <source>Hide or isolate components</source>
-        <translation>隐藏或隔离构件</translation>
+        <source>Show or hide components by category</source>
+        <translation>按类别显示或隐藏构件</translation>
     </message>
     <message>
         <source>Filter by floor</source>
@@ -1213,6 +1213,14 @@ Meshes / textures: %2
     <message>
         <source>Start recording, then stop to inspect the timeline</source>
         <translation>点录制，操作模型，再点停止查看时间线</translation>
+    </message>
+    <message>
+        <source>Components</source>
+        <translation>构件</translation>
+    </message>
+    <message>
+        <source>Show or hide components by category</source>
+        <translation>按类别显示或隐藏构件</translation>
     </message>
 </context>
 <context>
@@ -3281,6 +3289,140 @@ Export the drawing to DXF, SVG or an image, or rebuild with Qt6::Pdf available.<
         <location filename="../src/app/drawing_view.cpp" line="325"/>
         <source>(unnamed)</source>
         <translation>（未命名）</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::EntityKindCatalog</name>
+    <message>
+        <source>Walls</source>
+        <translation>墙</translation>
+    </message>
+    <message>
+        <source>Doors</source>
+        <translation>门</translation>
+    </message>
+    <message>
+        <source>Windows</source>
+        <translation>窗</translation>
+    </message>
+    <message>
+        <source>Curtain Walls</source>
+        <translation>幕墙</translation>
+    </message>
+    <message>
+        <source>Columns</source>
+        <translation>柱</translation>
+    </message>
+    <message>
+        <source>Beams</source>
+        <translation>梁</translation>
+    </message>
+    <message>
+        <source>Slabs</source>
+        <translation>板</translation>
+    </message>
+    <message>
+        <source>Structural Walls</source>
+        <translation>结构墙</translation>
+    </message>
+    <message>
+        <source>Foundations</source>
+        <translation>基础</translation>
+    </message>
+    <message>
+        <source>Boxes</source>
+        <translation>盒子</translation>
+    </message>
+    <message>
+        <source>Cylinders</source>
+        <translation>圆柱</translation>
+    </message>
+    <message>
+        <source>Lines</source>
+        <translation>直线</translation>
+    </message>
+    <message>
+        <source>Polylines</source>
+        <translation>折线</translation>
+    </message>
+    <message>
+        <source>Circles</source>
+        <translation>圆</translation>
+    </message>
+    <message>
+        <source>Arcs</source>
+        <translation>弧</translation>
+    </message>
+    <message>
+        <source>Rectangles</source>
+        <translation>矩形</translation>
+    </message>
+    <message>
+        <source>Beziers</source>
+        <translation>贝塞尔</translation>
+    </message>
+    <message>
+        <source>B-splines</source>
+        <translation>B 样条</translation>
+    </message>
+    <message>
+        <source>NURBS</source>
+        <translation>NURBS</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>未知</translation>
+    </message>
+    <message>
+        <source>Architectural</source>
+        <translation>建筑</translation>
+    </message>
+    <message>
+        <source>Structural</source>
+        <translation>结构</translation>
+    </message>
+    <message>
+        <source>Sketch &amp; Solids</source>
+        <translation>草图与基础体</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::VisibilityPanel</name>
+    <message>
+        <source>Search components</source>
+        <translation>搜索构件</translation>
+    </message>
+    <message>
+        <source>Show All</source>
+        <translation>全部显示</translation>
+    </message>
+    <message>
+        <source>Clear hidden, isolated and floor filters</source>
+        <translation>清除全部可见性过滤（隐藏、隔离、楼层）</translation>
+    </message>
+    <message>
+        <source>Open a model document to show or hide its components here.</source>
+        <translation>打开一个模型文档后，可在这里按类别显示或隐藏构件。</translation>
+    </message>
+    <message>
+        <source>This document has no components yet.</source>
+        <translation>当前文档还没有构件。</translation>
+    </message>
+    <message>
+        <source>No component matches the search.</source>
+        <translation>没有匹配的构件。</translation>
+    </message>
+    <message>
+        <source>Imported meshes</source>
+        <translation>导入网格</translation>
+    </message>
+    <message>
+        <source>Show Only This Category</source>
+        <translation>只显示这一类</translation>
+    </message>
+    <message>
+        <source>Frame This Category</source>
+        <translation>缩放到这一类</translation>
     </message>
 </context>
 </TS>

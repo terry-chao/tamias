@@ -726,6 +726,18 @@ MainWindow::MainWindow(QWidget* parent)
   display_ribbon->add_action(realistic_action_);
 
   RibbonGroup* panels_group = view_page->add_group(QStringLiteral("panels"), tr("Panels"));
+  // 构件显隐面板住在视口右上角的工具面板里（不在停靠区），这里只给入口与快捷键。
+  auto* components_action =
+      new QAction(ribbon_icon(QStringLiteral(":/icons/components.svg")), tr("Components"), this);
+  components_action->setShortcut(QKeySequence(tr("Ctrl+L")));
+  components_action->setToolTip(tr("Show or hide components by category"));
+  connect(components_action, &QAction::triggered, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->toggle_visibility_panel();
+    }
+  });
+  addAction(components_action);
+  panels_group->add_action(components_action);
   panels_group->add_action(draw_toggle_);
   panels_group->add_action(property_toggle);
   panels_group->add_action(texture_toggle);

@@ -9,8 +9,9 @@
 | 主窗口 + 菜单 | 开文件、保存、设置 | [`main_window`](https://github.com/terry-chao/tamias/blob/main/src/app/main_window.cpp) |
 | 欢迎页 | 新建/最近打开 | [`home_page`](https://github.com/terry-chao/tamias/blob/main/src/app/home_page.cpp)、[`recent_files`](https://github.com/terry-chao/tamias/blob/main/src/app/recent_files.cpp) |
 | 三维视口 | 看模型、转相机、点选 | [`document_viewport`](https://github.com/terry-chao/tamias/blob/main/src/app/document_viewport.cpp) |
-| 右侧工具条 | 选工具：盒子/墙/梁/板/柱/窗/门… | [`viewport_tool_strip`](https://github.com/terry-chao/tamias/blob/main/src/app/viewport_tool_strip.cpp) |
+| 视口右侧工具列 | 从视口右缘到右停靠面板之间、上下通高的一列：左边是按钮（2D/3D、构件显隐、楼层、适应窗口），点开后右边展开对应功能页 | [`viewport_tool_panel`](https://github.com/terry-chao/tamias/blob/main/src/app/viewport_tool_panel.cpp) |
 | 属性面板 | 改选中构件的参数 | [`property_panel`](https://github.com/terry-chao/tamias/blob/main/src/app/property_panel.cpp) |
+| 构件显隐页（视口右上，Ctrl+L） | 一眼看清、一下切换每类构件的显隐 | [`visibility_panel`](https://github.com/terry-chao/tamias/blob/main/src/app/visibility_panel.cpp) |
 | ViewCube | 快速换视角 | [`view_cube_widget`](https://github.com/terry-chao/tamias/blob/main/src/app/view_cube_widget.cpp) |
 | 设置对话框 | 选渲染后端（Vulkan/OpenGL）等 | [`settings_dialog`](https://github.com/terry-chao/tamias/blob/main/src/app/settings_dialog.cpp) |
 | 句柄检查（Ctrl+D） | 显示构件在 `.tdoc` 里的 id | [`handle_inspector`](https://github.com/terry-chao/tamias/blob/main/src/app/handle_inspector.cpp) |
@@ -65,6 +66,8 @@
 3. 按 `Ctrl+D` 打开句柄检查，点选几个构件，看看 id 是怎么分配的。
 4. 试试设置里切换 Vulkan / OpenGL，用 `F` 框住后比较画面（行为应一致）。
 5. 选中一个盒子，打开 Ribbon「插件」，点「列出选择」，看状态栏是否打出 id / 种类 / 名字。
+6. 打开视口右侧工具列的「构件显隐」页（点眼睛按钮，或按 `Ctrl+L`），取消勾选「墙」——整类墙立刻消失；
+   右键某一行可以「只显示这一类」或「缩放到这一类」。
 
 ## 延伸阅读
 
