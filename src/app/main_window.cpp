@@ -157,6 +157,7 @@ MainWindow::MainWindow(QWidget* parent)
     refresh_property_panel();
     refresh_handle_inspector();
     refresh_texture_library_panel();
+    sync_draw_panel();
     bind_plugin_session();
   });
   connect(home_, &HomePage::openRequested, this, &MainWindow::open_file);
@@ -510,15 +511,19 @@ MainWindow::MainWindow(QWidget* parent)
   addAction(property_toggle);
 
   // 左侧绘制设置面板：点构件 icon 后在此选子类型/参数，再"开始绘制"武装命令。
+  // 默认收起——没有文档时它没有意义；用构件工具或"视图 · 面板 · 绘制设置"唤出。
   draw_panel_ = new DrawPanel(this);
   draw_dock_ = new QDockWidget(tr("Draw"), this);
   draw_dock_->setObjectName(QStringLiteral("drawDock"));
   draw_dock_->setWidget(draw_panel_);
   draw_dock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
   addDockWidget(Qt::LeftDockWidgetArea, draw_dock_);
-  auto* draw_toggle = draw_dock_->toggleViewAction();
-  draw_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/properties.svg")));
-  addAction(draw_toggle);
+  draw_dock_->hide();
+  draw_toggle_ = draw_dock_->toggleViewAction();
+  draw_toggle_->setText(tr("Draw Settings"));
+  draw_toggle_->setIcon(ribbon_icon(QStringLiteral(":/icons/draw_panel.svg")));
+  draw_toggle_->setToolTip(tr("Show the draw settings panel"));
+  addAction(draw_toggle_);
   connect(draw_panel_, &DrawPanel::armed_args, this, [this](ToolMode mode, const CommandArgs& args) {
     if (auto* vp = current_viewport()) {
       vp->arm_create(mode, args);
@@ -672,6 +677,7 @@ MainWindow::MainWindow(QWidget* parent)
   display_ribbon->add_action(realistic_action_);
 
   RibbonGroup* panels_group = view_page->add_group(QStringLiteral("panels"), tr("Panels"));
+  panels_group->add_action(draw_toggle_);
   panels_group->add_action(property_toggle);
   panels_group->add_action(texture_toggle);
   panels_group->add_action(handle_toggle);
@@ -895,15 +901,64 @@ void MainWindow::showEvent(QShowEvent* event) {
 }
 
 void MainWindow::set_create_tool(ToolMode mode) {
-  if (auto* vp = current_viewport()) {
-    vp->set_tool(mode);
-    sync_create_tool_actions(vp->tool_mode());
-    if (draw_panel_ != nullptr) {
-      draw_panel_->set_component(mode);
-    }
+  auto* vp = current_viewport();
+  if (vp == nullptr) {
+    // 没有模型文档（起始页 / 参考图纸页）时构件工具无处落地，也不该弹面板。
+    sync_create_tool_actions(ToolMode::None);
+    sync_draw_panel();
+    statusBar()->showMessage(tr("Open a document to draw components"), 5000);
     return;
   }
-  sync_create_tool_actions(ToolMode::None);
+  // 同一构件已经武装：只把面板拉回前台，别重设工具——set_tool 会取消视口里的 pending，
+  // 让"再点一次图标"变成静默取消绘制。
+  const bool keep_armed = draw_panel_ != nullptr && draw_panel_->is_armed() &&
+                          draw_panel_->current_mode() == mode;
+  if (!keep_armed) {
+    if (draw_panel_ != nullptr) {
+      // 先换面板：set_component 可能 emit disarmed（换构件 = 放弃上一个 pending），
+      // 顺序反了会把刚设好的工具又取消掉。
+      draw_panel_->set_component(mode);
+    }
+    vp->set_tool(mode);
+    sync_create_tool_actions(vp->tool_mode());
+  }
+  // 只有真正带规格的构件才需要这块面板；草图工具（直线/圆/多段线…）点了就画，
+  // 弹出一张占位表单只会添乱。
+  const bool has_component = draw_panel_ != nullptr &&
+                             draw_panel_->current_mode() == mode &&
+                             draw_panel_->has_component();
+  if (has_component && draw_dock_ != nullptr) {
+    draw_dock_->show();
+    draw_dock_->raise();
+  }
+}
+
+void MainWindow::sync_draw_panel() {
+  DocumentViewport* vp = current_viewport();
+  const bool has_document = vp != nullptr;
+  if (draw_toggle_ != nullptr) {
+    draw_toggle_->setEnabled(has_document);
+    draw_toggle_->setToolTip(has_document ? tr("Show the draw settings panel")
+                                          : tr("Open a document to draw components"));
+  }
+  if (draw_panel_ == nullptr || draw_dock_ == nullptr) {
+    return;
+  }
+  if (!has_document) {
+    // 文档关闭后绘制设置没有意义：收起面板、清掉构件选择与武装状态。
+    draw_dock_->hide();
+    draw_panel_->set_component(ToolMode::None);
+    sync_create_tool_actions(ToolMode::None);
+    return;
+  }
+  // 工具状态跟着活跃文档走（和 sync_render_mode_actions 一个道理）：切到别的文档时
+  // 功能区高亮必须反映那个文档自己的工具，而不是上一个文档留下的。
+  sync_create_tool_actions(vp->tool_mode());
+  // 面板武装状态属于具体文档：切到工具不同的文档时按钮要回到"开始绘制"，
+  // 否则会留在"结束绘制"却没有任何 pending 命令的假状态。
+  if (draw_panel_->is_armed() && draw_panel_->current_mode() != vp->tool_mode()) {
+    draw_panel_->clear_armed();
+  }
 }
 
 void MainWindow::sync_create_tool_actions(ToolMode mode) {
@@ -931,6 +986,7 @@ void MainWindow::sync_create_tool_actions(ToolMode mode) {
 void MainWindow::show_home() {
   refresh_home();
   stack_->setCurrentWidget(home_);
+  sync_draw_panel();
 }
 
 void MainWindow::show_documents() {
@@ -944,6 +1000,7 @@ void MainWindow::show_documents() {
   refresh_property_panel();
   refresh_handle_inspector();
   refresh_texture_library_panel();
+  sync_draw_panel();
 }
 
 void MainWindow::activate_open_document(int index) {

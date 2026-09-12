@@ -71,11 +71,34 @@ void DrawPanel::set_armed(bool armed) {
     return;
   }
   armed_ = armed;
-  if (arm_button_ != nullptr) {
-    arm_button_->setText(armed ? tr("Re-arm") : tr("Start Drawing"));
-  }
+  update_arm_button();
   if (!armed) {
     emit disarmed();
+  }
+}
+
+void DrawPanel::clear_armed() {
+  if (!armed_) {
+    return;
+  }
+  armed_ = false;
+  update_arm_button();
+}
+
+void DrawPanel::update_arm_button() {
+  if (arm_button_ == nullptr) {
+    return;
+  }
+  // 武装后按钮改成醒目的"结束绘制"：面板是显式可退出的模式，用户不必去猜 Esc/右键。
+  if (armed_) {
+    arm_button_->setText(tr("End Drawing"));
+    arm_button_->setToolTip(tr("Leave the component tool and drop the pending command"));
+    arm_button_->setStyleSheet(
+        QStringLiteral("padding:6px;color:#d93025;border:1px solid #d93025;"));
+  } else {
+    arm_button_->setText(tr("Start Drawing"));
+    arm_button_->setToolTip(tr("Arm the component tool, then pick points in the viewport"));
+    arm_button_->setStyleSheet(QStringLiteral("padding:6px;"));
   }
 }
 
@@ -180,8 +203,8 @@ void DrawPanel::rebuild_form() {
 
   arm_button_ = new QPushButton(tr("Start Drawing"), content_);
   arm_button_->setCursor(Qt::PointingHandCursor);
-  arm_button_->setStyleSheet(QStringLiteral("padding:6px;"));
   connect(arm_button_, &QPushButton::clicked, this, &DrawPanel::arm_clicked);
+  update_arm_button();
   column->addWidget(arm_button_);
 
   column->addStretch(1);
@@ -303,14 +326,17 @@ void DrawPanel::gather_and_emit(bool arm) {
   emit armed_args(current_mode_, gather_args());
   if (arm) {
     armed_ = true;
-    if (arm_button_ != nullptr) {
-      arm_button_->setText(tr("Re-arm"));
-    }
+    update_arm_button();
   }
 }
 
 void DrawPanel::arm_clicked() {
   if (spec_ == nullptr) {
+    return;
+  }
+  if (armed_) {
+    // 已在绘制中：再点一次表示结束，回到未武装状态并取消视口里的 pending。
+    set_armed(false);
     return;
   }
   gather_and_emit(true);

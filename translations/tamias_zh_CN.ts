@@ -887,6 +887,18 @@ Remove it from Recent?</source>
         <translation>纹理库</translation>
     </message>
     <message>
+        <source>Draw Settings</source>
+        <translation>绘制设置</translation>
+    </message>
+    <message>
+        <source>Show the draw settings panel</source>
+        <translation>显示绘制设置面板</translation>
+    </message>
+    <message>
+        <source>Open a document to draw components</source>
+        <translation>请先打开或新建文档再绘制构件</translation>
+    </message>
+    <message>
         <source>No document open</source>
         <translation>未打开文档</translation>
     </message>
@@ -3036,8 +3048,16 @@ Wheel zooms, drag pans, double-click a bar to focus.</source>
         <translation>开始绘制</translation>
     </message>
     <message>
-        <source>Re-arm</source>
-        <translation>重新武装</translation>
+        <source>End Drawing</source>
+        <translation>结束绘制</translation>
+    </message>
+    <message>
+        <source>Leave the component tool and drop the pending command</source>
+        <translation>退出构件工具并放弃待定的绘制</translation>
+    </message>
+    <message>
+        <source>Arm the component tool, then pick points in the viewport</source>
+        <translation>武装构件工具，然后在视口中点击取点</translation>
     </message>
     <message>
         <source>Select a component from the ribbon to start drawing</source>

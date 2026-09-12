@@ -59,6 +59,7 @@ class MainWindow final : public QMainWindow {
   void refresh_property_panel();
   void refresh_handle_inspector();
   void refresh_texture_library_panel();
+  void sync_draw_panel();
 
  private:
   void showEvent(QShowEvent* event) override;
@@ -131,6 +132,7 @@ class MainWindow final : public QMainWindow {
   HandleInspector* handle_inspector_ = nullptr;
   DrawPanel* draw_panel_ = nullptr;
   QDockWidget* draw_dock_ = nullptr;
+  QAction* draw_toggle_ = nullptr;
   SceneDebuggerWindow* scene_debugger_ = nullptr;
   TextureLibraryPanel* texture_library_panel_ = nullptr;
   QDockWidget* texture_library_dock_ = nullptr;
