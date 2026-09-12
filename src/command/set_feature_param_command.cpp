@@ -2,10 +2,10 @@
 
 #include "bim/line_location.h"
 #include "bim/host_update.h"
+#include "command/edit_entity_grip_command.h"
 #include "entity/entity_grip.h"
 #include "engine/modeling/curve_geom.h"
 #include "engine/modeling/feature.h"
-#include "engine/modeling/occt_geom_builder.h"
 
 #include <algorithm>
 #include <cmath>
@@ -100,19 +100,8 @@ Result<void> SetFeatureParamCommand::apply(double value) {
   }
   sync_entity_grips(*entity);
 
-  auto mesh = geometry_builder().build(entity->model, 0.05);
-  if (!mesh) {
-    return Err(mesh.error());
-  }
-  if (!document_->replace_entity_mesh(entity_id_, std::move(*mesh))) {
-    return Err("SetFeatureParamCommand: mesh asset not found");
-  }
-  document_->recompute_scene();
-  document_->mark_dirty();
-  if (auto r = notify_entity_changed(*document_, entity_id_); !r) {
-    return r;
-  }
-  return {};
+  // 改参数（厚 / 长 / 高）会牵动墙-墙交接与宿主开口：统一走一次重建。
+  return rebuild_entity_mesh(*document_, entity_id_);
 }
 
 void SetFeatureParamCommand::undo() { (void)apply(old_value_); }

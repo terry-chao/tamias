@@ -1,6 +1,8 @@
 #include "engine/document/document.h"
 
+#include "bim/host_geometry.h"
 #include "bim/host_update.h"
+#include "bim/wall_join.h"
 #include "engine/math/math.h"
 #include "engine/modeling/occt_geom_builder.h"
 #include "engine/render/builtin_textures.h"
@@ -223,6 +225,10 @@ bool Document::sync_entity_location(std::uint64_t entity_id) {
   target->sync_from_location(bim_.storey_elevation(storey_id));
   scene_.set_transform(entity_id, target->local_transform);
   scene_.set_parent(entity_id, bim_.find_storey(storey_id) != nullptr ? storey_id : 0);
+  // 墙走了，端点的交接跟着走：自己和邻墙都要重新斜接。
+  if (is_wall_host(*target)) {
+    (void)remesh_wall_neighborhood(*this, entity_id);
+  }
   recompute_scene();
   mark_dirty();
   return true;
@@ -249,21 +255,15 @@ void Document::ensure_feature_coarse_lod(Entity& entity) {
   }
   const std::uint64_t geometry_id = entity.mesh_asset_id;
   bind_work_lod(geometry_id);
-  const bool has_hosted_openings =
-      (entity.kind() == EntityKind::Wall || entity.kind() == EntityKind::StructuralWall) &&
-      !bim().dependents(entity.id).empty();
-  if (has_hosted_openings) {
-    // 有洞口时，粗档也用工作网格，避免远处 LOD 回到未扣洞的墙。
-    tess_cache_.bind(geometry_id, MeshLod::Coarse, geometry_id);
-    return;
-  }
   if (tess_cache_.set_for(geometry_id).coarse != 0) {
     return;
   }
   if (const MeshAsset* work = mesh(geometry_id); work != nullptr && work->cpu.line_list) {
     return;
   }
-  Result<MeshCpu> coarse = entity.createGeom(kMeshLodCoarseDeflection);
+  // 粗档同样按「墙-墙倒角 + 开口切减」造型，否则远处会退回硬拼的墙。
+  Result<MeshCpu> coarse =
+      geometry_builder().build(wall_render_model(entity, *this), kMeshLodCoarseDeflection);
   if (!coarse) {
     return;
   }
@@ -295,16 +295,8 @@ void Document::invalidate_geometry_lods(std::uint64_t geometry_id) {
 std::function<Result<MeshCpu>()> Document::make_tess_fn(std::uint64_t geometry_id,
                                                         MeshLod lod) const {
   if (const Entity* e = entity_for_mesh(geometry_id); e != nullptr && !e->is_sketch_entity()) {
-    FeatureModel model;
-    const bool has_hosted_openings =
-        (e->kind() == EntityKind::Wall || e->kind() == EntityKind::StructuralWall) &&
-        !bim().dependents(e->id).empty();
-    if (has_hosted_openings) {
-      const auto openings = bim().dependents(e->id);
-      model = hosted_openings_model(*e, openings, *this);
-    } else {
-      model = e->model;
-    }
+    // 墙：墙-墙交接倒角 + 宿主开口切减；其它实体就是自己的特征树。
+    FeatureModel model = wall_render_model(*e, *this);
     const double deflection = mesh_lod_deflection(lod, false);
     return [model = std::move(model), deflection]() {
       return geometry_builder().build(model, deflection);
@@ -490,6 +482,10 @@ Entity* Document::add_entity(std::unique_ptr<Entity> entity, MeshCpu mesh) {
   if (SceneNode* n = scene_.find(raw->id)) {
     n->material_id = raw->material_id;
   }
+  // 新增的墙可能正落在邻墙端点上：两侧自动斜接。
+  if (is_wall_host(*raw)) {
+    (void)remesh_wall_neighborhood(*this, raw->id);
+  }
   ensure_feature_coarse_lod(*raw);
   recompute_scene();
   mark_dirty();
@@ -502,6 +498,8 @@ void Document::remove_entity(std::uint64_t id) {
     return;
   }
   const std::uint64_t mesh_id = it->second->mesh_asset_id;
+  // 交接的邻墙会因为这一面墙消失而少了斜接面，需要重新造型。
+  std::vector<std::uint64_t> neighbors = wall_neighborhood(*this, id);
   bim_.remove_involving(id);
   entities_.erase(it);
   scene_.remove_node(id);
@@ -509,6 +507,11 @@ void Document::remove_entity(std::uint64_t id) {
     invalidate_geometry_lods(mesh_id);
     if (!tess_cache_.uses_asset(mesh_id)) {
       remove_mesh(mesh_id);
+    }
+  }
+  for (const std::uint64_t neighbor : neighbors) {
+    if (neighbor != id && entity(neighbor) != nullptr) {
+      (void)remesh_wall(*this, neighbor);
     }
   }
   recompute_scene();
@@ -536,6 +539,10 @@ void Document::insert_entity(std::unique_ptr<Entity> entity, MeshAsset mesh) {
   if (Entity* raw = entities_[id].get(); raw != nullptr) {
     if (raw->grips.empty()) {
       sync_entity_grips(*raw);
+    }
+    // 撤销删除 / 重做新建：邻墙要重新认一次交接。
+    if (is_wall_host(*raw)) {
+      (void)remesh_wall_neighborhood(*this, id);
     }
     ensure_feature_coarse_lod(*raw);
   }

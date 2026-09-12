@@ -19,7 +19,7 @@
 | **墙一改** | 查出从属开口 → 通知 → 重造型 → 对齐 → 合法性检查 → 结束 |
 | **存哪** | `Document::bim()` 关系表，`.tdoc` 的 `RELA` chunk |
 
-**不管：** 墙怎么挤成实体（特征树）、世界矩阵怎么乘（语义树）、开洞布尔、墙连接裁剪。删墙时只清关系，开口留在原地。
+**不管：** 墙怎么挤成实体（特征树）、世界矩阵怎么乘（语义树）、开洞布尔、墙-墙斜接（后者见 [墙-墙交接](junctions.md)）。删墙时只清关系，开口留在原地。
 
 ---
 
@@ -57,6 +57,7 @@ src/bim/relation.h          // Relation
 src/bim/bim_model.h         // 关系表
 src/bim/host_geometry.h     // 墙框、开口尺寸、对齐、合法性
 src/bim/host_update.h       // notify / bind
+src/bim/wall_join.h         // 墙-墙交接斜接（倒角），见 junctions.md
 ```
 
 ---

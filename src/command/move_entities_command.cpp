@@ -1,6 +1,7 @@
 #include "move_entities_command.h"
 
 #include "bim/host_update.h"
+#include "bim/wall_join.h"
 
 namespace tamias {
 
@@ -32,6 +33,8 @@ void MoveEntitiesCommand::apply(bool to_target) {
   document_->mark_dirty();
   for (const EntityTransform& item : items_) {
     if (document_->entity(item.id) != nullptr) {
+      // 墙挪过去可能刚好压到邻墙端点：交接（斜接面）要跟着重算。
+      (void)remesh_wall_neighborhood(*document_, item.id);
       (void)notify_entity_changed(*document_, item.id);
     }
   }

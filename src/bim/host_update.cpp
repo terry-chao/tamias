@@ -1,12 +1,12 @@
 #include "bim/host_update.h"
 
 #include "bim/host_geometry.h"
+#include "bim/wall_join.h"
 #include "entity/door_entity.h"
 #include "entity/opening_entity.h"
 #include "engine/core/log.h"
 #include "engine/document/document.h"
 #include "engine/modeling/feature.h"
-#include "engine/modeling/occt_geom_builder.h"
 
 #include <string>
 
@@ -68,15 +68,9 @@ Result<void> reshape_hosted(Document& document, Relation& relation) {
 
 }  // namespace
 
-FeatureModel hosted_openings_model(const Entity& host,
-                                   const std::vector<const Relation*>& openings,
-                                   const Document& document) {
-  FeatureModel model = host.model;
-  const Feature* output = model.output_feature();
-  if (output == nullptr) {
-    return model;
-  }
-  std::uint64_t current = output->id;
+void append_hosted_opening_cuts(FeatureModel& model, std::uint64_t& current, const Entity& host,
+                                const std::vector<const Relation*>& openings,
+                                const Document& document) {
   const WallSize wall = wall_size(host);
   for (const Relation* relation : openings) {
     if (relation == nullptr || !relation->valid) {
@@ -104,7 +98,6 @@ FeatureModel hosted_openings_model(const Entity& host,
         {{"operation", static_cast<double>(static_cast<std::uint8_t>(BooleanOp::Cut))}});
     current = cut.id;
   }
-  return model;
 }
 
 Result<void> remesh_host_openings(Document& document, std::uint64_t host_id) {
@@ -115,19 +108,8 @@ Result<void> remesh_host_openings(Document& document, std::uint64_t host_id) {
   if (!is_wall_host(*host)) {
     return {};
   }
-  std::vector<const Relation*> openings;
-  for (const Relation* relation : document.bim().dependents(host_id)) {
-    openings.push_back(relation);
-  }
-  FeatureModel model = hosted_openings_model(*host, openings, document);
-  auto mesh = geometry_builder().build(model, 0.05);
-  if (!mesh) {
-    return Err(mesh.error());
-  }
-  if (!document.replace_entity_mesh(host_id, std::move(*mesh))) {
-    return Err("host_update: host mesh asset not found");
-  }
-  return {};
+  // 墙的造型只有一条路径：墙-墙倒角（墙局部斜接）+ 全部有效开口切减。
+  return remesh_wall(document, host_id);
 }
 
 Result<void> notify_entity_changed(Document& document, std::uint64_t entity_id) {

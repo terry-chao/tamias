@@ -181,13 +181,16 @@ src/bim/grid.h              // 尚未实现
 - 按楼层 / 类别查询，供大纲树和可见性
 - 将来 IFC 进出时，空间结构与本层互译（仍走 [IShapeOps](ISHAPE-OPS.md)，不为 IFC 另开几何通道）
 
-本层**先不做**：墙连接自动裁剪、核心层构造、房间边界生成、全专业 MEP、Revit 式约束系统。那些会把这一层做成第二个 Revit。删墙时开口不会级联删除，只清掉关系，开口留在原地。
+**已落地：** 墙-墙交接的自动斜接倒角（端点相接 / 顶在墙上时，两墙共用一个竖直斜接面各自裁掉，不再硬拼）。专页 [墙-墙交接](bim/junctions.md)。
+
+本层**先不做**：墙与板 / 梁 / 柱的交接、核心层构造、房间边界生成、全专业 MEP、Revit 式约束系统。那些会把这一层做成第二个 Revit。删墙时开口不会级联删除，只清掉关系，开口留在原地。
 
 ---
 
 ## 附录：涉及文件（现状）
 
 - [wall_entity.cpp](https://github.com/terry-chao/tamias/blob/main/src/entity/wall_entity.cpp) 等 —— 构件几何配方，不是业务层
+- [wall_join.cpp](https://github.com/terry-chao/tamias/blob/main/src/bim/wall_join.cpp) —— 墙-墙交接斜接：找接点、裁轮廓、重建网格（见 [墙-墙交接](bim/junctions.md)）
 - [create_wall_command.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/create_wall_command.cpp) —— 今日直写 Document；楼层落地后改调 `BimModel`
 - [create_primitive_command.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/create_primitive_command.cpp) —— 窗/门点中墙时调 `bind_opening_to_host`
 - [set_feature_param_command.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/set_feature_param_command.cpp) —— 改参后 `notify_entity_changed`

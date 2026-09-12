@@ -5,6 +5,7 @@
 #include "bim/line_location.h"
 #include "bim/point_location.h"
 #include "bim/surface_location.h"
+#include "bim/wall_join.h"
 #include "engine/core/fs_utf8.h"
 #include "engine/graphics/mesh.h"
 #include "engine/io/binary_archive.h"
@@ -1231,12 +1232,15 @@ Result<Document> read_document_body(BinaryReader& r) {
   document.set_next_texture_id(*next_texture);
   migrate_door_handles(document);
   document.recompute_scene();
+  // 墙：按交接（斜接倒角）+ 宿主开口重新造型。旧文件里存的硬拼角也一并变成倒角。
+  std::vector<std::uint64_t> wall_ids;
   for (const auto& [id, entity] : document.entities()) {
-    if (entity != nullptr &&
-        (entity->kind() == EntityKind::Wall || entity->kind() == EntityKind::StructuralWall) &&
-        !document.bim().dependents(id).empty()) {
-      (void)remesh_host_openings(document, id);
+    if (entity != nullptr && is_wall_host(*entity)) {
+      wall_ids.push_back(id);
     }
+  }
+  for (const std::uint64_t wall_id : wall_ids) {
+    (void)remesh_wall(document, wall_id);
   }
   document.clear_dirty();
   return document;
