@@ -50,6 +50,8 @@ struct FrameSubmission {
   std::vector<Vec3> grip_points;               // 选中实体的夹点
   std::optional<Vec3> snap_point;              // 网格交点捕捉标记
   std::vector<Vec3> debug_line_segments;       // 调试 AABB 等，成对线段
+  // 轴网：成对线段，虚线画在构件之下。轴网是定位参考，不是几何。
+  std::vector<Vec3> grid_line_segments;
   std::optional<DebugVertexOverlay> debug_vertex;  // 检查器点选的网格顶点
   float fovy = 0.8f;
   std::unordered_map<std::uint64_t, LodMeshSet> lod_sets;

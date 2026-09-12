@@ -1,6 +1,8 @@
 #pragma once
 
 #include "engine/core/native_window_handle.h"
+#include "bim/drawing_import.h"
+#include "bim/grid.h"
 #include "engine/document/document.h"
 #include "command/command_system.h"
 #include "engine/render/material.h"
@@ -113,6 +115,13 @@ class DocumentViewport final : public QWidget {
   void set_active_storey(std::uint64_t storey_id);
   // 楼层设置对话框的落点：整表替换楼层（可撤销）。
   void apply_storey_settings(std::vector<Storey> storeys, std::uint64_t active_storey_id);
+  // 轴网设置对话框的落点：整表替换轴网（可撤销）。
+  void apply_grid_settings(std::vector<GridAxis> axes);
+  // 翻模对话框的落点：把复核后的候选一次落进文档（一条命令 = 一步撤销）。
+  void apply_drawing_import(DrawingImportPlan plan);
+  // 轴网显示开关（视图 → 轴网）；轴网是参考线，不进实体表。
+  void set_grid_visible(bool visible);
+  [[nodiscard]] bool grid_visible() const { return grid_visible_; }
   void set_entity_location(std::uint64_t entity_id, std::uint64_t storey_id,
                            double elevation_offset);
   // 给选中实体追加倒圆角 / 倒斜角特征（走 fillet/chamfer 命令，可撤销）。
@@ -257,6 +266,7 @@ class DocumentViewport final : public QWidget {
   std::unordered_set<int> hidden_floors_;  // 空 = 全部楼层可见
   std::uint64_t last_submitted_scene_generation_ = 0;  // 脏标记游标（见 Scene::dirty_since）
   bool plan_view_ = false;
+  bool grid_visible_ = true;
   // 绘制面板最近一次武装的参数（连续绘制同类型构件时复用，避免回退到硬编码默认）。
   ToolMode last_arm_mode_ = ToolMode::None;
   CommandArgs last_arm_args_;

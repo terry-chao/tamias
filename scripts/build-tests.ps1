@@ -4,7 +4,9 @@ param(
   [ValidateSet("debug", "relwithdebinfo", "release")]
   [string]$Preset = "debug",
   [switch]$BuildOnly,
-  [string]$Filter = "RenderSceneGolden*"
+  [string]$Filter = "RenderSceneGolden*",
+  # Extra build targets (default: tamias_tests only). Pass tamias to compile the Qt shell.
+  [string[]]$Targets = @("tamias_tests")
 )
 
 $ErrorActionPreference = "Stop"
@@ -50,10 +52,16 @@ if (-not (Test-Path (Join-Path $Root "build\CMakeCache.txt"))) {
   }
 }
 
-Write-Host "Building tamias_tests ($Preset)..."
-cmd /c "call `"$vcvars`" && cmake --build --preset $Preset --target tamias_tests"
+$targetList = $Targets -join " "
+Write-Host "Building $targetList ($Preset)..."
+cmd /c "call `"$vcvars`" && cmake --build --preset $Preset --target $targetList"
 if ($LASTEXITCODE -ne 0) {
-  throw "cmake --build --preset $Preset --target tamias_tests failed ($LASTEXITCODE)"
+  throw "cmake --build --preset $Preset --target $targetList failed ($LASTEXITCODE)"
+}
+
+# Building the app alone leaves nothing to run: stop here.
+if ($Targets -notcontains "tamias_tests") {
+  return
 }
 
 $exe = Join-Path $Root "build\bin\$($config.Folder)\tamias_tests.exe"

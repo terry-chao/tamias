@@ -1266,9 +1266,10 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     const bool has_grips = !frame.grip_points.empty();
     const bool has_snap = frame.snap_point.has_value();
     const bool has_debug = frame.debug_line_segments.size() >= 2;
+    const bool has_grid = frame.grid_line_segments.size() >= 2;
     const bool has_vertex = frame.debug_vertex.has_value();
     if (has_curve || has_controls || has_points || has_grips || has_snap || has_debug ||
-        has_vertex) {
+        has_grid || has_vertex) {
       channel.command_list->set_pipeline(*line_pipeline_);
       bind_mesh_sets();
       channel.command_list->set_vertex_buffer(*preview_line_mesh_.vertex_buffer);
@@ -1359,6 +1360,16 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
         draw_segment({p.x, p.y, p.z - half}, {p.x, p.y, p.z + half}, r, g, b);
       };
 
+      // 轴网先画：它是底图，预览线/夹点要在它上面。
+      if (has_grid) {
+        // 实线而不是虚线：这条通路是逐段提交（每段一次 push constant + 实例上传），
+        // 一根 20 m 的轴按 0.1 m 虚线画就是上百次提交，几十根轴直接上千。轴网用
+        // 更淡的颜色和构件区分，不靠虚线。
+        const std::vector<Vec3>& pts = frame.grid_line_segments;
+        for (std::size_t i = 0; i + 1 < pts.size(); i += 2) {
+          draw_segment(pts[i], pts[i + 1], 0.52f, 0.58f, 0.66f);
+        }
+      }
       if (has_controls) {
         draw_dashed_polyline(frame.preview_control_polyline, 1.00f, 0.78f, 0.28f);
       }

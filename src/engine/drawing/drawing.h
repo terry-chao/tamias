@@ -41,6 +41,15 @@ class Drawing {
   [[nodiscard]] std::size_t unsupported_entity_count() const { return unsupported_; }
   void add_unsupported_entity() { ++unsupported_; }
 
+  // DXF 的 $INSUNITS（AutoCAD 图纸单位编号：1=英寸、4=毫米、5=厘米、6=米…）。
+  // 0 = 没写。翻模必须知道它，否则 12000（毫米）会被当成 12000 米。
+  void set_insunits(int units) { insunits_ = units; }
+  [[nodiscard]] int insunits() const { return insunits_; }
+  // 图纸单位 → 米。未知单位按 1（当作米）——调用方可以用导入选项覆盖。
+  [[nodiscard]] double unit_scale_to_meter() const;
+  // 单位可读名（"mm" / "m" / 没写时为 "unit"）。
+  [[nodiscard]] const char* unit_label() const;
+
  private:
   void expand_bounds(Vec2 p);
 
@@ -51,6 +60,7 @@ class Drawing {
   Aabb2 bounds_{};
   Vec2 world_origin_{};
   std::size_t unsupported_ = 0;
+  int insunits_ = 0;
 };
 
 }  // namespace tamias

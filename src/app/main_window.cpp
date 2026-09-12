@@ -20,7 +20,9 @@
 #include "property_panel.h"
 #include "draw_panel.h"
 #include "drawing_document.h"
+#include "drawing_import_dialog.h"
 #include "drawing_view.h"
+#include "grid_settings_dialog.h"
 #include "qt_path.h"
 #include "ribbon_bar.h"
 #include "ribbon_group.h"
@@ -203,6 +205,7 @@ MainWindow::MainWindow(QWidget* parent)
       }
     }
     sync_render_mode_actions();
+    sync_bim_actions();
     refresh_property_panel();
     refresh_handle_inspector();
     refresh_texture_library_panel();
@@ -548,6 +551,60 @@ MainWindow::MainWindow(QWidget* parent)
   });
   addAction(realistic_action_);
 
+  // 轴网：显示开关 + 设置。轴网是定位参考（不是构件），只在视口画线、不进实体表。
+  grid_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/grid.svg")), tr("Grid"), this);
+  grid_action_->setCheckable(true);
+  grid_action_->setChecked(true);
+  grid_action_->setToolTip(tr("Show the structural grid"));
+  connect(grid_action_, &QAction::triggered, this, [this](bool on) {
+    if (auto* vp = current_viewport()) {
+      vp->set_grid_visible(on);
+    }
+  });
+  addAction(grid_action_);
+
+  grid_settings_action_ =
+      new QAction(ribbon_icon(QStringLiteral(":/icons/settings.svg")), tr("Grid Settings"), this);
+  grid_settings_action_->setToolTip(tr("Create or edit the structural grid"));
+  connect(grid_settings_action_, &QAction::triggered, this, [this] {
+    auto* vp = current_viewport();
+    if (vp == nullptr) {
+      return;
+    }
+    GridSettingsDialog dialog(vp->document().bim().grid().axes(), this);
+    if (dialog.exec() == QDialog::Accepted) {
+      vp->apply_grid_settings(dialog.axes());
+    }
+  });
+  addAction(grid_settings_action_);
+
+  // 翻模：从 DXF 平面图生成墙 / 柱 / 门窗。识别结果先给用户复核，再落地。
+  trace_drawing_action_ =
+      new QAction(ribbon_icon(QStringLiteral(":/icons/tracing.svg")), tr("Trace Drawing"), this);
+  trace_drawing_action_->setToolTip(
+      tr("Create walls, columns and doors/windows from a DXF floor plan"));
+  connect(trace_drawing_action_, &QAction::triggered, this, [this] {
+    auto* vp = current_viewport();
+    if (vp == nullptr) {
+      statusBar()->showMessage(tr("Open or create a model first."), 6000);
+      return;
+    }
+    // 停在图纸页时就默认用那张图（只有 DXF 能翻模）。
+    QString path;
+    if (DrawingView* drawing = current_drawing_view()) {
+      const QString candidate = drawing->document().path();
+      if (QFileInfo(candidate).suffix().compare(QStringLiteral("dxf"), Qt::CaseInsensitive) == 0) {
+        path = candidate;
+      }
+    }
+    DrawingImportDialog dialog(path, &vp->document().bim().grid(), this);
+    if (dialog.exec() != QDialog::Accepted || dialog.plan().empty()) {
+      return;
+    }
+    vp->apply_drawing_import(dialog.plan());
+  });
+  addAction(trace_drawing_action_);
+
   // 右侧属性面板：展示/编辑选中实体的参数。
   property_panel_ = new PropertyPanel(this);
   auto* property_dock = new QDockWidget(tr("Properties"), this);
@@ -672,6 +729,7 @@ MainWindow::MainWindow(QWidget* parent)
   file_group->add_action(new_action);
   file_group->add_action(open_action);
   file_group->add_action(open_drawing_action);
+  file_group->add_action(trace_drawing_action_);
   file_group->add_action(save_action);
   file_group->add_action(save_as_action);
 
@@ -724,6 +782,8 @@ MainWindow::MainWindow(QWidget* parent)
   display_ribbon->add_action(wireframe_action_);
   display_ribbon->add_action(shaded_action_);
   display_ribbon->add_action(realistic_action_);
+  display_ribbon->add_action(grid_action_);
+  display_ribbon->add_action(grid_settings_action_);
 
   RibbonGroup* panels_group = view_page->add_group(QStringLiteral("panels"), tr("Panels"));
   // 构件显隐面板住在视口右上角的工具面板里（不在停靠区），这里只给入口与快捷键。
@@ -1308,6 +1368,7 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
     vp->request_redraw();
   }
   sync_render_mode_actions();
+  sync_bim_actions();
   bind_plugin_session();
   // add_entity / add_import_mesh mark dirty while assembling the initial scene.
   // That baseline is not a user edit, so closing without further changes must
@@ -2099,6 +2160,21 @@ void MainWindow::sync_render_mode_actions() {
   wireframe_action_->setChecked(mode == RenderMode::Wireframe);
   shaded_action_->setChecked(mode == RenderMode::Shaded);
   realistic_action_->setChecked(mode == RenderMode::Realistic);
+}
+
+// 轴网与翻模的勾选/可用状态跟着活跃文档走（和渲染模式一个道理）：切标签页时按钮要
+// 反映那个文档自己的状态，而不是上一个文档留下的。
+void MainWindow::sync_bim_actions() {
+  auto* vp = current_viewport();
+  if (grid_action_ != nullptr && grid_settings_action_ != nullptr) {
+    const QSignalBlocker block(grid_action_);
+    grid_action_->setEnabled(vp != nullptr);
+    grid_action_->setChecked(vp == nullptr || vp->grid_visible());
+    grid_settings_action_->setEnabled(vp != nullptr);
+  }
+  if (trace_drawing_action_ != nullptr) {
+    trace_drawing_action_->setEnabled(vp != nullptr);
+  }
 }
 
 void MainWindow::bind_plugin_session() {

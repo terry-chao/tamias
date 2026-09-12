@@ -377,6 +377,7 @@ class DxfParser {
 
  private:
   std::size_t skip_section(std::size_t i) const;
+  std::size_t parse_header(std::size_t i);
   std::size_t parse_tables(std::size_t i);
   std::size_t parse_blocks(std::size_t i);
   std::size_t process_entities(const std::vector<Pair>& p, std::size_t i, const Xform2& x,
@@ -385,9 +386,10 @@ class DxfParser {
                             const Xform2& x, int depth);
 
   void emit_path(const Xform2& x, std::vector<Vec2> points, bool closed, std::uint32_t layer,
-                 Vec3 color);
+                 Vec3 color, DrawingPathKind kind = DrawingPathKind::Polyline);
   void emit_arc(const Xform2& x, Vec2 center, double radius, double start_rad, double sweep_rad,
-                bool closed, std::uint32_t layer, Vec3 color);
+                bool closed, std::uint32_t layer, Vec3 color,
+                DrawingPathKind kind = DrawingPathKind::Arc);
 
   [[nodiscard]] std::uint32_t layer_index_for(std::string_view name);
   void register_layer(std::string_view name, Vec3 color);
@@ -398,6 +400,13 @@ class DxfParser {
   Drawing& drawing_;
   std::unordered_map<std::string, BlockDef> blocks_;
   std::unordered_map<std::string, std::uint32_t> layer_index_;
+
+  // 块上下文：块内画在 0 层的图元按 DXF 语义继承块引用的图层；
+  // 块名本身是门窗识别的关键线索（M0921 / C1518 这类编号）。
+  std::string current_block_;
+  std::string current_block_layer_;
+  float current_elevation_ = 0.f;  // 当前块基点的标高（块递归时累加）
+  float emit_elevation_ = 0.f;     // 正在输出这条路径的标高
   std::unordered_map<std::string, Vec3> layer_colors_;
   std::unordered_map<std::string, std::size_t> unsupported_types_;
 };
@@ -461,7 +470,7 @@ Vec3 DxfParser::resolve_color(int aci, int true_color_value, Vec3 layer_color) c
 }
 
 void DxfParser::emit_path(const Xform2& x, std::vector<Vec2> points, bool closed,
-                          std::uint32_t layer, Vec3 color) {
+                          std::uint32_t layer, Vec3 color, DrawingPathKind kind) {
   if (points.size() < 2) {
     return;
   }
@@ -473,11 +482,15 @@ void DxfParser::emit_path(const Xform2& x, std::vector<Vec2> points, bool closed
   path.closed = closed;
   path.layer = layer;
   path.color = color;
+  path.kind = kind;
+  path.block = current_block_;
+  path.elevation = emit_elevation_;
   drawing_.add_path(std::move(path));
 }
 
 void DxfParser::emit_arc(const Xform2& x, Vec2 center, double radius, double start_rad,
-                         double sweep_rad, bool closed, std::uint32_t layer, Vec3 color) {
+                         double sweep_rad, bool closed, std::uint32_t layer, Vec3 color,
+                         DrawingPathKind kind) {
   if (!(radius > 1e-9) || std::fabs(sweep_rad) < 1e-12) {
     return;
   }
@@ -493,7 +506,7 @@ void DxfParser::emit_arc(const Xform2& x, Vec2 center, double radius, double sta
   if (closed) {
     points.pop_back();  // 闭合环由 closed 标记，不重复首点
   }
-  emit_path(x, std::move(points), closed, layer, color);
+  emit_path(x, std::move(points), closed, layer, color, kind);
 }
 
 std::size_t DxfParser::skip_section(std::size_t i) const {
@@ -501,6 +514,28 @@ std::size_t DxfParser::skip_section(std::size_t i) const {
   while (i < n) {
     if (pairs_[i].code == 0 && pairs_[i].value == "ENDSEC") {
       return i + 1;
+    }
+    ++i;
+  }
+  return n;
+}
+
+// HEADER 只取翻模必需的一件东西：$INSUNITS（图纸单位）。
+// 没有它，"12000" 是毫米还是米只能靠猜。
+std::size_t DxfParser::parse_header(std::size_t i) {
+  const std::size_t n = pairs_.size();
+  while (i < n) {
+    if (pairs_[i].code == 0 && keyword(pairs_[i].value) == "ENDSEC") {
+      return i + 1;
+    }
+    if (pairs_[i].code == 9 && keyword(pairs_[i].value) == "$INSUNITS") {
+      std::size_t j = i + 1;
+      while (j < n && pairs_[j].code != 0 && pairs_[j].code != 9) {
+        ++j;
+      }
+      drawing_.set_insunits(group_int(pairs_, i + 1, j, 70, 0));
+      i = j;
+      continue;
     }
     ++i;
   }
@@ -589,13 +624,18 @@ Result<void> DxfParser::run() {
       continue;
     }
     if (keyword(pairs_[i].value) == "SECTION") {
+      // 段名是紧跟 SECTION 的组码 2；段体在其后。这里读到段名就停，不能一路吃到
+      // 下一个组码 0 —— HEADER 的段体是组码 9 开头的变量表，本来就没有前导组码 0，
+      // 一路吃下去会把 $INSUNITS 整段吞掉。
       std::size_t j = i + 1;
       std::string_view name;
-      while (j < n && pairs_[j].code != 0) {
-        if (pairs_[j].code == 2) {
-          name = pairs_[j].value;
-        }
+      if (j < n && pairs_[j].code == 2) {
+        name = pairs_[j].value;
         ++j;
+      } else {
+        while (j < n && pairs_[j].code != 0) {
+          ++j;
+        }
       }
       const std::string_view section = keyword(name);
       if (section == "ENTITIES") {
@@ -604,6 +644,8 @@ Result<void> DxfParser::run() {
         i = parse_blocks(j);
       } else if (section == "TABLES") {
         i = parse_tables(j);
+      } else if (section == "HEADER") {
+        i = parse_header(j);
       } else {
         i = skip_section(j);
       }
@@ -658,17 +700,26 @@ std::size_t DxfParser::handle_entity(const std::vector<Pair>& p, std::size_t i, 
     return resolve_color(aci, true_color_value, layer_color);
   };
 
-  const std::uint32_t layer = layer_index_for(str(8));
+  // 块内画在 0 层的图元按 DXF 语义继承块引用的图层；不处理的话门窗符号会
+  // 一律落到名为 "0" 的图层上，翻模就找不到它们。
+  std::string_view layer_name = str(8);
+  if (!current_block_layer_.empty() && (layer_name.empty() || layer_name == "0")) {
+    layer_name = current_block_layer_;
+  }
+  const std::uint32_t layer = layer_index_for(layer_name);
+  // 标高：优先取 38（多段线/块引用的 elevation），退回 30（线段起点的 z）。
+  emit_elevation_ = current_elevation_ + static_cast<float>(num(38, num(30, 0.0)));
 
   if (type == "LINE") {
     const Vec2 p1{static_cast<float>(num(10, 0.0)), static_cast<float>(num(20, 0.0))};
     const Vec2 p2{static_cast<float>(num(11, 0.0)), static_cast<float>(num(21, 0.0))};
-    emit_path(x, {p1, p2}, false, layer, color_of(layer));
+    emit_path(x, {p1, p2}, false, layer, color_of(layer), DrawingPathKind::Line);
     return e;
   }
   if (type == "CIRCLE") {
     const Vec2 center{static_cast<float>(num(10, 0.0)), static_cast<float>(num(20, 0.0))};
-    emit_arc(x, center, num(40, 0.0), 0.0, 2.0 * kPi, true, layer, color_of(layer));
+    emit_arc(x, center, num(40, 0.0), 0.0, 2.0 * kPi, true, layer, color_of(layer),
+             DrawingPathKind::Circle);
     return e;
   }
   if (type == "ARC") {
@@ -680,7 +731,8 @@ std::size_t DxfParser::handle_entity(const std::vector<Pair>& p, std::size_t i, 
     }
     const double start_rad = start_deg * kPi / 180.0;
     const double sweep_rad = (end_deg - start_deg) * kPi / 180.0;
-    emit_arc(x, center, num(40, 0.0), start_rad, sweep_rad, false, layer, color_of(layer));
+    emit_arc(x, center, num(40, 0.0), start_rad, sweep_rad, false, layer, color_of(layer),
+             DrawingPathKind::Arc);
     return e;
   }
   if (type == "ELLIPSE") {
@@ -710,7 +762,7 @@ std::size_t DxfParser::handle_entity(const std::vector<Pair>& p, std::size_t i, 
     if (closed) {
       points.pop_back();
     }
-    emit_path(x, std::move(points), closed, layer, color_of(layer));
+    emit_path(x, std::move(points), closed, layer, color_of(layer), DrawingPathKind::Ellipse);
     return e;
   }
   if (type == "LWPOLYLINE") {
@@ -928,6 +980,15 @@ std::size_t DxfParser::handle_entity(const std::vector<Pair>& p, std::size_t i, 
     const double column_spacing = num(44, 0.0);
     const double row_spacing = num(45, 0.0);
     const BlockDef& def = found->second;
+    // 块上下文：块内 0 层继承块引用的图层，块名一路带到路径上（翻模靠它认门窗）。
+    const std::string saved_block = current_block_;
+    const std::string saved_layer = current_block_layer_;
+    const float saved_elevation = current_elevation_;
+    if (current_block_.empty()) {
+      current_block_ = std::string(block_name);
+    }
+    current_block_layer_ = std::string(str(8));
+    current_elevation_ = saved_elevation + static_cast<float>(num(30, 0.0));
     for (int row = 0; row < rows; ++row) {
       for (int col = 0; col < columns; ++col) {
         // 阵列偏移在块自己的坐标系里，先加偏移再旋转/缩放。
@@ -940,6 +1001,9 @@ std::size_t DxfParser::handle_entity(const std::vector<Pair>& p, std::size_t i, 
         process_entities(def.pairs, 0, x.compose(block_x), depth + 1);
       }
     }
+    current_block_ = saved_block;
+    current_block_layer_ = saved_layer;
+    current_elevation_ = saved_elevation;
     return e;
   }
   if (type == "SEQEND" || type == "ENDBLK" || type == "ATTRIB" || type == "ATTDEF") {

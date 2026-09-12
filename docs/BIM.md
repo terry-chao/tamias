@@ -2,7 +2,7 @@
 
 > 墙、梁、板、柱、门、窗、轴网、楼层这些**建筑语义**不该散落在 Qt、命令或语义树里。它们有自己的一层：介于「命令」和「Document / Scene」之间。几何怎么挤、节点怎么挂父子，分别是造型层和语义树的事；**谁属于哪一层、贴哪道轴、窗开在哪面墙上**，是这一层的事。
 
-**现状：** 楼层与构件 Location 已落地，轴网尚未实现。墙、柱、板分别使用线、点、面 Location；门窗宿主关联通过 `HostedOn` 关系维护。
+**现状：** 楼层、轴网、构件 Location 已落地。墙、柱、板分别使用线、点、面 Location；门窗宿主关联通过 `HostedOn` 关系维护。
 
 代码在 [`src/bim/`](https://github.com/terry-chao/tamias/tree/main/src/bim)。实体几何仍在 [`src/entity/`](https://github.com/terry-chao/tamias/tree/main/src/entity)，命令仍在 [`src/command/`](https://github.com/terry-chao/tamias/tree/main/src/command)。`BimModel` 作为 `Document` 的一个侧面挂上（和 `Scene`、实体表并列）。
 
@@ -68,7 +68,7 @@ BIM 业务层就是 [MCAD 与 BIM](DECISION-MCAD-BIM.md) 里说的那层**域分
 | 层高 / 夹层 | 一层的净高、夹在两整层之间的矮层 | 楼层记录上的 `height` / `mezzanine`；夹层也是楼层，只是标高落在两层之间 |
 | 当前标高 | 会话/文档上的「正在画哪一层」 | 不是 Scene 字段；`BimModel` 持有 `active_storey_id` |
 | 墙梁板柱门窗 | 放置、归属楼层、后改宿主 | 叶子节点；`parent` 指向楼层（或门窗指向宿主墙） |
-| 轴网 | 定位参考，不是实体构件 | 数据在本层；显示走 overlay；**尚未实现** |
+| 轴网 | 定位参考，不是实体构件 | 数据在本层（`Grid`）；显示走 overlay；**已实现** |
 | **关联 / 宿主** | 窗属于墙、门属于墙 | **显式 `Relation`**，存进 `.tdoc` 的 `RELA` chunk；不靠 Z 坐标反推 |
 
 **不管：**
@@ -160,11 +160,12 @@ CreatePrimitiveCommand（窗/门）
 src/bim/relation_kind.h     // RelationKind
 src/bim/host_placement.h    // HostPlacement
 src/bim/relation.h          // Relation
-src/bim/bim_model.h         // 关系表 + 楼层表；轴网将来也挂这里
+src/bim/bim_model.h         // 关系表 + 楼层表 + 轴网（Grid）
 src/bim/host_geometry.h     // 墙框、开口尺寸、对齐、合法性
 src/bim/host_update.h       // notify / bind
 src/bim/storey.h            // 楼层：名称 / 标高 / 层高 / 夹层
-src/bim/grid.h              // 尚未实现
+src/bim/grid.h              // 轴网：轴线数据 + 排序 / 吸附 / 成对线段的取法
+src/bim/drawing_import.h    // 翻模：图纸 → 候选构件（见 图纸 → BIM）
 ```
 
 `BimModel` 作为 `Document` 的一个侧面挂上（和 `Scene`、实体表并列），这样撤销、`.tdoc` 序列化仍是一份文档。不要做成第二份平行文档。
@@ -182,6 +183,11 @@ src/bim/grid.h              // 尚未实现
 - 将来 IFC 进出时，空间结构与本层互译（仍走 [IShapeOps](ISHAPE-OPS.md)，不为 IFC 另开几何通道）
 
 **已落地：** 墙-墙交接的自动斜接倒角（端点相接 / 顶在墙上时，两墙共用一个竖直斜接面各自裁掉，不再硬拼）。专页 [墙-墙交接](bim/junctions.md)。
+
+**已落地：轴网。** `Grid` 是一组轴线（方向 + 固定坐标 + 沿轴范围），随文档存进 `.tdoc` 的 `GRID` chunk
+（格式版本 17），显示由视口当 overlay 画（虚线，画在当前楼层标高上），**不进实体表、不进渲染合批**。
+入口：**开始 → 轴网设置**（按间距生成正交轴网 / 逐根增删改名）。翻模的墙端点会吸附到轴网上，
+见 [图纸 → BIM](DRAWING-TO-BIM.md)。
 
 本层**先不做**：墙与板 / 梁 / 柱的交接、核心层构造、房间边界生成、全专业 MEP、Revit 式约束系统。那些会把这一层做成第二个 Revit。删墙时开口不会级联删除，只清掉关系，开口留在原地。
 

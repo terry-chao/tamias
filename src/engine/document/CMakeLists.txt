@@ -5,6 +5,8 @@ add_library(tamias_document STATIC
   texture_library.cpp
   picking.cpp
   ${CMAKE_SOURCE_DIR}/src/bim/bim_model.cpp
+  ${CMAKE_SOURCE_DIR}/src/bim/drawing_import.cpp
+  ${CMAKE_SOURCE_DIR}/src/bim/grid.cpp
   ${CMAKE_SOURCE_DIR}/src/bim/host_geometry.cpp
   ${CMAKE_SOURCE_DIR}/src/bim/host_update.cpp
   ${CMAKE_SOURCE_DIR}/src/bim/wall_join.cpp
@@ -16,6 +18,7 @@ target_link_libraries(tamias_document
     tamias::core
     tamias::math
     tamias::graphics
+    tamias::drawing
     tamias::io
     tamias::render
     tamias::modeling

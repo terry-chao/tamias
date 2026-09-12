@@ -4,6 +4,10 @@
 <context>
     <name>tamias::DocumentViewport</name>
     <message>
+        <source>Tracing done: %1 walls, %2 columns, %3 doors/windows</source>
+        <translation>翻模完成：墙 %1、柱 %2、门窗 %3</translation>
+    </message>
+    <message>
         <location filename="../src/app/document_viewport.cpp"/>
         <source>X %1  Y %2  Z %3</source>
         <translation>X %1  Y %2  Z %3</translation>
@@ -221,6 +225,34 @@
 </context>
 <context>
     <name>tamias::MainWindow</name>
+    <message>
+        <source>Trace Drawing</source>
+        <translation>翻模</translation>
+    </message>
+    <message>
+        <source>Create walls, columns and doors/windows from a DXF floor plan</source>
+        <translation>从 DXF 平面图生成墙、柱、门窗</translation>
+    </message>
+    <message>
+        <source>Open or create a model first.</source>
+        <translation>先打开或新建一个模型。</translation>
+    </message>
+    <message>
+        <source>Grid</source>
+        <translation>轴网</translation>
+    </message>
+    <message>
+        <source>Grid Settings</source>
+        <translation>轴网设置</translation>
+    </message>
+    <message>
+        <source>Show the structural grid</source>
+        <translation>显示轴网</translation>
+    </message>
+    <message>
+        <source>Create or edit the structural grid</source>
+        <translation>新建或编辑轴网</translation>
+    </message>
     <message>
         <source>Open Project</source>
         <translation>打开工程</translation>
@@ -3561,6 +3593,288 @@ Export the drawing to DXF, SVG or an image, or rebuild with Qt6::Pdf available.<
     <message>
         <source>Two floors cannot share the same elevation: %1 m</source>
         <translation>两层不能共用同一标高：%1 m</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::GridSettingsDialog</name>
+    <message>
+        <source>Grid Settings</source>
+        <translation>轴网设置</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>名称</translation>
+    </message>
+    <message>
+        <source>Direction</source>
+        <translation>方向</translation>
+    </message>
+    <message>
+        <source>Vertical (Z)</source>
+        <translation>竖轴（Z）</translation>
+    </message>
+    <message>
+        <source>Horizontal (X)</source>
+        <translation>横轴（X）</translation>
+    </message>
+    <message>
+        <source>Position</source>
+        <translation>位置</translation>
+    </message>
+    <message>
+        <source>Start</source>
+        <translation>起点</translation>
+    </message>
+    <message>
+        <source>End</source>
+        <translation>终点</translation>
+    </message>
+    <message>
+        <source>Add Axis</source>
+        <translation>添加轴线</translation>
+    </message>
+    <message>
+        <source>Remove Selected</source>
+        <translation>删除选中</translation>
+    </message>
+    <message>
+        <source>Delete the selected axes from the table</source>
+        <translation>从表中删除选中的轴线</translation>
+    </message>
+    <message>
+        <source>Numbered spacing</source>
+        <translation>编号轴间距</translation>
+    </message>
+    <message>
+        <source>Spacing between vertical (numbered) axes, in metres</source>
+        <translation>竖轴（编号轴）之间的间距，单位米</translation>
+    </message>
+    <message>
+        <source>Lettered spacing</source>
+        <translation>字母轴间距</translation>
+    </message>
+    <message>
+        <source>Spacing between horizontal (lettered) axes, in metres</source>
+        <translation>横轴（字母轴）之间的间距，单位米</translation>
+    </message>
+    <message>
+        <source>Origin</source>
+        <translation>原点</translation>
+    </message>
+    <message>
+        <source>Margin</source>
+        <translation>外扩</translation>
+    </message>
+    <message>
+        <source>Generate</source>
+        <translation>生成</translation>
+    </message>
+    <message>
+        <source>Generating replaces the table above. Positions are in metres, measured from the origin.</source>
+        <translation>生成会替换上表内容。位置单位是米，从原点算起。</translation>
+    </message>
+    <message>
+        <source>Spacing must be a list of positive numbers, e.g. 6,6,6.</source>
+        <translation>间距要写成一串正数，例如 6,6,6。</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::DrawingImportDialog</name>
+    <message>
+        <source>Trace Drawing to BIM</source>
+        <translation>翻模</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>图纸</translation>
+    </message>
+    <message>
+        <source>A DXF drawing exported from your CAD file</source>
+        <translation>由 CAD 导出的 DXF 图纸</translation>
+    </message>
+    <message>
+        <source>Browse…</source>
+        <translation>浏览…</translation>
+    </message>
+    <message>
+        <source>Drawing</source>
+        <translation>图纸</translation>
+    </message>
+    <message>
+        <source>Open Drawing</source>
+        <translation>打开图纸</translation>
+    </message>
+    <message>
+        <source>DXF drawing (*.dxf)</source>
+        <translation>DXF 图纸 (*.dxf)</translation>
+    </message>
+    <message>
+        <source>Units</source>
+        <translation>单位</translation>
+    </message>
+    <message>
+        <source>From drawing</source>
+        <translation>按图纸</translation>
+    </message>
+    <message>
+        <source>Millimetres</source>
+        <translation>毫米</translation>
+    </message>
+    <message>
+        <source>Centimetres</source>
+        <translation>厘米</translation>
+    </message>
+    <message>
+        <source>Metres</source>
+        <translation>米</translation>
+    </message>
+    <message>
+        <source>Inches</source>
+        <translation>英寸</translation>
+    </message>
+    <message>
+        <source>Feet</source>
+        <translation>英尺</translation>
+    </message>
+    <message>
+        <source>Drawing units to metres. Prefer the value stored in the file; override it here when the drawing has none.</source>
+        <translation>图纸单位换算到米。优先用图纸里记录的单位；图纸没写时在这里指定。</translation>
+    </message>
+    <message>
+        <source>Layers</source>
+        <translation>图层</translation>
+    </message>
+    <message>
+        <source>Comma separated, case-insensitive, matched as substring</source>
+        <translation>逗号分隔、忽略大小写、按包含匹配</translation>
+    </message>
+    <message>
+        <source>Walls</source>
+        <translation>墙</translation>
+    </message>
+    <message>
+        <source>Columns</source>
+        <translation>柱</translation>
+    </message>
+    <message>
+        <source>Doors / windows</source>
+        <translation>门窗</translation>
+    </message>
+    <message>
+        <source>Sizes</source>
+        <translation>尺寸</translation>
+    </message>
+    <message>
+        <source>Wall thickness</source>
+        <translation>墙厚</translation>
+    </message>
+    <message>
+        <source>Wall height</source>
+        <translation>墙高</translation>
+    </message>
+    <message>
+        <source>Column height</source>
+        <translation>柱高</translation>
+    </message>
+    <message>
+        <source>Host tolerance</source>
+        <translation>宿主容差</translation>
+    </message>
+    <message>
+        <source>Snap wall ends to grid</source>
+        <translation>墙端点吸附到轴网</translation>
+    </message>
+    <message>
+        <source>Recognise</source>
+        <translation>识别</translation>
+    </message>
+    <message>
+        <source>Pick a drawing, then press Recognise.</source>
+        <translation>选一张图纸，然后点「识别」。</translation>
+    </message>
+    <message>
+        <source>Pick a DXF drawing first.</source>
+        <translation>先选一张 DXF 图纸。</translation>
+    </message>
+    <message>
+        <source>Cannot read this drawing: %1</source>
+        <translation>读不了这张图纸：%1</translation>
+    </message>
+    <message>
+        <source>Select All</source>
+        <translation>全选</translation>
+    </message>
+    <message>
+        <source>Select None</source>
+        <translation>全不选</translation>
+    </message>
+    <message>
+        <source>High Confidence</source>
+        <translation>只留高置信度</translation>
+    </message>
+    <message>
+        <source>Component</source>
+        <translation>构件</translation>
+    </message>
+    <message>
+        <source>Parameters</source>
+        <translation>参数</translation>
+    </message>
+    <message>
+        <source>At</source>
+        <translation>位置</translation>
+    </message>
+    <message>
+        <source>Notes from the recogniser</source>
+        <translation>识别说明</translation>
+    </message>
+    <message>
+        <source>Create Model</source>
+        <translation>生成模型</translation>
+    </message>
+    <message>
+        <source>Wall</source>
+        <translation>墙</translation>
+    </message>
+    <message>
+        <source>Column</source>
+        <translation>柱</translation>
+    </message>
+    <message>
+        <source>Door</source>
+        <translation>门</translation>
+    </message>
+    <message>
+        <source>Window</source>
+        <translation>窗</translation>
+    </message>
+    <message>
+        <source>thickness %1 m, height %2 m</source>
+        <translation>厚 %1 m，高 %2 m</translation>
+    </message>
+    <message>
+        <source>round, %1 m</source>
+        <translation>圆柱，直径 %1 m</translation>
+    </message>
+    <message>
+        <source>%1 × %2 m</source>
+        <translation>%1 × %2 m</translation>
+    </message>
+    <message>
+        <source>(%1, %2) → (%3, %4)</source>
+        <translation>（%1, %2）→（%3, %4）</translation>
+    </message>
+    <message>
+        <source>(%1, %2)</source>
+        <translation>（%1, %2）</translation>
+    </message>
+    <message>
+        <source>Selected %1 of %2 — walls %3, columns %4, doors/windows %5</source>
+        <translation>已选 %1 / %2 — 墙 %3、柱 %4、门窗 %5</translation>
+    </message>
+    <message>
+        <source>Skipped %1 segments shorter than the minimum wall length.</source>
+        <translation>跳过了 %1 段短于最小墙长的线段。</translation>
     </message>
 </context>
 </TS>

@@ -60,6 +60,7 @@ nav:
   - BIM:
       - bim/index.md
       - BIM 业务层: BIM.md
+      - 图纸 → BIM（翻模）: DRAWING-TO-BIM.md
       - 关联关系: bim/relations.md
       - 墙-墙交接: bim/junctions.md
   - 场景图:

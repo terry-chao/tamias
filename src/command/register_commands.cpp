@@ -6,6 +6,7 @@
 #include "command/create_curve_command.h"
 #include "command/create_curtain_wall_command.h"
 #include "command/create_foundation_command.h"
+#include "command/create_grid_axis_command.h"
 #include "command/create_primitive_command.h"
 #include "command/create_sketch_command.h"
 #include "command/create_slab_command.h"
@@ -13,9 +14,11 @@
 #include "command/create_structural_wall_command.h"
 #include "command/create_wall_command.h"
 #include "command/delete_entity_command.h"
+#include "command/delete_grid_axis_command.h"
 #include "command/set_feature_param_command.h"
 #include "command/set_location_command.h"
 #include "command/set_material_command.h"
+#include "command/update_grid_command.h"
 #include "bim/wall_size.h"
 #include "entity/column_entity.h"
 
@@ -349,6 +352,33 @@ void register_commands(CommandRegistry& registry) {
     material.tex.world_scale = static_cast<float>(arg_double(args, "tex_world_scale", 2.0));
     return std::make_unique<SetMaterialCommand>(
         doc, static_cast<std::uint64_t>(arg_int(args, "entity_id", 0)), std::move(material));
+  });
+
+  // ---- 轴网（定位参考，不是构件）----
+  registry.register_command("create_grid_axis", [](Document& doc, const CommandArgs& args) {
+    GridAxis axis;
+    axis.name = arg_string(args, "name", "1");
+    axis.direction = arg_string(args, "direction", "z") == "x"
+                         ? GridAxisDirection::AlongX
+                         : GridAxisDirection::AlongZ;
+    axis.position = arg_double(args, "position", 0.0);
+    axis.start = arg_double(args, "start", 0.0);
+    axis.end = arg_double(args, "end", 0.0);
+    return std::make_unique<CreateGridAxisCommand>(doc, std::move(axis));
+  });
+
+  // 按间距表一次生成正交轴网：x_spacings 是相邻编号轴间距，z_spacings 是相邻字母轴间距。
+  registry.register_command("auto_grid", [](Document& doc, const CommandArgs& args) {
+    std::vector<GridAxis> axes = make_orthogonal_grid(
+        arg_double(args, "origin_x", 0.0), arg_double(args, "origin_z", 0.0),
+        arg_doubles(args, "x_spacings"), arg_doubles(args, "z_spacings"),
+        arg_double(args, "margin", 1.0));
+    return std::make_unique<UpdateGridCommand>(doc, std::move(axes));
+  });
+
+  registry.register_command("delete_grid_axis", [](Document& doc, const CommandArgs& args) {
+    return std::make_unique<DeleteGridAxisCommand>(
+        doc, static_cast<std::uint64_t>(arg_int(args, "axis_id", 0)));
   });
 }
 

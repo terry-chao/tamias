@@ -2,6 +2,7 @@
 
 #include "bim/host_geometry.h"
 #include "bim/host_update.h"
+#include "bim/grid.h"
 #include "bim/line_location.h"
 #include "bim/point_location.h"
 #include "bim/surface_location.h"
@@ -25,7 +26,7 @@ namespace tamias {
 namespace {
 
 constexpr char kMagic[4] = {'T', 'M', 'A', 'S'};
-constexpr std::uint32_t kFormatVersion = 16;
+constexpr std::uint32_t kFormatVersion = 17;
 constexpr std::uint32_t kMinFormatVersion = 5;
 constexpr std::uint32_t kGripsFormatVersion = 7;
 constexpr std::uint32_t kLocationFormatVersion = 8;
@@ -36,6 +37,7 @@ constexpr std::uint32_t kTextureTransformFormatVersion = 12;
 constexpr std::uint32_t kBuiltinOrmFormatVersion = 13;
 constexpr std::uint32_t kDoorHandleSideFormatVersion = 14;
 constexpr std::uint32_t kStoreyHeightFormatVersion = 16;
+constexpr std::uint32_t kGridFormatVersion = 17;
 
 constexpr std::uint32_t fourcc(char a, char b, char c, char d) {
   return static_cast<std::uint32_t>(static_cast<std::uint8_t>(a)) |
@@ -53,6 +55,7 @@ constexpr std::uint32_t kChunkMatl = fourcc('M', 'A', 'T', 'L');
 constexpr std::uint32_t kChunkTex = fourcc('T', 'E', 'X', 'T');
 constexpr std::uint32_t kChunkRela = fourcc('R', 'E', 'L', 'A');
 constexpr std::uint32_t kChunkStry = fourcc('S', 'T', 'R', 'Y');
+constexpr std::uint32_t kChunkGrid = fourcc('G', 'R', 'I', 'D');
 
 void report_load_progress(const LoadProgressCallback& progress, float value) {
   if (progress) {
@@ -855,6 +858,63 @@ Result<void> read_storey(BinaryReader& r, Storey& storey, std::uint32_t version)
   return {};
 }
 
+Result<void> write_grid_axis(BinaryWriter& w, const GridAxis& axis) {
+  if (auto r = w.write_u64(axis.id); !r) {
+    return r;
+  }
+  if (auto r = w.write_string(axis.name); !r) {
+    return r;
+  }
+  if (auto r = w.write_u8(static_cast<std::uint8_t>(axis.direction)); !r) {
+    return r;
+  }
+  if (auto r = w.write_f64(axis.position); !r) {
+    return r;
+  }
+  if (auto r = w.write_f64(axis.start); !r) {
+    return r;
+  }
+  return w.write_f64(axis.end);
+}
+
+Result<void> read_grid_axis(BinaryReader& r, GridAxis& axis) {
+  auto id = r.read_u64();
+  if (!id) {
+    return Err(id.error());
+  }
+  auto name = r.read_string();
+  if (!name) {
+    return Err(name.error());
+  }
+  auto direction = r.read_u8();
+  if (!direction) {
+    return Err(direction.error());
+  }
+  auto position = r.read_f64();
+  if (!position) {
+    return Err(position.error());
+  }
+  auto start = r.read_f64();
+  if (!start) {
+    return Err(start.error());
+  }
+  auto end = r.read_f64();
+  if (!end) {
+    return Err(end.error());
+  }
+  GridAxis loaded;
+  loaded.id = *id;
+  loaded.name = std::move(*name);
+  loaded.direction = *direction == static_cast<std::uint8_t>(GridAxisDirection::AlongX)
+                         ? GridAxisDirection::AlongX
+                         : GridAxisDirection::AlongZ;
+  loaded.position = *position;
+  loaded.start = *start;
+  loaded.end = *end;
+  axis = std::move(loaded);
+  return {};
+}
+
 Result<void> write_scene_node(BinaryWriter& w, const SceneNode& node) {
   if (auto r = w.write_u64(node.id); !r) {
     return r;
@@ -1102,6 +1162,19 @@ Result<void> write_document_body(BinaryWriter& w, const Document& document) {
   if (auto r = w.write_u64(document.bim().active_storey_id()); !r) {
     return r;
   }
+  // 轴网（格式追加在末尾：旧快照读到 active_storey_id 就结束，不会出错）。
+  if (auto r = w.write_u64(document.bim().grid().next_id()); !r) {
+    return r;
+  }
+  if (auto r = w.write_u64(static_cast<std::uint64_t>(document.bim().grid().axes().size()));
+      !r) {
+    return r;
+  }
+  for (const GridAxis& axis : document.bim().grid().axes()) {
+    if (auto r = write_grid_axis(w, axis); !r) {
+      return r;
+    }
+  }
   return {};
 }
 
@@ -1224,6 +1297,27 @@ Result<Document> read_document_body(BinaryReader& r) {
       return Err(active_storey.error());
     }
     document.bim().set_active_storey_id(*active_storey);
+  }
+  if (r.remaining() > 0) {
+    auto next_grid = r.read_u64();
+    if (!next_grid) {
+      return Err(next_grid.error());
+    }
+    auto grid_count = r.read_u64();
+    if (!grid_count) {
+      return Err(grid_count.error());
+    }
+    std::vector<GridAxis> grid_axes;
+    grid_axes.reserve(static_cast<std::size_t>(*grid_count));
+    for (std::uint64_t i = 0; i < *grid_count; ++i) {
+      GridAxis axis{};
+      if (auto res = read_grid_axis(r, axis); !res) {
+        return Err(res.error());
+      }
+      grid_axes.push_back(std::move(axis));
+    }
+    document.bim().grid().replace(grid_axes);
+    document.bim().grid().set_next_id(*next_grid);
   }
 
   document.set_next_mesh_id(*next_mesh);
@@ -1413,6 +1507,20 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
     return r;
   }
 
+  BinaryWriter grid_w;
+  if (auto r = grid_w.write_u64(document.bim().grid().next_id()); !r) {
+    return r;
+  }
+  if (auto r = grid_w.write_u64(static_cast<std::uint64_t>(document.bim().grid().axes().size()));
+      !r) {
+    return r;
+  }
+  for (const GridAxis& axis : document.bim().grid().axes()) {
+    if (auto r = write_grid_axis(grid_w, axis); !r) {
+      return r;
+    }
+  }
+
   BinaryWriter file;
   if (auto r = file.write_bytes(kMagic, 4); !r) {
     return r;
@@ -1420,7 +1528,7 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
   if (auto r = file.write_u32(kFormatVersion); !r) {
     return r;
   }
-  if (auto r = file.write_u32(9); !r) {  // chunk_count
+  if (auto r = file.write_u32(10); !r) {  // chunk_count
     return r;
   }
   if (auto r = append_chunk(file, kChunkMeta, meta_w.data()); !r) {
@@ -1445,6 +1553,9 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
     return r;
   }
   if (auto r = append_chunk(file, kChunkStry, stry_w.data()); !r) {
+    return r;
+  }
+  if (auto r = append_chunk(file, kChunkGrid, grid_w.data()); !r) {
     return r;
   }
   if (auto r = append_chunk(file, kChunkView, view_w.data()); !r) {
@@ -1499,6 +1610,8 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes,
   std::vector<TextureAsset> textures;
   std::vector<Relation> relations;
   std::vector<Storey> storeys;
+  std::vector<GridAxis> grid_axes;
+  std::uint64_t next_grid_id = 1;
   std::uint64_t next_relation_id = 1;
   std::uint64_t active_storey_id = 0;
   ViewportState viewport{};
@@ -1667,6 +1780,25 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes,
         }
         storeys.push_back(std::move(storey));
       }
+    } else if (*id == kChunkGrid) {
+      auto next_grid = chunk_r.read_u64();
+      if (!next_grid) {
+        return Err(next_grid.error());
+      }
+      next_grid_id = *next_grid;
+      auto count = chunk_r.read_u64();
+      if (!count) {
+        return Err(count.error());
+      }
+      grid_axes.clear();
+      grid_axes.reserve(static_cast<std::size_t>(*count));
+      for (std::uint64_t n = 0; n < *count; ++n) {
+        GridAxis axis{};
+        if (auto res = read_grid_axis(chunk_r, axis); !res) {
+          return Err(res.error());
+        }
+        grid_axes.push_back(std::move(axis));
+      }
     } else if (*id == kChunkView) {
       if (auto res = read_viewport(chunk_r, viewport); !res) {
         return Err(res.error());
@@ -1709,6 +1841,8 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes,
     loaded.document.bim().insert_storey(std::move(storey));
   }
   loaded.document.bim().set_active_storey_id(active_storey_id);
+  loaded.document.bim().grid().replace(grid_axes);
+  loaded.document.bim().grid().set_next_id(next_grid_id);
   loaded.document.bim().set_next_id(next_relation_id);
   loaded.document.set_next_mesh_id(next_mesh_id);
   loaded.document.scene().set_next_id(next_node_id);

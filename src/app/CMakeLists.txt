@@ -44,6 +44,8 @@ add_executable(tamias
   visibility_panel.cpp
   floor_panel.cpp
   floor_settings_dialog.cpp
+  grid_settings_dialog.cpp
+  drawing_import_dialog.cpp
   theme.cpp
   rhi_backends.cpp
   resources.qrc

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bim/grid.h"
 #include "bim/relation.h"
 #include "bim/storey.h"
 
@@ -8,8 +9,7 @@
 
 namespace tamias {
 
-// BIM 文档侧面：关联关系表。和 Scene、实体表并列，随 .tdoc 一起存。
-// 楼层 / 轴网以后也挂在这里；现在先做宿主关联。
+// BIM 文档侧面：关联关系表 + 楼层表 + 轴网。和 Scene、实体表并列，随 .tdoc 一起存。
 class BimModel {
  public:
   Relation& add(Relation relation);
@@ -42,9 +42,14 @@ class BimModel {
   void set_active_storey_id(std::uint64_t id);
   [[nodiscard]] double storey_elevation(std::uint64_t id) const;
 
+  // 轴网：定位参考，不是构件；不进实体表，也不进渲染合批。
+  [[nodiscard]] Grid& grid() { return grid_; }
+  [[nodiscard]] const Grid& grid() const { return grid_; }
+
  private:
   std::vector<Relation> relations_;
   std::vector<Storey> storeys_;
+  Grid grid_;
   std::uint64_t active_storey_id_ = 0;
   std::uint64_t next_id_ = 1;
 };

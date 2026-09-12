@@ -41,6 +41,7 @@ void BimModel::remove_involving(std::uint64_t entity_id) {
 void BimModel::clear() {
   relations_.clear();
   storeys_.clear();
+  grid_.clear();
   active_storey_id_ = 0;
   next_id_ = 1;
 }

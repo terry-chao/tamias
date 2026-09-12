@@ -60,4 +60,51 @@ void Drawing::normalize_origin() {
   world_origin_.y += offset.y;
 }
 
+// AutoCAD $INSUNITS 编号。翻模只需要常见几种，其余归为"未知，按米算"。
+double Drawing::unit_scale_to_meter() const {
+  switch (insunits_) {
+    case 1:   // inches
+      return 0.0254;
+    case 2:   // feet
+      return 0.3048;
+    case 4:   // millimetres
+      return 0.001;
+    case 5:   // centimetres
+      return 0.01;
+    case 6:   // metres
+      return 1.0;
+    case 7:   // kilometres
+      return 1000.0;
+    case 10:  // yards
+      return 0.9144;
+    case 14:  // decimetres
+      return 0.1;
+    default:
+      return 1.0;
+  }
+}
+
+const char* Drawing::unit_label() const {
+  switch (insunits_) {
+    case 1:
+      return "in";
+    case 2:
+      return "ft";
+    case 4:
+      return "mm";
+    case 5:
+      return "cm";
+    case 6:
+      return "m";
+    case 7:
+      return "km";
+    case 10:
+      return "yd";
+    case 14:
+      return "dm";
+    default:
+      return "unit";
+  }
+}
+
 }  // namespace tamias

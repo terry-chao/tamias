@@ -43,7 +43,94 @@ Drawing must_parse(const std::string& text) {
   return result ? std::move(*result) : Drawing{};
 }
 
+// 带 HEADER 的完整文件（$INSUNITS 等只出现在这一段）。
+std::string dxf_with_header(const std::string& header_pairs, const std::string& entities) {
+  std::string out;
+  out += group(0, "SECTION");
+  out += group(2, "HEADER");
+  out += header_pairs;
+  out += group(0, "ENDSEC");
+  out += group(0, "SECTION");
+  out += group(2, "ENTITIES");
+  out += entities;
+  out += group(0, "ENDSEC");
+  out += group(0, "EOF");
+  return out;
+}
+
 }  // namespace
+
+TEST(DxfReader, ReadsInsUnitsFromHeader) {
+  // 4 = 毫米。国产施工图几乎都是这个，翻模必须按它换算。
+  const std::string marker =
+      group(0, "LINE") + group(10, "0") + group(20, "0") + group(11, "1") + group(21, "0");
+  Drawing drawing =
+      must_parse(dxf_with_header(group(9, "$INSUNITS") + group(70, "4"), marker));
+  EXPECT_EQ(drawing.insunits(), 4);
+  EXPECT_DOUBLE_EQ(drawing.unit_scale_to_meter(), 0.001);
+  EXPECT_STREQ(drawing.unit_label(), "mm");
+
+  Drawing metres =
+      must_parse(dxf_with_header(group(9, "$INSUNITS") + group(70, "6"), marker));
+  EXPECT_DOUBLE_EQ(metres.unit_scale_to_meter(), 1.0);
+
+  // 没写单位 → 按米算，不猜。
+  Drawing unknown = must_parse(dxf_with_header("", marker));
+  EXPECT_EQ(unknown.insunits(), 0);
+  EXPECT_DOUBLE_EQ(unknown.unit_scale_to_meter(), 1.0);
+  EXPECT_STREQ(unknown.unit_label(), "unit");
+}
+
+TEST(DxfReader, TagsPathKindPerEntityType) {
+  std::string entities;
+  entities += group(0, "LINE") + group(10, "0") + group(20, "0") + group(11, "10") + group(21, "0");
+  entities += group(0, "CIRCLE") + group(10, "0") + group(20, "0") + group(40, "2");
+  entities += group(0, "ARC") + group(10, "0") + group(20, "0") + group(40, "3") + group(50, "0") +
+              group(51, "90");
+
+  const Drawing drawing = must_parse(dxf_with(entities));
+  ASSERT_EQ(drawing.paths().size(), 3u);
+  EXPECT_EQ(drawing.paths()[0].kind, DrawingPathKind::Line);
+  EXPECT_EQ(drawing.paths()[1].kind, DrawingPathKind::Circle);
+  EXPECT_EQ(drawing.paths()[2].kind, DrawingPathKind::Arc);
+}
+
+TEST(DxfReader, ReadsEntityElevation) {
+  std::string entities;
+  entities += group(0, "LINE") + group(8, "WALL") + group(10, "0") + group(20, "0") +
+              group(30, "3000") + group(11, "10") + group(21, "0") + group(31, "3000");
+
+  const Drawing drawing = must_parse(dxf_with(entities));
+  ASSERT_EQ(drawing.paths().size(), 1u);
+  EXPECT_FLOAT_EQ(drawing.paths().front().elevation, 3000.f);
+}
+
+TEST(DxfReader, BlockContentKeepsBlockNameAndInheritsInsertLayer) {
+  std::string text;
+  text += group(0, "SECTION") + group(2, "BLOCKS");
+  text += group(0, "BLOCK") + group(2, "M0921") + group(10, "0") + group(20, "0");
+  // 块内容画在 0 层：按 DXF 语义继承块引用的图层。
+  text += group(0, "LINE") + group(8, "0") + group(10, "0") + group(20, "0") + group(11, "900") +
+          group(21, "0");
+  text += group(0, "ENDBLK");
+  text += group(0, "ENDSEC");
+  text += group(0, "SECTION") + group(2, "ENTITIES");
+  // 块引用画在 DOOR 层，插入到 (100,200)。
+  text += group(0, "INSERT") + group(8, "DOOR") + group(2, "M0921") + group(10, "100") +
+          group(20, "200");
+  text += group(0, "ENDSEC") + group(0, "EOF");
+
+  const Drawing drawing = must_parse(text);
+  ASSERT_EQ(drawing.paths().size(), 1u);
+  const DrawingPath& path = drawing.paths().front();
+  EXPECT_EQ(path.block, "M0921");
+  ASSERT_LT(path.layer, drawing.layers().size());
+  EXPECT_EQ(drawing.layers()[path.layer].name, "DOOR");
+  // 块基点 (0,0) 在 (100,200)：终点落到 (1000,200)。
+  // 解析结束会归一化原点（把包围盒挪到 0），所以要用 world_origin 还原绝对坐标。
+  EXPECT_NEAR(path.points.back().x + drawing.world_origin().x, 1000.f, 1e-3f);
+  EXPECT_NEAR(path.points.back().y + drawing.world_origin().y, 200.f, 1e-3f);
+}
 
 TEST(DxfReader, ParsesLineIntoTwoPointPath) {
   std::string entities;

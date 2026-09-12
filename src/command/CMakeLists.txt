@@ -9,17 +9,21 @@ add_library(tamias_command STATIC
   create_storey_command.cpp
   create_structural_wall_command.cpp
   create_foundation_command.cpp
+  create_grid_axis_command.cpp
   create_curtain_wall_command.cpp
   create_sketch_command.cpp
   delete_entity_command.cpp
+  delete_grid_axis_command.cpp
   move_entities_command.cpp
   set_feature_param_command.cpp
   edit_entity_grip_command.cpp
   set_material_command.cpp
   import_texture_command.cpp
+  import_drawing_command.cpp
   replace_texture_command.cpp
   update_material_command.cpp
   update_storeys_command.cpp
+  update_grid_command.cpp
   set_location_command.cpp
   command_system.cpp
   register_commands.cpp

@@ -5,8 +5,10 @@
 #include "bim/wall_size.h"
 #include "command/edit_entity_grip_command.h"
 #include "command/import_texture_command.h"
+#include "command/import_drawing_command.h"
 #include "command/replace_texture_command.h"
 #include "command/update_material_command.h"
+#include "command/update_grid_command.h"
 #include "command/update_storeys_command.h"
 #include "component_specs.h"
 #include "engine/core/log.h"
@@ -715,6 +717,15 @@ void DocumentViewport::submit_current_frame() {
   }
   if (grid_snap_active() && has_cursor_ && is_on_grid_xz(cursor)) {
     frame.snap_point = cursor;
+  }
+  if (grid_visible_ && !document_->bim().grid().empty()) {
+    // 轴网画在当前楼层的标高上：平面视图里它正好落在工作面上。
+    document_->bim().grid().append_segments(frame.grid_line_segments);
+    const float y =
+        static_cast<float>(document_->bim().storey_elevation(document_->bim().active_storey_id()));
+    for (Vec3& point : frame.grid_line_segments) {
+      point.y = y;
+    }
   }
   fill_grip_overlay(frame);
   fill_debug_overlay(frame);
@@ -1966,6 +1977,43 @@ void DocumentViewport::apply_storey_settings(std::vector<Storey> storeys,
   request_redraw();
   emit document_changed();
   emit visibility_changed();
+}
+
+void DocumentViewport::apply_grid_settings(std::vector<GridAxis> axes) {
+  auto cmd = std::make_unique<UpdateGridCommand>(*document_, std::move(axes));
+  if (auto r = cmd->execute(); !r) {
+    log_error(r.error());
+    return;
+  }
+  command_system_.push_executed(std::move(cmd));
+  request_redraw();
+  emit document_changed();
+}
+
+void DocumentViewport::set_grid_visible(bool visible) {
+  if (grid_visible_ == visible) {
+    return;
+  }
+  grid_visible_ = visible;
+  request_redraw();
+}
+
+void DocumentViewport::apply_drawing_import(DrawingImportPlan plan) {
+  const QString summary = tr("Tracing done: %1 walls, %2 columns, %3 doors/windows")
+                              .arg(plan.walls.size())
+                              .arg(plan.columns.size())
+                              .arg(plan.openings.size());
+  auto cmd = std::make_unique<ImportDrawingCommand>(*document_, std::move(plan));
+  if (auto r = cmd->execute(); !r) {
+    log_error(r.error());
+    emit status_message(QString::fromStdString(r.error()));
+    return;
+  }
+  command_system_.push_executed(std::move(cmd));
+  refresh_after_edit();
+  request_redraw();
+  emit document_changed();
+  emit status_message(summary);
 }
 
 bool DocumentViewport::pick_grip_at(const QPoint& pos, EntityGrip& out) const {
