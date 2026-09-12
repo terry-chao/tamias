@@ -19,6 +19,7 @@ add_library(tamias_command STATIC
   import_texture_command.cpp
   replace_texture_command.cpp
   update_material_command.cpp
+  update_storeys_command.cpp
   set_location_command.cpp
   command_system.cpp
   register_commands.cpp

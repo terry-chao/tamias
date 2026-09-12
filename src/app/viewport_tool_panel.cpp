@@ -1,11 +1,11 @@
 #include "viewport_tool_panel.h"
 
+#include "floor_panel.h"
 #include "visibility_panel.h"
 
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QIcon>
-#include <QMenu>
 #include <QPainter>
 #include <QPen>
 #include <QPixmap>
@@ -83,12 +83,13 @@ ViewportToolPanel::ViewportToolPanel(QWidget* parent) : QWidget(parent) {
     set_active_page(open ? kVisibilityPage : -1);
   });
 
-  floor_button_ =
-      add_rail_button(rail_layout, load_icon(QStringLiteral(":/icons/storey.svg")), tr("Filter by floor"));
-  floor_menu_ = new QMenu(this);
-  floor_button_->setMenu(floor_menu_);
-  floor_button_->setPopupMode(QToolButton::InstantPopup);
-  connect(floor_menu_, &QMenu::aboutToShow, this, &ViewportToolPanel::floor_menu_about_to_show);
+  // 按楼层显隐：和构件显隐一样是同一列里的功能页（勾选 = 显示）。
+  floor_button_ = add_rail_button(rail_layout, load_icon(QStringLiteral(":/icons/storey.svg")),
+                                  tr("Show or hide floors, and set floor heights"));
+  floor_button_->setCheckable(true);
+  connect(floor_button_, &QToolButton::toggled, this, [this](bool open) {
+    set_active_page(open ? kFloorPage : -1);
+  });
 
   auto* sep = new QFrame(rail_);
   sep->setFrameShape(QFrame::HLine);
@@ -110,6 +111,9 @@ ViewportToolPanel::ViewportToolPanel(QWidget* parent) : QWidget(parent) {
   visibility_page_ = new VisibilityPanel(pages_);
   visibility_page_->set_dark_theme(is_dark_theme());
   pages_->addWidget(visibility_page_);
+  floor_page_ = new FloorPanel(pages_);
+  floor_page_->set_dark_theme(is_dark_theme());
+  pages_->addWidget(floor_page_);
   pages_->setCurrentIndex(kVisibilityPage);
   pages_->hide();
   root->addWidget(pages_);
@@ -134,10 +138,17 @@ void ViewportToolPanel::set_viewport(DocumentViewport* viewport) {
   if (visibility_page_ != nullptr) {
     visibility_page_->set_viewport(viewport);
   }
+  if (floor_page_ != nullptr) {
+    floor_page_->set_viewport(viewport);
+  }
 }
 
 void ViewportToolPanel::toggle_visibility_page() {
   set_active_page(panel_open() ? -1 : kVisibilityPage);
+}
+
+void ViewportToolPanel::toggle_floor_page() {
+  set_active_page(panel_open() ? -1 : kFloorPage);
 }
 
 void ViewportToolPanel::set_active_page(int page) {
@@ -148,12 +159,20 @@ void ViewportToolPanel::set_active_page(int page) {
   pages_->setVisible(page >= 0);
   if (page >= 0) {
     pages_->setCurrentIndex(page);
-    visibility_page_->refresh();
+    if (page == kVisibilityPage) {
+      visibility_page_->refresh();
+    } else if (page == kFloorPage) {
+      floor_page_->refresh();
+    }
   }
   {
     // 按钮按下态跟着页面走，但别再把 toggled 弹回来。
     const QSignalBlocker blocker(visibility_button_);
     visibility_button_->setChecked(page == kVisibilityPage);
+  }
+  {
+    const QSignalBlocker blocker(floor_button_);
+    floor_button_->setChecked(page == kFloorPage);
   }
   apply_width();
   emit layout_changed();

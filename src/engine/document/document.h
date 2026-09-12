@@ -53,6 +53,11 @@ class Document {
   Storey& insert_storey(Storey storey);
   void remove_storey(std::uint64_t id);
   void set_active_storey(std::uint64_t id);
+  // 楼层设置：按整表替换楼层（名称 / 标高 / 层高 / 夹层）。
+  // 表里 id == 0 的条目按新增处理（就地分配 id 写回 plan），表里没有的楼层按删除
+  // 处理，id 非 0 但当前不存在的按"恢复"处理（撤销用，保留原 id）。
+  // 标高变了的楼层，挂在其下的构件跟着动（相对偏移不变）。
+  void apply_storey_plan(std::vector<Storey>& plan);
   // 按 Location 刷新实体造型放置缓存、场景变换及楼层归属。
   bool sync_entity_location(std::uint64_t entity_id);
   // 将构件当前世界标高换算为当前楼层的相对偏移。
@@ -349,6 +354,8 @@ class Document {
   void unregister_mesh_hash(const MeshAsset& asset);
   [[nodiscard]] bool mesh_referenced(std::uint64_t id) const;
   void drop_unref_mesh(std::uint64_t id);
+  // 楼层标高变了以后，把挂在该层的构件按新标高重摆（不逐件 recompute）。
+  void resync_storey_children(std::uint64_t storey_id);
   [[nodiscard]] std::function<Result<MeshCpu>()> make_tess_fn(std::uint64_t geometry_id,
                                                              MeshLod lod) const;
 

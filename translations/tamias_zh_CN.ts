@@ -108,17 +108,13 @@
         <source>Rectangles</source>
         <translation>矩形</translation>
     </message>
-    <message>
-        <source>All Floors</source>
-        <translation>全部楼层</translation>
-    </message>
-    <message>
-        <source>No floors in this model</source>
-        <translation>当前模型没有楼层</translation>
-    </message>
 </context>
 <context>
     <name>tamias::ViewportToolPanel</name>
+    <message>
+        <source>Show or hide floors, and set floor heights</source>
+        <translation>按楼层显隐，并设置层高</translation>
+    </message>
     <message>
         <source>Switch between 2D top view (Y up) and 3D perspective</source>
         <translation>在二维俯视（Y 朝上）与三维透视之间切换</translation>
@@ -134,10 +130,6 @@
     <message>
         <source>Show or hide components by category</source>
         <translation>按类别显示或隐藏构件</translation>
-    </message>
-    <message>
-        <source>Filter by floor</source>
-        <translation>按楼层过滤</translation>
     </message>
     <message>
         <source>Fit All</source>
@@ -1221,6 +1213,14 @@ Meshes / textures: %2
     <message>
         <source>Show or hide components by category</source>
         <translation>按类别显示或隐藏构件</translation>
+    </message>
+    <message>
+        <source>Floors</source>
+        <translation>楼层</translation>
+    </message>
+    <message>
+        <source>Show or hide floors, and set floor heights</source>
+        <translation>按楼层显隐，并设置层高</translation>
     </message>
 </context>
 <context>
@@ -3423,6 +3423,144 @@ Export the drawing to DXF, SVG or an image, or rebuild with Qt6::Pdf available.<
     <message>
         <source>Frame This Category</source>
         <translation>缩放到这一类</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::FloorPanel</name>
+    <message>
+        <source>Current floor</source>
+        <translation>当前楼层</translation>
+    </message>
+    <message>
+        <source>Floor Settings</source>
+        <translation>楼层设置</translation>
+    </message>
+    <message>
+        <source>Floor</source>
+        <translation>楼层</translation>
+    </message>
+    <message>
+        <source>Elevation</source>
+        <translation>标高</translation>
+    </message>
+    <message>
+        <source>Floor Height</source>
+        <translation>层高</translation>
+    </message>
+    <message>
+        <source>Show All</source>
+        <translation>显示全部</translation>
+    </message>
+    <message>
+        <source>Clear hidden, isolated and floor filters</source>
+        <translation>清除全部可见性过滤（隐藏、隔离、楼层）</translation>
+    </message>
+    <message>
+        <source>Open a model document to show or hide its floors here.</source>
+        <translation>打开模型文档后，可在这里按楼层显隐。</translation>
+    </message>
+    <message>
+        <source>Unassigned</source>
+        <translation>未指定</translation>
+    </message>
+    <message>
+        <source>[Mezzanine] %1</source>
+        <translation>[夹层] %1</translation>
+    </message>
+    <message>
+        <source>Inferred from geometry: this model has no floor records yet.</source>
+        <translation>按几何标高推出：当前模型还没有楼层记录。</translation>
+    </message>
+    <message>
+        <source>Click to make this the current floor; untick to hide it.</source>
+        <translation>单击设为当前楼层；取消勾选即隐藏该层。</translation>
+    </message>
+    <message>
+        <source>This model has no floors yet. Use Floor Settings to add them.</source>
+        <translation>当前模型还没有楼层，点「楼层设置」新建。</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::FloorSettingsDialog</name>
+    <message>
+        <source>Floor Settings</source>
+        <translation>楼层设置</translation>
+    </message>
+    <message>
+        <source>Floor</source>
+        <translation>楼层</translation>
+    </message>
+    <message>
+        <source>Elevation</source>
+        <translation>标高</translation>
+    </message>
+    <message>
+        <source>Floor Height</source>
+        <translation>层高</translation>
+    </message>
+    <message>
+        <source>Type</source>
+        <translation>类型</translation>
+    </message>
+    <message>
+        <source>Add Floor</source>
+        <translation>添加楼层</translation>
+    </message>
+    <message>
+        <source>Add a full storey above the topmost floor</source>
+        <translation>在最高一层上面加一整层</translation>
+    </message>
+    <message>
+        <source>Add Mezzanine</source>
+        <translation>添加夹层</translation>
+    </message>
+    <message>
+        <source>Insert a mezzanine between the selected floor and the one above it</source>
+        <translation>在选中楼层与其上一层之间插入夹层</translation>
+    </message>
+    <message>
+        <source>Remove</source>
+        <translation>删除</translation>
+    </message>
+    <message>
+        <source>Remove the selected floor (its components stay where they are)</source>
+        <translation>删除选中楼层（其上的构件留在原处，改为未指定）</translation>
+    </message>
+    <message>
+        <source>Elevation and floor height are in metres. Changing a floor height moves the floors stacked above it; a mezzanine is a shorter floor inserted between two floors, and lifts the floors above it.</source>
+        <translation>标高与层高单位为米。改层高时，紧贴其上叠放的楼层跟着移动；夹层是插在两层之间的矮层，会把上面的楼层整体抬高。</translation>
+    </message>
+    <message>
+        <source>Mezzanine</source>
+        <translation>夹层</translation>
+    </message>
+    <message>
+        <source>Top of this floor: %1 m</source>
+        <translation>本层顶标高：%1 m</translation>
+    </message>
+    <message>
+        <source>Floor elevation</source>
+        <translation>楼层标高</translation>
+    </message>
+    <message>
+        <source>Floor %1</source>
+        <translation>楼层 %1</translation>
+    </message>
+    <message>
+        <source>Mezzanine %1</source>
+        <translation>夹层 %1</translation>
+    </message>
+    <message>
+        <source>Every floor needs a name.</source>
+        <translation>每层都要有名称。</translation>
+    </message>
+    <message>
+        <source>Floor names must be unique: %1</source>
+        <translation>楼层名称不能重复：%1</translation>
+    </message>
+    <message>
+        <source>Two floors cannot share the same elevation: %1 m</source>
+        <translation>两层不能共用同一标高：%1 m</translation>
     </message>
 </context>
 </TS>

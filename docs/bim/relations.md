@@ -94,7 +94,7 @@ SetFeatureParamCommand
 
 ## 4. 进 .tdoc
 
-`.tdoc` 格式版本 **15**。`RELA` chunk：
+`.tdoc` 格式版本 **16**。`RELA` chunk：
 
 ```
 next_relation_id : u64

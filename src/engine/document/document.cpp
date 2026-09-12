@@ -9,6 +9,7 @@
 #include "entity/kind_display_color.h"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 
 namespace tamias {
@@ -136,6 +137,68 @@ void Document::remove_storey(std::uint64_t id) {
 void Document::set_active_storey(std::uint64_t id) {
   bim_.set_active_storey_id(id);
   mark_dirty();
+}
+
+void Document::apply_storey_plan(std::vector<Storey>& plan) {
+  // 1. 删掉不在表里的楼层（构件留在世界里，改成未归属）。
+  std::vector<std::uint64_t> doomed;
+  for (const Storey& storey : bim_.storeys()) {
+    const bool keep = std::any_of(plan.begin(), plan.end(), [&storey](const Storey& wanted) {
+      return wanted.id != 0 && wanted.id == storey.id;
+    });
+    if (!keep) {
+      doomed.push_back(storey.id);
+    }
+  }
+  for (const std::uint64_t id : doomed) {
+    remove_storey(id);
+  }
+
+  // 2. 新增 / 恢复 / 改参数。
+  bool moved = false;
+  bool renamed = false;
+  for (Storey& wanted : plan) {
+    if (wanted.id == 0) {
+      wanted.id = add_storey(wanted.name, wanted.elevation).id;
+    } else if (bim_.find_storey(wanted.id) == nullptr) {
+      insert_storey(wanted);
+    }
+    Storey* stored = bim_.find_storey(wanted.id);
+    if (stored == nullptr) {
+      continue;
+    }
+    const bool elevation_changed = std::abs(stored->elevation - wanted.elevation) > 1e-9;
+    renamed = renamed || stored->name != wanted.name;
+    stored->name = wanted.name;
+    stored->elevation = wanted.elevation;
+    stored->height = wanted.height > 0.0 ? wanted.height : kDefaultWallHeight;
+    stored->mezzanine = wanted.mezzanine;
+    if (SceneNode* node = scene_.find(wanted.id)) {
+      node->name = wanted.name;
+    }
+    if (elevation_changed) {
+      moved = true;
+      resync_storey_children(wanted.id);
+    }
+  }
+
+  if (moved || renamed) {
+    recompute_scene();
+    mark_dirty();
+  }
+}
+
+void Document::resync_storey_children(std::uint64_t storey_id) {
+  const double elevation = bim_.storey_elevation(storey_id);
+  for (auto& [unused, entity_ptr] : entities_) {
+    (void)unused;
+    if (entity_ptr == nullptr || !entity_ptr->location ||
+        entity_ptr->location->storey_id() != storey_id) {
+      continue;
+    }
+    entity_ptr->sync_from_location(elevation);
+    scene_.set_transform(entity_ptr->id, entity_ptr->local_transform);
+  }
 }
 
 void Document::assign_active_storey(Entity& entity) {

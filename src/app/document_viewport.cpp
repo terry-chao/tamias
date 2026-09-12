@@ -7,6 +7,7 @@
 #include "command/import_texture_command.h"
 #include "command/replace_texture_command.h"
 #include "command/update_material_command.h"
+#include "command/update_storeys_command.h"
 #include "component_specs.h"
 #include "engine/core/log.h"
 #include "engine/math/grid.h"
@@ -21,16 +22,13 @@
 #endif
 
 #include <QAction>
-#include <QActionGroup>
 #include <QCoreApplication>
 #include <QCursor>
 #include <QIcon>
-#include <QInputDialog>
 #include <QKeyEvent>
 #include <QKeySequence>
 #include <QHBoxLayout>
 #include <QLayout>
-#include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
 #include <QMouseEvent>
@@ -137,8 +135,6 @@ DocumentViewport::DocumentViewport(std::shared_ptr<Document> document,
           [this](bool plan) { set_plan_view(plan); });
   connect(tool_panel_, &ViewportToolPanel::frame_all_clicked, this,
           &DocumentViewport::frame_scene);
-  connect(tool_panel_, &ViewportToolPanel::floor_menu_about_to_show, this,
-          &DocumentViewport::populate_floor_menu);
   connect(tool_panel_, &ViewportToolPanel::layout_changed, this, [this] {
     layout_overlays();
     request_redraw();  // 三维区域宽度变了，宽高比要重算
@@ -1727,7 +1723,7 @@ void DocumentViewport::show_all_visible() {
   hidden_ids_.clear();
   isolated_ids_.clear();
   hidden_kinds_.clear();
-  active_floor_ = -1;  // "全部显示"就是真的全部：楼层过滤也复位
+  hidden_floors_.clear();  // "全部显示"就是真的全部：楼层过滤也复位
   request_redraw();
   emit visibility_changed();
 }
@@ -1875,12 +1871,18 @@ std::unordered_set<EntityKind> DocumentViewport::isolated_kinds() const {
 
 bool DocumentViewport::has_active_filter() const {
   return !hidden_ids_.empty() || !isolated_ids_.empty() || !hidden_kinds_.empty() ||
-         active_floor_ >= 0;
+         !hidden_floors_.empty();
 }
 
 void DocumentViewport::toggle_visibility_panel() {
   if (tool_panel_ != nullptr) {
     tool_panel_->toggle_visibility_page();
+  }
+}
+
+void DocumentViewport::toggle_floor_panel() {
+  if (tool_panel_ != nullptr) {
+    tool_panel_->toggle_floor_page();
   }
 }
 
@@ -1894,24 +1896,48 @@ std::vector<std::uint64_t> DocumentViewport::imported_node_ids() const {
   return ids;
 }
 
-void DocumentViewport::set_active_floor(int index) {
-  refresh_floors();
-  if (index >= static_cast<int>(floors_.size())) {
-    index = -1;
+void DocumentViewport::refresh_floors() {
+  floors_ = infer_viewport_floors(*document_);
+  // 楼层表变了（增 / 删 / 重排）以后，按下标记的隐藏集合会错位：丢掉够不到的项。
+  for (auto it = hidden_floors_.begin(); it != hidden_floors_.end();) {
+    if (*it < 0 || *it >= static_cast<int>(floors_.size())) {
+      it = hidden_floors_.erase(it);
+    } else {
+      ++it;
+    }
   }
-  if (active_floor_ == index) {
+}
+
+std::vector<ViewportFloor> DocumentViewport::floors() {
+  refresh_floors();
+  return floors_;
+}
+
+bool DocumentViewport::floor_hidden(std::size_t index) const {
+  return hidden_floors_.count(static_cast<int>(index)) != 0;
+}
+
+void DocumentViewport::set_floor_hidden(std::size_t index, bool hidden) {
+  refresh_floors();
+  if (index >= floors_.size()) {
     return;
   }
-  active_floor_ = index;
+  const bool changed = hidden ? hidden_floors_.insert(static_cast<int>(index)).second
+                              : hidden_floors_.erase(static_cast<int>(index)) != 0;
+  if (!changed) {
+    return;
+  }
   request_redraw();
   emit visibility_changed();
 }
 
-void DocumentViewport::refresh_floors() {
-  floors_ = infer_viewport_floors(*document_);
-  if (active_floor_ >= static_cast<int>(floors_.size())) {
-    active_floor_ = -1;
+void DocumentViewport::clear_floor_filter() {
+  if (hidden_floors_.empty()) {
+    return;
   }
+  hidden_floors_.clear();
+  request_redraw();
+  emit visibility_changed();
 }
 
 bool DocumentViewport::node_visible_in_view(std::uint64_t id) const {
@@ -1925,85 +1951,41 @@ bool DocumentViewport::node_visible_in_view(std::uint64_t id) const {
   if (entity != nullptr && hidden_kinds_.count(entity->kind()) != 0) {
     return false;
   }
-  if (active_floor_ >= 0 && active_floor_ < static_cast<int>(floors_.size())) {
+  if (!hidden_floors_.empty()) {
     const SceneNode* node = document_->scene().find(id);
-    if (node != nullptr &&
-        !viewport_floor_contains(floors_[static_cast<std::size_t>(active_floor_)],
-                                 node->world_bounds)) {
-      return false;
+    if (node != nullptr) {
+      // 跨层的构件（墙、柱、导入网格）只要碰到任意一个可见楼层就还看得见。
+      bool visible = false;
+      for (std::size_t i = 0; i < floors_.size(); ++i) {
+        if (hidden_floors_.count(static_cast<int>(i)) != 0) {
+          continue;
+        }
+        if (viewport_floor_contains(floors_[i], node->world_bounds)) {
+          visible = true;
+          break;
+        }
+      }
+      if (!visible) {
+        return false;
+      }
     }
   }
   return true;
 }
 
-void DocumentViewport::populate_floor_menu() {
-  if (tool_panel_ == nullptr) {
+void DocumentViewport::apply_storey_settings(std::vector<Storey> storeys,
+                                             std::uint64_t active_storey_id) {
+  auto cmd = std::make_unique<UpdateStoreysCommand>(*document_, std::move(storeys),
+                                                   active_storey_id);
+  if (auto r = cmd->execute(); !r) {
+    log_error(r.error());
     return;
   }
+  command_system_.push_executed(std::move(cmd));
   refresh_floors();
-  QMenu* menu = tool_panel_->floor_menu();
-  menu->clear();
-
-  QAction* current_header = menu->addAction(tr("Current Storey"));
-  current_header->setEnabled(false);
-  auto* storey_group = new QActionGroup(menu);
-  storey_group->setExclusive(true);
-  QAction* unassigned = menu->addAction(tr("Unassigned"));
-  unassigned->setCheckable(true);
-  unassigned->setChecked(document_->bim().active_storey_id() == 0);
-  storey_group->addAction(unassigned);
-  connect(unassigned, &QAction::triggered, this, [this] { set_active_storey(0); });
-  for (const Storey& storey : document_->bim().storeys()) {
-    QAction* action = menu->addAction(
-        tr("%1  (%2 m)").arg(QString::fromStdString(storey.name)).arg(storey.elevation, 0, 'f', 3));
-    action->setCheckable(true);
-    action->setChecked(document_->bim().active_storey_id() == storey.id);
-    storey_group->addAction(action);
-    connect(action, &QAction::triggered, this,
-            [this, id = storey.id] { set_active_storey(id); });
-  }
-  QAction* create = menu->addAction(tr("New Storey..."));
-  connect(create, &QAction::triggered, this, [this] {
-    bool accepted = false;
-    const QString name =
-        QInputDialog::getText(this, tr("New Storey"), tr("Name"), QLineEdit::Normal,
-                              tr("Storey"), &accepted);
-    if (!accepted || name.trimmed().isEmpty()) {
-      return;
-    }
-    const double elevation =
-        QInputDialog::getDouble(this, tr("New Storey"), tr("Elevation (m)"), 0.0,
-                                -1000000.0, 1000000.0, 3, &accepted);
-    if (accepted) {
-      create_storey(name.trimmed().toStdString(), elevation);
-    }
-  });
-
-  menu->addSeparator();
-  QAction* filter_header = menu->addAction(tr("Visibility Filter"));
-  filter_header->setEnabled(false);
-  auto* group = new QActionGroup(menu);
-  group->setExclusive(true);
-
-  QAction* all = menu->addAction(tr("All Floors"));
-  all->setCheckable(true);
-  all->setChecked(active_floor_ < 0);
-  group->addAction(all);
-  connect(all, &QAction::triggered, this, [this] { set_active_floor(-1); });
-
-  if (floors_.empty()) {
-    QAction* empty = menu->addAction(tr("No floors in this model"));
-    empty->setEnabled(false);
-    return;
-  }
-  menu->addSeparator();
-  for (int i = 0; i < static_cast<int>(floors_.size()); ++i) {
-    QAction* act = menu->addAction(QString::fromStdString(floors_[static_cast<std::size_t>(i)].label));
-    act->setCheckable(true);
-    act->setChecked(active_floor_ == i);
-    group->addAction(act);
-    connect(act, &QAction::triggered, this, [this, i] { set_active_floor(i); });
-  }
+  request_redraw();
+  emit document_changed();
+  emit visibility_changed();
 }
 
 bool DocumentViewport::pick_grip_at(const QPoint& pos, EntityGrip& out) const {

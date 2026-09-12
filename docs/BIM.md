@@ -65,6 +65,7 @@ BIM 业务层就是 [MCAD 与 BIM](DECISION-MCAD-BIM.md) 里说的那层**域分
 | 对象 | 含义 | 在树上的落法 |
 |---|---|---|
 | 空间结构 | 项目 → 场地 → 建筑 → 楼层（对齐 IFC `IfcBuildingStorey` 那一截） | 楼层 = **分组节点**（`mesh_asset_id = 0`） |
+| 层高 / 夹层 | 一层的净高、夹在两整层之间的矮层 | 楼层记录上的 `height` / `mezzanine`；夹层也是楼层，只是标高落在两层之间 |
 | 当前标高 | 会话/文档上的「正在画哪一层」 | 不是 Scene 字段；`BimModel` 持有 `active_storey_id` |
 | 墙梁板柱门窗 | 放置、归属楼层、后改宿主 | 叶子节点；`parent` 指向楼层（或门窗指向宿主墙） |
 | 轴网 | 定位参考，不是实体构件 | 数据在本层；显示走 overlay；**尚未实现** |
@@ -91,7 +92,22 @@ BIM 业务层就是 [MCAD 与 BIM](DECISION-MCAD-BIM.md) 里说的那层**域分
 
 ---
 
-## 5. 没指定楼层时怎么办
+## 5. 楼层设置（已实现）
+
+「楼层面板 → 楼层设置」（`floor_settings_dialog`）改的是一张表：名称 / 标高 / 层高 / 楼层或夹层。确定时整表交给 `UpdateStoreysCommand`（`apply_storey_plan`），一条命令一步撤销：
+
+1. 表里没有的楼层按删除处理——构件留在原处，改成未归属（`elevation_offset` 保留世界标高）。
+2. 表里 `id == 0` 的条目按新增处理；撤销再重做复用同一批句柄，不换 id。
+3. 标高变了的楼层，挂在其下的构件跟着动（相对偏移不变）。
+4. 改层高会把紧贴其上、按标高叠放的楼层一起挪（顶标高对齐）；夹层 = 插在两层之间的矮层，上面的楼层整体抬高。
+
+按楼层显隐不写文档：楼层面板勾选/取消只改视口的隐藏集合，跨层构件碰到任意一个可见楼层就还看得见。楼层带（`viewport_floor.h`）按标高算：本层到上一层，顶层用 `elevation + height`。
+
+落盘：`.tdoc` 格式版本升到 **16**，`STRY` chunk 每层多两个字段（层高 f64、夹层 bool）。版本 < 16 的文件照常打开，层高按默认 3.0 m 补、夹层为否。
+
+---
+
+## 6. 没指定楼层时怎么办
 
 没有当前楼层时，构件挂在根上。这是合法的「未归属」，不是 bug。宿主关联不依赖楼层。
 
@@ -113,7 +129,7 @@ Scene 根                Building
 
 ---
 
-## 6. 和现有代码的接缝
+## 7. 和现有代码的接缝
 
 今天墙的入树口（[document.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.cpp)）不碰 BIM：
 
@@ -144,10 +160,10 @@ CreatePrimitiveCommand（窗/门）
 src/bim/relation_kind.h     // RelationKind
 src/bim/host_placement.h    // HostPlacement
 src/bim/relation.h          // Relation
-src/bim/bim_model.h         // 关系表；将来楼层/轴网也挂这里
+src/bim/bim_model.h         // 关系表 + 楼层表；轴网将来也挂这里
 src/bim/host_geometry.h     // 墙框、开口尺寸、对齐、合法性
 src/bim/host_update.h       // notify / bind
-src/bim/storey.h            // 尚未实现
+src/bim/storey.h            // 楼层：名称 / 标高 / 层高 / 夹层
 src/bim/grid.h              // 尚未实现
 ```
 
@@ -155,7 +171,7 @@ src/bim/grid.h              // 尚未实现
 
 ---
 
-## 7. 深度边界（中浅）
+## 8. 深度边界（中浅）
 
 本层**要做**的上限：
 

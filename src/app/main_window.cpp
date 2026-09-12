@@ -738,6 +738,18 @@ MainWindow::MainWindow(QWidget* parent)
   });
   addAction(components_action);
   panels_group->add_action(components_action);
+  // 楼层面板同样住在视口右侧的工具列里（同一列的第二个功能页）。
+  auto* floors_action =
+      new QAction(ribbon_icon(QStringLiteral(":/icons/storey.svg")), tr("Floors"), this);
+  floors_action->setShortcut(QKeySequence(tr("Ctrl+Shift+L")));
+  floors_action->setToolTip(tr("Show or hide floors, and set floor heights"));
+  connect(floors_action, &QAction::triggered, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->toggle_floor_panel();
+    }
+  });
+  addAction(floors_action);
+  panels_group->add_action(floors_action);
   panels_group->add_action(draw_toggle_);
   panels_group->add_action(property_toggle);
   panels_group->add_action(texture_toggle);

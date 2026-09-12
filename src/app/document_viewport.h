@@ -77,8 +77,17 @@ class DocumentViewport final : public QWidget {
   [[nodiscard]] bool is_isolating() const { return !isolated_ids_.empty(); }
   [[nodiscard]] std::unordered_set<EntityKind> isolated_kinds() const;
   [[nodiscard]] bool has_active_filter() const;
+  // ==== 按楼层显隐（楼层面板用；勾选 = 显示）====
+  // 楼层带（标高 / 层高 / 夹层）按文档里的楼层重算，没有楼层记录的模型按几何标高临时分层。
+  [[nodiscard]] std::vector<ViewportFloor> floors();
+  [[nodiscard]] bool floor_hidden(std::size_t index) const;
+  void set_floor_hidden(std::size_t index, bool hidden);
+  void clear_floor_filter();
+  [[nodiscard]] bool has_floor_filter() const { return !hidden_floors_.empty(); }
   // 开合视口右上角工具面板里的"构件显隐"页（Ribbon / 快捷键走这里）。
   void toggle_visibility_panel();
+  // 开合同一列的"楼层"页（Ribbon / 快捷键走这里）。
+  void toggle_floor_panel();
   [[nodiscard]] ViewportState capture_viewport_state() const;
   [[nodiscard]] RenderScene::View capture_render_scene_view() const;
   [[nodiscard]] std::vector<std::uint64_t> capture_hidden_node_ids() const;
@@ -102,6 +111,8 @@ class DocumentViewport final : public QWidget {
   void update_library_material(const Material& material);
   void create_storey(const std::string& name, double elevation);
   void set_active_storey(std::uint64_t storey_id);
+  // 楼层设置对话框的落点：整表替换楼层（可撤销）。
+  void apply_storey_settings(std::vector<Storey> storeys, std::uint64_t active_storey_id);
   void set_entity_location(std::uint64_t entity_id, std::uint64_t storey_id,
                            double elevation_offset);
   // 给选中实体追加倒圆角 / 倒斜角特征（走 fillet/chamfer 命令，可撤销）。
@@ -156,9 +167,7 @@ class DocumentViewport final : public QWidget {
   void start_view_animation(float target_yaw, float target_pitch,
                            bool finish_orthographic = false);
   void stop_view_animation();
-  void populate_floor_menu();
   void refresh_floors();
-  void set_active_floor(int index);
   [[nodiscard]] bool node_visible_in_view(std::uint64_t id) const;
   // 导入网格（无 Entity 的 SceneNode）的节点 id。
   [[nodiscard]] std::vector<std::uint64_t> imported_node_ids() const;
@@ -240,7 +249,7 @@ class DocumentViewport final : public QWidget {
   std::unordered_set<std::uint64_t> isolated_ids_;
   std::unordered_set<EntityKind> hidden_kinds_;
   std::vector<ViewportFloor> floors_;
-  int active_floor_ = -1;  // -1 = all floors
+  std::unordered_set<int> hidden_floors_;  // 空 = 全部楼层可见
   std::uint64_t last_submitted_scene_generation_ = 0;  // 脏标记游标（见 Scene::dirty_since）
   bool plan_view_ = false;
   // 绘制面板最近一次武装的参数（连续绘制同类型构件时复用，避免回退到硬编码默认）。

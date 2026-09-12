@@ -42,6 +42,8 @@ add_executable(tamias
   viewport_tool_panel.cpp
   entity_kind_catalog.cpp
   visibility_panel.cpp
+  floor_panel.cpp
+  floor_settings_dialog.cpp
   theme.cpp
   rhi_backends.cpp
   resources.qrc

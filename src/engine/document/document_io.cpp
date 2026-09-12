@@ -24,7 +24,7 @@ namespace tamias {
 namespace {
 
 constexpr char kMagic[4] = {'T', 'M', 'A', 'S'};
-constexpr std::uint32_t kFormatVersion = 15;
+constexpr std::uint32_t kFormatVersion = 16;
 constexpr std::uint32_t kMinFormatVersion = 5;
 constexpr std::uint32_t kGripsFormatVersion = 7;
 constexpr std::uint32_t kLocationFormatVersion = 8;
@@ -34,6 +34,7 @@ constexpr std::uint32_t kTextureMetaFormatVersion = 11;
 constexpr std::uint32_t kTextureTransformFormatVersion = 12;
 constexpr std::uint32_t kBuiltinOrmFormatVersion = 13;
 constexpr std::uint32_t kDoorHandleSideFormatVersion = 14;
+constexpr std::uint32_t kStoreyHeightFormatVersion = 16;
 
 constexpr std::uint32_t fourcc(char a, char b, char c, char d) {
   return static_cast<std::uint32_t>(static_cast<std::uint8_t>(a)) |
@@ -811,10 +812,16 @@ Result<void> write_storey(BinaryWriter& w, const Storey& storey) {
   if (auto r = w.write_string(storey.name); !r) {
     return r;
   }
-  return w.write_f64(storey.elevation);
+  if (auto r = w.write_f64(storey.elevation); !r) {
+    return r;
+  }
+  if (auto r = w.write_f64(storey.height); !r) {
+    return r;
+  }
+  return w.write_bool(storey.mezzanine);
 }
 
-Result<void> read_storey(BinaryReader& r, Storey& storey) {
+Result<void> read_storey(BinaryReader& r, Storey& storey, std::uint32_t version) {
   auto id = r.read_u64();
   if (!id) {
     return Err(id.error());
@@ -827,7 +834,23 @@ Result<void> read_storey(BinaryReader& r, Storey& storey) {
   if (!elevation) {
     return Err(elevation.error());
   }
-  storey = {*id, std::move(*name), *elevation};
+  Storey loaded;
+  loaded.id = *id;
+  loaded.name = std::move(*name);
+  loaded.elevation = *elevation;
+  if (version >= kStoreyHeightFormatVersion) {
+    auto height = r.read_f64();
+    if (!height) {
+      return Err(height.error());
+    }
+    auto mezzanine = r.read_bool();
+    if (!mezzanine) {
+      return Err(mezzanine.error());
+    }
+    loaded.height = *height > 0.0 ? *height : kDefaultWallHeight;
+    loaded.mezzanine = *mezzanine;
+  }
+  storey = std::move(loaded);
   return {};
 }
 
@@ -1190,7 +1213,7 @@ Result<Document> read_document_body(BinaryReader& r) {
     }
     for (std::uint64_t i = 0; i < *storey_count; ++i) {
       Storey storey{};
-      if (auto res = read_storey(r, storey); !res) {
+      if (auto res = read_storey(r, storey, kFormatVersion); !res) {
         return Err(res.error());
       }
       document.bim().insert_storey(std::move(storey));
@@ -1635,7 +1658,7 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes,
       storeys.reserve(static_cast<std::size_t>(*count));
       for (std::uint64_t n = 0; n < *count; ++n) {
         Storey storey{};
-        if (auto res = read_storey(chunk_r, storey); !res) {
+        if (auto res = read_storey(chunk_r, storey, *version); !res) {
           return Err(res.error());
         }
         storeys.push_back(std::move(storey));
