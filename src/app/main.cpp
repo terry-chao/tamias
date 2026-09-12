@@ -12,6 +12,8 @@
 #include <QApplication>
 #include <QIcon>
 #include <QString>
+#include <QStringList>
+#include <QTimer>
 
 #include <string>
 
@@ -55,7 +57,18 @@ int main(int argc, char* argv[]) {
   int code = 0;
   {
     tamias::MainWindow window;
+    QStringList startup_paths;
+    const QStringList arguments = QCoreApplication::arguments();
+    for (int i = 1; i < arguments.size(); ++i) {
+      if (!arguments[i].startsWith(QLatin1Char('-'))) {
+        startup_paths.push_back(arguments[i]);
+      }
+    }
     window.show();
+    if (!startup_paths.isEmpty()) {
+      QTimer::singleShot(0, &window,
+                         [&window, startup_paths] { window.open_paths(startup_paths); });
+    }
     code = app.exec();
   }
   tamias::RenderThreadPool::instance().shutdown();

@@ -292,7 +292,7 @@ HomePage::HomePage(QWidget* parent) : QWidget(parent) {
   section->setObjectName(QStringLiteral("homeSection"));
   section_row->addWidget(section);
   section_row->addStretch(1);
-  auto* section_hint = new QLabel(tr("Click to open · Right-click for more"), body);
+  auto* section_hint = new QLabel(tr("Double-click to open · Right-click for more"), body);
   section_hint->setObjectName(QStringLiteral("homeSectionHint"));
   section_row->addWidget(section_hint);
   body_layout->addLayout(section_row);
@@ -310,7 +310,7 @@ HomePage::HomePage(QWidget* parent) : QWidget(parent) {
   recent_list_->setSelectionMode(QAbstractItemView::SingleSelection);
   recent_list_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   recent_list_->setContextMenuPolicy(Qt::CustomContextMenu);
-  connect(recent_list_, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {
+  connect(recent_list_, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* item) {
     if (!item) {
       return;
     }

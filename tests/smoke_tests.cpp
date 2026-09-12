@@ -1805,6 +1805,25 @@ TEST(DocumentIo, LoadDocumentBytesRoundTrip) {
   EXPECT_FALSE(loaded->document.render_items().empty());
 }
 
+TEST(DocumentIo, LoadDocumentReportsProgress) {
+  Document doc("progress");
+  doc.add_import_mesh("cube", make_demo_cube(), Mat4::identity(), {0.7f, 0.7f, 0.7f});
+  const auto path = std::filesystem::temp_directory_path() / "tamias_progress_io.tdoc";
+  ViewportState view{};
+  ASSERT_TRUE(save_document(path, doc, view)) << "save_document failed";
+
+  std::vector<float> progress;
+  auto loaded = load_document(path, [&progress](float value) { progress.push_back(value); });
+  ASSERT_TRUE(loaded) << loaded.error();
+  EXPECT_FALSE(progress.empty());
+  EXPECT_FLOAT_EQ(progress.front(), 0.0f);
+  EXPECT_FLOAT_EQ(progress.back(), 1.0f);
+  EXPECT_TRUE(std::is_sorted(progress.begin(), progress.end()));
+
+  std::error_code ec;
+  std::filesystem::remove(path, ec);
+}
+
 TEST(DocumentIo, MigratesLegacyDoorHandleOnLoad) {
   DoorEntity legacy_door;
   legacy_door.name = "door";

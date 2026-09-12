@@ -52,6 +52,12 @@ constexpr std::uint32_t kChunkTex = fourcc('T', 'E', 'X', 'T');
 constexpr std::uint32_t kChunkRela = fourcc('R', 'E', 'L', 'A');
 constexpr std::uint32_t kChunkStry = fourcc('S', 'T', 'R', 'Y');
 
+void report_load_progress(const LoadProgressCallback& progress, float value) {
+  if (progress) {
+    progress(std::clamp(value, 0.0f, 1.0f));
+  }
+}
+
 Result<void> write_vec3(BinaryWriter& w, const Vec3& v) {
   if (auto r = w.write_f32(v.x); !r) {
     return r;
@@ -1431,7 +1437,9 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
   return {};
 }
 
-Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes) {
+Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes,
+                                           const LoadProgressCallback& progress) {
+  report_load_progress(progress, 0.0f);
   BinaryReader reader(bytes);
   char magic[4]{};
   if (auto r = reader.read_bytes(magic, 4); !r) {
@@ -1640,6 +1648,10 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes) 
     } else {
       // Unknown chunk: already consumed via read_bytes into chunk; skip.
     }
+    if (*chunk_count > 0) {
+      report_load_progress(
+          progress, 0.9f * static_cast<float>(i + 1) / static_cast<float>(*chunk_count));
+    }
   }
 
   if (!has_meta || !has_mesh || !has_scen) {
@@ -1680,10 +1692,12 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes) 
   loaded.document.clear_dirty();
   loaded.viewport = viewport;
   loaded.has_viewport = has_view;
+  report_load_progress(progress, 1.0f);
   return loaded;
 }
 
-Result<LoadedDocument> load_document(const std::filesystem::path& path) {
+Result<LoadedDocument> load_document(const std::filesystem::path& path,
+                                     const LoadProgressCallback& progress) {
   std::ifstream in(path, std::ios::binary);
   if (!in) {
     return Err("Failed to open file: " + path_to_utf8(path));
@@ -1692,13 +1706,26 @@ Result<LoadedDocument> load_document(const std::filesystem::path& path) {
   const auto file_size = static_cast<std::size_t>(in.tellg());
   in.seekg(0, std::ios::beg);
   std::vector<std::uint8_t> bytes(file_size);
+  report_load_progress(progress, 0.0f);
   if (file_size > 0) {
-    in.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(file_size));
-    if (!in) {
-      return Err("Failed to read file: " + path_to_utf8(path));
+    constexpr std::size_t kReadChunkBytes = 4u * 1024u * 1024u;
+    std::size_t read_total = 0;
+    while (read_total < file_size) {
+      const std::size_t chunk = std::min(kReadChunkBytes, file_size - read_total);
+      in.read(reinterpret_cast<char*>(bytes.data() + read_total),
+              static_cast<std::streamsize>(chunk));
+      if (!in) {
+        return Err("Failed to read file: " + path_to_utf8(path));
+      }
+      read_total += chunk;
+      report_load_progress(
+          progress,
+          0.45f * static_cast<float>(read_total) / static_cast<float>(file_size));
     }
   }
-  auto loaded = load_document_bytes(bytes);
+  auto loaded = load_document_bytes(bytes, [&progress](float fraction) {
+    report_load_progress(progress, 0.45f + 0.55f * fraction);
+  });
   if (!loaded) {
     return loaded;
   }

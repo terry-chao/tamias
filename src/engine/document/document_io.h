@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <span>
 #include <vector>
 
@@ -35,15 +36,20 @@ struct LoadedDocument {
   bool has_viewport = false;
 };
 
+// Reports monotonic load progress in [0, 1], synchronously on the calling thread.
+using LoadProgressCallback = std::function<void(float)>;
+
 // In-memory document body (no file wrapper / no viewport). Used by undo history.
 Result<std::vector<std::uint8_t>> serialize_document(const Document& document);
 Result<Document> deserialize_document(std::span<const std::uint8_t> bytes);
 
 Result<void> save_document(const std::filesystem::path& path, const Document& document,
                            const ViewportState& viewport);
-Result<LoadedDocument> load_document(const std::filesystem::path& path);
+Result<LoadedDocument> load_document(const std::filesystem::path& path,
+                                     const LoadProgressCallback& progress = {});
 // File-format .tdoc (magic + chunks), from memory. Does not set Document::path.
-Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes);
+Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes,
+                                           const LoadProgressCallback& progress = {});
 
 [[nodiscard]] bool is_tdoc_document_path(const std::filesystem::path& path);
 

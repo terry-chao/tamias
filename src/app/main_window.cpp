@@ -35,8 +35,10 @@
 #include <QByteArray>
 #include <QAction>
 #include <QActionGroup>
+#include <QApplication>
 #include <QCloseEvent>
 #include <QCoreApplication>
+#include <QEventLoop>
 #include <QGuiApplication>
 #include <QScreen>
 #include <QShowEvent>
@@ -61,6 +63,7 @@
 #include <QPushButton>
 #include <QPixmap>
 #include <QPlainTextEdit>
+#include <QProgressDialog>
 #include <QSignalBlocker>
 #include <QSize>
 #include <QStatusBar>
@@ -70,6 +73,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -122,6 +126,51 @@ void center_on_primary_screen(QWidget* widget) {
 void reveal_path(const std::filesystem::path& path) {
   QDesktopServices::openUrl(QUrl::fromLocalFile(path_to_qstring(path)));
 }
+
+class OpenProgressDialog final {
+ public:
+  OpenProgressDialog(QWidget* parent, const QString& title, const QString& label)
+      : dialog_(title, label, 0, 100, parent) {
+    dialog_.setWindowTitle(title);
+    dialog_.setWindowModality(Qt::WindowModal);
+    dialog_.setMinimumDuration(0);
+    dialog_.setAutoClose(false);
+    dialog_.setAutoReset(false);
+    dialog_.setCancelButton(nullptr);
+    dialog_.setValue(0);
+    dialog_.show();
+    QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+  }
+
+  ~OpenProgressDialog() { close(); }
+
+  OpenProgressDialog(const OpenProgressDialog&) = delete;
+  OpenProgressDialog& operator=(const OpenProgressDialog&) = delete;
+
+  void stage(int percent, const QString& label) {
+    if (dialog_.maximum() == 0) {
+      dialog_.setRange(0, 100);
+    }
+    dialog_.setLabelText(label);
+    dialog_.setValue(std::clamp(percent, 0, 100));
+    QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+  }
+
+  void busy(const QString& label) {
+    dialog_.setLabelText(label);
+    dialog_.setRange(0, 0);
+    QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+  }
+
+  void close() {
+    if (dialog_.isVisible()) {
+      dialog_.close();
+    }
+  }
+
+ private:
+  QProgressDialog dialog_;
+};
 
 }  // namespace
 
@@ -1059,12 +1108,26 @@ int MainWindow::find_open_document(const QString& path) const {
   return -1;
 }
 
-Result<void> MainWindow::populate_document_meshes(Document& document, RenderThread& thread) {
+Result<void> MainWindow::populate_document_meshes(
+    Document& document, RenderThread& thread,
+    const UiLoadProgressCallback& progress) {
+  const int mesh_count = static_cast<int>(document.meshes().size());
+  int uploaded = 0;
   for (auto& [asset_id, asset] : document.meshes()) {
+    if (progress && mesh_count > 0) {
+      progress(uploaded * 100 / mesh_count,
+               tr("Uploading geometry (%1 / %2)…")
+                   .arg(uploaded + 1)
+                   .arg(mesh_count));
+    }
     auto gpu_id = thread.upload_mesh(asset_id, asset.cpu);
     if (!gpu_id) {
       return Err(gpu_id.error());
     }
+    ++uploaded;
+  }
+  if (progress) {
+    progress(100, tr("Preparing the scene…"));
   }
   document.recompute_scene();
   return {};
@@ -1163,7 +1226,8 @@ void MainWindow::apply_plugin_order() {
 }
 
 void MainWindow::add_document_tab(std::shared_ptr<Document> document,
-                                  const ViewportState* viewport) {
+                                  const ViewportState* viewport,
+                                  const UiLoadProgressCallback& progress) {
   const RenderDeviceConfig config = AppSettings::instance().render_device_config();
   auto thread = RenderThreadPool::instance().acquire(config);
   if (!thread) {
@@ -1173,7 +1237,7 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
             .arg(QString::fromUtf8(to_string(config.backend))));
     return;
   }
-  if (auto r = populate_document_meshes(*document, *thread); !r) {
+  if (auto r = populate_document_meshes(*document, *thread, progress); !r) {
     QMessageBox::critical(this, tr("Upload"), QString::fromStdString(r.error()));
     return;
   }
@@ -1247,34 +1311,48 @@ bool MainWindow::open_path(const QString& path) {
   }
 
   const auto file = qstring_to_path(info.absoluteFilePath());
+  OpenProgressDialog progress(this, tr("Open Project"),
+                              tr("Opening %1…").arg(info.fileName()));
+  progress.stage(3, tr("Opening %1…").arg(info.fileName()));
 
   if (DrawingDocument::is_drawing_path(path)) {
+    progress.busy(tr("Reading drawing %1…").arg(info.fileName()));
     open_drawing_tab(info.absoluteFilePath());
+    progress.stage(100, tr("Drawing opened."));
     return true;
   }
 
   if (is_render_scene_path(file)) {
+    progress.busy(tr("Reading render scene %1…").arg(info.fileName()));
     auto loaded = load_render_scene(file);
     if (!loaded) {
+      progress.close();
       QMessageBox::critical(this, tr("Open"), QString::fromStdString(loaded.error()));
       return false;
     }
+    progress.stage(82, tr("Generating preview…"));
     QString thumb_path;
     if (!loaded->meshes.empty()) {
       const QImage thumb = render_mesh_thumbnail(loaded->meshes.begin()->second);
       thumb_path = save_mesh_thumbnail(info.absoluteFilePath(), thumb);
     }
+    progress.stage(94, tr("Opening render scene…"));
     open_scene_debugger(std::move(*loaded), file, nullptr);
     recent_.add(info.absoluteFilePath(), thumb_path);
     refresh_home();
+    progress.stage(100, tr("Render scene opened."));
     statusBar()->showMessage(tr("Opened render scene in debugger: %1").arg(info.absoluteFilePath()),
                              5000);
     return true;
   }
 
   if (is_tdoc_document_path(file)) {
-    auto loaded = load_document(file);
+    auto loaded = load_document(file, [&progress, &info](float fraction) {
+      progress.stage(5 + static_cast<int>(fraction * 60.0f),
+                     tr("Reading project %1…").arg(info.fileName()));
+    });
     if (!loaded) {
+      progress.close();
       QMessageBox::critical(this, tr("Open"), QString::fromStdString(loaded.error()));
       return false;
     }
@@ -1285,8 +1363,13 @@ bool MainWindow::open_path(const QString& path) {
     // file still has an imported .obj name in META.
     document->set_path(file);
     document->set_name(path_to_utf8(file.filename()));
-    add_document_tab(document, has_viewport ? &vp_storage : nullptr);
+    progress.stage(68, tr("Uploading geometry…"));
+    add_document_tab(document, has_viewport ? &vp_storage : nullptr,
+                     [&progress](int percent, const QString& label) {
+                       progress.stage(68 + percent * 24 / 100, label);
+                     });
 
+    progress.stage(94, tr("Generating preview…"));
     const MeshCpu* thumb_mesh = nullptr;
     if (!document->meshes().empty()) {
       thumb_mesh = &document->meshes().begin()->second.cpu;
@@ -1299,16 +1382,20 @@ bool MainWindow::open_path(const QString& path) {
       recent_.add(info.absoluteFilePath(), QString());
     }
     refresh_home();
+    progress.stage(100, tr("Project opened."));
     statusBar()->showMessage(tr("Loaded %1").arg(info.absoluteFilePath()), 5000);
     return true;
   }
 
   if (info.suffix().compare(QStringLiteral("ifc"), Qt::CaseInsensitive) == 0) {
+    progress.busy(tr("Parsing IFC structure %1…").arg(info.fileName()));
     auto tree = format_ifc_spatial_tree(file);
     if (!tree) {
+      progress.close();
       QMessageBox::critical(this, tr("Open"), QString::fromStdString(tree.error()));
       return false;
     }
+    progress.close();
     QDialog dlg(this);
     dlg.setWindowTitle(tr("IFC spatial structure"));
     dlg.resize(640, 480);
@@ -1330,25 +1417,32 @@ bool MainWindow::open_path(const QString& path) {
   std::unique_ptr<Shape> cad_shape;
   std::optional<ImportedModel> imported;
   if (occt_supports_extension(file)) {
+    progress.busy(tr("Reading CAD geometry %1…").arg(info.fileName()));
     TAMIAS_TIMING_SCOPE("open_file", TimingCategory::Command);
     auto* ops = ShapeOpsRegistry::instance().find("occt");
     if (!ops) {
+      progress.close();
       QMessageBox::critical(this, tr("Open"), tr("OCCT ShapeOps is not registered."));
       return false;
     }
     auto shape = ops->read_file(file);
     if (!shape) {
+      progress.close();
       QMessageBox::critical(this, tr("Open"), QString::fromStdString(shape.error()));
       return false;
     }
     cad_shape = std::move(*shape);
+    progress.stage(45, tr("Preparing CAD geometry…"));
   } else {
+    progress.busy(tr("Reading mesh %1…").arg(info.fileName()));
     auto model = load_mesh_model(file);
     if (!model) {
+      progress.close();
       QMessageBox::critical(this, tr("Open"), QString::fromStdString(model.error()));
       return false;
     }
     imported = std::move(*model);
+    progress.stage(45, tr("Preparing mesh materials…"));
   }
   auto document = std::make_shared<Document>(path_to_utf8(file.filename()));
   document->set_path(file);
@@ -1397,11 +1491,15 @@ bool MainWindow::open_path(const QString& path) {
                                         Mat4::identity(), color, mat_id);
   }
   if (mesh_id == 0) {
+    progress.close();
     QMessageBox::critical(this, tr("Open"), tr("Failed to add imported geometry."));
     return false;
   }
-  add_document_tab(document);
+  add_document_tab(document, nullptr, [&progress](int percent, const QString& label) {
+    progress.stage(55 + percent * 35 / 100, label);
+  });
 
+  progress.stage(94, tr("Generating preview…"));
   const MeshAsset* asset = document->mesh(mesh_id);
   MeshCpu thumb_mesh;
   if (asset != nullptr && !asset->cpu.vertices.empty()) {
@@ -1416,6 +1514,7 @@ bool MainWindow::open_path(const QString& path) {
   const QString thumb_path = save_mesh_thumbnail(info.absoluteFilePath(), thumb);
   recent_.add(info.absoluteFilePath(), thumb_path);
   refresh_home();
+  progress.stage(100, tr("File opened."));
   statusBar()->showMessage(tr("Loaded %1").arg(info.absoluteFilePath()), 5000);
   return true;
 }
@@ -1437,6 +1536,15 @@ void MainWindow::open_file() {
     return;
   }
   open_path(path);
+}
+
+void MainWindow::open_paths(const QStringList& paths) {
+  for (const QString& path : paths) {
+    if (path.isEmpty() || path.startsWith(QLatin1Char('-'))) {
+      continue;
+    }
+    open_path(path);
+  }
 }
 
 void MainWindow::open_drawing_file() {

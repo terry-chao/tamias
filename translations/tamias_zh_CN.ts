@@ -208,8 +208,8 @@
     </message>
     <message>
         <location filename="../src/app/home_page.cpp" line="301"/>
-        <source>Click to open · Right-click for more</source>
-        <translation>单击打开 · 右键更多操作</translation>
+        <source>Double-click to open · Right-click for more</source>
+        <translation>双击打开 · 右键更多操作</translation>
     </message>
     <message>
         <location filename="../src/app/home_page.cpp" line="384"/>
@@ -229,6 +229,82 @@
 </context>
 <context>
     <name>tamias::MainWindow</name>
+    <message>
+        <source>Open Project</source>
+        <translation>打开工程</translation>
+    </message>
+    <message>
+        <source>Opening %1…</source>
+        <translation>正在打开 %1…</translation>
+    </message>
+    <message>
+        <source>Reading drawing %1…</source>
+        <translation>正在读取图纸 %1…</translation>
+    </message>
+    <message>
+        <source>Drawing opened.</source>
+        <translation>图纸已打开。</translation>
+    </message>
+    <message>
+        <source>Reading render scene %1…</source>
+        <translation>正在读取渲染场景 %1…</translation>
+    </message>
+    <message>
+        <source>Generating preview…</source>
+        <translation>正在生成预览…</translation>
+    </message>
+    <message>
+        <source>Opening render scene…</source>
+        <translation>正在打开渲染场景…</translation>
+    </message>
+    <message>
+        <source>Render scene opened.</source>
+        <translation>渲染场景已打开。</translation>
+    </message>
+    <message>
+        <source>Reading project %1…</source>
+        <translation>正在读取工程 %1…</translation>
+    </message>
+    <message>
+        <source>Uploading geometry…</source>
+        <translation>正在上传几何…</translation>
+    </message>
+    <message>
+        <source>Uploading geometry (%1 / %2)…</source>
+        <translation>正在上传几何（%1 / %2）…</translation>
+    </message>
+    <message>
+        <source>Preparing the scene…</source>
+        <translation>正在准备场景…</translation>
+    </message>
+    <message>
+        <source>Project opened.</source>
+        <translation>工程已打开。</translation>
+    </message>
+    <message>
+        <source>Parsing IFC structure %1…</source>
+        <translation>正在解析 IFC 结构 %1…</translation>
+    </message>
+    <message>
+        <source>Reading CAD geometry %1…</source>
+        <translation>正在读取 CAD 几何 %1…</translation>
+    </message>
+    <message>
+        <source>Preparing CAD geometry…</source>
+        <translation>正在准备 CAD 几何…</translation>
+    </message>
+    <message>
+        <source>Reading mesh %1…</source>
+        <translation>正在读取网格 %1…</translation>
+    </message>
+    <message>
+        <source>Preparing mesh materials…</source>
+        <translation>正在准备网格材质…</translation>
+    </message>
+    <message>
+        <source>File opened.</source>
+        <translation>文件已打开。</translation>
+    </message>
     <message>
         <location filename="../src/app/main_window.cpp" line="188"/>
         <location filename="../src/app/main_window.cpp" line="1387"/>

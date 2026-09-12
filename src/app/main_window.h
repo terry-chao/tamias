@@ -10,9 +10,12 @@
 #include "recent_files.h"
 
 #include <QMainWindow>
+#include <QString>
+#include <QStringList>
 #include <QStackedWidget>
 #include <QTabWidget>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -40,6 +43,8 @@ class MainWindow final : public QMainWindow {
  public:
   explicit MainWindow(QWidget* parent = nullptr);
   ~MainWindow() override;
+
+  void open_paths(const QStringList& paths);
 
  private slots:
   void open_file();
@@ -69,9 +74,12 @@ class MainWindow final : public QMainWindow {
   // must stay open.
   bool confirm_close_document(DocumentViewport* vp);
   void activate_viewport(DocumentViewport* vp);
+  using UiLoadProgressCallback = std::function<void(int, const QString&)>;
   void add_document_tab(std::shared_ptr<Document> document,
-                        const ViewportState* viewport = nullptr);
-  Result<void> populate_document_meshes(Document& document, RenderThread& thread);
+                        const ViewportState* viewport = nullptr,
+                        const UiLoadProgressCallback& progress = {});
+  Result<void> populate_document_meshes(Document& document, RenderThread& thread,
+                                        const UiLoadProgressCallback& progress = {});
   void refresh_home();
   bool open_path(const QString& path);
   void open_drawing_tab(const QString& path);
