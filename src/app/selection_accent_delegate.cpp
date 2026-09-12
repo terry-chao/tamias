@@ -11,6 +11,7 @@ void RowAccentDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opt
   QStyleOptionViewItem opt = option;
   const bool selected = opt.state.testFlag(QStyle::State_Selected);
   opt.state &= ~QStyle::State_Selected;
+  opt.state &= ~QStyle::State_HasFocus;
 
   QStyledItemDelegate::paint(painter, opt, index);
 

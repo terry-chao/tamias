@@ -585,7 +585,7 @@ void RenderSceneInspector::rebuild() {
                                .arg(fmt_vec(scene_.view.eye_position), fmt_vec(scene_.view.target))
                                .arg(scene_.view.view_distance, 0, 'g', 4));
   summary_camera2_->setText(
-      tr("yaw %1  ·  pitch %2  ·  fovy %3  ·  znear %4  ·  zfar %5  ·  %6")
+      tr("yaw %1\npitch %2\nfovy %3\nznear %4\nzfar %5\n%6")
           .arg(scene_.view.yaw, 0, 'g', 4)
           .arg(scene_.view.pitch, 0, 'g', 4)
           .arg(scene_.view.fovy, 0, 'g', 4)

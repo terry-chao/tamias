@@ -1767,8 +1767,18 @@ distance %3</source>
         <translation>无 BRep 面信息（导入三角汤）</translation>
     </message>
     <message>
-        <source>yaw %1  ·  pitch %2  ·  fovy %3  ·  znear %4  ·  zfar %5  ·  %6</source>
-        <translation>偏航 %1  ·  俯仰 %2  ·  视野 %3  ·  近裁 %4  ·  远裁 %5  ·  %6</translation>
+        <source>yaw %1
+pitch %2
+fovy %3
+znear %4
+zfar %5
+%6</source>
+        <translation>偏航 %1
+俯仰 %2
+视野 %3
+近裁 %4
+远裁 %5
+%6</translation>
     </message>
     <message>
         <source>orthographic</source>
@@ -2533,7 +2543,7 @@ Plugin ID: %4</source>
     </message>
     <message>
         <source>Hosted on</source>
-        <translation>依附于</translation>
+        <translation>宿主关联</translation>
     </message>
     <message>
         <source>Relation</source>
@@ -2548,8 +2558,32 @@ Plugin ID: %4</source>
         <translation>否</translation>
     </message>
     <message>
-        <source>id %1  %2  %3 → %4  along=%5  sill=%6  valid=%7</source>
-        <translation>id %1  %2  %3 → %4  沿墙=%5  窗台高=%6  有效=%7</translation>
+        <source>(unnamed)</source>
+        <translation>（未命名）</translation>
+    </message>
+    <message>
+        <source>%1 %2 (#%3)</source>
+        <translation>%1 %2（构件 #%3）</translation>
+    </message>
+    <message>
+        <source>%1 (0 = wall start, 1 = wall end)</source>
+        <translation>%1（0=墙起点，1=墙终点）</translation>
+    </message>
+    <message>
+        <source>%1 m</source>
+        <translation>%1 m</translation>
+    </message>
+    <message>
+        <source>Valid</source>
+        <translation>有效</translation>
+    </message>
+    <message>
+        <source>Invalid</source>
+        <translation>无效</translation>
+    </message>
+    <message>
+        <source>Relation #%1&#10;  Type: %2&#10;  Dependent: %3&#10;  Host: %4&#10;  Along wall: %5&#10;  Sill height: %6&#10;  Status: %7</source>
+        <translation>关联 #%1&#10;  类型：%2&#10;  从属构件：%3&#10;  宿主构件：%4&#10;  沿墙位置：%5&#10;  离地高度：%6&#10;  状态：%7</translation>
     </message>
 </context>
 <context>
