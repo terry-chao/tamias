@@ -195,7 +195,7 @@ src/bim/drawing_import.h    // 翻模：图纸 → 候选构件（见 图纸 →
 
 ## 附录：涉及文件（现状）
 
-- [wall_entity.cpp](https://github.com/terry-chao/tamias/blob/main/src/entity/wall_entity.cpp) 等 —— 构件几何配方，不是业务层
+- [wall_entity.cpp](https://github.com/terry-chao/tamias/blob/main/src/entity/architectural/wall_entity.cpp) 等 —— 构件几何配方，不是业务层
 - [wall_join.cpp](https://github.com/terry-chao/tamias/blob/main/src/bim/wall_join.cpp) —— 墙-墙交接斜接：找接点、裁轮廓、重建网格（见 [墙-墙交接](bim/junctions.md)）
 - [create_wall_command.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/create_wall_command.cpp) —— 今日直写 Document；楼层落地后改调 `BimModel`
 - [create_primitive_command.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/create_primitive_command.cpp) —— 窗/门点中墙时调 `bind_opening_to_host`

@@ -3,7 +3,7 @@
 #include "bim/bim_model.h"
 #include "engine/document/mesh_asset.h"
 #include "engine/document/scene.h"
-#include "entity/entity.h"
+#include "entity/core/entity.h"
 #include "engine/document/texture_library.h"
 #include "engine/render/material.h"
 #include "engine/render/render_scene.h"

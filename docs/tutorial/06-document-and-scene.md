@@ -52,7 +52,7 @@ n->world_transform = parent_world * n->local_transform;  // 自顶向下累积
 
 ## 6.4 Entity：可编辑的配方载体
 
-`Entity`（[entity.h](https://github.com/terry-chao/tamias/blob/main/src/entity/entity.h)）把「特征树配方」和「场景节点」绑在一起：
+`Entity`（[entity.h](https://github.com/terry-chao/tamias/blob/main/src/entity/core/entity.h)）把「特征树配方」和「场景节点」绑在一起：
 
 ```
 BoxEntity / WallEntity / DoorEntity …

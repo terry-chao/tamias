@@ -1,6 +1,6 @@
 #pragma once
 
-#include "entity/entity.h"
+#include "entity/core/entity.h"
 #include "engine/document/scene.h"
 #include "engine/modeling/feature.h"
 #include "engine/render/material.h"

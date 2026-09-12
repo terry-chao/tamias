@@ -4,7 +4,7 @@
 #include "bim/opening_size.h"
 #include "bim/wall_size.h"
 #include "engine/math/math.h"
-#include "entity/entity.h"
+#include "entity/core/entity.h"
 
 #include <vector>
 

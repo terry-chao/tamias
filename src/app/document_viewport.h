@@ -15,7 +15,7 @@
 #include "view_cube_widget.h"
 #include "viewport_floor.h"
 #include "viewport_tool_panel.h"
-#include "entity/entity_grip.h"
+#include "entity/core/entity_grip.h"
 #include "engine/modeling/feature.h"
 #include "host/session.h"
 #include "plugin/plugin_point_input_session.h"

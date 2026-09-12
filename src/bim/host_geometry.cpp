@@ -1,7 +1,7 @@
 #include "bim/host_geometry.h"
 
 #include "engine/modeling/feature.h"
-#include "entity/opening_entity.h"
+#include "entity/family/opening_entity.h"
 
 #include <algorithm>
 #include <cmath>

@@ -2,7 +2,7 @@
 #include "engine/document/document.h"
 #include "engine/io/mesh_io.h"
 #include "engine/math/math.h"
-#include "entity/wall_entity.h"
+#include "entity/architectural/wall_entity.h"
 #include "host/command_arg_text.h"
 #include "plugin/plugin_host.h"
 #include "plugin/plugin_manager.h"

@@ -1,10 +1,10 @@
 #include "command/create_curve_command.h"
 
-#include "entity/bezier_entity.h"
-#include "entity/bspline_entity.h"
-#include "entity/line_entity.h"
-#include "entity/nurbs_entity.h"
-#include "entity/polyline_entity.h"
+#include "entity/sketch/bezier_entity.h"
+#include "entity/sketch/bspline_entity.h"
+#include "entity/sketch/line_entity.h"
+#include "entity/sketch/nurbs_entity.h"
+#include "entity/sketch/polyline_entity.h"
 
 #include <utility>
 

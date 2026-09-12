@@ -1,6 +1,6 @@
 #include "create_foundation_command.h"
 
-#include "entity/foundation_entity.h"
+#include "entity/structural/foundation_entity.h"
 
 namespace tamias {
 

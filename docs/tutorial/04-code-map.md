@@ -10,6 +10,12 @@ src/
 ├── command/     命令系统：每个编辑操作 = 一个可撤销的 Command
 ├── plugin/      C# 插件宿主：HostApi C ABI、hostfxr、Ribbon「插件」页
 ├── entity/      参数化实体：BoxEntity、WallEntity、DoorEntity…（写特征树配方）
+│   ├── core/          实体基类、夹点、识别色
+│   ├── family/        族实体：FamilyEntity + 扣减（开洞）实体（门、窗）
+│   ├── architectural/ 建筑专业：墙、幕墙（宿主构件）
+│   ├── structural/    结构专业：梁、柱、板、结构墙、基础
+│   ├── sketch/        草图曲线：直线、折线、圆、圆弧、贝塞尔、矩形、B 样条、NURBS
+│   └── primitive/     基础体：盒子、圆柱
 ├── bim/         BIM 业务层：楼层、宿主、关联关系、IFC 空间结构
 ├── engine/
 │   ├── core/    日志、结果类型、原生窗口句柄

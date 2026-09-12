@@ -2,10 +2,10 @@
 
 #include "bim/host_geometry.h"
 #include "bim/host_update.h"
-#include "entity/column_entity.h"
-#include "entity/door_entity.h"
-#include "entity/entity.h"
-#include "entity/window_entity.h"
+#include "entity/structural/column_entity.h"
+#include "entity/family/door_entity.h"
+#include "entity/core/entity.h"
+#include "entity/family/window_entity.h"
 
 namespace tamias {
 namespace {

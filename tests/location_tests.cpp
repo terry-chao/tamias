@@ -4,9 +4,9 @@
 #include "command/update_storeys_command.h"
 #include "engine/document/document.h"
 #include "engine/document/document_io.h"
-#include "entity/column_entity.h"
-#include "entity/slab_entity.h"
-#include "entity/wall_entity.h"
+#include "entity/structural/column_entity.h"
+#include "entity/structural/slab_entity.h"
+#include "entity/architectural/wall_entity.h"
 
 #include <gtest/gtest.h>
 

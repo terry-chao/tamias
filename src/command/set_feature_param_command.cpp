@@ -3,7 +3,7 @@
 #include "bim/line_location.h"
 #include "bim/host_update.h"
 #include "command/edit_entity_grip_command.h"
-#include "entity/entity_grip.h"
+#include "entity/core/entity_grip.h"
 #include "engine/modeling/curve_geom.h"
 #include "engine/modeling/feature.h"
 

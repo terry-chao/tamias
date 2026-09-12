@@ -2,7 +2,7 @@
 
 #include "bim/bim_model.h"
 #include "engine/document/document.h"
-#include "entity/entity.h"
+#include "entity/core/entity.h"
 
 #include <QClipboard>
 #include <QEvent>

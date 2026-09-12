@@ -28,7 +28,7 @@
           → 视口 upload_mesh，下一帧 render_items 画出来
 ```
 
-以盒子为例，构造函数只写配方，不碰 OCCT（[box_entity.cpp](https://github.com/terry-chao/tamias/blob/main/src/entity/box_entity.cpp)）：
+以盒子为例，构造函数只写配方，不碰 OCCT（[box_entity.cpp](https://github.com/terry-chao/tamias/blob/main/src/entity/primitive/box_entity.cpp)）：
 
 ```cpp
 auto& profile = model.add_feature(FeatureKind::RectProfile, {},
@@ -45,7 +45,7 @@ local_transform = translate(position);
 放置    local_transform = 点到的位置
 ```
 
-墙、梁、板、柱、门、窗都是同一套，只是参数不同（[wall_entity.cpp](https://github.com/terry-chao/tamias/blob/main/src/entity/wall_entity.cpp) 用两点算长度和朝向）。
+墙、梁、板、柱、门、窗都是同一套，只是参数不同（[wall_entity.cpp](https://github.com/terry-chao/tamias/blob/main/src/entity/architectural/wall_entity.cpp) 用两点算长度和朝向）。
 
 ## 5.3 求值器：照配方做菜
 
@@ -91,7 +91,7 @@ OCCT 是 **Z-up**（Z 朝上），Tamias 视口是 **Y-up**（glTF/Blender 惯�
 
 ## 5.7 动手练习
 
-1. 读 [`box_entity.cpp`](https://github.com/terry-chao/tamias/blob/main/src/entity/box_entity.cpp)，把配方和 5.3 的表对上。
+1. 读 [`box_entity.cpp`](https://github.com/terry-chao/tamias/blob/main/src/entity/primitive/box_entity.cpp)，把配方和 5.3 的表对上。
 2. 在属性面板改盒子深度，用调试器看 `evaluate_feature_model` 被重新调用的过程。
 3. 打开一个 `.obj` 和一个 `.step`，分别用句柄检查看它们的 id 差异，想想为什么。
 

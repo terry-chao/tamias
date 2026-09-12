@@ -3,7 +3,7 @@
 #include "bim/relation.h"
 #include "command/command.h"
 #include "engine/document/document.h"
-#include "entity/column_entity.h"
+#include "entity/structural/column_entity.h"
 
 #include <optional>
 

@@ -1,6 +1,6 @@
 #include "create_curtain_wall_command.h"
 
-#include "entity/curtain_wall_entity.h"
+#include "entity/architectural/curtain_wall_entity.h"
 
 namespace tamias {
 

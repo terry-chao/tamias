@@ -2,7 +2,7 @@
 
 #include "command/command.h"
 #include "engine/document/document.h"
-#include "entity/beam_entity.h"
+#include "entity/structural/beam_entity.h"
 
 namespace tamias {
 

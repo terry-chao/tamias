@@ -5,8 +5,8 @@
 #include "engine/document/document.h"
 #include "engine/graphics/mesh.h"
 #include "engine/modeling/occt_feature.h"
-#include "entity/wall_entity.h"
-#include "entity/window_entity.h"
+#include "entity/architectural/wall_entity.h"
+#include "entity/family/window_entity.h"
 
 #include <gtest/gtest.h>
 

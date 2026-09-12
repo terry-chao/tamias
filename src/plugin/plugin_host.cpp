@@ -2,7 +2,7 @@
 
 #include "engine/core/executable_directory.h"
 #include "engine/core/log.h"
-#include "entity/entity.h"
+#include "entity/core/entity.h"
 #include "host/command_arg_text.h"
 #include "plugin/csharp_runtime.h"
 

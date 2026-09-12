@@ -4,7 +4,7 @@
 #include "engine/core/result.h"
 #include "engine/math/math.h"
 #include "engine/modeling/feature.h"
-#include "entity/entity.h"
+#include "entity/core/entity.h"
 
 #include <cstdint>
 #include <vector>

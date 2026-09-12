@@ -4,7 +4,7 @@
 #include "engine/document/document.h"
 #include "engine/modeling/feature.h"
 #include "engine/render/texture_asset.h"
-#include "entity/entity.h"
+#include "entity/core/entity.h"
 
 #include <gtest/gtest.h>
 

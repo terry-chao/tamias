@@ -1,6 +1,6 @@
 #pragma once
 
-#include "entity/entity.h"
+#include "entity/core/entity.h"
 
 #include <QWidget>
 #include <unordered_map>

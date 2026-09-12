@@ -7,8 +7,8 @@
 #include "engine/modeling/occt_geom_builder.h"
 #include "engine/render/builtin_textures.h"
 #include "engine/render/mesh_lod.h"
-#include "entity/entity_grip.h"
-#include "entity/kind_display_color.h"
+#include "entity/core/entity_grip.h"
+#include "entity/core/kind_display_color.h"
 
 #include <algorithm>
 #include <cmath>

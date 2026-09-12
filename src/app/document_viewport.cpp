@@ -16,8 +16,8 @@
 #include "engine/modeling/curve_geom.h"
 #include "engine/modeling/feature.h"
 #include "engine/profile/timing_scope.h"
-#include "entity/entity.h"
-#include "entity/entity_grip.h"
+#include "entity/core/entity.h"
+#include "entity/core/entity_grip.h"
 
 #if defined(TAMIAS_HAS_RHI_OPENGL)
 #include "engine/render/rhi/opengl/opengl_backend.h"

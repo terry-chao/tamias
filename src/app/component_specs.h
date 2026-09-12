@@ -1,6 +1,6 @@
 #pragma once
 
-#include "entity/entity.h"
+#include "entity/core/entity.h"
 #include "host/tool_mode.h"
 #include "param_spec.h"
 #include "section_preview_spec.h"

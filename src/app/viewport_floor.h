@@ -2,7 +2,7 @@
 
 #include "bim/wall_size.h"
 #include "engine/document/document.h"
-#include "entity/entity.h"
+#include "entity/core/entity.h"
 
 #include <algorithm>
 #include <cstdint>
