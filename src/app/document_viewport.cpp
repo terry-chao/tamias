@@ -321,14 +321,24 @@ void DocumentViewport::sync_view_cube() {
   }
 }
 
+QSize DocumentViewport::scene_area_size() const {
+  const int w = surface_ != nullptr ? surface_->width() : width();
+  const int h = surface_ != nullptr ? surface_->height() : height();
+  return {std::max(1, w), std::max(1, h)};
+}
+
+// 光标 → 世界射线。渲染只发生在三维区域里，所以 NDC 与宽高比都按三维区算：
+// 用整块视口的宽（含右侧工具列）会把光标横向拉伸，画面越靠右偏得越多。
+Ray DocumentViewport::ray_at(const QPoint& pos) const {
+  const QSize area = scene_area_size();
+  const float w = static_cast<float>(area.width());
+  const float h = static_cast<float>(area.height());
+  return camera_ray(camera_, w / h, static_cast<float>(pos.x()), static_cast<float>(pos.y()), w,
+                    h);
+}
+
 Vec3 DocumentViewport::cursor_world_position(const QPoint& pos) const {
-  const auto dpr = devicePixelRatioF();
-  const float aspect = static_cast<float>((std::max)(1, width())) /
-                       static_cast<float>((std::max)(1, height()));
-  const Ray ray =
-      camera_ray(camera_, aspect, static_cast<float>(pos.x() * dpr),
-                 static_cast<float>(pos.y() * dpr), static_cast<float>(width() * dpr),
-                 static_cast<float>(height() * dpr));
+  const Ray ray = ray_at(pos);
 
   if (auto hit = bvh_.closest_hit(ray, *document_, [this](std::uint64_t id) {
         return node_visible_in_view(id);
@@ -745,14 +755,7 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
       Vec3 point = cursor_ground_position(event->pos());
       std::uint64_t picked = 0;
       if (plugin_point_input_.pick_entities()) {
-        const auto dpr = devicePixelRatioF();
-        const float aspect = static_cast<float>((std::max)(1, width())) /
-                             static_cast<float>((std::max)(1, height()));
-        const Ray ray =
-            camera_ray(camera_, aspect, static_cast<float>(event->pos().x() * dpr),
-                       static_cast<float>(event->pos().y() * dpr),
-                       static_cast<float>(width() * dpr),
-                       static_cast<float>(height() * dpr));
+        const Ray ray = ray_at(event->pos());
         if (auto hit = bvh_.closest_hit(ray, *document_, [this](std::uint64_t id) {
               return node_visible_in_view(id);
             })) {
@@ -1430,13 +1433,7 @@ void DocumentViewport::delete_selected() {
 }
 
 std::uint64_t DocumentViewport::pick_node_at(const QPoint& pos) const {
-  const auto dpr = devicePixelRatioF();
-  const float aspect = static_cast<float>((std::max)(1, width())) /
-                       static_cast<float>((std::max)(1, height()));
-  const Ray ray =
-      camera_ray(camera_, aspect, static_cast<float>(pos.x() * dpr),
-                 static_cast<float>(pos.y() * dpr), static_cast<float>(width() * dpr),
-                 static_cast<float>(height() * dpr));
+  const Ray ray = ray_at(pos);
   if (auto hit = bvh_.closest_hit(ray, *document_, [this](std::uint64_t id) {
         return node_visible_in_view(id);
       })) {
@@ -1447,13 +1444,7 @@ std::uint64_t DocumentViewport::pick_node_at(const QPoint& pos) const {
 
 std::optional<std::pair<std::uint64_t, Vec3>> DocumentViewport::pick_wall_at(
     const QPoint& pos) const {
-  const auto dpr = devicePixelRatioF();
-  const float aspect = static_cast<float>((std::max)(1, width())) /
-                       static_cast<float>((std::max)(1, height()));
-  const Ray ray =
-      camera_ray(camera_, aspect, static_cast<float>(pos.x() * dpr),
-                 static_cast<float>(pos.y() * dpr), static_cast<float>(width() * dpr),
-                 static_cast<float>(height() * dpr));
+  const Ray ray = ray_at(pos);
   if (auto hit = bvh_.closest_hit(ray, *document_, [this](std::uint64_t id) {
         if (!node_visible_in_view(id)) {
           return false;
@@ -1576,13 +1567,7 @@ bool DocumentViewport::grid_snap_active() const {
 }
 
 Vec3 DocumentViewport::cursor_ground_position(const QPoint& pos) const {
-  const auto dpr = devicePixelRatioF();
-  const float aspect = static_cast<float>((std::max)(1, width())) /
-                       static_cast<float>((std::max)(1, height()));
-  const Ray ray =
-      camera_ray(camera_, aspect, static_cast<float>(pos.x() * dpr),
-                 static_cast<float>(pos.y() * dpr), static_cast<float>(width() * dpr),
-                 static_cast<float>(height() * dpr));
+  const Ray ray = ray_at(pos);
   Vec3 hit = ray.origin + ray.direction * camera_.distance();
   // 与当前工作面求交（地面 y=0；画板时是板的标高，避免透视下点偏）。
   const float plane_y = plugin_point_input_.active()
@@ -1601,13 +1586,7 @@ Vec3 DocumentViewport::cursor_ground_position(const QPoint& pos) const {
 }
 
 Vec3 DocumentViewport::snapped_ground_position(const QPoint& pos) const {
-  const auto dpr = devicePixelRatioF();
-  const float aspect = static_cast<float>((std::max)(1, width())) /
-                       static_cast<float>((std::max)(1, height()));
-  const Ray ray =
-      camera_ray(camera_, aspect, static_cast<float>(pos.x() * dpr),
-                 static_cast<float>(pos.y() * dpr), static_cast<float>(width() * dpr),
-                 static_cast<float>(height() * dpr));
+  const Ray ray = ray_at(pos);
   Vec3 hit = ray.origin + ray.direction * camera_.distance();
   const float plane_y = plugin_point_input_.active()
                             ? plugin_point_input_.work_plane_y()
@@ -1619,15 +1598,16 @@ Vec3 DocumentViewport::snapped_ground_position(const QPoint& pos) const {
     }
   }
   const float dist = length(hit - camera_.eye_position());
-  const float radius =
-      grid_snap_world_radius(dist, camera_.fovy(), static_cast<float>((std::max)(1, height())));
+  const float radius = grid_snap_world_radius(dist, camera_.fovy(),
+                                             static_cast<float>(scene_area_size().height()));
   return snap_to_grid_xz_if_near(hit, radius);
 }
 
 Mat4 DocumentViewport::view_proj() const {
-  const float aspect = static_cast<float>((std::max)(1, width())) /
-                       static_cast<float>((std::max)(1, height()));
-  return camera_.proj_matrix(aspect) * camera_.view_matrix();
+  const QSize area = scene_area_size();
+  return camera_.proj_matrix(static_cast<float>(area.width()) /
+                             static_cast<float>(area.height())) *
+         camera_.view_matrix();
 }
 
 void DocumentViewport::update_box_select_rect(const QPoint& pos) {
@@ -1646,11 +1626,11 @@ void DocumentViewport::finish_box_select(const QPoint& pos, bool additive) {
     return;
   }
   const bool crossing = pos.x() < press_mouse_.x();
+  const QSize area = scene_area_size();
   const std::vector<std::uint64_t> ids = nodes_in_screen_rect(
-      *document_, view_proj(), static_cast<float>((std::max)(1, width())),
-      static_cast<float>((std::max)(1, height())), static_cast<float>(press_mouse_.x()),
-      static_cast<float>(press_mouse_.y()), static_cast<float>(pos.x()),
-      static_cast<float>(pos.y()), crossing);
+      *document_, view_proj(), static_cast<float>(area.width()), static_cast<float>(area.height()),
+      static_cast<float>(press_mouse_.x()), static_cast<float>(press_mouse_.y()),
+      static_cast<float>(pos.x()), static_cast<float>(pos.y()), crossing);
   if (!additive) {
     session_->clear_selection();
   }
@@ -1993,8 +1973,9 @@ bool DocumentViewport::pick_grip_at(const QPoint& pos, EntityGrip& out) const {
     return false;
   }
   const Mat4 vp = view_proj();
-  const float w = static_cast<float>((std::max)(1, width()));
-  const float h = static_cast<float>((std::max)(1, height()));
+  const QSize area = scene_area_size();
+  const float w = static_cast<float>(area.width());
+  const float h = static_cast<float>(area.height());
   float best = 10.f;
   bool hit = false;
   for (const std::uint64_t id : document_->selected_ids()) {

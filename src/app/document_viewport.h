@@ -192,6 +192,11 @@ class DocumentViewport final : public QWidget {
   void refuse_slab_outside_plan(bool popup);
   [[nodiscard]] bool finish_pending_if_done(const Result<bool>& done);
   [[nodiscard]] Vec3 snapped_ground_position(const QPoint& pos) const;
+  // 相机只渲染三维区域（surface_，右侧工具列不参与渲染）。鼠标事件由三维子窗口
+  // 转发上来，坐标就是它的局部坐标；射线与投影必须按三维区域的宽高（而不是整块
+  // 视口的宽高）算，否则光标越靠右、算出的世界点越偏——画的墙就不在鼠标下起笔。
+  [[nodiscard]] QSize scene_area_size() const;
+  [[nodiscard]] Ray ray_at(const QPoint& pos) const;
   void update_box_select_rect(const QPoint& pos);
   void finish_box_select(const QPoint& pos, bool additive);
   [[nodiscard]] Mat4 view_proj() const;
