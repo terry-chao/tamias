@@ -2251,6 +2251,11 @@ Plugin ID: %4</source>
         <translation>高</translation>
     </message>
     <message>
+        <location filename="../src/app/property_panel.cpp" line="195"/>
+        <source>Sill Height</source>
+        <translation>离地高度</translation>
+    </message>
+    <message>
         <source>Radius</source>
         <translation>半径</translation>
     </message>
