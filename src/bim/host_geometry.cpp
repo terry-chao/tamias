@@ -86,6 +86,7 @@ HostPlacement placement_from_world(const Entity& wall, const OpeningSize& /*open
   placement.along = static_cast<double>(local.z) / size.length + 0.5;
   placement.sill = sill_height;
   placement.offset = static_cast<double>(local.x);
+  placement.handle_side = placement.offset >= 0.0 ? 1.0 : -1.0;
   return placement;
 }
 

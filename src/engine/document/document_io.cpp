@@ -1,5 +1,6 @@
 #include "document_io.h"
 
+#include "bim/host_geometry.h"
 #include "bim/host_update.h"
 #include "bim/line_location.h"
 #include "bim/point_location.h"
@@ -9,6 +10,7 @@
 #include "engine/io/binary_archive.h"
 #include "engine/io/mesh_binary.h"
 #include "engine/render/builtin_textures.h"
+#include "entity/door_entity.h"
 #include "entity/entity_grip.h"
 
 #include <algorithm>
@@ -22,7 +24,7 @@ namespace tamias {
 namespace {
 
 constexpr char kMagic[4] = {'T', 'M', 'A', 'S'};
-constexpr std::uint32_t kFormatVersion = 13;
+constexpr std::uint32_t kFormatVersion = 15;
 constexpr std::uint32_t kMinFormatVersion = 5;
 constexpr std::uint32_t kGripsFormatVersion = 7;
 constexpr std::uint32_t kLocationFormatVersion = 8;
@@ -31,6 +33,7 @@ constexpr std::uint32_t kOpacityFormatVersion = 10;
 constexpr std::uint32_t kTextureMetaFormatVersion = 11;
 constexpr std::uint32_t kTextureTransformFormatVersion = 12;
 constexpr std::uint32_t kBuiltinOrmFormatVersion = 13;
+constexpr std::uint32_t kDoorHandleSideFormatVersion = 14;
 
 constexpr std::uint32_t fourcc(char a, char b, char c, char d) {
   return static_cast<std::uint32_t>(static_cast<std::uint8_t>(a)) |
@@ -709,10 +712,13 @@ Result<void> write_relation(BinaryWriter& w, const Relation& rel) {
   if (auto r = w.write_f64(rel.placement.offset); !r) {
     return r;
   }
+  if (auto r = w.write_f64(rel.placement.handle_side); !r) {
+    return r;
+  }
   return w.write_bool(rel.valid);
 }
 
-Result<void> read_relation(BinaryReader& r, Relation& rel) {
+Result<void> read_relation(BinaryReader& r, Relation& rel, std::uint32_t version) {
   auto id = r.read_u64();
   if (!id) {
     return Err(id.error());
@@ -748,12 +754,48 @@ Result<void> read_relation(BinaryReader& r, Relation& rel) {
     return Err(offset.error());
   }
   rel.placement.offset = *offset;
+  if (version >= kDoorHandleSideFormatVersion) {
+    auto handle_side = r.read_f64();
+    if (!handle_side) {
+      return Err(handle_side.error());
+    }
+    rel.placement.handle_side = *handle_side;
+  }
   auto valid = r.read_bool();
   if (!valid) {
     return Err(valid.error());
   }
   rel.valid = *valid;
   return {};
+}
+
+// 旧文档里的门网格可能没有把手特征。打开时补特征并重算门网格，
+// 否则用户看到的是文件里保存的旧网格，而不是新配方算出来的造型。
+void migrate_door_handles(Document& document) {
+  for (auto& [id, entity] : document.entities()) {
+    if (entity == nullptr || entity->kind() != EntityKind::Door) {
+      continue;
+    }
+
+    bool needs_remesh = ensure_door_handle(*entity);
+    if (const Relation* host = document.bim().host_of(id)) {
+      if (const Entity* host_entity = document.entity(host->to)) {
+        const double target_depth = wall_size(*host_entity).thickness + 0.08;
+        needs_remesh = set_door_handle_depth(*entity, target_depth) || needs_remesh;
+      }
+      const double side = host->placement.handle_side < 0.0 ? -1.0 : 1.0;
+      if (door_handle_side(*entity) != side) {
+        set_door_handle_side(*entity, side);
+        needs_remesh = true;
+      }
+    }
+    if (!needs_remesh) {
+      continue;
+    }
+    if (auto mesh = entity->createGeom(); mesh) {
+      (void)document.replace_entity_mesh(id, std::move(*mesh));
+    }
+  }
 }
 
 Result<void> write_storey(BinaryWriter& w, const Storey& storey) {
@@ -1128,7 +1170,7 @@ Result<Document> read_document_body(BinaryReader& r) {
     }
     for (std::uint64_t i = 0; i < *rel_count; ++i) {
       Relation rel{};
-      if (auto res = read_relation(r, rel); !res) {
+      if (auto res = read_relation(r, rel, kFormatVersion); !res) {
         return Err(res.error());
       }
       document.bim().insert(std::move(rel));
@@ -1158,6 +1200,7 @@ Result<Document> read_document_body(BinaryReader& r) {
   document.scene().set_next_id(*next_node);
   document.set_next_material_id(*next_material);
   document.set_next_texture_id(*next_texture);
+  migrate_door_handles(document);
   document.recompute_scene();
   for (const auto& [id, entity] : document.entities()) {
     if (entity != nullptr &&
@@ -1565,7 +1608,7 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes) 
       relations.reserve(static_cast<std::size_t>(*count));
       for (std::uint64_t n = 0; n < *count; ++n) {
         Relation rel{};
-        if (auto res = read_relation(chunk_r, rel); !res) {
+        if (auto res = read_relation(chunk_r, rel, *version); !res) {
           return Err(res.error());
         }
         relations.push_back(std::move(rel));
@@ -1632,6 +1675,7 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes) 
   loaded.document.scene().set_next_id(next_node_id);
   loaded.document.set_next_material_id(next_material_id);
   loaded.document.set_next_texture_id(next_texture_id);
+  migrate_door_handles(loaded.document);
   loaded.document.recompute_scene();
   loaded.document.clear_dirty();
   loaded.viewport = viewport;

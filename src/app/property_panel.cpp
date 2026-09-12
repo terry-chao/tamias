@@ -357,6 +357,11 @@ void PropertyPanel::show_entity(const Entity* entity, Document* document,
 
   // 扁平 grid：每行 [参数名 | 数值 spinbox]，按特征顺序 + 参数名排序，顺序稳定。
   for (const auto& feature : entity->model.features()) {
+    // 门把手是内部造型细节，不作为可编辑特征暴露。
+    if (feature.params.find("handle_part") != feature.params.end() ||
+        feature.params.find("handle_fuse") != feature.params.end()) {
+      continue;
+    }
     std::vector<std::string> keys;
     keys.reserve(feature.params.size());
     for (const auto& [key, unused] : feature.params) {

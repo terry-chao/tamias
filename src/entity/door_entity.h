@@ -12,4 +12,10 @@ class DoorEntity final : public OpeningEntity {
                       double thickness = 0.05, double sill = 0.0);
 };
 
+// 门把手侧：+1 = 门扇局部 +X 侧，-1 = 门扇局部 -X 侧。
+[[nodiscard]] double door_handle_side(const Entity& entity);
+void set_door_handle_side(Entity& entity, double side);
+[[nodiscard]] bool ensure_door_handle(Entity& entity);
+[[nodiscard]] bool set_door_handle_depth(Entity& entity, double depth);
+
 }  // namespace tamias

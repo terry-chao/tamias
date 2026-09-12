@@ -14,6 +14,7 @@
 #include <BRepFilletAPI_MakeChamfer.hxx>
 #include <BRepFilletAPI_MakeFillet.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
+#include <BRepPrimAPI_MakeCylinder.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
 #include <BRep_Tool.hxx>
 #include <Poly_Triangulation.hxx>
@@ -32,6 +33,7 @@
 #include <Standard_Failure.hxx>
 #include <Standard_Type.hxx>
 
+#include <algorithm>
 #include <exception>
 #include <unordered_map>
 #include <vector>
@@ -76,6 +78,17 @@ TopoDS_Face make_circle_face(double radius) {
   const gp_Circ circle(gp_Ax2(center, gp_Dir(0.0, 0.0, 1.0)), radius);
   BRepBuilderAPI_MakeWire wire{BRepBuilderAPI_MakeEdge(circle)};
   return BRepBuilderAPI_MakeFace(wire).Face();
+}
+
+// Tamias Y-up 局部 (x,y,z) ↔ OCCT Z-up (x,-z,y)；与最终 tessellate 的转换互逆。
+gp_Pnt tamias_point_to_occt(Vec3 p) {
+  return gp_Pnt(static_cast<double>(p.x), -static_cast<double>(p.z),
+                static_cast<double>(p.y));
+}
+
+gp_Dir tamias_dir_to_occt(Vec3 d) {
+  return gp_Dir(static_cast<double>(d.x), -static_cast<double>(d.z),
+                static_cast<double>(d.y));
 }
 
 // 取 shape 的第 index 条边（拓扑命名「索引法」：按 TopExp 遍历顺序，脆但简单）。
@@ -341,6 +354,23 @@ static Result<MeshCpu> evaluate_feature_model_impl(const FeatureModel& model,
         gp_Trsf tr;
         tr.SetTranslation(gp_Vec(tx, -tz, ty));
         s = BRepBuilderAPI_Transform(it->second, tr, Standard_True).Shape();
+        break;
+      }
+      case FeatureKind::Cylinder: {
+        const double radius = std::max(model.param(f.id, "radius", 0.05), 1e-4);
+        const double height = std::max(model.param(f.id, "height", 0.1), 1e-4);
+        Vec3 center{static_cast<float>(model.param(f.id, "cx", 0.0)),
+                    static_cast<float>(model.param(f.id, "cy", 0.0)),
+                    static_cast<float>(model.param(f.id, "cz", 0.0))};
+        Vec3 axis{static_cast<float>(model.param(f.id, "ax", 0.0)),
+                  static_cast<float>(model.param(f.id, "ay", 1.0)),
+                  static_cast<float>(model.param(f.id, "az", 0.0))};
+        axis = length(axis) > 1e-8f ? normalize(axis) : Vec3{0.f, 1.f, 0.f};
+        const Vec3 base = center - axis * (static_cast<float>(height) * 0.5f);
+        s = BRepPrimAPI_MakeCylinder(gp_Ax2(tamias_point_to_occt(base),
+                                            tamias_dir_to_occt(axis)),
+                                     radius, height)
+                .Shape();
         break;
       }
       default:

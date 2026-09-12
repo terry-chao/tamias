@@ -26,6 +26,7 @@ enum class FeatureKind : std::uint8_t {
   Nurbs = 13,       // NURBS，params{ n, degree, p0x.., w0, w1, ... }
   PolygonProfile = 14,  // 多边形轮廓面，params{ n, p0x,p0y,p0z, ... }；可附带 width/height
   Transform = 15,       // 平移，input[0] = shape，params{ tx, ty, tz }（Tamias Y-up 局部）
+  Cylinder = 16,        // 圆柱，params{ radius, height, cx,cy,cz, ax,ay,az }（Tamias Y-up 局部）
 };
 
 inline bool is_sketch_feature(FeatureKind kind) {
@@ -78,6 +79,8 @@ inline const char* feature_kind_name(FeatureKind kind) {
       return "PolygonProfile";
     case FeatureKind::Transform:
       return "Transform";
+    case FeatureKind::Cylinder:
+      return "Cylinder";
   }
   return "Feature";
 }

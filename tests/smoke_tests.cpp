@@ -824,6 +824,7 @@ TEST(Entity, BuildingComponentsCreateGeom) {
   const WindowEntity window({0.f, 0.f, 0.f}, 1.2, 1.2, 0.08);
   EXPECT_TRUE(is_opening_entity(door));
   EXPECT_TRUE(is_opening_entity(window));
+  EXPECT_NEAR(door_handle_side(door), 1.0, 1e-9);
 
   for (const Entity* e : {static_cast<const Entity*>(&beam),
                           static_cast<const Entity*>(&column),
@@ -835,6 +836,24 @@ TEST(Entity, BuildingComponentsCreateGeom) {
     EXPECT_FALSE(mesh->indices.empty());
     EXPECT_TRUE(mesh->bounds.valid());
   }
+
+  DoorEntity left_door({0.f, 0.f, 0.f}, 1.0, 2.1, 0.05);
+  set_door_handle_side(left_door, -1.0);
+  EXPECT_NEAR(door_handle_side(left_door), -1.0, 1e-9);
+  auto left_mesh = left_door.createGeom();
+  ASSERT_TRUE(left_mesh) << left_mesh.error();
+  EXPECT_FALSE(left_mesh->indices.empty());
+
+  DoorEntity legacy_door;
+  auto& legacy_profile = legacy_door.model.add_feature(
+      FeatureKind::RectProfile, {}, {{"width", 1.0}, {"height", 0.05}});
+  legacy_door.model.add_feature(FeatureKind::Extrude, {legacy_profile.id},
+                                {{"depth", 2.1}});
+  EXPECT_TRUE(ensure_door_handle(legacy_door));
+  EXPECT_NEAR(door_handle_side(legacy_door), 1.0, 1e-9);
+  auto legacy_mesh = legacy_door.createGeom();
+  ASSERT_TRUE(legacy_mesh) << legacy_mesh.error();
+  EXPECT_FALSE(legacy_mesh->indices.empty());
 }
 
 TEST(CommandSystem, DispatchCreateWallUndoRedo) {
@@ -1589,6 +1608,10 @@ TEST(Bim, HostPlacementAlignAndValidity) {
   const DoorEntity door({0.f, 0.f, 0.f}, 1.0, 2.1, 0.05);
   HostPlacement door_placement = placement_from_world(wall, door, {0.f, 1.5f, 2.5f});
   EXPECT_NEAR(door_placement.sill, 0.0, 1e-9);
+  EXPECT_NEAR(door_placement.handle_side, 1.0, 1e-9);
+  HostPlacement left_door_placement =
+      placement_from_world(wall, door, {-0.08f, 1.5f, 2.5f});
+  EXPECT_NEAR(left_door_placement.handle_side, -1.0, 1e-9);
 
   HostPlacement overflow{};
   overflow.along = 0.05;
@@ -1780,5 +1803,85 @@ TEST(DocumentIo, LoadDocumentBytesRoundTrip) {
   EXPECT_EQ(loaded->document.name(), "mem");
   EXPECT_EQ(loaded->document.meshes().size(), 1u);
   EXPECT_FALSE(loaded->document.render_items().empty());
+}
+
+TEST(DocumentIo, MigratesLegacyDoorHandleOnLoad) {
+  DoorEntity legacy_door;
+  legacy_door.name = "door";
+  auto& profile = legacy_door.model.add_feature(
+      FeatureKind::RectProfile, {}, {{"width", 1.0}, {"height", 0.05}});
+  legacy_door.model.add_feature(FeatureKind::Extrude, {profile.id}, {{"depth", 2.1}});
+
+  auto legacy_mesh = legacy_door.createGeom();
+  ASSERT_TRUE(legacy_mesh) << legacy_mesh.error();
+  const float legacy_z_max = legacy_mesh->bounds.max.z;
+
+  Document doc("legacy-door");
+  Entity* added = doc.add_entity(std::make_unique<DoorEntity>(std::move(legacy_door)),
+                                 std::move(*legacy_mesh));
+  ASSERT_NE(added, nullptr);
+  const std::uint64_t door_id = added->id;
+
+  const auto path = std::filesystem::temp_directory_path() / "tamias_legacy_door.tdoc";
+  ViewportState view{};
+  ASSERT_TRUE(save_document(path, doc, view)) << "save_document failed";
+  auto loaded = load_document(path);
+  ASSERT_TRUE(loaded) << loaded.error();
+
+  const Entity* loaded_door = loaded->document.entity(door_id);
+  ASSERT_NE(loaded_door, nullptr);
+  EXPECT_EQ(loaded_door->kind(), EntityKind::Door);
+  EXPECT_GT(loaded_door->model.features().size(), 2u);
+  EXPECT_NEAR(door_handle_side(*loaded_door), 1.0, 1e-9);
+
+  const MeshAsset* loaded_mesh = loaded->document.mesh(loaded_door->mesh_asset_id);
+  ASSERT_NE(loaded_mesh, nullptr);
+  EXPECT_GT(loaded_mesh->cpu.bounds.max.z, legacy_z_max + 1e-3f);
+
+  std::error_code ec;
+  std::filesystem::remove(path, ec);
+}
+
+TEST(DocumentIo, MigratesHostedLegacyDoorHandleDepthOnLoad) {
+  Document doc("legacy-hosted-door");
+  const std::uint64_t wall_id = add_wall_entity(doc, {0.f, 0.f, 0.f}, {0.f, 0.f, 5.f});
+
+  DoorEntity legacy_door;
+  legacy_door.name = "door";
+  auto& profile = legacy_door.model.add_feature(
+      FeatureKind::RectProfile, {}, {{"width", 1.0}, {"height", 0.05}});
+  legacy_door.model.add_feature(FeatureKind::Extrude, {profile.id}, {{"depth", 2.1}});
+  auto legacy_mesh = legacy_door.createGeom();
+  ASSERT_TRUE(legacy_mesh) << legacy_mesh.error();
+
+  Entity* door = doc.add_entity(std::make_unique<DoorEntity>(std::move(legacy_door)),
+                                std::move(*legacy_mesh));
+  ASSERT_NE(door, nullptr);
+  const std::uint64_t door_id = door->id;
+
+  Relation rel{};
+  rel.kind = RelationKind::HostedOn;
+  rel.from = door_id;
+  rel.to = wall_id;
+  rel.placement.along = 0.5;
+  rel.placement.sill = 0.0;
+  rel.valid = true;
+  doc.bim().add(rel);
+
+  const auto path = std::filesystem::temp_directory_path() / "tamias_hosted_door.tdoc";
+  ViewportState view{};
+  ASSERT_TRUE(save_document(path, doc, view)) << "save_document failed";
+  auto loaded = load_document(path);
+  ASSERT_TRUE(loaded) << loaded.error();
+
+  const Entity* loaded_door = loaded->document.entity(door_id);
+  ASSERT_NE(loaded_door, nullptr);
+  const MeshAsset* loaded_mesh = loaded->document.mesh(loaded_door->mesh_asset_id);
+  ASSERT_NE(loaded_mesh, nullptr);
+  // 墙厚 0.2；把手深度应跟着墙厚走，并向墙体两侧各探出 0.04。
+  EXPECT_GT(loaded_mesh->cpu.bounds.max.z, 0.1f + 1e-3f);
+
+  std::error_code ec;
+  std::filesystem::remove(path, ec);
 }
 

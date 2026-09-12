@@ -1,6 +1,7 @@
 #include "bim/host_update.h"
 
 #include "bim/host_geometry.h"
+#include "entity/door_entity.h"
 #include "entity/opening_entity.h"
 #include "engine/core/log.h"
 #include "engine/document/document.h"
@@ -45,6 +46,10 @@ Result<void> reshape_hosted(Document& document, Relation& relation) {
   relation.placement.sill = opening_sill_height(*guest);
   align_placement(relation.placement, wall, opening);
   relation.placement.offset = 0.0;  // 开口居中穿墙
+  if (guest->kind() == EntityKind::Door) {
+    (void)set_door_handle_depth(*guest, wall.thickness + 0.08);
+    set_door_handle_side(*guest, relation.placement.handle_side);
+  }
   relation.valid = placement_is_valid(relation.placement, wall, opening);
 
   sync_transform(document, *guest, hosted_transform(*host, relation.placement));

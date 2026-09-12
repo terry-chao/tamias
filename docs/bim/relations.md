@@ -15,7 +15,7 @@
 | | |
 |---|---|
 | **谁连谁** | 窗 / 门（`from`）`HostedOn` 墙（`to`） |
-| **开口在哪** | `along` / `sill` / `offset`，相对墙局部 |
+| **开口在哪** | `along` / `sill` / `offset` / `handle_side`，相对墙局部 |
 | **墙一改** | 查出从属开口 → 通知 → 重造型 → 对齐 → 合法性检查 → 结束 |
 | **存哪** | `Document::bim()` 关系表，`.tdoc` 的 `RELA` chunk |
 
@@ -31,7 +31,7 @@ Relation
   kind        目前只有 HostedOn
   from        从属构件（窗、门）
   to          宿主构件（墙）
-  placement   along / sill / offset
+  placement   along / sill / offset / handle_side
   valid       对齐之后是否仍完全落在墙内
 ```
 
@@ -44,6 +44,7 @@ Relation
 | `along` | 沿墙长，0 = 起点，1 = 终点 |
 | `sill` | 距墙底的高度（门固定为 0） |
 | `offset` | 沿墙厚，0 = 墙中心 |
+| `handle_side` | 门把手侧：+1 = 门扇局部 +X 侧，-1 = 门扇局部 -X 侧；由点击面相对墙中心线的方向决定 |
 
 窗/门的局部 X 是宽，墙的局部 Z 是长，放置时绕 Y 转 −90° 对齐。
 
@@ -93,12 +94,12 @@ SetFeatureParamCommand
 
 ## 4. 进 .tdoc
 
-`.tdoc` 格式版本 **6**。新增 chunk `RELA`：
+`.tdoc` 格式版本 **15**。`RELA` chunk：
 
 ```
 next_relation_id : u64
 count            : u64
-[ id, kind, from, to, along, sill, offset, valid ] × count
+[ id, kind, from, to, along, sill, offset, handle_side, valid ] × count
 ```
 
 版本 5 的文件仍能打开（没有 `RELA` 就是空表）。内存快照（undo 用的 `serialize_document`）同样带上关系表。

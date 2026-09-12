@@ -8,9 +8,11 @@
 #include <QEvent>
 #include <QFormLayout>
 #include <QGuiApplication>
+#include <QHash>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMouseEvent>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QStringList>
@@ -19,10 +21,56 @@
 #include <QVBoxLayout>
 
 #include <QRegularExpression>
+#include <functional>
 #include <string>
+#include <utility>
 
 namespace tamias {
 namespace {
+
+// 关联卡片里的“从属构件 / 宿主构件”两行是可定位热区；其余行保持普通文本行为。
+class RelationTextEdit final : public QPlainTextEdit {
+ public:
+  using QPlainTextEdit::QPlainTextEdit;
+
+  std::function<void(std::uint64_t)> entity_activated;
+
+  void set_line_entity_ids(QHash<int, std::uint64_t> ids) {
+    line_entity_ids_ = std::move(ids);
+    viewport()->setMouseTracking(!line_entity_ids_.isEmpty());
+  }
+
+  void clear_line_entity_ids() {
+    line_entity_ids_.clear();
+    viewport()->setMouseTracking(false);
+    viewport()->unsetCursor();
+  }
+
+ protected:
+  void mouseDoubleClickEvent(QMouseEvent* event) override {
+    const QTextCursor cursor = cursorForPosition(event->pos());
+    const auto it = line_entity_ids_.constFind(cursor.blockNumber());
+    if (it != line_entity_ids_.constEnd() && entity_activated) {
+      entity_activated(it.value());
+      event->accept();
+      return;
+    }
+    QPlainTextEdit::mouseDoubleClickEvent(event);
+  }
+
+  void mouseMoveEvent(QMouseEvent* event) override {
+    const QTextCursor cursor = cursorForPosition(event->pos());
+    if (line_entity_ids_.contains(cursor.blockNumber())) {
+      viewport()->setCursor(Qt::PointingHandCursor);
+    } else {
+      viewport()->unsetCursor();
+    }
+    QPlainTextEdit::mouseMoveEvent(event);
+  }
+
+ private:
+  QHash<int, std::uint64_t> line_entity_ids_;
+};
 
 QString kind_name(const HandleInspector& self, EntityKind kind) {
   switch (kind) {
@@ -80,15 +128,43 @@ QString handle_text(std::uint64_t id) {
   return QStringLiteral("%1  (0x%2)").arg(id).arg(id, 0, 16);
 }
 
-QString format_relation(const HandleInspector& self, const Relation& rel) {
-  return self.tr("id %1  %2  %3 → %4  along=%5  sill=%6  valid=%7")
+QString entity_ref(const HandleInspector& self, const Document& document, std::uint64_t id) {
+  const Entity* entity = document.entity(id);
+  const SceneNode* node = document.scene().find(id);
+  const QString kind =
+      entity != nullptr ? kind_name(self, entity->kind()) : self.tr("Imported mesh");
+  QString name;
+  if (node != nullptr && !node->name.empty()) {
+    name = QString::fromStdString(node->name);
+  } else if (entity != nullptr && !entity->name.empty()) {
+    name = QString::fromStdString(entity->name);
+  } else {
+    name = self.tr("(unnamed)");
+  }
+  return self.tr("%1 %2 (#%3)").arg(kind).arg(name).arg(id);
+}
+
+QString format_relation(const HandleInspector& self, const Document& document,
+                        const Relation& rel) {
+  const QString along = self.tr("%1 (0 = wall start, 1 = wall end)")
+                            .arg(rel.placement.along, 0, 'f', 3);
+  const QString sill = self.tr("%1 m").arg(rel.placement.sill, 0, 'f', 3);
+  const QString status = rel.valid ? self.tr("Valid") : self.tr("Invalid");
+  return self.tr(
+             "Relation #%1\n"
+             "  Type: %2\n"
+             "  Dependent: %3\n"
+             "  Host: %4\n"
+             "  Along wall: %5\n"
+             "  Sill height: %6\n"
+             "  Status: %7")
       .arg(rel.id)
       .arg(relation_kind_name(self, rel.kind))
-      .arg(rel.from)
-      .arg(rel.to)
-      .arg(rel.placement.along, 0, 'f', 3)
-      .arg(rel.placement.sill, 0, 'f', 3)
-      .arg(rel.valid ? self.tr("yes") : self.tr("no"));
+      .arg(entity_ref(self, document, rel.from))
+      .arg(entity_ref(self, document, rel.to))
+      .arg(along)
+      .arg(sill)
+      .arg(status);
 }
 
 // 句柄形如 "1  (0x1)" 时只取括号里的 "0x1"。
@@ -119,7 +195,13 @@ HandleInspector::HandleInspector(QWidget* parent) : QWidget(parent) {
   layout->addLayout(form);
 
   auto* rel_label = new QLabel(tr("Relations"), this);
-  relations_ = new QPlainTextEdit(this);
+  auto* relation_edit = new RelationTextEdit(this);
+  relations_ = relation_edit;
+  relation_edit->entity_activated = [this](std::uint64_t id) {
+    if (id != 0) {
+      emit locate_requested(id);
+    }
+  };
   relations_->setReadOnly(true);
   relations_->setPlaceholderText(tr("No relations"));
   layout->addWidget(rel_label);
@@ -197,6 +279,9 @@ void HandleInspector::set_empty(const QString& note) {
   kind_->setText(QStringLiteral("—"));
   name_->setText(QStringLiteral("—"));
   mesh_->setText(QStringLiteral("—"));
+  if (auto* relation_edit = static_cast<RelationTextEdit*>(relations_)) {
+    relation_edit->clear_line_entity_ids();
+  }
   relations_->setPlainText(note);
 }
 
@@ -225,18 +310,37 @@ void HandleInspector::show_selection(const Document* document, std::uint64_t nod
   }
 
   QStringList lines;
+  QHash<int, std::uint64_t> line_entity_ids;
+  int next_line = 0;
+  auto append_relation = [&](const Relation& rel) {
+    if (!lines.isEmpty()) {
+      lines << QString();
+      ++next_line;
+    }
+    const int card_start = next_line;
+    const QString card = format_relation(*this, *document, rel);
+    lines << card;
+    // format_relation 的第 3/4 行固定是“从属构件 / 宿主构件”。
+    line_entity_ids.insert(card_start + 2, rel.from);
+    line_entity_ids.insert(card_start + 3, rel.to);
+    next_line = card_start + card.count(QLatin1Char('\n')) + 1;
+  };
+
   if (entity != nullptr) {
     if (const Relation* host = document->bim().host_of(entity->id)) {
-      lines << format_relation(*this, *host);
+      append_relation(*host);
     }
     for (const Relation* dep : document->bim().dependents(entity->id)) {
-      lines << format_relation(*this, *dep);
+      append_relation(*dep);
     }
   }
+  auto* relation_edit = static_cast<RelationTextEdit*>(relations_);
   if (lines.isEmpty()) {
+    relation_edit->clear_line_entity_ids();
     relations_->setPlainText(tr("No relations on this component"));
   } else {
-    relations_->setPlainText(lines.join(QLatin1Char('\n')));
+    relations_->setPlainText(lines.join(QStringLiteral("\n")));
+    relation_edit->set_line_entity_ids(std::move(line_entity_ids));
   }
 }
 

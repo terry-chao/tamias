@@ -33,7 +33,7 @@ Relation
   kind        HostedOn
   from        窗 / 门
   to          墙
-  placement   along / sill / offset（相对墙局部）
+  placement   along / sill / offset / handle_side（相对墙局部）
   valid       对齐后是否完全落在墙内
 ```
 

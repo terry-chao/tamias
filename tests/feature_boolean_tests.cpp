@@ -52,5 +52,28 @@ TEST(FeatureModel, BooleanCommonStaysInsideBox) {
   EXPECT_GE(common->bounds.min.x, box->bounds.min.x - 1e-3f);
 }
 
+TEST(FeatureModel, CylinderRespectsTamiasAxis) {
+  FeatureModel model;
+  model.add_feature(FeatureKind::Cylinder, {},
+                    {{"radius", 0.05},
+                     {"height", 0.2},
+                     {"cx", 1.0},
+                     {"cy", 2.0},
+                     {"cz", 3.0},
+                     {"ax", 0.0},
+                     {"ay", 0.0},
+                     {"az", 1.0}});
+
+  auto mesh = evaluate_feature_model(model, 0.02);
+  ASSERT_TRUE(mesh) << mesh.error();
+  const Vec3 extent = mesh->bounds.extent();
+  EXPECT_NEAR(extent.x, 0.1f, 1e-3f);
+  EXPECT_NEAR(extent.y, 0.1f, 1e-3f);
+  EXPECT_NEAR(extent.z, 0.2f, 1e-3f);
+  EXPECT_NEAR(mesh->bounds.center().x, 1.0f, 1e-3f);
+  EXPECT_NEAR(mesh->bounds.center().y, 2.0f, 1e-3f);
+  EXPECT_NEAR(mesh->bounds.center().z, 3.0f, 1e-3f);
+}
+
 }  // namespace
 }  // namespace tamias
