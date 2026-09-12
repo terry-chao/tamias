@@ -53,7 +53,7 @@
 
 | 层 | 管什么 | 读这些 |
 |---|---|---|
-| **客户端** | 窗口、视口、属性面板、命令入口 | [Qt 壳](APP.md) |
+| **客户端** | 窗口、视口、属性面板、命令入口 | [Qt 壳](APP.md)、[参考图纸](DRAWING.md) |
 | **插件** | C# 扩展：Ribbon 命令、只读查询、dispatch 内核命令 | [插件系列](plugin/index.md) |
 | **BIM** | 楼层、轴网、墙梁板柱宿主、关联关系、当前标高 | [BIM 业务层](BIM.md)、[关联关系](bim/relations.md) |
 | **场景图** | 语义树、变换、包围盒、展平 draw list | [总述](scene/index.md)、[语义树](SCENE-GRAPH.md) |

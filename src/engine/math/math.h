@@ -1,5 +1,7 @@
 #pragma once
 
+#include "aabb2.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstddef>

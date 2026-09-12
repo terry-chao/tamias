@@ -19,6 +19,8 @@
 #include "pin_result_dialog.h"
 #include "property_panel.h"
 #include "draw_panel.h"
+#include "drawing_document.h"
+#include "drawing_view.h"
 #include "qt_path.h"
 #include "ribbon_bar.h"
 #include "ribbon_group.h"
@@ -180,6 +182,15 @@ MainWindow::MainWindow(QWidget* parent)
   open_action->setToolTip(tr("Open a model file"));
   connect(open_action, &QAction::triggered, this, &MainWindow::open_file);
   addAction(open_action);
+
+  auto* open_drawing_action =
+      new QAction(ribbon_icon(QStringLiteral(":/icons/drawing.svg")),
+                  tr("Open Drawing"), this);
+  open_drawing_action->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+O")));
+  open_drawing_action->setToolTip(
+      tr("Open a reference drawing (PDF / DXF / SVG / image) in a 2D page"));
+  connect(open_drawing_action, &QAction::triggered, this, &MainWindow::open_drawing_file);
+  addAction(open_drawing_action);
 
   auto* save_action = new QAction(ribbon_icon(QStringLiteral(":/icons/save.svg")),
                                   tr("Save"), this);
@@ -606,6 +617,7 @@ MainWindow::MainWindow(QWidget* parent)
   RibbonGroup* file_group = home_page->add_group(QStringLiteral("file"), tr("File"));
   file_group->add_action(new_action);
   file_group->add_action(open_action);
+  file_group->add_action(open_drawing_action);
   file_group->add_action(save_action);
   file_group->add_action(save_as_action);
 
@@ -967,6 +979,14 @@ int MainWindow::find_open_document(const QString& path) const {
   }
   const QString abs = QFileInfo(path).absoluteFilePath();
   for (int i = 0; i < tabs_->count(); ++i) {
+    if (auto* drawing = qobject_cast<DrawingView*>(tabs_->widget(i))) {
+      const QString& drawing_path = drawing->document().path();
+      if (!drawing_path.isEmpty() &&
+          QFileInfo(drawing_path).absoluteFilePath() == abs) {
+        return i;
+      }
+      continue;
+    }
     auto* vp = qobject_cast<DocumentViewport*>(tabs_->widget(i));
     if (!vp) {
       continue;
@@ -1171,6 +1191,11 @@ bool MainWindow::open_path(const QString& path) {
 
   const auto file = qstring_to_path(info.absoluteFilePath());
 
+  if (DrawingDocument::is_drawing_path(path)) {
+    open_drawing_tab(info.absoluteFilePath());
+    return true;
+  }
+
   if (is_render_scene_path(file)) {
     auto loaded = load_render_scene(file);
     if (!loaded) {
@@ -1340,12 +1365,14 @@ bool MainWindow::open_path(const QString& path) {
 
 void MainWindow::open_file() {
   const QString filters =
-      tr("All Supported (*.tdoc *.trscn *.gltf *.glb *.obj *.step *.stp *.iges *.igs *.brep *.ifc);;"
+      tr("All Supported (*.tdoc *.trscn *.gltf *.glb *.obj *.step *.stp *.iges *.igs *.brep *.ifc "
+         "*.pdf *.dxf *.svg *.png *.jpg *.jpeg *.bmp *.tif *.tiff);;"
          "Tamias (*.tdoc);;"
          "Render Scene (*.trscn);;"
          "Meshes (*.gltf *.glb *.obj);;"
          "CAD (*.step *.stp *.iges *.igs *.brep);;"
          "IFC (*.ifc);;"
+         "Drawings (*.pdf *.dxf *.svg *.png *.jpg *.jpeg *.bmp *.tif *.tiff);;"
          "glTF (*.gltf *.glb);;OBJ (*.obj);;"
          "STEP (*.step *.stp);;IGES (*.iges *.igs);;BREP (*.brep)");
   const QString path = QFileDialog::getOpenFileName(this, tr("Open"), QString(), filters);
@@ -1353,6 +1380,51 @@ void MainWindow::open_file() {
     return;
   }
   open_path(path);
+}
+
+void MainWindow::open_drawing_file() {
+  const QString path =
+      QFileDialog::getOpenFileName(this, tr("Open Drawing"), QString(),
+                                   DrawingDocument::file_dialog_filter());
+  if (path.isEmpty()) {
+    return;
+  }
+  open_drawing_tab(QFileInfo(path).absoluteFilePath());
+}
+
+void MainWindow::open_drawing_tab(const QString& path) {
+  if (path.isEmpty()) {
+    return;
+  }
+  if (const int existing = find_open_document(path); existing >= 0) {
+    activate_open_document(existing);
+    return;
+  }
+  QString error;
+  std::unique_ptr<DrawingDocument> document = DrawingDocument::open(path, error);
+  if (!document) {
+    QMessageBox::critical(this, tr("Open Drawing"), error);
+    return;
+  }
+  const QString title = document->title();
+  const QString detail = document->detail_text();
+  auto* view = new DrawingView(std::move(document), nullptr);
+  connect(view, &DrawingView::status_message, this, [this](const QString& text) {
+    statusBar()->showMessage(text, 4000);
+  });
+  const int index = tabs_->addTab(view, title);
+  tabs_->setCurrentIndex(index);
+  show_documents();
+  view->setFocus();
+  view->fit_to_window();
+
+  const QImage thumb = view->document().render_thumbnail(QSize(320, 180));
+  const QString thumb_path = save_mesh_thumbnail(path, thumb);
+  recent_.add(path, thumb_path);
+  refresh_home();
+  statusBar()->showMessage(
+      tr("Opened drawing %1 (%2) — wheel to zoom, drag to pan, F to fit").arg(title, detail),
+      8000);
 }
 
 bool MainWindow::is_obj_path(const QString& path) {
@@ -1643,6 +1715,11 @@ void MainWindow::notify_save_success(const QString& path) {
 bool MainWindow::save_file() {
   auto* vp = current_viewport();
   if (!vp) {
+    if (current_drawing_view() != nullptr) {
+      // 图纸是只读参考底图，没有可回写的内容。
+      statusBar()->showMessage(tr("Reference drawings are read-only — nothing to save."), 5000);
+      return false;
+    }
     QMessageBox::information(this, tr("Save"), tr("Open a document first."));
     return false;
   }
@@ -1662,6 +1739,10 @@ bool MainWindow::save_file() {
 bool MainWindow::save_file_as() {
   auto* vp = current_viewport();
   if (!vp) {
+    if (current_drawing_view() != nullptr) {
+      statusBar()->showMessage(tr("Reference drawings are read-only — nothing to save."), 5000);
+      return false;
+    }
     QMessageBox::information(this, tr("Save"), tr("Open a document first."));
     return false;
   }
@@ -1722,6 +1803,13 @@ DocumentViewport* MainWindow::current_viewport() const {
     return nullptr;
   }
   return qobject_cast<DocumentViewport*>(tabs_->currentWidget());
+}
+
+DrawingView* MainWindow::current_drawing_view() const {
+  if (stack_->currentWidget() != tabs_) {
+    return nullptr;
+  }
+  return qobject_cast<DrawingView*>(tabs_->currentWidget());
 }
 
 void MainWindow::refresh_property_panel() {
@@ -1794,6 +1882,10 @@ void MainWindow::debug_current_frame() {
 void MainWindow::frame_all() {
   if (auto* vp = current_viewport()) {
     vp->frame_scene();
+    return;
+  }
+  if (auto* drawing = current_drawing_view()) {
+    drawing->fit_to_window();
   }
 }
 

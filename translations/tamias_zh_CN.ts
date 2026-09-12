@@ -230,6 +230,34 @@
 <context>
     <name>tamias::MainWindow</name>
     <message>
+        <location filename="../src/app/main_window.cpp" line="188"/>
+        <location filename="../src/app/main_window.cpp" line="1387"/>
+        <location filename="../src/app/main_window.cpp" line="1406"/>
+        <source>Open Drawing</source>
+        <translation>打开图纸</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp" line="191"/>
+        <source>Open a reference drawing (PDF / DXF / SVG / image) in a 2D page</source>
+        <translation>打开参考图纸（PDF / DXF / SVG / 图片），以二维图纸页显示</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp" line="1368"/>
+        <source>All Supported (*.tdoc *.trscn *.gltf *.glb *.obj *.step *.stp *.iges *.igs *.brep *.ifc *.pdf *.dxf *.svg *.png *.jpg *.jpeg *.bmp *.tif *.tiff);;Tamias (*.tdoc);;Render Scene (*.trscn);;Meshes (*.gltf *.glb *.obj);;CAD (*.step *.stp *.iges *.igs *.brep);;IFC (*.ifc);;Drawings (*.pdf *.dxf *.svg *.png *.jpg *.jpeg *.bmp *.tif *.tiff);;glTF (*.gltf *.glb);;OBJ (*.obj);;STEP (*.step *.stp);;IGES (*.iges *.igs);;BREP (*.brep)</source>
+        <translation>所有支持的类型 (*.tdoc *.trscn *.gltf *.glb *.obj *.step *.stp *.iges *.igs *.brep *.ifc *.pdf *.dxf *.svg *.png *.jpg *.jpeg *.bmp *.tif *.tiff);;Tamias 文档 (*.tdoc);;渲染场景 (*.trscn);;网格 (*.gltf *.glb *.obj);;CAD (*.step *.stp *.iges *.igs *.brep);;IFC (*.ifc);;图纸 (*.pdf *.dxf *.svg *.png *.jpg *.jpeg *.bmp *.tif *.tiff);;glTF (*.gltf *.glb);;OBJ (*.obj);;STEP (*.step *.stp);;IGES (*.iges *.igs);;BREP (*.brep)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp" line="1426"/>
+        <source>Opened drawing %1 (%2) — wheel to zoom, drag to pan, F to fit</source>
+        <translation>已打开图纸 %1（%2）—— 滚轮缩放，拖拽平移，F 适配窗口</translation>
+    </message>
+    <message>
+        <location filename="../src/app/main_window.cpp" line="1720"/>
+        <location filename="../src/app/main_window.cpp" line="1743"/>
+        <source>Reference drawings are read-only — nothing to save.</source>
+        <translation>参考图纸是只读底图，没有需要保存的内容。</translation>
+    </message>
+    <message>
         <location filename="../src/app/main_window.cpp" line="199"/>
         <source>&amp;File</source>
         <translation>文件(&amp;F)</translation>
@@ -3014,6 +3042,149 @@ Wheel zooms, drag pans, double-click a bar to focus.</source>
     <message>
         <source>Select a component from the ribbon to start drawing</source>
         <translation>从功能区选择一个构件开始绘制</translation>
+    </message>
+</context>
+<context>
+    <name>QObject</name>
+    <message>
+        <location filename="../src/app/drawing_document.cpp" line="93"/>
+        <source>Drawings (*.pdf *.dxf *.svg *.png *.jpg *.jpeg *.bmp *.tif *.tiff *.gif *.webp);;PDF (*.pdf);;DXF (*.dxf);;Vector (*.svg);;Images (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.gif *.webp)</source>
+        <translation>图纸 (*.pdf *.dxf *.svg *.png *.jpg *.jpeg *.bmp *.tif *.tiff *.gif *.webp);;PDF (*.pdf);;DXF (*.dxf);;矢量图 (*.svg);;图片 (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.gif *.webp)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_document.cpp" line="136"/>
+        <source>Cannot read image: %1</source>
+        <translation>无法读取图片：%1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_document.cpp" line="140"/>
+        <source>Image</source>
+        <translation>图片</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_document.cpp" line="143"/>
+        <source>%1 × %2 px</source>
+        <translation>%1 × %2 像素</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_document.cpp" line="150"/>
+        <source>Cannot read SVG: %1</source>
+        <translation>无法读取 SVG：%1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_document.cpp" line="162"/>
+        <source>%1 × %2 units</source>
+        <translation>%1 × %2 单位</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_document.cpp" line="179"/>
+        <source>DXF has no measurable extent.</source>
+        <translation>DXF 没有可显示的范围。</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_document.cpp" line="185"/>
+        <source>%1 curves · %2 texts · %3 layers</source>
+        <translation>%1 条曲线 · %2 处文字 · %3 个图层</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_document.cpp" line="190"/>
+        <source> · %1 unsupported</source>
+        <translation> · %1 个图元未支持</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_document.cpp" line="200"/>
+        <source>Cannot read PDF: %1</source>
+        <translation>无法读取 PDF：%1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_document.cpp" line="119"/>
+        <source>Cannot open drawing: %1</source>
+        <translation>无法打开图纸：%1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_document.cpp" line="208"/>
+        <source>%1 page(s)</source>
+        <translation>%1 页</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_document.cpp" line="212"/>
+        <source>PDF viewing needs the Qt PDF module (Qt6::Pdf), which is not part of this build.
+Export the drawing to DXF, SVG or an image, or rebuild with Qt6::Pdf available.</source>
+        <translation>查看 PDF 需要 Qt PDF 模块（Qt6::Pdf），当前构建未包含。
+可以把图纸另存为 DXF、SVG 或图片，或在装上 Qt6::Pdf 后重新构建。</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::DrawingView</name>
+    <message>
+        <location filename="../src/app/drawing_view.cpp" line="144"/>
+        <source>%1%</source>
+        <translation>%1%</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_view.cpp" line="146"/>
+        <source> · page %1/%2</source>
+        <translation> · 第 %1/%2 页</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_view.cpp" line="187"/>
+        <source>X %1   Y %2</source>
+        <translation>X %1   Y %2</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_view.cpp" line="192"/>
+        <source>Zoom %1%</source>
+        <translation>缩放 %1%</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_view.cpp" line="194"/>
+        <source>   Page %1/%2</source>
+        <translation>   第 %1/%2 页</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_view.cpp" line="295"/>
+        <source>Fit to window</source>
+        <translation>适配窗口</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_view.cpp" line="297"/>
+        <source>Zoom 100%</source>
+        <translation>缩放到 100%</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_view.cpp" line="299"/>
+        <source>Zoom in</source>
+        <translation>放大</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_view.cpp" line="301"/>
+        <source>Zoom out</source>
+        <translation>缩小</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_view.cpp" line="306"/>
+        <source>Previous page</source>
+        <translation>上一页</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_view.cpp" line="309"/>
+        <source>Next page</source>
+        <translation>下一页</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_view.cpp" line="315"/>
+        <source>Light background</source>
+        <translation>浅色背景</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_view.cpp" line="322"/>
+        <source>Layers</source>
+        <translation>图层</translation>
+    </message>
+    <message>
+        <location filename="../src/app/drawing_view.cpp" line="325"/>
+        <source>(unnamed)</source>
+        <translation>（未命名）</translation>
     </message>
 </context>
 </TS>

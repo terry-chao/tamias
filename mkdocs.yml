@@ -50,6 +50,7 @@ nav:
   - 客户端:
       - app/index.md
       - Qt 壳: APP.md
+      - 参考图纸: DRAWING.md
   - 插件:
       - plugin/index.md
       - 设计理念: plugin/design.md

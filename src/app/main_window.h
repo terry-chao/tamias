@@ -33,6 +33,7 @@ class TimingPanel;
 class PluginManager;
 class RibbonGroup;
 class DrawPanel;
+class DrawingView;
 
 class MainWindow final : public QMainWindow {
   Q_OBJECT
@@ -48,6 +49,7 @@ class MainWindow final : public QMainWindow {
   void close_tab(int index);
   void open_recent_path(const QString& path);
   void on_missing_recent(const QString& path);
+  void open_drawing_file();
   void open_settings();
   void open_about();
   void open_plugin_manager();
@@ -71,6 +73,7 @@ class MainWindow final : public QMainWindow {
   Result<void> populate_document_meshes(Document& document, RenderThread& thread);
   void refresh_home();
   bool open_path(const QString& path);
+  void open_drawing_tab(const QString& path);
   void new_document();
   void set_create_tool(ToolMode mode);
   void sync_create_tool_actions(ToolMode mode);
@@ -93,6 +96,7 @@ class MainWindow final : public QMainWindow {
   const MeshCpu* mesh_for_obj_export(Document& document) const;
   int find_open_document(const QString& path) const;
   DocumentViewport* current_viewport() const;
+  DrawingView* current_drawing_view() const;
   static bool is_obj_path(const QString& path);
   static bool is_tdoc_path(const QString& path);
   static bool is_trscn_path(const QString& path);

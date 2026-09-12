@@ -29,6 +29,8 @@ add_executable(tamias
   handle_inspector.cpp
   property_panel.cpp
   draw_panel.cpp
+  drawing_document.cpp
+  drawing_view.cpp
   section_preview_widget.cpp
   component_specs.cpp
   texture_library_panel.cpp
@@ -103,6 +105,7 @@ target_link_libraries(tamias
     tamias::render
     tamias::document
     tamias::io
+    tamias::drawing
     tamias::modeling
     tamias::command
     tamias::plugin
@@ -111,6 +114,17 @@ target_link_libraries(tamias
     Qt6::Gui
     Qt6::Svg
 )
+
+# PDF 图纸需要 Qt PDF 模块（Qt 6 下是 GPLv3 / 商业双许可，未随本仓库分发）。
+# 装上就自动启用；没装则 PDF 走"请导出 DXF/SVG/图片"的提示。
+find_package(Qt6 QUIET COMPONENTS Pdf)
+if(TARGET Qt6::Pdf)
+  target_link_libraries(tamias PRIVATE Qt6::Pdf)
+  target_compile_definitions(tamias PRIVATE TAMIAS_HAVE_QT_PDF=1)
+  message(STATUS "Tamias PDF drawings: enabled (Qt6::Pdf)")
+else()
+  message(STATUS "Tamias PDF drawings: disabled (Qt6::Pdf not found)")
+endif()
 
 if(TARGET tamias::rhi_vulkan)
   target_link_libraries(tamias PRIVATE tamias::rhi_vulkan)

@@ -102,3 +102,4 @@ Output: `build/package/Tamias-<version>-win64.msi`. It installs to `C:\Program F
 - ASCII `.gltf` not yet supported — convert to `.glb` or `.obj`
 - STEP / IGES / BREP via OCCT
 - IFC spatial structure via IfcOpenShell IfcParse (geometry not imported yet)
+- Reference drawings (2D): PDF (needs `Qt6::Pdf`), DXF, SVG, images
