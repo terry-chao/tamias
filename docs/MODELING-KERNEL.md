@@ -133,7 +133,21 @@ Document::createGeom / rebuild
 
 ## 5. 现状与下一步
 
-**已落地**：接口层、OCCT 后端、求值器与指纹匹配搬进中间层、`register_linked_kernels()`。
+**已落地**：
+
+- 接口层、OCCT 后端、求值器与指纹匹配搬进中间层、`register_linked_kernels()`；
+- **第二个后端：Truck（Rust）**，见 §6；设置里可以选内核；
+- 跨后端验收网 `tests/kernel_conformance_tests.cpp`：同一批场景对每个注册的内核跑一遍。
+
+**两个后端现在各自会什么**（`KernelCapabilities::verbs` 是真相，UI / 测试都按它走）：
+
+| 动词 | OCCT | Truck |
+|---|---|---|
+| 矩形 / 圆 / 多边形轮廓、拉伸、平移、边的枚举与测量、三角化、包围盒 | ✅ | ✅ |
+| 布尔（并 / 交 / 差） | ✅ | ✅（经 `truck-shapeops`） |
+| 圆柱 | ✅ | ❌ |
+| 圆角 / 倒角 | ✅ | ❌ |
+| STEP / IGES / BREP 读写 | ✅ | ❌ |
 
 **过渡件（P3 收尾）**：
 
@@ -143,10 +157,51 @@ Document::createGeom / rebuild
 
 **还没做**：
 
-- 第二个后端（ACIS / Truck…）。接口是照着“再加一个后端不返工”设计的，但只有在真接第二个
-  后端时才会暴露假设；建议接入前先补一组参数化跑所有后端的内核测试；
-- `measure_edges` 目前一次算完所有边（含相邻面法线）。大零件上可以拆成“粗测量 + 按候选补法线”
-  两段，避免全量曲面投影；
-- 能力位还没接到 UI（灰按钮）。
+- Truck 的相邻面法线：`measure_edges` 只填位置 / 方向 / 长度（指纹少了消歧的那一维）；
+- `measure_edges` 一次算完所有边（含法线）。大零件上可以拆成“粗测量 + 按候选补法线”；
+- 能力位接 UI 灰按钮（现在只有设置里的内核下拉）。
+
+---
+
+## 6. 第二个后端：Truck（Rust）
+
+**为什么是它**：Truck 是 Rust 写的开源 B-rep 内核（MIT/Apache）。它的价值不在“比 OCCT 强”，
+而在两点：① 能编到 WASM，将来浏览器里想要可编辑的模型，OCCT 进不去；② 用一个能力更弱的
+内核反过来验证接口是不是真的中立。
+
+**桥怎么分**（Rust 与 C++ 之间只有一层薄桥）：
+
+```
+C++  truck/truck_kernel.cpp     实现 ModelKernel 动词，Body 包一个 u64 句柄
+        │  extern "C"（POD + 裸指针）
+Rust    truck-bridge/src/lib.rs  持有 Truck 拓扑（handle table）、跑动词、序列化网格
+        └─ truck-modeling / topology / meshalgo / shapeops
+```
+
+桥的纪律（写在 `lib.rs` 顶部）：
+
+1. 每个导出函数 `catch_unwind`，panic 绝不穿 FFI，转错误码 + `truck_last_error()`；
+2. 跨边界只有 `#[repr(C)]` 结构体和裸指针，不传 `String` / `Vec` / `Option`；
+3. 网格缓冲由 Rust 分配、C++ 拷走后调 `truck_verts_free` / `truck_indices_free`；
+4. 桥里没有业务逻辑——特征树、指纹、错误文案全在中间层。
+
+**怎么打开**：
+
+```powershell
+cmake --preset msvc -DTAMIAS_ENABLE_TRUCK_KERNEL=ON
+cmake --build --preset debug --target tamias
+```
+
+需要 Rust 工具链（`cargo`）；CMake 用 `add_custom_command` 调 `cargo build --release` 产静态库
+（**必须声明 Rust 源码为依赖**，否则改了 `lib.rs` 也不会重编——在这里踩过一次）。
+打开后设置 → Modeling → Kernel backend 就能选，重启生效。
+
+**踩过的坑**：
+
+- 两个后端量出来的边必须可比，所以 `EdgeMeasure` 统一到 Tamias Y-up、由中间层归一化，
+  指纹因此加了 `edge_fp_version`；
+- `EdgeMeasure.key`：OCCT 用 `std::hash<TopoDS_Shape>`，Truck 用 `Edge::id()`（曲线 Arc 指针）。
+  没有它，中间层分不清“同一条棱被两个面各枚举一次”和“两条真的不同的棱”；
+- 共面的两个体做布尔是退化情形：Truck 直接返回 none。验收用例里把工具体挪开一点避开它。
 
 相关：[特征树求值器](FEATURE-TREE-EVALUATOR.md)、[几何边界](ISHAPE-OPS.md)、[渲染 RHI](RENDERING.md)。

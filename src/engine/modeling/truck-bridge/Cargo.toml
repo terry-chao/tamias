@@ -15,6 +15,7 @@ truck-modeling = "0.6"
 truck-meshalgo = "0.4"
 truck-polymesh = "0.6"
 truck-topology = "0.6"
+truck-shapeops = "0.4.0"
 
 # 桥必须能 catch_unwind，所以 panic 不能是 abort。
 [profile.release]

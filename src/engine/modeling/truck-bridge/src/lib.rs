@@ -20,6 +20,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use truck_meshalgo::prelude::*;
 use truck_modeling::*;
+use truck_shapeops::{and, or};
 
 // Truck 自己导出了 `Result<T>` 别名，这里用别名区分，避免签名被它的错误类型吃掉。
 type Res<T> = std::result::Result<T, (i32, String)>;
@@ -274,6 +275,37 @@ pub extern "C" fn truck_extrude(handle: u64, depth: f64, out: *mut u64) -> i32 {
                 "extrude expects a profile face, got a solid".into(),
             )),
         }
+    })
+}
+
+// op: 0 = Fuse, 1 = Common, 2 = Cut（与 tamias::BooleanOp 一致）。
+#[no_mangle]
+pub extern "C" fn truck_boolean(a: u64, b: u64, op: i32, out: *mut u64) -> i32 {
+    guard(|| {
+        let shape_a = load(a)?;
+        let shape_b = load(b)?;
+        let (Shape::Solid(solid_a), Shape::Solid(solid_b)) = (shape_a.as_ref(), shape_b.as_ref())
+        else {
+            return Err((
+                TRUCK_E_UNSUPPORTED,
+                "boolean expects two solids (extrude the profiles first)".into(),
+            ));
+        };
+        // 点重合容差：形状在米级别，1e-4 够用；太大反而会把薄壁吃掉。
+        const TOL: f64 = 1e-4;
+        let result = match op {
+            1 => and(solid_a, solid_b, TOL),
+            2 => {
+                // Truck 没有单独的 difference：把工具体翻面再求交。
+                let mut inverted = solid_b.clone();
+                inverted.not();
+                and(solid_a, &inverted, TOL)
+            }
+            _ => or(solid_a, solid_b, TOL),
+        };
+        let solid = result
+            .ok_or_else(|| (TRUCK_E_FAILED, "truck boolean produced no solid".into()))?;
+        write_out(out, store(Shape::Solid(solid)))
     })
 }
 

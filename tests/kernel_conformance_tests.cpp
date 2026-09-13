@@ -113,6 +113,13 @@ TEST(KernelConformance, BooleanCutRemovesMaterial) {
     ASSERT_TRUE(tool_face) << tool_face.error();
     auto tool = kernel.extrude(**tool_face, 4.0);
     ASSERT_TRUE(tool) << tool.error();
+    // 工具体下移一点，让它穿透母体而不是底面共面——共面是布尔算法的退化情形，
+    // 换哪个内核都容易失败，测试里避开它。
+    if (caps.supports(KernelVerb::Transform)) {
+      auto moved = kernel.transform(**tool, Vec3{0.f, -1.f, 0.f});
+      ASSERT_TRUE(moved) << moved.error();
+      tool = std::move(*moved);
+    }
 
     auto cut = kernel.boolean(**base, **tool, BooleanOp::Cut);
     ASSERT_TRUE(cut) << cut.error();

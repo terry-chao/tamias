@@ -43,8 +43,9 @@ KernelCapabilities TruckKernel::capabilities() const {
   // 如实声明：Truck 0.6 没有布尔（在单独的 truck-shapeops 里）、没有圆角/倒角。
   // C++ 侧因此不会假装支持，UI 也能据此灰按钮。
   caps.verbs = KernelVerb::RectFace | KernelVerb::CircleFace | KernelVerb::PolygonFace |
-               KernelVerb::Extrude | KernelVerb::Transform | KernelVerb::Edges |
-               KernelVerb::MeasureEdges | KernelVerb::Tessellate | KernelVerb::Bounds;
+               KernelVerb::Extrude | KernelVerb::Boolean | KernelVerb::Transform |
+               KernelVerb::Edges | KernelVerb::MeasureEdges | KernelVerb::Tessellate |
+               KernelVerb::Bounds;
   caps.multi_edge_fillet = false;
   caps.variable_radius_fillet = false;
   caps.step_import = false;
@@ -104,8 +105,16 @@ Result<BodyRef> TruckKernel::transform(const Body& body, Vec3 translation) const
   return wrap(code, handle, "transform");
 }
 
-Result<BodyRef> TruckKernel::boolean(const Body&, const Body&, BooleanOp) const {
-  return Err("truck backend does not support boolean yet (truck-shapeops 未接入)");
+Result<BodyRef> TruckKernel::boolean(const Body& a, const Body& b, BooleanOp op) const {
+  const TruckBody* body_a = truck_body(a);
+  const TruckBody* body_b = truck_body(b);
+  if (body_a == nullptr || body_b == nullptr) {
+    return Err("boolean: bodies are not Truck bodies");
+  }
+  std::uint64_t handle = 0;
+  const std::int32_t code = truck_boolean(body_a->handle(), body_b->handle(),
+                                         static_cast<std::int32_t>(op), &handle);
+  return wrap(code, handle, "boolean");
 }
 
 Result<BodyRef> TruckKernel::cylinder(double, double, Vec3, Vec3) const {

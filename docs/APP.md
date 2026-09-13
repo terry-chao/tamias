@@ -20,7 +20,7 @@
 | 构件显隐页（按类别显隐，Ctrl+L） | `visibility_panel` / `entity_kind_catalog` |
 | 楼层面板（按楼层显隐 + 当前楼层，Ctrl+Shift+L） | `floor_panel` / `viewport_floor.h` |
 | 楼层设置对话框（标高 / 层高 / 夹层） | `floor_settings_dialog` / `update_storeys_command` |
-| 设置（含选 Vulkan / OpenGL） | `app_settings` / `settings_dialog` |
+| 设置（选 Vulkan / OpenGL，选建模内核 OCCT / Truck） | `app_settings` / `settings_dialog` |
 | 登记 RHI 后端 | `rhi_backends.cpp` |
 
 和下面几层的接缝：
@@ -49,6 +49,6 @@ Ribbon「开始 → 插件」由 `PluginHost` 在启动时加载 C# 插件。插
 
 ## 现在有 / 还没有
 
-**有：** 打开 `.tdoc` / `.trscn` / 导入网格、转相机、点选、挤出等特征的属性编辑、墙工具预览线、线框/着色/真实模式、**视图 → 渲染场景**（`Ctrl+Shift+I`：对照 draw list、写 `.trscn` / 钉金样 / 导出 OBJ；`Ctrl+Shift+P` 钉进 `assets/samples/render/`，调试步骤见 [渲染场景快照](RENDER-SCENE.md#调试步骤)）、**Ctrl+D 句柄检查窗口**（点选构件显示 `.tdoc` 里的 id）、**构件显隐页**（`Ctrl+L`，按类别一键显隐）、**楼层面板**（`Ctrl+Shift+L`，一层一行勾选显隐 + 选当前楼层，齿轮开「楼层设置」改标高 / 层高 / 夹层）、**开始 → 插件**（C# 示例：列出选择 / 删除所选）。
+**有：** 打开 `.tdoc` / `.trscn` / 导入网格、转相机、点选、挤出等特征的属性编辑、墙工具预览线、线框/着色/真实模式、**视图 → 渲染场景**（`Ctrl+Shift+I`：对照 draw list、写 `.trscn` / 钉金样 / 导出 OBJ；`Ctrl+Shift+P` 钉进 `assets/samples/render/`，调试步骤见 [渲染场景快照](RENDER-SCENE.md#调试步骤)）、**Ctrl+D 句柄检查窗口**（点选构件显示 `.tdoc` 里的 id）、**构件显隐页**（`Ctrl+L`，按类别一键显隐）、**楼层面板**（`Ctrl+Shift+L`，一层一行勾选显隐 + 选当前楼层，齿轮开「楼层设置」改标高 / 层高 / 夹层）、**开始 → 插件**（C# 示例：列出选择 / 删除所选）、**设置 → Modeling → Kernel backend**（选建模内核：OCCT 完整 / Truck 实验性，重启生效，见 [建模内核](MODELING-KERNEL.md)）。
 
 **还没有（路线图支撑线）：** 大纲树、测量、工作台切换、完整建模草图 UI、轴网 UI。壳继续长在 app 里；BIM 规则走 [BIM 业务层](BIM.md)，内核仍是 command →（bim）→ document → modeling。
