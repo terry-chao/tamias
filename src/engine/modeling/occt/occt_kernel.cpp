@@ -335,6 +335,11 @@ Result<BodyRef> with_shape(const Body& body, const char* what, Fn&& fn) {
 
 KernelCapabilities OcctKernel::capabilities() const {
   KernelCapabilities caps;
+  caps.verbs = KernelVerb::RectFace | KernelVerb::CircleFace | KernelVerb::PolygonFace |
+               KernelVerb::Extrude | KernelVerb::Boolean | KernelVerb::Transform |
+               KernelVerb::Cylinder | KernelVerb::Edges | KernelVerb::MeasureEdges |
+               KernelVerb::Tessellate | KernelVerb::Bounds | KernelVerb::Fillet |
+               KernelVerb::Chamfer;
   caps.multi_edge_fillet = true;  // MakeFillet / MakeChamfer 支持一次 Add 多条
   caps.variable_radius_fillet = false;
   caps.step_import = true;

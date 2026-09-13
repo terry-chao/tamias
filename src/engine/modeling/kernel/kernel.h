@@ -34,14 +34,43 @@ struct KernelCreateInfo {
   KernelBackend backend = KernelBackend::Occt;
 };
 
-// 后端能力：接口只保证「动词存在」，支持到哪一步由能力位说明。
-// UI / 命令按能力灰按钮，后端不必假装支持（对标 WebGL 后端没有线框）。
+// 后端支持哪些动词。UI / 命令据此灰按钮，跨后端验收测试据此跳过，后端不必假装支持
+// （对标 WebGL 后端没有线框 polygon mode）。
+enum class KernelVerb : std::uint32_t {
+  None = 0,
+  RectFace = 1u << 0,
+  CircleFace = 1u << 1,
+  PolygonFace = 1u << 2,
+  Extrude = 1u << 3,
+  Boolean = 1u << 4,
+  Transform = 1u << 5,
+  Cylinder = 1u << 6,
+  Edges = 1u << 7,
+  MeasureEdges = 1u << 8,
+  Tessellate = 1u << 9,
+  Bounds = 1u << 10,
+  Fillet = 1u << 11,
+  Chamfer = 1u << 12,
+};
+
+inline KernelVerb operator|(KernelVerb a, KernelVerb b) {
+  return static_cast<KernelVerb>(static_cast<std::uint32_t>(a) |
+                                 static_cast<std::uint32_t>(b));
+}
+
+inline bool any(KernelVerb a, KernelVerb b) {
+  return (static_cast<std::uint32_t>(a) & static_cast<std::uint32_t>(b)) != 0;
+}
+
 struct KernelCapabilities {
+  KernelVerb verbs = KernelVerb::None;
   bool multi_edge_fillet = false;  // 一次倒多条棱
   bool variable_radius_fillet = false;
   bool step_import = false;
   bool step_export = false;
   bool native_brep_io = false;  // BRep / IGES 之类原生读写
+
+  [[nodiscard]] bool supports(KernelVerb verb) const { return any(verbs, verb); }
 };
 
 // 体：后端持有的不透明句柄。外面永远看不到 TopoDS_Shape / ENTITY*。
