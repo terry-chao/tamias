@@ -8,7 +8,7 @@
 #include "engine/render/material.h"
 #include "engine/render/render_scene.h"
 #include "engine/document/tess_cache.h"
-#include "engine/modeling/shape_ops.h"
+#include "engine/modeling/kernel/shape_ops.h"
 #include "engine/modeling/tess_worker.h"
 #include "engine/render/lod_request.h"
 

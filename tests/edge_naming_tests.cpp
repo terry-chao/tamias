@@ -4,7 +4,7 @@
 #include "engine/graphics/mesh.h"
 #include "engine/modeling/edge_fingerprint.h"
 #include "engine/modeling/feature.h"
-#include "engine/modeling/occt_feature.h"
+#include "engine/modeling/evaluator.h"
 
 #include <gtest/gtest.h>
 

@@ -5,7 +5,7 @@
 #include "bim/line_location.h"
 #include "engine/document/document.h"
 #include "engine/modeling/curve_geom.h"
-#include "engine/modeling/occt_geom_builder.h"
+#include "engine/modeling/geom_builder.h"
 
 #include <algorithm>
 #include <cmath>

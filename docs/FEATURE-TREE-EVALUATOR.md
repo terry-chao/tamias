@@ -120,10 +120,13 @@ recompute_scene()
 | 层 | 文件 | 职责 | 跟 OCCT 的关系 |
 |---|---|---|---|
 | **配方（数据）** | [feature.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/feature.h) `FeatureModel` | 存特征树，纯数据，能序列化进 `.tdoc` | **零依赖 OCCT** |
-| **边界（抽象）** | [geom_builder.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/geom_builder.h) `IGeometryBuilder` | 只定义一个接口 `build(model) → MeshCpu` | 只声明，不实现 |
-| **执行（实现）** | [occt_geom_builder.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt_geom_builder.cpp) + [occt_feature.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt_feature.cpp) | 真正调 OCCT 求值 | **全项目唯一碰 OCCT 几何的地方** |
+| **中间层（求值器）** | [evaluator.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/evaluator.cpp) | 遍历特征、解析参数、调内核动词、出三角网 | 零依赖 OCCT（只 include 内核接口） |
+| **内核接口** | [kernel/kernel.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/kernel/kernel.h) `ModelKernel` | 轮廓 / 拉伸 / 布尔 / 圆角 / 倒角 / 测量 / 离散这些动词 | 只声明，不实现 |
+| **后端（实现）** | [occt/](https://github.com/terry-chao/tamias/tree/main/src/engine/modeling/occt) | 真正调 OCCT 求值 | **全项目唯一碰 OCCT 几何的地方** |
 
 最关键的一点：`FeatureModel` 里**没有任何 OCCT 类型**（没有 `TopoDS_Shape`），只有 `uint64_t id`、`FeatureKind`、`unordered_map<string,double> params`。所以它能存盘。OCCT 的 `TopoDS_Shape` 只在求值器内部活一瞬间，算完就转成 `MeshCpu` 交出去，不往外泄漏。
+
+分层细节与「加第二个后端」的约定见 [建模内核](MODELING-KERNEL.md)。
 
 ---
 
@@ -155,7 +158,7 @@ struct Feature {
 
 ## 4. 求值器怎么工作
 
-入口是 [occt_feature.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt_feature.cpp) 的 `evaluate_feature_model(model, deflection)`，流程：
+入口是 [evaluator.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/evaluator.cpp) 的 `evaluate_feature_model(model, kernel, deflection)`，流程：
 
 ```
 建一个 shapes 表（id → TopoDS_Shape），一开始是空的
@@ -247,7 +250,7 @@ OCCT 是 **Z-up**（Z 朝上），Tamias 视口是 **Y-up**（glTF/Blender 惯�
 
 键名是 `edge_mid_* / edge_dir_* / edge_len / edge_n_*`（见 [edge_fingerprint.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/edge_fingerprint.h)），跟特征树一起进 `.tdoc`。属性面板会把它们过滤掉（`is_edge_fingerprint_key`），用户只看到 `Edge` / `Radius`。
 
-**解析**（`resolve_edge`，[occt_feature.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt_feature.cpp)）：
+**解析**（`resolve_edge`，[edge_fingerprint.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/edge_fingerprint.cpp)）：
 
 1. 没有指纹（旧 `.tdoc`、脚本只给 `edge`）→ 保持旧的纯索引行为，不报错；
 2. 索引那条边的指纹对得上 → 就用它（没改上游时的快路）；

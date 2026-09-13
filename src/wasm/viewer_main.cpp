@@ -2,6 +2,7 @@
 
 #include "command/command_system.h"
 #include "engine/core/log.h"
+#include "engine/modeling/linked_kernels.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -21,6 +22,7 @@ tamias::ViewerHost& host() {
 
 bool start_viewer(const std::string& canvas) {
   tamias::init_logging(tamias::LogLevel::Info);
+  tamias::register_linked_kernels();  // WASM 阶段 1 不带内核：这里是 no-op
   tamias::register_commands(tamias::command_registry());
   auto r = host().start(canvas.c_str());
   return static_cast<bool>(r);

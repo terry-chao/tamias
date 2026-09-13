@@ -15,4 +15,9 @@ class IGeometryBuilder {
                                               double deflection) const = 0;
 };
 
+// 过渡接口：老调用方（Entity::createGeom、各种 rebuild）只想要「特征树 → 网格」。
+// 实现转发给默认内核（见 linked_kernels.h）。P3 会把内核显式传进这些调用点，
+// 这个全局入口随之删除——不要在新代码里用它。
+[[nodiscard]] IGeometryBuilder& geometry_builder();
+
 }  // namespace tamias

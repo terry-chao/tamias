@@ -195,7 +195,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 ## 8. 建议的第一步（可执行）
 
 1. 设计特征树最小数据模型（`Feature{ id, kind, inputs, params }`）+ 求值器（Box + Extrude 两个节点够用），挂在现有 OCCT 集成上。
-2. 让 `Shape`（[shape_ops.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/shape_ops.h)）从「read_file + tessellate」升级为「持有特征树 + evaluate() → TopoDS_Shape + tessellate()」。
+2. 让 `Shape`（[kernel/shape_ops.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/kernel/shape_ops.h)）从「read_file + tessellate」升级为「持有特征树 + evaluate() → TopoDS_Shape + tessellate()」。
 3. 做一个极简入口：改参数 → 重算 → 上传新三角网 → 渲染更新，先跑通闭环，再谈 UI 和拓扑命名。
 
 并行：IfcParse 最小 demo 已通（`tamias_ifc_dump` / 打开 `.ifc` 打印空间结构树）。完整导入仍走支撑线。

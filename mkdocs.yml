@@ -68,6 +68,7 @@ nav:
       - 语义树: SCENE-GRAPH.md
   - 造型:
       - modeling/index.md
+      - 建模内核（Kernel）: MODELING-KERNEL.md
       - 特征树求值器: FEATURE-TREE-EVALUATOR.md
       - MCAD 管线: MCAD-PIPELINE.md
       - 几何边界: ISHAPE-OPS.md

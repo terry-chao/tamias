@@ -11,7 +11,9 @@
 
 namespace tamias {
 
-// Kernel-agnostic shape boundary (OCCT/Truck plug in later).
+// 导入路径的内核边界：读文件 → Shape（懒离散）。
+// 与 kernel.h 的 Body 是一对：Body 是参数化求值路径的句柄，Shape 是导入路径的
+// 句柄（要长期持有、按需离散）。三条内核路线落地后两者合并，见 docs/MODELING-KERNEL.md。
 class Shape {
  public:
   virtual ~Shape() = default;

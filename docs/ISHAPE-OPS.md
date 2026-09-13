@@ -22,7 +22,7 @@ app / document / 特征树（纯数据）
    OcctShapeOps / OcctGeometryBuilder  →  TopoDS_Shape → 三角网
 ```
 
-接口在 [`shape_ops.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/shape_ops.h)、[`geom_builder.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/geom_builder.h)。OCCT 实现在 `occt_shape_ops.cpp`、`occt_geom_builder.cpp`、`occt_feature.cpp`。
+接口在 [`kernel/shape_ops.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/kernel/shape_ops.h)（导入路径）与 [`kernel/kernel.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/kernel/kernel.h)（参数化求值的动词）。OCCT 实现在 [`occt/`](https://github.com/terry-chao/tamias/tree/main/src/engine/modeling/occt)：`occt_shape_ops.cpp`（读 STEP/IGES/BREP）、`occt_kernel.cpp`（求值动词 + 边的测量）。分层见 [建模内核](MODELING-KERNEL.md)。
 
 ---
 
@@ -84,4 +84,4 @@ IfcOpenShell **不是**和 OCCT 并列的第二个几何内核。它是：
 - `Shape` 升级为「持有特征树 + evaluate()」（路线图第 8 节仍写着）
 - 第二套几何内核（Truck 等）；接口预留了，没有第二实现
 
-附录：[shape_ops.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/shape_ops.h) · [occt_shape_ops.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt_shape_ops.cpp) · [geom_builder.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/geom_builder.h)
+附录：[kernel/shape_ops.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/kernel/shape_ops.h) · [occt/occt_shape_ops.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt/occt_shape_ops.cpp) · [kernel/kernel.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/kernel/kernel.h)

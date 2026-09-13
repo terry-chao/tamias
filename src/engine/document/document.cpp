@@ -4,7 +4,7 @@
 #include "bim/host_update.h"
 #include "bim/wall_join.h"
 #include "engine/math/math.h"
-#include "engine/modeling/occt_geom_builder.h"
+#include "engine/modeling/geom_builder.h"
 #include "engine/render/builtin_textures.h"
 #include "engine/render/mesh_lod.h"
 #include "entity/core/entity_grip.h"

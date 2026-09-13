@@ -1,5 +1,5 @@
 #include "engine/modeling/feature.h"
-#include "engine/modeling/occt_feature.h"
+#include "engine/modeling/evaluator.h"
 
 #include <gtest/gtest.h>
 

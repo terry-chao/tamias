@@ -244,7 +244,7 @@ CPU 录两万次 draw 仍会顶满。下一步：
 | [mesh.h](https://github.com/terry-chao/tamias/blob/main/src/engine/graphics/mesh.h) `Vertex` / `MeshCpu` | 44 字节顶点；`faces` 为 Face 范围 + AABB | 量化顶点；按面流式加载 |
 | [mesh_lod.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/mesh_lod.h) | `MeshLod` + `select_mesh_lod` 滞回 | 连续 deflection / Close 档 |
 | [tess_cache.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/tess_cache.h) | `(geometry_id, lod) → MeshAsset` | 落盘 |
-| [occt_feature.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt_feature.cpp) `tessellate_shape` | 按 Face 出网并记下范围 | 按 deflection 多档 + 按面剔除 |
+| [occt/occt_kernel.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt/occt_kernel.cpp) `tessellate_shape` | 按 Face 出网并记下范围 | 按 deflection 多档 + 按面剔除 |
 | [tess_worker.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/tess_worker.cpp) | OCCT 单线程队列 | — |
 | [mesh_asset.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/mesh_asset.h) | 一资产一份 CPU 网；intern 按指纹 | 引用计数 / 几何指纹复用 |
 | [scene.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/scene.h) | 语义树，线性 find；`mesh_asset_id` = 几何身份 | find 改索引 |

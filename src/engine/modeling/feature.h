@@ -96,7 +96,8 @@ struct Feature {
 };
 
 // 特征树：一串带参数的步骤，求值得到几何。
-// 数据模型与几何内核无关（可序列化）；求值器在 OCCT 后端（见 occt_feature.h）。
+// 数据模型与几何内核无关（可序列化）；求值器在中间层（见 evaluator.h），
+// 内核动词见 kernel/kernel.h，OCCT 实现在 occt/。
 class FeatureModel {
  public:
   Feature& add_feature(FeatureKind kind, std::vector<std::uint64_t> inputs,

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/modeling/shape_ops.h"
+#include "engine/modeling/kernel/shape_ops.h"
 
 namespace tamias {
 

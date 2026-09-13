@@ -7,7 +7,8 @@
 #include "engine/render/render_runtime.h"
 #include "engine/graphics/graphics_backend.h"
 #include "i18n.h"
-#include "engine/modeling/occt_shape_ops.h"
+#include "engine/modeling/linked_kernels.h"
+#include "engine/modeling/occt/occt_shape_ops.h"
 
 #include <QApplication>
 #include <QIcon>
@@ -31,6 +32,7 @@ int main(int argc, char* argv[]) {
 
   tamias::init_logging(tamias::LogLevel::Info);
   tamias::register_linked_rhi_backends();
+  tamias::register_linked_kernels();
   tamias::register_commands(tamias::command_registry());
   tamias::register_occt_shape_ops();
 

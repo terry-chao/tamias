@@ -2,7 +2,7 @@
 
 #include "entity/core/entity_grip.h"
 #include "engine/modeling/edge_fingerprint.h"
-#include "engine/modeling/occt_geom_builder.h"
+#include "engine/modeling/geom_builder.h"
 
 namespace tamias {
 

@@ -20,7 +20,7 @@
 #include "entity/structural/structural_wall_entity.h"
 #include "entity/architectural/wall_entity.h"
 #include "entity/family/window_entity.h"
-#include "engine/modeling/occt_geom_builder.h"
+#include "engine/modeling/geom_builder.h"
 #include "engine/profile/timing_scope.h"
 #include "bim/line_location.h"
 #include "bim/point_location.h"

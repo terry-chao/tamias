@@ -31,9 +31,9 @@
 #include "engine/math/math.h"
 #include "engine/document/picking.h"
 #include "engine/math/camera.h"
-#include "engine/modeling/occt_feature.h"
-#include "engine/modeling/occt_shape_ops.h"
-#include "engine/modeling/shape_ops.h"
+#include "engine/modeling/evaluator.h"
+#include "engine/modeling/occt/occt_shape_ops.h"
+#include "engine/modeling/kernel/shape_ops.h"
 #include "engine/render/render_runtime.h"
 
 #include <gtest/gtest.h>

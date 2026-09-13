@@ -1,28 +1,34 @@
 find_package(Threads REQUIRED)
 
-set(_tamias_modeling_src shape_ops.cpp curve_geom.cpp edge_fingerprint.cpp tess_worker.cpp)
-if(TAMIAS_ENABLE_OCCT)
-  list(APPEND _tamias_modeling_src
-    occt_shape_ops.cpp
-    occt_feature.cpp
-    occt_geom_builder.cpp)
-else()
-  list(APPEND _tamias_modeling_src stub_geom_builder.cpp)
-endif()
+# 内核接口层（对应 render/rhi：动词 + 注册表）
+add_subdirectory(kernel)
 
-add_library(tamias_modeling STATIC ${_tamias_modeling_src})
+# 中间层：特征树、求值器、草图数学、拓扑命名。不含任何内核实现。
+add_library(tamias_modeling STATIC
+  curve_geom.cpp
+  edge_fingerprint.cpp
+  evaluator.cpp
+  geom_builder.cpp
+  linked_kernels.cpp
+  tess_worker.cpp
+)
+
 add_library(tamias::modeling ALIAS tamias_modeling)
 target_include_directories(tamias_modeling PUBLIC
   ${CMAKE_SOURCE_DIR}/src
 )
-if(TAMIAS_ENABLE_OCCT AND TAMIAS_OCCT_INCLUDE_DIR)
-  target_include_directories(tamias_modeling PUBLIC "${TAMIAS_OCCT_INCLUDE_DIR}")
-endif()
 target_link_libraries(tamias_modeling PUBLIC
+  tamias::kernel
   tamias::core
   tamias::graphics
   Threads::Threads
 )
+
+# 后端：OCCT。中间层不 include 它，只是把注册进来的内核当默认实现用（过渡期）。
 if(TAMIAS_ENABLE_OCCT)
-  target_link_libraries(tamias_modeling PUBLIC ${TAMIAS_OCCT_LIBRARIES})
+  add_subdirectory(occt)
+endif()
+if(TARGET tamias::kernel_occt)
+  target_link_libraries(tamias_modeling PUBLIC tamias::kernel_occt)
+  target_compile_definitions(tamias_modeling PRIVATE TAMIAS_HAS_KERNEL_OCCT=1)
 endif()

@@ -75,7 +75,9 @@ WebGPU RHI          emdawnwebgpu，绑 #viewport
 
 **线程。** `RenderDeviceConfig.synchronous = true` 时不建 `std::thread`。上传和 `pump()` 都在调用线程跑，避开 SharedArrayBuffer / COOP-COEP。
 
-**OCCT。** WASM 预设关掉 `TAMIAS_ENABLE_OCCT`，`modeling` 链 `stub_geom_builder.cpp`。打开已 tessellate 的 `.tdoc` 只吃 MESH/SCEN 缓存，不重求值。
+**OCCT。** WASM 预设关掉 `TAMIAS_ENABLE_OCCT`，没有后端注册进内核注册表：特征树求值会直接报
+“kernel not registered”（`geometry_builder` 的过渡 shim 原样把错误传出去）。打开已 tessellate 的
+`.tdoc` 只吃 MESH/SCEN 缓存，不重求值。见 [建模内核](MODELING-KERNEL.md)。
 
 **UI。** `web/` 是自建的 Vite + React 18 + TypeScript 工程，依赖全部本地化（不走 esm.sh CDN）。
 `src/viewer.ts` 里有 embind 导出的类型声明和加载器（运行时动态加载同目录的 `tamias_viewer.js`）；

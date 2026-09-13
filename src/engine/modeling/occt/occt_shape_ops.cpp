@@ -1,4 +1,4 @@
-#include "occt_shape_ops.h"
+#include "engine/modeling/occt/occt_shape_ops.h"
 
 #include "engine/core/fs_utf8.h"
 #include "engine/core/log.h"
