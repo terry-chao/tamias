@@ -27,6 +27,9 @@
 namespace tamias {
 namespace {
 
+// 错误面板只留最近这些行，避免长时间运行后越堆越多。
+constexpr std::size_t kMaxLogLines = 20;
+
 std::string lower_ext(std::string_view name) {
   std::string ext;
   const auto dot = name.find_last_of('.');
@@ -43,13 +46,42 @@ std::string lower_ext(std::string_view name) {
 }  // namespace
 
 ViewerHost::ViewerHost()
-    : session_(std::make_unique<Session>(std::make_shared<Document>("Untitled"))) {}
+    : session_(std::make_unique<Session>(std::make_shared<Document>("Untitled"))) {
+  // 把引擎日志接到页面上的错误面板：只留 warn / error，不然会被贴图上传刷屏。
+  // 桌面端是状态栏 / 对话框在报错，web 端原来只能翻 DevTools。
+  set_log_sink([this](LogLevel level, std::string_view message) {
+    if (level != LogLevel::Warn && level != LogLevel::Error) {
+      return;
+    }
+    std::scoped_lock lock(log_mutex_);
+    log_lines_.emplace_back(message);
+    if (log_lines_.size() > kMaxLogLines) {
+      log_lines_.erase(log_lines_.begin());
+    }
+  });
+}
 
 ViewerHost::~ViewerHost() {
+  set_log_sink(nullptr);  // 别让引擎在宿主析构之后还回调进来
   channel_.reset();
   if (render_thread_) {
     render_thread_->stop();
   }
+}
+
+std::string ViewerHost::log_text() const {
+  std::scoped_lock lock(log_mutex_);
+  std::string out;
+  for (const std::string& line : log_lines_) {
+    out += line;
+    out += '\n';
+  }
+  return out;
+}
+
+void ViewerHost::clear_log() {
+  std::scoped_lock lock(log_mutex_);
+  log_lines_.clear();
 }
 
 NativeWindowHandle ViewerHost::window() const {
@@ -68,6 +100,7 @@ void ViewerHost::load_demo() {
 bool ViewerHost::new_document() {
   // 新建 = 一个空文档 + 内置示例场景。示例走命令层（不是硬编码网格），所以几何由
   // 已注册的内核求值——WASM 上是 Truck，顺便证明"新建出来就能接着造型"。
+  clear_log();
   session_->reset_document(std::make_shared<Document>(std::string("示例")));
   loaded_ = true;
   last_submitted_scene_generation_ = 0;
@@ -178,6 +211,7 @@ void ViewerHost::upload_document() {
 
 Result<void> ViewerHost::load_bytes(std::string_view name, std::span<const std::uint8_t> bytes) {
   const auto ext = lower_ext(name);
+  clear_log();
   mode_ = RenderMode::Shaded;
   if (ext == ".tdoc") {
     auto loaded = load_document_bytes(bytes);
@@ -244,6 +278,62 @@ void ViewerHost::resize(std::uint32_t width, std::uint32_t height) {
   if (channel_) {
     channel_->resize(window(), width_, height_);
   }
+}
+
+void ViewerHost::set_render_mode(int mode) {
+  mode_ = static_cast<RenderMode>(std::clamp(mode, 0, 2));
+}
+
+void ViewerHost::set_view_angles(double yaw, double pitch) {
+  // pitch 夹在 ±(π/2 − ε)：正上/正下时 right = cross(forward, up) 退化。
+  constexpr double kHalfPi = 1.5707963267948966;
+  constexpr double kEps = 1e-3;
+  session_->camera().camera().set_yaw_pitch(static_cast<float>(yaw),
+                                             static_cast<float>(
+                                                 std::clamp(pitch, -kHalfPi + kEps,
+                                                            kHalfPi - kEps)));
+}
+
+double ViewerHost::view_yaw() const { return session_->camera().camera().yaw(); }
+
+double ViewerHost::view_pitch() const { return session_->camera().camera().pitch(); }
+
+std::uint64_t ViewerHost::pick_entity(float nx, float ny) {
+  if (width_ < 2 || height_ < 2) {
+    return 0;
+  }
+  const float w = static_cast<float>(width_);
+  const float h = static_cast<float>(height_);
+  const float px = std::clamp(nx, 0.f, 1.f) * w;
+  const float py = std::clamp(ny, 0.f, 1.f) * h;
+  const Ray ray = camera_ray(session_->camera().camera(), w / h, px, py, w, h);
+  const Document& doc = session_->document();
+  // 与桌面视口同一套：物体级 BVH 求最近命中。文档规模变化时重建，
+  // 几何只由点击驱动，代价可以接受（桌面也是点一次建一次）。
+  Bvh bvh;
+  bvh.build(doc);
+  if (auto hit = bvh.closest_hit(ray, doc)) {
+    session_->set_selection({hit->node_id});
+    status_ = "selected " + std::to_string(hit->node_id);
+    return hit->node_id;
+  }
+  session_->clear_selection();
+  status_ = "selection cleared";
+  return 0;
+}
+
+ViewerStats ViewerHost::stats() const {
+  RenderFrameStats frame_stats{};
+  if (render_thread_) {
+    frame_stats = render_thread_->last_stats();
+  }
+  ViewerStats out;
+  out.draws = static_cast<int>(frame_stats.draws);
+  out.triangles = static_cast<int>(frame_stats.triangles);
+  out.gpu_mesh_mb = static_cast<double>(frame_stats.gpu_mesh_bytes) / (1024.0 * 1024.0);
+  out.pending_tessellate = static_cast<int>(session_->document().pending_tessellate_count() +
+                                            frame_stats.lod_requests);
+  return out;
 }
 
 void ViewerHost::pointer_down(float x, float y, int button) {

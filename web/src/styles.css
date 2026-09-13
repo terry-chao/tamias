@@ -158,7 +158,8 @@ kbd {
 
 .hint {
   position: absolute;
-  left: 12px;
+  left: 50%;
+  transform: translateX(-50%);
   bottom: 12px;
   color: var(--muted);
   font-size: 12px;
@@ -167,6 +168,68 @@ kbd {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 4px 8px;
+}
+
+/* 桌面视口左下角那组读数：draw / tri / gpu / tess / 选中。 */
+.stats {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font: 11px/1.4 ui-monospace, monospace;
+  color: var(--muted);
+  pointer-events: none;
+  background: rgba(20, 22, 26, 0.65);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+/* 引擎 warn / error 面板（右下角）。 */
+.view-cube {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 96px;
+  height: 96px;
+  cursor: grab;
+  touch-action: none;
+  background: rgba(20, 22, 26, 0.35);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.view-cube:active {
+  cursor: grabbing;
+}
+
+.log-panel {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  max-width: min(46vw, 520px);
+  max-height: 42%;
+  overflow: auto;
+  background: rgba(20, 22, 26, 0.9);
+  border: 1px solid var(--error);
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: var(--text);
+}
+
+.log-panel .log-title {
+  font-size: 11px;
+  color: var(--error);
+  margin-bottom: 4px;
+}
+
+.log-panel pre {
+  margin: 0;
+  font: 11px/1.45 ui-monospace, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .drop-overlay {

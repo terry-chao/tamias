@@ -1,6 +1,14 @@
 // embind 暴露出来的 WASM 模块的类型声明 + 加载器。
 // viewer_main.cpp 中 EMSCRIPTEN_BINDINGS 导出的函数一一对应。
 
+// 桌面视口左下角读数的同款字段。
+export interface ViewerStats {
+  draws: number;
+  triangles: number;
+  gpuMeshMb: number;
+  pendingTessellate: number;
+}
+
 export interface TamiasViewerModule {
   startViewer(canvasSelector: string): boolean;
   loadFile(name: string, bytes: string): boolean;
@@ -26,6 +34,18 @@ export interface TamiasViewerModule {
   clearSelection(): void;
   // 视口归一化坐标 → 工作平面 (y = planeY) 上的世界点，返回 "x,y,z"；无交点返回空串。
   pickWorkPlane(nx: number, ny: number, planeY: number): string;
+  // 视图模式：0 线框 / 1 着色 / 2 真实感（与桌面端同一套 RenderMode）。
+  setRenderMode(mode: number): void;
+  renderMode(): number;
+  // 相机朝向，与桌面 ViewCube 同一套约定（Front=+Z, Right=+X, Top=+Y）。
+  setViewAngles(yaw: number, pitch: number): void;
+  viewYaw(): number;
+  viewPitch(): number;
+  // 点选：命中就选中并返回节点 id，未命中清空选择返回 0。
+  pickEntity(nx: number, ny: number): number;
+  stats(): ViewerStats;
+  // 引擎最近的问题（warn / error），每行一条；空串表示没有。
+  logText(): string;
 }
 
 declare global {

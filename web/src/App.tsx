@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { loadViewer, settle, toBinaryString } from "./viewer";
+import { loadViewer, settle, toBinaryString, type ViewerStats } from "./viewer";
+import ViewCube, { type ViewAngles } from "./ViewCube";
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -16,6 +17,24 @@ export default function App() {
   const [dragging, setDragging] = useState(false);
   // 建模放置模式：active 时左键点击视口就在水平面上落一个构件。
   const [placeMode, setPlaceMode] = useState<"none" | "rect" | "circle">("none");
+  // 视图模式：0 线框 / 1 着色 / 2 真实感 —— 与桌面端同一套 RenderMode。
+  const [renderMode, setRenderMode] = useState(1);
+  const [selectedCount, setSelectedCount] = useState(0);
+  const [stats, setStats] = useState<ViewerStats>({
+    draws: 0,
+    triangles: 0,
+    gpuMeshMb: 0,
+    pendingTessellate: 0,
+  });
+  // 引擎的 warn / error：桌面端在状态栏/对话框里报，web 端显示成页面上的面板。
+  const [logText, setLogText] = useState("");
+  // 相机朝向：右上角立方体用它画姿态，也用它做点面转场。
+  const [viewAngles, setViewAngles] = useState<ViewAngles>({ yaw: 0.785398163, pitch: 0.35 });
+  const viewAnglesRef = useRef(viewAngles);
+  const applyViewAngles = (angles: ViewAngles) => {
+    viewAnglesRef.current = angles;
+    setViewAngles(angles);
+  };
 
   // 只驱动引擎、不取返回值的调用：Asyncify 下可能返回 Promise，忽略它但要吃掉异常。
   const fire = (action: unknown) => {
@@ -94,6 +113,30 @@ export default function App() {
     };
   }, []);
 
+  // 桌面视口左下角的读数（draw / tri / gpu / tess）在 web 上同样常显。
+  // 每 400ms 取一次即可，不必每帧穿过 embind。
+  useEffect(() => {
+    if (!ready) return;
+    const tick = async () => {
+      const module = moduleRef.current;
+      if (!module) return;
+      try {
+        setStats(await settle(module.stats()));
+        setSelectedCount(await settle(module.selectionCount()));
+        setLogText(await settle(module.logText()));
+        applyViewAngles({
+          yaw: await settle(module.viewYaw()),
+          pitch: await settle(module.viewPitch()),
+        });
+      } catch {
+        // 忽略瞬时读取失败（例如正在重建文档）
+      }
+    };
+    void tick();
+    const timer = window.setInterval(() => void tick(), 400);
+    return () => window.clearInterval(timer);
+  }, [ready]);
+
   // 键盘快捷键：F = 框选全部。
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -143,6 +186,8 @@ export default function App() {
       }
       setDocName(file.name);
       setStatus(await settle(module.status()));
+      // .trscn 自带视图模式，加载后把按钮状态同步过来。
+      setRenderMode(await settle(module.renderMode()));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setStatus("加载失败");
@@ -158,7 +203,77 @@ export default function App() {
     setStatus(message);
     setError(ok ? null : message);
     setDocName(await settle(module.documentName()));
+    setRenderMode(await settle(module.renderMode()));
     setPlaceMode("none");
+  };
+
+  // 视图模式：线框 / 着色 / 真实感（桌面端是同一套 RenderMode）。
+  const changeRenderMode = (mode: number) => {
+    setRenderMode(mode);
+    fire(moduleRef.current?.setRenderMode(mode));
+  };
+
+  const clampPitch = (pitch: number) =>
+    Math.max(-Math.PI / 2 + 1e-3, Math.min(Math.PI / 2 - 1e-3, pitch));
+
+  // 点立方体的面：按桌面端的 280ms ease-out cubic 转到标准视图（yaw 走最短路径）。
+  const animateView = (target: ViewAngles) => {
+    const module = moduleRef.current;
+    if (!module) return;
+    const from = viewAnglesRef.current;
+    let dy = target.yaw - from.yaw;
+    while (dy > Math.PI) dy -= Math.PI * 2;
+    while (dy < -Math.PI) dy += Math.PI * 2;
+    const toPitch = clampPitch(target.pitch);
+    const start = performance.now();
+    const duration = 280;
+    const step = () => {
+      const t = Math.min(1, (performance.now() - start) / duration);
+      const e = 1 - Math.pow(1 - t, 3);
+      const angles = {
+        yaw: from.yaw + dy * e,
+        pitch: from.pitch + (toPitch - from.pitch) * e,
+      };
+      fire(module.setViewAngles(angles.yaw, angles.pitch));
+      applyViewAngles(angles);
+      if (t < 1) {
+        requestAnimationFrame(step);
+      } else {
+        fire(module.setViewAngles(target.yaw, toPitch));
+        applyViewAngles({ yaw: target.yaw, pitch: toPitch });
+      }
+    };
+    requestAnimationFrame(step);
+  };
+
+  // 拖立方体：直接跟手，不做缓动。
+  const orbitView = (angles: ViewAngles) => {
+    const next = { yaw: angles.yaw, pitch: clampPitch(angles.pitch) };
+    fire(moduleRef.current?.setViewAngles(next.yaw, next.pitch));
+    applyViewAngles(next);
+  };
+
+  // 删除选中：先把 id 收集完再逐条 dispatch——边删边读选择会看到过期列表。
+  const deleteSelection = async () => {
+    const module = moduleRef.current;
+    if (!module) return;
+    const count = await settle(module.selectionCount());
+    if (count === 0) {
+      setStatus("没有选中的构件");
+      return;
+    }
+    const ids: number[] = [];
+    for (let i = 0; i < count; i += 1) {
+      ids.push(await settle(module.selectionIdAt(i)));
+    }
+    let ok = true;
+    for (const id of ids) {
+      ok = (await settle(module.dispatch("delete_entity", `i:entity_id=${id}`))) && ok;
+    }
+    const message = await settle(module.status());
+    setStatus(ok ? `已删除 ${ids.length} 个构件` : message);
+    setError(ok ? null : message);
+    setSelectedCount(await settle(module.selectionCount()));
   };
 
   // 建模：在指定世界点脚本式建一根柱子（带预设位置 → 命令非交互，立即建体）。
@@ -192,6 +307,19 @@ export default function App() {
     await placeColumn(placeMode, point);
   };
 
+  // 左键点击点选：与桌面视口同一套物体级 BVH 拾取；点空白处清空选择。
+  const pickAt = async (canvas: HTMLCanvasElement, clientX: number, clientY: number) => {
+    const module = moduleRef.current;
+    if (!module) return;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) return;
+    const id = await settle(
+      module.pickEntity((clientX - rect.left) / rect.width, (clientY - rect.top) / rect.height),
+    );
+    setSelectedCount(await settle(module.selectionCount()));
+    setStatus(id ? `选中 #${id}` : "点空了，已清空选择");
+  };
+
   const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -207,9 +335,14 @@ export default function App() {
     fire(moduleRef.current?.pointerUp(event.clientX, event.clientY, event.button));
     const press = pressRef.current;
     pressRef.current = null;
-    // 只认「左键按下后没怎么动」的点击；拖拽过就不落点。
+    // 只认「左键按下后没怎么动」的点击；拖拽过就不算点击。
     if (!press || press.button !== 0 || event.button !== 0) return;
     if (Math.hypot(event.clientX - press.x, event.clientY - press.y) > 4) return;
+    if (placeMode === "none") {
+      // 不在放置模式时，左键点击＝点选（与桌面视口一致）。
+      void pickAt(event.currentTarget, event.clientX, event.clientY);
+      return;
+    }
     void placeAt(event.currentTarget, event.clientX, event.clientY);
   };
 
@@ -291,6 +424,29 @@ export default function App() {
           >
             框选全部 <kbd>F</kbd>
           </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={!ready}
+            onClick={() => void deleteSelection()}
+            title="删除选中的构件（每条都是一步可撤销的命令）"
+          >
+            删除选中{selectedCount > 0 ? ` (${selectedCount})` : ""}
+          </button>
+          <span className="divider" />
+          {/* 视图模式：与桌面端同一套 RenderMode，0 线框 / 1 着色 / 2 真实感 */}
+          {["线框", "着色", "真实"].map((label, index) => (
+            <button
+              key={label}
+              type="button"
+              className={`btn${renderMode === index ? " active" : ""}`}
+              disabled={!ready}
+              onClick={() => changeRenderMode(index)}
+              title={`${label}模式`}
+            >
+              {label}
+            </button>
+          ))}
           <span className="divider" />
           <button
             type="button"
@@ -339,12 +495,31 @@ export default function App() {
           onContextMenu={(event) => event.preventDefault()}
         />
         {dragging && <div className="drop-overlay">松开以打开文件</div>}
+        <ViewCube
+          yaw={viewAngles.yaw}
+          pitch={viewAngles.pitch}
+          onPick={animateView}
+          onOrbit={orbitView}
+        />
         <div className="hint">
-          中键旋转 · 右键平移 · 滚轮缩放 · F 框选全部 · Ctrl+Z 撤销 ·{" "}
-          {placeMode === "none"
-            ? "选「方柱 / 圆柱」后点视口落点（Truck 建模）"
-            : "左键点击放置，Esc 退出"}
+          左键点选 · 中键旋转 · 右键平移 · 滚轮缩放 · F 框选全部 · Ctrl+Z 撤销 ·{" "}
+          {placeMode === "none" ? "「方柱 / 圆柱」可点视口落点" : "左键点击放置，Esc 退出"}
         </div>
+        {/* 与桌面视口左下角同一组读数 */}
+        <div className="stats" title="与桌面视口左下角同一组读数">
+          <span>draw {stats.draws}</span>
+          <span>tri {stats.triangles}</span>
+          <span>gpu {stats.gpuMeshMb.toFixed(1)}MB</span>
+          <span>tess {stats.pendingTessellate}</span>
+          <span>选中 {selectedCount}</span>
+        </div>
+        {/* 引擎报错：原来只能翻 DevTools，现在直接显示在页面上 */}
+        {logText.trim() !== "" && (
+          <div className="log-panel" title="引擎的 warn / error 日志">
+            <div className="log-title">引擎日志</div>
+            <pre>{logText.trim()}</pre>
+          </div>
+        )}
       </div>
     </div>
   );

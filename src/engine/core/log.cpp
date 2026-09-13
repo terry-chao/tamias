@@ -19,6 +19,7 @@ namespace {
 
 LogLevel g_level = LogLevel::Info;
 std::mutex g_mutex;
+std::function<void(LogLevel, std::string_view)> g_sink;
 
 const char* level_name(LogLevel level) {
   switch (level) {
@@ -40,34 +41,47 @@ void write_line(LogLevel level, std::string_view msg) {
   if (static_cast<int>(level) < static_cast<int>(g_level)) {
     return;
   }
-  std::scoped_lock lock(g_mutex);
-  const auto now = std::chrono::system_clock::now();
-  const auto t = std::chrono::system_clock::to_time_t(now);
-  std::tm tm{};
+  std::function<void(LogLevel, std::string_view)> sink;
+  {
+    std::scoped_lock lock(g_mutex);
+    sink = g_sink;
+    const auto now = std::chrono::system_clock::now();
+    const auto t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm{};
 #if defined(_WIN32)
-  localtime_s(&tm, &t);
+    localtime_s(&tm, &t);
 #else
-  localtime_r(&t, &tm);
+    localtime_r(&t, &tm);
 #endif
-  char line[1024];
-  const int n = std::snprintf(line, sizeof(line), "[%02d:%02d:%02d] [%s] %.*s\n",
-                              tm.tm_hour, tm.tm_min, tm.tm_sec, level_name(level),
-                              static_cast<int>(msg.size()), msg.data());
-  if (n < 0) {
-    return;
-  }
-  std::fprintf(stderr, "%s", line);
+    char line[1024];
+    const int n = std::snprintf(line, sizeof(line), "[%02d:%02d:%02d] [%s] %.*s\n",
+                                tm.tm_hour, tm.tm_min, tm.tm_sec, level_name(level),
+                                static_cast<int>(msg.size()), msg.data());
+    if (n < 0) {
+      return;
+    }
+    std::fprintf(stderr, "%s", line);
 #if defined(_WIN32)
-  // 同时发到调试器：VSCode 的「调试控制台」/「输出」面板走 OutputDebugString 通道，
-  // 而 GUI/调试场景下 stderr 常常不可见。
-  OutputDebugStringA(line);
+    // 同时发到调试器：VSCode 的「调试控制台」/「输出」面板走 OutputDebugString 通道，
+    // 而 GUI/调试场景下 stderr 常常不可见。
+    OutputDebugStringA(line);
 #endif
+  }
+  // 回调放在锁外：宿主的 sink 不该再打日志，但别为此冒自锁的风险。
+  if (sink) {
+    sink(level, msg);
+  }
 }
 
 }  // namespace
 
 void init_logging(LogLevel level) { g_level = level; }
 void shutdown_logging() {}
+
+void set_log_sink(std::function<void(LogLevel, std::string_view)> sink) {
+  std::scoped_lock lock(g_mutex);
+  g_sink = std::move(sink);
+}
 
 void log_trace(std::string_view msg) { write_line(LogLevel::Trace, msg); }
 void log_debug(std::string_view msg) { write_line(LogLevel::Debug, msg); }

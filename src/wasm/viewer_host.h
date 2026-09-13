@@ -7,12 +7,21 @@
 
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace tamias {
+
+// 桌面视口左下角那行读数（draw / tri / gpu / tess）在 web 上也要有。
+struct ViewerStats {
+  int draws = 0;
+  int triangles = 0;
+  double gpu_mesh_mb = 0.0;
+  int pending_tessellate = 0;
+};
 
 // WASM 宿主：Session + 渲染通道 + canvas 管理。
 // 文档 / 命令 / 相机 / 选择都走 Session；embind 面 = Session 能力 1:1。
@@ -26,6 +35,20 @@ class ViewerHost {
   // 新建文档：清空当前内容，填一个内置示例场景（走命令层，几何由已注册内核求值）。
   bool new_document();
   void resize(std::uint32_t width, std::uint32_t height);
+  // 视图模式：0 线框 / 1 着色 / 2 真实感（与 RenderMode 同序，桌面端是同一套）。
+  void set_render_mode(int mode);
+  [[nodiscard]] int render_mode() const { return static_cast<int>(mode_); }
+  // 相机朝向，与桌面 ViewCube 同一套约定（Front=+Z, Right=+X, Top=+Y）：
+  // eye_dir = (cos(pitch)·sin(yaw), sin(pitch), cos(pitch)·cos(yaw))。
+  void set_view_angles(double yaw, double pitch);
+  [[nodiscard]] double view_yaw() const;
+  [[nodiscard]] double view_pitch() const;
+  // 点选：视口归一化坐标 → 命中的节点 id；未命中返回 0 并清空选择。
+  std::uint64_t pick_entity(float nx, float ny);
+  [[nodiscard]] ViewerStats stats() const;
+  // 引擎日志里最近的问题（warn / error），给页面上的错误面板用。
+  [[nodiscard]] std::string log_text() const;
+  void clear_log();
   void pointer_down(float x, float y, int button);
   void pointer_move(float x, float y);
   void pointer_up(float x, float y, int button);
@@ -55,6 +78,8 @@ class ViewerHost {
   std::unique_ptr<Session> session_;
   std::shared_ptr<RenderThread> render_thread_;
   std::unique_ptr<RenderChannel> channel_;
+  mutable std::mutex log_mutex_;
+  std::vector<std::string> log_lines_;
   std::string canvas_selector_ = "#viewport";
   std::string status_ = "idle";
   std::uint32_t width_ = 1;

@@ -80,6 +80,21 @@ std::string pick_work_plane(float nx, float ny, float plane_y) {
   return host().pick_work_plane(nx, ny, plane_y);
 }
 
+void set_render_mode_viewer(int mode) { host().set_render_mode(mode); }
+int render_mode_viewer() { return host().render_mode(); }
+
+void set_view_angles_viewer(double yaw, double pitch) { host().set_view_angles(yaw, pitch); }
+double view_yaw_viewer() { return host().view_yaw(); }
+double view_pitch_viewer() { return host().view_pitch(); }
+
+// 点选：命中就选中并返回节点 id，未命中清空选择返回 0。
+std::uint64_t pick_entity_viewer(float nx, float ny) { return host().pick_entity(nx, ny); }
+
+tamias::ViewerStats stats_viewer() { return host().stats(); }
+
+// 引擎最近的问题（warn / error）：页面上的错误面板用。
+std::string log_text_viewer() { return host().log_text(); }
+
 }  // namespace
 
 #if defined(__EMSCRIPTEN__)
@@ -105,6 +120,21 @@ EMSCRIPTEN_BINDINGS(tamias_viewer) {
   emscripten::function("selectionIdAt", &selection_id_at);
   emscripten::function("clearSelection", &clear_selection_viewer);
   emscripten::function("pickWorkPlane", &pick_work_plane);
+  emscripten::function("setRenderMode", &set_render_mode_viewer);
+  emscripten::function("renderMode", &render_mode_viewer);
+  emscripten::function("setViewAngles", &set_view_angles_viewer);
+  emscripten::function("viewYaw", &view_yaw_viewer);
+  emscripten::function("viewPitch", &view_pitch_viewer);
+  emscripten::function("pickEntity", &pick_entity_viewer);
+  emscripten::function("stats", &stats_viewer);
+  emscripten::function("logText", &log_text_viewer);
+
+  // 桌面视口左下角读数的同款字段（draw / tri / gpu / tess）。
+  emscripten::value_object<tamias::ViewerStats>("ViewerStats")
+      .field("draws", &tamias::ViewerStats::draws)
+      .field("triangles", &tamias::ViewerStats::triangles)
+      .field("gpuMeshMb", &tamias::ViewerStats::gpu_mesh_mb)
+      .field("pendingTessellate", &tamias::ViewerStats::pending_tessellate);
 }
 #endif
 

@@ -24,11 +24,28 @@ Qt 6 官方支持 WebAssembly，但 Tamias 桌面视口绑的是 HWND / X11、`A
 |---|---|---|
 | **0. 契约** | 非 Qt 宿主能喂窗口和字节 | ✅ `NativeWindowHandle.canvas_selector`；`load_document_bytes` / `load_obj_bytes` |
 | **1. 查看器** | 浏览器打开 `.tdoc` / `.trscn` / `.obj` 能转 | ✅ WebGPU RHI、同步 `RenderThread::pump`、Vite + React + TS 单页 |
-| **2. 轻编辑** | 选中、夹点、撤销 | ❌ `CommandSystem` 尚未 embind |
-| **3. 建模** | 浏览器里布尔 / 拉伸 | ❌ OCCT 未进 WASM |
+| **2. 轻编辑** | 选中、夹点、撤销 | 🟡 选中（点选 BVH + 高亮）/ 撤销 / 重做 ✅；夹点、框选拖拽 ❌ |
+| **3. 建模** | 浏览器里布尔 / 拉伸 | ✅ 走 Truck 内核：柱 / 梁 / 板等命令 + 视口点击落点；圆角倒角 ❌（Truck 没有） |
 | **4. BIM** | IFC 浏览 | ❌ 仍走桌面 / 将来服务端 |
 
 阶段 1 **不做**：OCCT 布尔、IFC、多视口、线框 polygon mode。
+
+### 对照桌面端：web 已经有什么
+
+| 能力 | 桌面 | web |
+|---|---|---|
+| 打开 `.tdoc` / `.trscn` / `.obj` | ✅ | ✅（拖放或选择文件） |
+| 转相机 / 框选全部 | ✅ | ✅（中键 / 右键 / F） |
+| 线框 / 着色 / 真实模式 | ✅ | ✅（顶栏三个按钮，同一套 `RenderMode`） |
+| 点选 + 选中高亮 | ✅ | ✅（左键点击，物体级 BVH；点空白清空） |
+| 撤销 / 重做 | ✅ | ✅（`Ctrl+Z` / `Ctrl+Y`） |
+| 左下角读数 draw / tri / gpu / tess | ✅ | ✅（视口左下角，字段同名） |
+| 建模命令（柱 / 梁 / 板 / 布尔…） | ✅（OCCT / Truck 可选） | ✅（Truck；顶栏放置 + 点击落点） |
+| 新建文档 | ✅ | ✅（内置示例场景，几何由内核求值） |
+| 删除选中 | ✅ | ✅ |
+| 属性面板 / 大纲树 / 测量 / 楼层 / 构件显隐 / 句柄检查 / 渲染场景调试器 | ✅ | ❌ |
+| 夹点编辑、框选拖拽、墙工具预览 | ✅ | ❌ |
+| 插件（C#） | ✅ | ❌ |
 
 ---
 
@@ -36,7 +53,9 @@ Qt 6 官方支持 WebAssembly，但 Tamias 桌面视口绑的是 HWND / X11、`A
 
 ```
 Web UI (web/, Vite + React + TypeScript)
-    │  embind：startViewer / loadFile / pointer* / renderFrame
+    │  embind：startViewer / loadFile / newDocument / pointer* / renderFrame
+    │          / dispatch / undo・redo / selection* / pickEntity / pickWorkPlane
+    │          / setRenderMode / stats
     ▼
 ViewerHost          相机、文件、提交 FrameSubmission
     ▼
