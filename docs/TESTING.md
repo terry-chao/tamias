@@ -87,6 +87,7 @@ CMake 用 `gtest_discover_tests(... DISCOVERY_MODE PRE_TEST)`，并给 OCCT DLL 
 | [`tests/ibl_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/ibl_tests.cpp) | `IblBake` | 1 | studio IBL 分辨率、有限非零辐射度 |
 | [`tests/command_dispatch_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/command_dispatch_tests.cpp) | `CommandDispatch` | 8 | 梁/柱/圆柱/门/弧/矩形/楼层/`set_location`/`set_material`/`chamfer`、布尔交差 |
 | [`tests/feature_boolean_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/feature_boolean_tests.cpp) | `FeatureModel` | 2 | 特征树布尔 Cut / Common |
+| [`tests/edge_naming_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/edge_naming_tests.cpp) | `EdgeNaming` | 10 | 圆角/倒角的边定位：指纹采集、改上游后跟随、索引被改错时纠正、指纹对不上报错、旧文件兼容、`.tdoc` roundtrip |
 | [`tests/camera_controller_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/camera_controller_tests.cpp) | `CameraController` | 4 | orbit / pan / frame_aabb / dolly_to_focus |
 | [`tests/import_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/import_tests.cpp) | `MeshIo` `OcctImport` | 5 | 最小 GLB、拒绝 ASCII glTF、STEP/IGES/BREP 读写 |
 | [`tests/mesh_intern_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/mesh_intern_tests.cpp) | `MeshIntern` | 4 | 同几何 intern 一份 `MeshAsset`；改参数 COW；删共享引用不丢网 |

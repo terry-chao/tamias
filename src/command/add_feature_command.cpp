@@ -1,6 +1,7 @@
 #include "add_feature_command.h"
 
 #include "entity/core/entity_grip.h"
+#include "engine/modeling/edge_fingerprint.h"
 #include "engine/modeling/occt_geom_builder.h"
 
 namespace tamias {
@@ -25,6 +26,10 @@ Result<void> AddFeatureCommand::apply(bool add) {
     const std::uint64_t input = entity->model.output_feature()->id;
     Feature& added = entity->model.add_feature(kind_, {input}, params_);
     feature_id_ = added.id;
+    // 圆角 / 倒角：连「这条边长什么样」一起记下来，上游改了才认得回来。
+    if (kind_ == FeatureKind::Fillet || kind_ == FeatureKind::Chamfer) {
+      refresh_edge_fingerprint(entity->model, feature_id_);
+    }
   } else {
     entity->model.remove_feature(feature_id_);
   }

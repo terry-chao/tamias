@@ -1,6 +1,6 @@
 find_package(Threads REQUIRED)
 
-set(_tamias_modeling_src shape_ops.cpp curve_geom.cpp tess_worker.cpp)
+set(_tamias_modeling_src shape_ops.cpp curve_geom.cpp edge_fingerprint.cpp tess_worker.cpp)
 if(TAMIAS_ENABLE_OCCT)
   list(APPEND _tamias_modeling_src
     occt_shape_ops.cpp

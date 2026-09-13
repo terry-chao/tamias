@@ -1,11 +1,15 @@
 #include "occt_feature.h"
 
 #include "engine/modeling/curve_geom.h"
+#include "engine/modeling/edge_fingerprint.h"
 #include "engine/profile/timing_scope.h"
 
+#include <Bnd_Box.hxx>
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
+#include <BRepAdaptor_Curve.hxx>
+#include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_MakePolygon.hxx>
@@ -17,9 +21,14 @@
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
 #include <BRep_Tool.hxx>
+#include <GeomLProp_SLProps.hxx>
+#include <Geom_Surface.hxx>
 #include <Poly_Triangulation.hxx>
+#include <ShapeAnalysis_Surface.hxx>
+#include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopLoc_Location.hxx>
+#include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
@@ -28,13 +37,17 @@
 #include <gp_Circ.hxx>
 #include <gp_Dir.hxx>
 #include <gp_Pnt.hxx>
+#include <gp_Pnt2d.hxx>
 #include <gp_Trsf.hxx>
 #include <gp_Vec.hxx>
 #include <Standard_Failure.hxx>
 #include <Standard_Type.hxx>
 
 #include <algorithm>
+#include <cmath>
 #include <exception>
+#include <limits>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -91,16 +104,337 @@ gp_Dir tamias_dir_to_occt(Vec3 d) {
                 static_cast<double>(d.y));
 }
 
-// 取 shape 的第 index 条边（拓扑命名「索引法」：按 TopExp 遍历顺序，脆但简单）。
-TopoDS_Edge nth_edge(const TopoDS_Shape& shape, int index) {
-  int i = 0;
-  for (TopExp_Explorer exp(shape, TopAbs_EDGE); exp.More(); exp.Next()) {
-    if (i == index) {
-      return TopoDS::Edge(exp.Current());
-    }
-    ++i;
+// ---------------------------------------------------------------------------
+// 边的几何指纹：把「第 N 条边」升级成「长什么样的那条边」。
+// 采集与匹配都在求值器内部的 OCCT 空间做；位置按包围盒归一化，所以与尺寸无关。
+// ---------------------------------------------------------------------------
+
+// 指纹加权代价阈值。越大越像；超过 kEdgeMatchCost 就认定「不是同一条边」。
+constexpr double kEdgeMatchCost = 0.6;     // 接受一条候选边的代价上限
+constexpr double kEdgeMatchMargin = 0.10;  // 最优与次优太接近 → 不敢认，报错
+constexpr double kEdgeMatchSlack = 0.05;   // 索引候选和最优差不多时，优先信索引
+
+struct ShapeFrame {
+  gp_Pnt min;
+  double dx = 1.0;
+  double dy = 1.0;
+  double dz = 1.0;
+  double diag = 1.0;
+};
+
+struct EdgeSignature {
+  bool valid = false;
+  Vec3 mid{};   // 归一化中点/质心
+  Vec3 dir{};
+  bool has_dir = false;
+  double length = 0.0;  // 边长 / 包围盒对角线
+  Vec3 normal1{};
+  Vec3 normal2{};
+  bool has_normal1 = false;
+  bool has_normal2 = false;
+};
+
+ShapeFrame shape_frame(const TopoDS_Shape& shape) {
+  ShapeFrame frame{gp_Pnt(0.0, 0.0, 0.0), 1.0, 1.0, 1.0, 1.0};
+  Bnd_Box box;
+  BRepBndLib::Add(shape, box);
+  if (box.IsVoid()) {
+    return frame;
   }
-  return TopoDS_Edge();
+  double xmin = 0.0;
+  double ymin = 0.0;
+  double zmin = 0.0;
+  double xmax = 0.0;
+  double ymax = 0.0;
+  double zmax = 0.0;
+  box.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+  frame.min = gp_Pnt(xmin, ymin, zmin);
+  frame.dx = std::max(xmax - xmin, 1e-9);
+  frame.dy = std::max(ymax - ymin, 1e-9);
+  frame.dz = std::max(zmax - zmin, 1e-9);
+  frame.diag = std::sqrt(frame.dx * frame.dx + frame.dy * frame.dy + frame.dz * frame.dz);
+  return frame;
+}
+
+std::vector<TopoDS_Edge> collect_edges(const TopoDS_Shape& shape) {
+  std::vector<TopoDS_Edge> edges;
+  for (TopExp_Explorer exp(shape, TopAbs_EDGE); exp.More(); exp.Next()) {
+    edges.push_back(TopoDS::Edge(exp.Current()));
+  }
+  return edges;
+}
+
+Vec3 occt_dir_to_vec(const gp_Dir& d) {
+  return Vec3{static_cast<float>(d.X()), static_cast<float>(d.Y()), static_cast<float>(d.Z())};
+}
+
+// 相邻面在 p 处的法线（按面朝向修正，指向外面）。平面、圆柱面都能取；取不到返回 false。
+bool face_normal_at(const TopoDS_Face& face, const gp_Pnt& p, gp_Dir& out) {
+  const Handle(Geom_Surface) surface = BRep_Tool::Surface(face);
+  if (surface.IsNull()) {
+    return false;
+  }
+  const gp_Pnt2d uv = ShapeAnalysis_Surface(surface).ValueOfUV(p, 1e-6);
+  GeomLProp_SLProps props(surface, uv.X(), uv.Y(), 1, 1e-9);
+  if (!props.IsNormalDefined()) {
+    return false;
+  }
+  gp_Dir normal = props.Normal();
+  if (face.Orientation() == TopAbs_REVERSED) {
+    normal.Reverse();
+  }
+  out = normal;
+  return true;
+}
+
+// 一条边的几何签名。闭合边（圆）没有稳定方向，改用整圈采样质心 + 总长。
+// with_normals = false 时跳过相邻面法线（粗筛用，省掉昂贵的曲面投影）。
+EdgeSignature edge_signature(const TopoDS_Edge& edge, const ShapeFrame& frame,
+                             const TopTools_IndexedDataMapOfShapeListOfShape* ancestors,
+                             bool with_normals) {
+  EdgeSignature sig;
+  if (edge.IsNull()) {
+    return sig;
+  }
+  BRepAdaptor_Curve curve(edge);
+  const double u0 = curve.FirstParameter();
+  const double u1 = curve.LastParameter();
+  const bool closed = curve.IsClosed();
+
+  constexpr int kSamples = 24;
+  const int count = closed ? kSamples : kSamples + 1;
+  std::vector<gp_Pnt> points;
+  points.reserve(static_cast<std::size_t>(count));
+  gp_XYZ sum(0.0, 0.0, 0.0);
+  for (int i = 0; i < count; ++i) {
+    const double t = static_cast<double>(i) / static_cast<double>(kSamples);
+    const gp_Pnt p = curve.Value(u0 + (u1 - u0) * t);
+    points.push_back(p);
+    sum += p.XYZ();
+  }
+  const gp_Pnt centroid(sum / static_cast<double>(count));
+
+  double length = 0.0;
+  const std::size_t segments = closed ? points.size() : points.size() - 1;
+  for (std::size_t i = 0; i < segments; ++i) {
+    length += points[i].Distance(points[(i + 1) % points.size()]);
+  }
+
+  sig.valid = true;
+  sig.mid = Vec3{static_cast<float>((centroid.X() - frame.min.X()) / frame.dx),
+                 static_cast<float>((centroid.Y() - frame.min.Y()) / frame.dy),
+                 static_cast<float>((centroid.Z() - frame.min.Z()) / frame.dz)};
+  sig.length = length / frame.diag;
+
+  if (!closed) {
+    gp_Pnt p;
+    gp_Vec d1;
+    curve.D1(0.5 * (u0 + u1), p, d1);
+    if (d1.Magnitude() > 1e-12) {
+      sig.dir = occt_dir_to_vec(gp_Dir(d1));
+      sig.has_dir = true;
+    }
+  }
+
+  if (with_normals && ancestors != nullptr && ancestors->Contains(edge)) {
+    // 法线在「边上的点」取（中点参数处必在曲线上）；位置签名才用采样质心，
+    // 因为闭合边（圆）的质心是圆心，不在曲线上。
+    const gp_Pnt probe = curve.Value(0.5 * (u0 + u1));
+    int found = 0;
+    for (const TopoDS_Shape& face_shape : ancestors->FindFromKey(edge)) {
+      gp_Dir normal;
+      if (!face_normal_at(TopoDS::Face(face_shape), probe, normal)) {
+        continue;
+      }
+      if (found == 0) {
+        sig.normal1 = occt_dir_to_vec(normal);
+        sig.has_normal1 = true;
+      } else {
+        sig.normal2 = occt_dir_to_vec(normal);
+        sig.has_normal2 = true;
+      }
+      if (++found == 2) {
+        break;
+      }
+    }
+  }
+  return sig;
+}
+
+double normal_cost(bool has_a, Vec3 a, bool has_b, Vec3 b) {
+  if (!has_a) {
+    return 0.0;  // 采集时就没取到法线，不拿它当依据
+  }
+  if (!has_b) {
+    return 0.1;  // 候选边取不到法线：轻微扣分，别让它白捡
+  }
+  const double d = std::min(static_cast<double>(std::fabs(dot(a, b))), 1.0);
+  return 1.0 - d;
+}
+
+// 两个签名的加权代价：0 = 一模一样。位置和方向权重最高。
+double edge_signature_cost(const EdgeSignature& a, const EdgeSignature& b) {
+  if (!a.valid || !b.valid) {
+    return std::numeric_limits<double>::infinity();
+  }
+  const double dx = static_cast<double>(a.mid.x - b.mid.x);
+  const double dy = static_cast<double>(a.mid.y - b.mid.y);
+  const double dz = static_cast<double>(a.mid.z - b.mid.z);
+  double cost = 2.0 * std::sqrt(dx * dx + dy * dy + dz * dz);
+  if (a.has_dir && b.has_dir) {
+    const double d = std::min(static_cast<double>(std::fabs(dot(a.dir, b.dir))), 1.0);
+    cost += 2.0 * (1.0 - d);
+  } else {
+    cost += 0.25;
+  }
+  cost += 0.5 * std::fabs(a.length - b.length);
+  cost += normal_cost(a.has_normal1, a.normal1, b.has_normal1, b.normal1);
+  cost += normal_cost(a.has_normal2, a.normal2, b.has_normal2, b.normal2);
+  return cost;
+}
+
+EdgeSignature signature_from_params(const Feature& f) {
+  const auto get = [&f](const char* key, double fallback) {
+    const auto it = f.params.find(key);
+    return it == f.params.end() ? fallback : it->second;
+  };
+  EdgeSignature sig;
+  sig.valid = true;
+  sig.mid = Vec3{static_cast<float>(get("edge_mid_x", 0.0)),
+                 static_cast<float>(get("edge_mid_y", 0.0)),
+                 static_cast<float>(get("edge_mid_z", 0.0))};
+  sig.length = get("edge_len", 0.0);
+  if (f.params.find("edge_dir_x") != f.params.end()) {
+    sig.dir = Vec3{static_cast<float>(get("edge_dir_x", 0.0)),
+                   static_cast<float>(get("edge_dir_y", 0.0)),
+                   static_cast<float>(get("edge_dir_z", 0.0))};
+    sig.has_dir = true;
+  }
+  if (f.params.find("edge_n1_x") != f.params.end()) {
+    sig.normal1 = Vec3{static_cast<float>(get("edge_n1_x", 0.0)),
+                       static_cast<float>(get("edge_n1_y", 0.0)),
+                       static_cast<float>(get("edge_n1_z", 0.0))};
+    sig.has_normal1 = true;
+  }
+  if (f.params.find("edge_n2_x") != f.params.end()) {
+    sig.normal2 = Vec3{static_cast<float>(get("edge_n2_x", 0.0)),
+                       static_cast<float>(get("edge_n2_y", 0.0)),
+                       static_cast<float>(get("edge_n2_z", 0.0))};
+    sig.has_normal2 = true;
+  }
+  return sig;
+}
+
+EdgeFingerprint fingerprint_from_signature(const EdgeSignature& sig) {
+  EdgeFingerprint fp;
+  fp.mid = sig.mid;
+  fp.dir = sig.dir;
+  fp.has_dir = sig.has_dir;
+  fp.length = sig.length;
+  fp.normal1 = sig.normal1;
+  fp.has_normal1 = sig.has_normal1;
+  fp.normal2 = sig.normal2;
+  fp.has_normal2 = sig.has_normal2;
+  return fp;
+}
+
+// 解析「倒哪条边」：索引只是首选，指纹才是依据。
+//   1. 没有指纹（旧文件/脚本只给索引）→ 保持旧的纯索引行为；
+//   2. 索引那条边的指纹对得上 → 就用它（没改上游时的快路）；
+//   3. 对不上 → 全量找最像的一条；
+//   4. 找不到、或两条一样像 → 报错，绝不静默倒到别的棱上。
+Result<TopoDS_Edge> resolve_edge(const TopoDS_Shape& shape, const Feature& f) {
+  const std::string what = feature_kind_name(f.kind);
+  const std::vector<TopoDS_Edge> edges = collect_edges(shape);
+  if (edges.empty()) {
+    return Err(what + ": shape has no edges");
+  }
+  const auto edge_index_it = f.params.find("edge");
+  const int index =
+      static_cast<int>(edge_index_it != f.params.end() ? edge_index_it->second : 0.0);
+
+  if (!has_edge_fingerprint(f.params)) {
+    if (index < 0 || index >= static_cast<int>(edges.size())) {
+      return Err(what + ": edge index out of range");
+    }
+    return edges[static_cast<std::size_t>(index)];
+  }
+
+  const EdgeSignature stored = signature_from_params(f);
+  const ShapeFrame frame = shape_frame(shape);
+  const bool want_normals = stored.has_normal1 || stored.has_normal2;
+  TopTools_IndexedDataMapOfShapeListOfShape ancestors;
+  if (want_normals) {
+    TopExp::MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, ancestors);
+  }
+  const auto* ancestors_ptr = want_normals ? &ancestors : nullptr;
+
+  // 两遍扫描：先只算位置/方向/长度做粗筛（省掉昂贵的相邻面投影），再对可能胜出的
+  // 少数候选补法线。法线只会让代价变大，所以「粗筛代价 > 阈值」的边不可能赢，剪掉是安全的。
+  EdgeSignature stored_cheap = stored;
+  stored_cheap.has_normal1 = false;
+  stored_cheap.has_normal2 = false;
+  std::vector<double> cheap_cost(edges.size(), std::numeric_limits<double>::infinity());
+  for (int i = 0; i < static_cast<int>(edges.size()); ++i) {
+    const EdgeSignature cheap =
+        edge_signature(edges[static_cast<std::size_t>(i)], frame, nullptr, false);
+    cheap_cost[static_cast<std::size_t>(i)] = edge_signature_cost(stored_cheap, cheap);
+  }
+
+  std::vector<EdgeSignature> full_signatures(edges.size());
+  std::vector<bool> have_full(edges.size(), false);
+  const auto cost_at = [&](int i) {
+    const auto slot = static_cast<std::size_t>(i);
+    if (!want_normals || cheap_cost[slot] > kEdgeMatchCost) {
+      return cheap_cost[slot];  // 粗筛已出局：它的代价是下界，够用了
+    }
+    if (!have_full[slot]) {
+      full_signatures[slot] = edge_signature(edges[slot], frame, ancestors_ptr, true);
+      have_full[slot] = true;
+    }
+    return edge_signature_cost(stored, full_signatures[slot]);
+  };
+
+  const bool index_in_range = index >= 0 && index < static_cast<int>(edges.size());
+  const double index_cost =
+      index_in_range ? cost_at(index) : std::numeric_limits<double>::infinity();
+  if (index_in_range && index_cost <= kEdgeMatchCost) {
+    return edges[static_cast<std::size_t>(index)];
+  }
+
+  int best = -1;
+  double best_cost = std::numeric_limits<double>::infinity();
+  for (int i = 0; i < static_cast<int>(edges.size()); ++i) {
+    const double cost = (index_in_range && i == index) ? index_cost : cost_at(i);
+    if (cost < best_cost) {
+      best_cost = cost;
+      best = i;
+    }
+  }
+  if (best < 0 || best_cost > kEdgeMatchCost) {
+    return Err(what + ": edge " + std::to_string(index) +
+               " cannot be located after the model changed (geometry no longer matches)");
+  }
+
+  // 唯一性检查：和最优一样像的另一条边（同一条边的重复出现不算）会让结果不可信。
+  const TopoDS_Edge& best_edge = edges[static_cast<std::size_t>(best)];
+  double second_cost = std::numeric_limits<double>::infinity();
+  for (int i = 0; i < static_cast<int>(edges.size()); ++i) {
+    const TopoDS_Edge& candidate = edges[static_cast<std::size_t>(i)];
+    if (i == best || candidate.IsSame(best_edge)) {
+      continue;
+    }
+    const double cost = (index_in_range && i == index) ? index_cost : cost_at(i);
+    second_cost = std::min(second_cost, cost);
+  }
+  if (index_in_range && index_cost <= best_cost + kEdgeMatchSlack) {
+    return edges[static_cast<std::size_t>(index)];
+  }
+  if (second_cost - best_cost < kEdgeMatchMargin) {
+    return Err(what + ": edge " + std::to_string(index) +
+               " is ambiguous after the model changed (two edges match equally well)");
+  }
+  return edges[static_cast<std::size_t>(best)];
 }
 
 const char* feature_scope_name(const FeatureModel& model, const Feature& f) {
@@ -221,15 +555,10 @@ Result<MeshCpu> tessellate_shape(const TopoDS_Shape& shape, double deflection) {
 
 }  // namespace
 
-// 求值实现：不捕获异常，由外层 evaluate_feature_model 统一转成 Result 错误。
-static Result<MeshCpu> evaluate_feature_model_impl(const FeatureModel& model,
-                                                  double linear_deflection) {
-  const Feature* out = model.output_feature();
-  if (out != nullptr && is_sketch_feature(out->kind)) {
-    TAMIAS_TIMING_SCOPE(feature_kind_name(out->kind), TimingCategory::Modeling);
-    return mesh_from_sketch_feature(model, *out);
-  }
-
+// 按拓扑序把特征算成 BRep 形状。stop_id != 0 时算到那个特征就停（采集指纹用，
+// 不必把下游也跑一遍）。不捕获异常，由外层统一转成 Result 错误。
+static Result<std::unordered_map<std::uint64_t, TopoDS_Shape>> build_shapes(
+    const FeatureModel& model, std::uint64_t stop_id) {
   std::unordered_map<std::uint64_t, TopoDS_Shape> shapes;
   for (const auto& f : model.features()) {
     TAMIAS_TIMING_SCOPE(feature_scope_name(model, f), TimingCategory::Modeling);
@@ -302,13 +631,12 @@ static Result<MeshCpu> evaluate_feature_model_impl(const FeatureModel& model,
           return Err("Fillet references a missing shape");
         }
         const double radius = model.param(f.id, "radius", 0.1);
-        const int edge_idx = static_cast<int>(model.param(f.id, "edge", 0.0));
-        const TopoDS_Edge edge = nth_edge(it->second, edge_idx);
-        if (edge.IsNull()) {
-          return Err("Fillet: edge index out of range");
+        auto edge = resolve_edge(it->second, f);
+        if (!edge) {
+          return Err(edge.error());
         }
         BRepFilletAPI_MakeFillet fillet(it->second);
-        fillet.Add(radius, edge);
+        fillet.Add(radius, *edge);
         fillet.Build();
         if (!fillet.IsDone()) {
           return Err("Fillet failed");
@@ -325,13 +653,12 @@ static Result<MeshCpu> evaluate_feature_model_impl(const FeatureModel& model,
           return Err("Chamfer references a missing shape");
         }
         const double distance = model.param(f.id, "distance", 0.1);
-        const int edge_idx = static_cast<int>(model.param(f.id, "edge", 0.0));
-        const TopoDS_Edge edge = nth_edge(it->second, edge_idx);
-        if (edge.IsNull()) {
-          return Err("Chamfer: edge index out of range");
+        auto edge = resolve_edge(it->second, f);
+        if (!edge) {
+          return Err(edge.error());
         }
         BRepFilletAPI_MakeChamfer chamfer(it->second);
-        chamfer.Add(distance, edge);
+        chamfer.Add(distance, *edge);
         chamfer.Build();
         if (!chamfer.IsDone()) {
           return Err("Chamfer failed");
@@ -377,13 +704,30 @@ static Result<MeshCpu> evaluate_feature_model_impl(const FeatureModel& model,
         return Err("unknown feature kind");
     }
     shapes[f.id] = s;
+    if (stop_id != 0 && f.id == stop_id) {
+      break;
+    }
   }
+  return shapes;
+}
 
+// 求值实现：不捕获异常，由外层 evaluate_feature_model 统一转成 Result 错误。
+static Result<MeshCpu> evaluate_feature_model_impl(const FeatureModel& model,
+                                                  double linear_deflection) {
+  const Feature* out = model.output_feature();
+  if (out != nullptr && is_sketch_feature(out->kind)) {
+    TAMIAS_TIMING_SCOPE(feature_kind_name(out->kind), TimingCategory::Modeling);
+    return mesh_from_sketch_feature(model, *out);
+  }
+  auto shapes = build_shapes(model, 0);
+  if (!shapes) {
+    return Err(shapes.error());
+  }
   if (out == nullptr) {
     return Err("feature model has no features");
   }
-  const auto it = shapes.find(out->id);
-  if (it == shapes.end()) {
+  const auto it = shapes->find(out->id);
+  if (it == shapes->end()) {
     return Err("output feature has no shape");
   }
   return tessellate_shape(it->second, linear_deflection);
@@ -397,6 +741,46 @@ Result<MeshCpu> evaluate_feature_model(const FeatureModel& model, double linear_
     return Err(std::string("OCCT evaluation failed: ") + e.DynamicType()->Name());
   } catch (const std::exception& e) {
     return Err(std::string("OCCT evaluation failed: ") + e.what());
+  }
+}
+
+Result<EdgeFingerprint> capture_edge_fingerprint(const FeatureModel& model,
+                                                std::uint64_t shape_feature_id,
+                                                int edge_index) {
+  try {
+    std::uint64_t target = shape_feature_id;
+    if (target == 0) {
+      const Feature* out = model.output_feature();
+      if (out == nullptr) {
+        return Err("edge fingerprint: feature model is empty");
+      }
+      target = out->id;
+    }
+    auto shapes = build_shapes(model, target);
+    if (!shapes) {
+      return Err(shapes.error());
+    }
+    const auto it = shapes->find(target);
+    if (it == shapes->end()) {
+      return Err("edge fingerprint: shape feature not found");
+    }
+    const std::vector<TopoDS_Edge> edges = collect_edges(it->second);
+    if (edge_index < 0 || edge_index >= static_cast<int>(edges.size())) {
+      return Err("edge fingerprint: edge index out of range");
+    }
+    const ShapeFrame frame = shape_frame(it->second);
+    TopTools_IndexedDataMapOfShapeListOfShape ancestors;
+    TopExp::MapShapesAndAncestors(it->second, TopAbs_EDGE, TopAbs_FACE, ancestors);
+    const EdgeSignature sig =
+        edge_signature(edges[static_cast<std::size_t>(edge_index)], frame, &ancestors, true);
+    if (!sig.valid) {
+      return Err("edge fingerprint: edge has no geometry");
+    }
+    return fingerprint_from_signature(sig);
+  } catch (const Standard_Failure& e) {
+    return Err(std::string("edge fingerprint failed: ") + e.DynamicType()->Name());
+  } catch (const std::exception& e) {
+    return Err(std::string("edge fingerprint failed: ") + e.what());
   }
 }
 

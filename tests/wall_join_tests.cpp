@@ -4,6 +4,8 @@
 #include "command/move_entities_command.h"
 #include "engine/document/document.h"
 #include "engine/graphics/mesh.h"
+#include "engine/modeling/edge_fingerprint.h"
+#include "engine/modeling/feature.h"
 #include "engine/modeling/occt_feature.h"
 #include "entity/architectural/wall_entity.h"
 #include "entity/family/window_entity.h"
@@ -324,6 +326,36 @@ TEST(WallJunction, JoinedModelKeepsHostedOpeningCuts) {
   }
   EXPECT_TRUE(has_miter_profile) << "倒角轮廓丢了";
   EXPECT_TRUE(has_cut) << "开口切减丢了";
+
+  auto mesh = evaluate_feature_model(model, 0.05);
+  ASSERT_TRUE(mesh) << mesh.error();
+  EXPECT_FALSE(mesh->indices.empty());
+}
+
+// 墙上已经有倒圆角时，交接会改写基础轮廓（矩形 → 斜接多边形）。倒角的边引用
+// 靠几何指纹重新定位；定位不到就该报错，而不是悄悄把圆角挪到别的棱上。
+TEST(WallJunction, JoinedModelKeepsFilletResolvable) {
+  CornerWalls walls = make_corner();
+  ASSERT_NE(walls.a, 0u);
+
+  Entity* wall = walls.document.entity(walls.a);
+  ASSERT_NE(wall, nullptr);
+  const std::uint64_t input = wall->model.output_feature()->id;
+  const std::uint64_t fillet_id =
+      wall->model
+          .add_feature(FeatureKind::Fillet, {input}, {{"radius", 0.05}, {"edge", 0.0}})
+          .id;
+  refresh_edge_fingerprint(wall->model, fillet_id);
+  ASSERT_TRUE(has_edge_fingerprint(wall->model.find(fillet_id)->params));
+
+  const FeatureModel model = wall_render_model(*wall, walls.document);
+  bool has_fillet = false;
+  for (const Feature& feature : model.features()) {
+    if (feature.kind == FeatureKind::Fillet) {
+      has_fillet = true;
+    }
+  }
+  EXPECT_TRUE(has_fillet) << "倒圆角特征丢了";
 
   auto mesh = evaluate_feature_model(model, 0.05);
   ASSERT_TRUE(mesh) << mesh.error();

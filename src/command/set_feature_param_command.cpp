@@ -5,6 +5,7 @@
 #include "command/edit_entity_grip_command.h"
 #include "entity/core/entity_grip.h"
 #include "engine/modeling/curve_geom.h"
+#include "engine/modeling/edge_fingerprint.h"
 #include "engine/modeling/feature.h"
 
 #include <algorithm>
@@ -97,6 +98,12 @@ Result<void> SetFeatureParamCommand::apply(double value) {
       profile->params["width"] = w;
       profile->params["height"] = h;
     }
+  }
+  // 圆角 / 倒角改了「倒第几条边」：指纹要跟着重采，否则旧指纹会把索引改回去。
+  if (changed != nullptr &&
+      (changed->kind == FeatureKind::Fillet || changed->kind == FeatureKind::Chamfer) &&
+      param_name_ == "edge") {
+    refresh_edge_fingerprint(entity->model, feature_id_);
   }
   sync_entity_grips(*entity);
 

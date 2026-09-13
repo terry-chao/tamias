@@ -110,7 +110,7 @@ recompute_scene()
 
 - 真正的草图 + 约束（现在是写死的矩形/圆）
 - 增量求值（每次从第一个特征算到最后）
-- 稳的拓扑命名（圆角仍是「第 0 条边」）
+- 完整的拓扑命名（圆角 / 倒角现在做到「索引 + 几何指纹」，见 §9；几何法 / 持久命名还没做）
 - 导入 STEP 反建成特征树
 
 ---
@@ -183,8 +183,8 @@ struct Feature {
 | `CircleProfile` | `MakeEdge(圆)` + `MakeFace` | 圆形轮廓面 |
 | `Extrude` | `BRepPrimAPI_MakePrism` | 把面沿 +Z 拉伸成体 |
 | `Boolean` | `BRepAlgoAPI_Fuse / Common / Cut` | 并 / 交 / 差（`operation` 参数选） |
-| `Fillet` | `BRepFilletAPI_MakeFillet.Add(radius, edge)` | 给第 N 条边倒圆角 |
-| `Chamfer` | `BRepFilletAPI_MakeChamfer.Add(distance, edge)` | 给第 N 条边倒斜角 |
+| `Fillet` | `BRepFilletAPI_MakeFillet.Add(radius, edge)` | 倒圆角；边由 `resolve_edge` 解析（索引 + 几何指纹，见 §9） |
+| `Chamfer` | `BRepFilletAPI_MakeChamfer.Add(distance, edge)` | 倒斜角；边同样走 `resolve_edge` |
 
 ---
 
@@ -221,7 +221,7 @@ OCCT 是 **Z-up**（Z 朝上），Tamias 视口是 **Y-up**（glTF/Blender 惯�
 
 ## 8. 三个关键设计点 / 坑
 
-1. **拓扑命名（P3，还没做）**：`Fillet`/`Chamfer` 引用的是「第 N 条边」的**序号**（`nth_edge`）。改上游参数后 BRep 重算、边的编号会变，第 N 条边可能不再是原来那条 → 圆角倒错边。ROADMAP 里的「索引法 → 几何法」就是解决这个。现在是「索引法」，脆。
+1. **拓扑命名（P3）**：`Fillet`/`Chamfer` 要记住「倒哪条边」，但「第 N 条」这个编号是重算时临时排的，上游一改就可能指到别的棱上。ROADMAP 里「索引法 → 几何法」的第一步——**索引 + 几何指纹**——已经落地，见 §9；完整的几何法 / 持久命名还没做。
 
 2. **全量重算（增量待做）**：现在 `evaluate_feature_model` 每次都从第一个特征算到最后。理想是「改了特征 3，只重算特征 3 及其下游」。当前特征树还小，全量没问题；这是 P4 及以后的优化点。
 
@@ -229,3 +229,33 @@ OCCT 是 **Z-up**（Z 朝上），Tamias 视口是 **Y-up**（glTF/Blender 惯�
    - 能存进 `.tdoc`（序列化只写 id/kind/params/inputs）。
    - 理论上能换内核（`IGeometryBuilder` 换实现即可），OCCT 只是当前唯一的实现。
    - 将来 IFC 导入时，声明式几何（`IfcExtrudedAreaSolid` 等）可以直接映射成特征树节点，而不是只导入三角网——这是 ROADMAP 里「IFC 可编辑」的根基。
+
+---
+
+## 9. 边的定位：索引 + 几何指纹（已落地）
+
+圆角 / 倒角要知道「倒哪条边」。只记「第 N 条」不稳：改了上游参数，BRep 重算、边的遍历顺序可能变，圆角就跑到别的棱上。现在的做法是**索引只是首选，几何指纹才是依据**。
+
+**采集。** 追加圆角 / 倒角时（`AddFeatureCommand`）把那条边的长相一起写进特征参数：
+
+| 记什么 | 为什么 |
+|---|---|
+| 归一化中点（相对包围盒，0..1） | 改尺寸后位置跟着缩放，仍然可比；闭合边（圆）用采样质心 |
+| 单位方向（±同向即算一致） | 区分垂直棱和水平棱；闭合边没有稳定方向，跳过 |
+| 边长 / 包围盒对角线 | 无量纲的长度，同样与尺寸无关 |
+| 相邻两个面的法线 | 消歧「位置方向都一样但是另一条棱」的情况 |
+
+键名是 `edge_mid_* / edge_dir_* / edge_len / edge_n_*`（见 [edge_fingerprint.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/edge_fingerprint.h)），跟特征树一起进 `.tdoc`。属性面板会把它们过滤掉（`is_edge_fingerprint_key`），用户只看到 `Edge` / `Radius`。
+
+**解析**（`resolve_edge`，[occt_feature.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt_feature.cpp)）：
+
+1. 没有指纹（旧 `.tdoc`、脚本只给 `edge`）→ 保持旧的纯索引行为，不报错；
+2. 索引那条边的指纹对得上 → 就用它（没改上游时的快路）；
+3. 对不上 → 全量找最像的一条：先按位置 / 方向 / 长度粗筛，只对可能胜出的候选补相邻面法线（法线只会让代价变大，粗筛是安全剪枝）；
+4. 找不到、或者两条一样像 → **报错**，绝不静默倒到别的棱上。
+
+**重采。** 改 `Edge` 参数时（`SetFeatureParamCommand`）按新索引重采指纹——否则旧指纹会把索引改回去。
+
+**能力边界。** 位置归一化 + 方向取 ±，所以改尺寸、改方向、加倒角这类变化都能认回来；但布尔大改、特征整体大位移会让指纹变得不可信，那时宁可报错。真正的解法是几何法 / 持久命名（记「这条边从哪个特征演化来」），还没做。
+
+**测试。** [tests/edge_naming_tests.cpp](https://github.com/terry-chao/tamias/blob/main/tests/edge_naming_tests.cpp)：采集、改上游后跟随、索引被改错时纠正、指纹对不上报错、旧文件兼容、`.tdoc` roundtrip。

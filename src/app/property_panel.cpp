@@ -1,6 +1,7 @@
 #include "property_panel.h"
 
 #include "engine/document/document.h"
+#include "engine/modeling/edge_fingerprint.h"
 #include "texture_image.h"
 
 #include <QAbstractSpinBox>
@@ -372,6 +373,10 @@ void PropertyPanel::show_entity(const Entity* entity, Document* document,
 
     const std::uint64_t fid = feature.id;
     for (const auto& key : keys) {
+      // 边的几何指纹是内部定位数据（见 edge_fingerprint.h），不作为可编辑参数暴露。
+      if (is_edge_fingerprint_key(key)) {
+        continue;
+      }
       if (is_sketch_feature(feature.kind)) {
         const bool is_weight = key.size() >= 2 && key[0] == 'w' &&
                                std::all_of(key.begin() + 1, key.end(), [](unsigned char c) {
