@@ -50,7 +50,9 @@ Web UI (web/)
 - **异步：** `RequestAdapter` / `RequestDevice` 用 `TimedWaitAny`；`tamias_viewer` 链 `-sASYNCIFY=1`，让 `ViewerHost::start()` 仍是同步的。
 - **窗口：** `NativeWindowHandle.canvas_selector`（`#viewport`）→ `WGPUEmscriptenSurfaceSourceCanvasHTMLSelector`。
 - **线程：** 与 WebGL 相同，`synchronous=true`，不跟其它视口共线程。
-- **Clip / NDC：** 与 Vulkan 相同（Y 向下，Z ∈ [0, 1]），`clip_space_correction_matrix()` 翻 Y。
+- **Clip / NDC：** Y **向上**（和 OpenGL / WebGL 一样，只有 Vulkan 是 Y 向下），Z ∈ [0, 1]。
+  而 `perspective()` 本来就产出「Y 向上、Z ∈ [0,1]」，所以 `clip_space_correction_matrix()`
+  是单位矩阵。（曾经照 Vulkan 那版翻过 Y，结果是整个画面上下颠倒、世界 Y 轴朝下。）
 - **常量：** `set_push_constants` → 动态 UBO（256 字节对齐环）。标准 WebGPU 没有 push constant。
 - **着色器：** 内嵌 WGSL（`webgpu_shaders.h`），不走 DXC / SPIR-V。浏览器不收 SPIR-V。
 - **线框：** 标准 WebGPU 无 polygon mode；与现 WebGL 一样，线框模式先走片元里的 `mode` 分支（实体着色）。以后要真线框再做重心 discard 或边线 IBO。

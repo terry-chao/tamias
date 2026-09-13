@@ -297,8 +297,9 @@ inline std::string_view sky_frag() {
   static const std::string src = std::string(kPushAndMeshBindings) + R"WGSL(
 @fragment
 fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
+  // NDC 的 Y 向上（见 webgpu_device.cpp 的说明），uv 已经是「上 = 1」，
+  // 所以这里不需要再翻一次；翻了会让天空采样方向上下颠倒。
   var ndc = uv * 2.0 - 1.0;
-  ndc.y = -ndc.y;
   let view_dir = normalize(vec3<f32>(ndc.x * pc.color.x, ndc.y * pc.color.y, -1.0));
   let model3 = mat3x3<f32>(pc.model[0].xyz, pc.model[1].xyz, pc.model[2].xyz);
   let world_dir = model3 * view_dir;

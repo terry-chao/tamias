@@ -250,11 +250,13 @@ class WebGpuDevice final : public RHIDevice {
 
   [[nodiscard]] GraphicsBackend backend() const override { return GraphicsBackend::WebGPU; }
   [[nodiscard]] Mat4 clip_space_correction_matrix() const override {
-    Mat4 m = Mat4::identity();
-    m(1, 1) = -1.f;
-    m(2, 2) = 0.5f;
-    m(2, 3) = 0.5f;
-    return m;
+    // WebGPU 的 NDC 是 **Y 向上**（和 OpenGL/WebGL 一样），只有 Z 是 [0, 1]；
+    // 而 perspective() 本来就产出「Y 向上、Z ∈ [0,1]」，所以这里什么都不用改。
+    //
+    // 曾经这里是 Vulkan 那一版（m(1,1) = -1 翻 Y + Z 重映射），抄过来之后整个画面
+    // 上下颠倒——最直观的症状就是世界 Y 轴（绿）朝下。只有 Vulkan 的 NDC 是 Y 向下，
+    // 对照 webgl_device.cpp 的实现即可确认。改这里时别把 Vulkan 的矩阵再抄回来。
+    return Mat4::identity();
   }
 
   Result<std::unique_ptr<Buffer>> create_buffer(const BufferDesc& desc) override;
