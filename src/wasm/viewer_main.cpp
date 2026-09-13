@@ -22,7 +22,8 @@ tamias::ViewerHost& host() {
 
 bool start_viewer(const std::string& canvas) {
   tamias::init_logging(tamias::LogLevel::Info);
-  tamias::register_linked_kernels();  // WASM 阶段 1 不带内核：这里是 no-op
+  // 注册编进 wasm 的后端（Truck）。OCCT 不在 wasm 构建里，默认后端会退到 Truck。
+  tamias::register_linked_kernels();
   tamias::register_commands(tamias::command_registry());
   auto r = host().start(canvas.c_str());
   return static_cast<bool>(r);
@@ -33,6 +34,9 @@ bool load_file(const std::string& name, const std::string& bytes) {
   auto r = host().load_bytes(name, std::span(data, bytes.size()));
   return static_cast<bool>(r);
 }
+
+// 新建文档：空文档 + 内置示例场景（走命令层，几何由 wasm 里的内核求值）。
+bool new_document_viewer() { return host().new_document(); }
 
 void resize_viewer(int width, int height) {
   host().resize(static_cast<std::uint32_t>(std::max(1, width)),
@@ -71,12 +75,18 @@ std::uint64_t selection_id_at(int index) {
 
 void clear_selection_viewer() { host().clear_selection(); }
 
+// 建模落点：视口归一化坐标 → 工作平面（y = planeY）上的世界点。
+std::string pick_work_plane(float nx, float ny, float plane_y) {
+  return host().pick_work_plane(nx, ny, plane_y);
+}
+
 }  // namespace
 
 #if defined(__EMSCRIPTEN__)
 EMSCRIPTEN_BINDINGS(tamias_viewer) {
   emscripten::function("startViewer", &start_viewer);
   emscripten::function("loadFile", &load_file);
+  emscripten::function("newDocument", &new_document_viewer);
   emscripten::function("resizeViewer", &resize_viewer);
   emscripten::function("pointerDown", &pointer_down);
   emscripten::function("pointerMove", &pointer_move);
@@ -94,6 +104,7 @@ EMSCRIPTEN_BINDINGS(tamias_viewer) {
   emscripten::function("selectionCount", &selection_count);
   emscripten::function("selectionIdAt", &selection_id_at);
   emscripten::function("clearSelection", &clear_selection_viewer);
+  emscripten::function("pickWorkPlane", &pick_work_plane);
 }
 #endif
 

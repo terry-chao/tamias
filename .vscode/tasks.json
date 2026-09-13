@@ -2,6 +2,22 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "Tamias: WASM 预览（构建 + 起服务）",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/scripts/wasm-preview.ps1\" -NoBrowser",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "按需配置并构建 tamias_viewer，然后在独立窗口起预览服务；关掉 TamiasWasmServe 窗口即停止预览"
+    },
+    {
       "label": "Tamias: 结束调试进程",
       "type": "shell",
       "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/.vscode/predebug.ps1\"",
@@ -19,8 +35,24 @@
       "detail": "结束正在运行的调试构建，避免 Restart 时无法覆盖 tamias.exe"
     },
     {
+      "label": "Tamias: 检查桌面预设",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/scripts/check-desktop-preset.ps1\" \"${command:cmake.activeConfigurePresetName}\"",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "showReuseMessage": false,
+        "echo": false
+      },
+      "problemMatcher": [],
+      "detail": "Configure preset 不是桌面树（msvc / linux）时给出明确提示，而不是 ninja 的 unknown target 'tamias'"
+    },
+    {
       "label": "Tamias: 编译",
-      "dependsOn": ["Tamias: 结束调试进程"],
+      "dependsOn": ["Tamias: 结束调试进程", "Tamias: 检查桌面预设"],
       "dependsOrder": "sequence",
       "type": "cmake",
       "command": "build",

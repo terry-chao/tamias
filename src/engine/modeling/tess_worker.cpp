@@ -20,16 +20,6 @@ void TessWorker::enqueue(std::uint64_t geometry_id, MeshLod lod,
   if (!run || geometry_id == 0) {
     return;
   }
-#if defined(__EMSCRIPTEN__)
-  TessJobResult result;
-  result.geometry_id = geometry_id;
-  result.lod = lod;
-  result.mesh = run();
-  std::scoped_lock lock(mutex_);
-  if (!stop_) {
-    completed_.push_back(std::move(result));
-  }
-#else
   {
     std::scoped_lock lock(mutex_);
     if (stop_) {
@@ -37,8 +27,46 @@ void TessWorker::enqueue(std::uint64_t geometry_id, MeshLod lod,
     }
     jobs_.push(Job{geometry_id, lod, std::move(run)});
   }
+#if !defined(__EMSCRIPTEN__)
   cv_.notify_one();
 #endif
+}
+
+std::size_t TessWorker::pump(std::size_t max_jobs) {
+#if defined(__EMSCRIPTEN__)
+  std::size_t ran = 0;
+  while (ran < max_jobs && step()) {
+    ++ran;
+  }
+  return ran;
+#else
+  (void)max_jobs;
+  return 0;
+#endif
+}
+
+bool TessWorker::step() {
+  Job job;
+  {
+    std::scoped_lock lock(mutex_);
+    if (jobs_.empty()) {
+      return false;
+    }
+    job = std::move(jobs_.front());
+    jobs_.pop();
+    ++in_flight_;
+  }
+  TessJobResult result;
+  result.geometry_id = job.geometry_id;
+  result.lod = job.lod;
+  result.mesh = job.run ? job.run() : Err("empty tessellate job");
+  {
+    std::scoped_lock lock(mutex_);
+    completed_.push_back(std::move(result));
+    --in_flight_;
+  }
+  cv_.notify_all();
+  return true;
 }
 
 std::vector<TessJobResult> TessWorker::take_completed() {
@@ -95,27 +123,14 @@ void TessWorker::shutdown() {
 
 void TessWorker::thread_main() {
   for (;;) {
-    Job job;
     {
       std::unique_lock lock(mutex_);
       cv_.wait(lock, [this] { return stop_ || !jobs_.empty(); });
       if (stop_ && jobs_.empty()) {
         return;
       }
-      job = std::move(jobs_.front());
-      jobs_.pop();
-      ++in_flight_;
     }
-    TessJobResult result;
-    result.geometry_id = job.geometry_id;
-    result.lod = job.lod;
-    result.mesh = job.run ? job.run() : Err("empty tessellate job");
-    {
-      std::scoped_lock lock(mutex_);
-      completed_.push_back(std::move(result));
-      --in_flight_;
-    }
-    cv_.notify_all();
+    (void)step();
   }
 }
 

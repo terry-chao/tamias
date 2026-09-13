@@ -1,8 +1,10 @@
 #include "viewer_host.h"
 
 #include "engine/core/log.h"
+#include "engine/document/picking.h"
 #include "engine/document/document_io.h"
 #include "engine/io/mesh_io.h"
+#include "engine/modeling/tess_worker.h"
 #include "engine/render/render_scene.h"
 #if defined(TAMIAS_HAS_RHI_WEBGPU)
 #include "engine/render/rhi/webgpu/webgpu_backend.h"
@@ -14,6 +16,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
+#include <cstdio>
 #include <utility>
 
 #if defined(__EMSCRIPTEN__)
@@ -61,6 +65,62 @@ void ViewerHost::load_demo() {
   status_ = "demo cube";
 }
 
+bool ViewerHost::new_document() {
+  // 新建 = 一个空文档 + 内置示例场景。示例走命令层（不是硬编码网格），所以几何由
+  // 已注册的内核求值——WASM 上是 Truck，顺便证明"新建出来就能接着造型"。
+  session_->reset_document(std::make_shared<Document>(std::string("示例")));
+  loaded_ = true;
+  last_submitted_scene_generation_ = 0;
+
+  auto run = [this](const char* command, const char* args) {
+    auto parsed = parse_command_arg_text(args);
+    if (!parsed) {
+      return false;
+    }
+    return static_cast<bool>(session_->dispatch(command, *parsed));
+  };
+
+  // 3m × 3m 的方形柱网：四角各一根柱，顶上四根梁连成框。
+  constexpr double kHalf = 1.5;
+  constexpr double kColumnHeight = 3.0;
+  const double xs[2] = {-kHalf, kHalf};
+  const double zs[2] = {-kHalf, kHalf};
+  bool any = false;
+  for (double x : xs) {
+    for (double z : zs) {
+      char args[160];
+      std::snprintf(args, sizeof(args),
+                    "s:sub_type=rect;d:width=0.4;d:depth=0.4;d:height=%g;p:points=%g,0,%g",
+                    kColumnHeight, x, z);
+      any = run("create_column", args) || any;
+    }
+  }
+  // 顶圈四根梁：沿 X 两根（z = ±1.5）、沿 Z 两根（x = ±1.5），各只生成一次。
+  for (double z : zs) {
+    char args[192];
+    std::snprintf(args, sizeof(args), "d:width=0.3;d:depth=0.4;p:points=%g,%g,%g|%g,%g,%g",
+                  xs[0], kColumnHeight, z, xs[1], kColumnHeight, z);
+    run("create_beam", args);
+  }
+  for (double x : xs) {
+    char args[192];
+    std::snprintf(args, sizeof(args), "d:width=0.3;d:depth=0.4;p:points=%g,%g,%g|%g,%g,%g", x,
+                  kColumnHeight, zs[0], x, kColumnHeight, zs[1]);
+    run("create_beam", args);
+  }
+
+  if (!any) {
+    // 内核没注册（比如裁剪过的构建）时，退回内置网格演示体，至少不是空画面。
+    load_demo();
+    return false;
+  }
+  session_->document().recompute_scene();
+  session_->camera().frame_aabb(session_->document().bounds());
+  upload_document();
+  status_ = "示例";
+  return true;
+}
+
 Result<void> ViewerHost::start(const char* canvas_selector) {
   if (canvas_selector != nullptr && canvas_selector[0] != '\0') {
     canvas_selector_ = canvas_selector;
@@ -84,7 +144,8 @@ Result<void> ViewerHost::start(const char* canvas_selector) {
   }
   channel_ = std::make_unique<RenderChannel>(render_thread_, render_thread_->create_channel());
   if (!loaded_) {
-    load_demo();
+    // 首次进入直接给一个示例文档（内核没注册时会退回内置网格演示体）。
+    new_document();
   }
   upload_document();
   status_ = "ready";
@@ -219,6 +280,29 @@ void ViewerHost::frame_all() {
   session_->camera().frame_aabb(session_->document().bounds());
 }
 
+std::string ViewerHost::pick_work_plane(float nx, float ny, float plane_y) const {
+  if (width_ < 2 || height_ < 2) {
+    return {};
+  }
+  const float w = static_cast<float>(width_);
+  const float h = static_cast<float>(height_);
+  const float px = std::clamp(nx, 0.f, 1.f) * w;
+  const float py = std::clamp(ny, 0.f, 1.f) * h;
+  const Ray ray = camera_ray(session_->camera().camera(), w / h, px, py, w, h);
+  if (std::fabs(ray.direction.y) < 1e-6f) {
+    return {};  // 视线与工作面平行
+  }
+  const float t = (plane_y - ray.origin.y) / ray.direction.y;
+  if (t <= 0.f) {
+    return {};  // 交点在相机背后
+  }
+  const Vec3 p = ray.origin + ray.direction * t;
+  char buffer[96];
+  std::snprintf(buffer, sizeof(buffer), "%.4f,%.4f,%.4f", static_cast<double>(p.x),
+                static_cast<double>(p.y), static_cast<double>(p.z));
+  return std::string(buffer);
+}
+
 void ViewerHost::render() {
   if (!channel_ || width_ < 2 || height_ < 2) {
     return;
@@ -241,6 +325,10 @@ void ViewerHost::render() {
   frame.scene_dirty_ids = session_->document().scene().dirty_since(last_submitted_scene_generation_);
   last_submitted_scene_generation_ = frame.scene_generation;
   channel_->resize(window(), width_, height_);
+  // 没有 worker 线程的构建（WASM 不带 pthread）在这里按帧推进离散队列：每帧最多跑
+  // 一个任务，把 LOD 请求摊到多帧，避免一帧里同步跑完所有离散卡死主线程。
+  // 桌面有 worker 线程，pump() 是 no-op。
+  TessWorker::instance().pump(1);
   for (const std::uint64_t id : session_->document().apply_completed_tess_jobs()) {
     if (const MeshAsset* asset = session_->document().mesh(id);
         asset != nullptr && !asset->cpu.vertices.empty()) {

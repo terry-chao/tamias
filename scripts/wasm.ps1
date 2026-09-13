@@ -40,6 +40,17 @@ function Find-NinjaDir {
 }
 
 function Ensure-Emscripten {
+  # If emcmake is already on PATH but EMSDK is not set (user-installed emsdk),
+  # Invoke-WasmConfigure below fails because it reads $env:EMSDK. Fill it in first.
+  if (-not $env:EMSDK) {
+    foreach ($dir in @("C:\dev\emsdk", "C:\emsdk", "$env:USERPROFILE\emsdk")) {
+      if (Test-Path (Join-Path $dir "upstream\emscripten\emcc.exe")) {
+        $env:EMSDK = (Resolve-Path $dir).Path
+        $env:Path = "$env:EMSDK\upstream\emscripten;$env:EMSDK;$env:Path"
+        break
+      }
+    }
+  }
   if (Get-Command emcmake -ErrorAction SilentlyContinue) {
     return
   }
@@ -90,8 +101,12 @@ function Invoke-WasmConfigure {
   }
   $wasmBuild = Join-Path $Root "build\wasm"
   if ((Test-Path (Join-Path $wasmBuild "CMakeCache.txt")) -and -not (Test-WasmCacheReady)) {
-    Write-Host "Removing stale $wasmBuild (wrong toolchain)"
-    Remove-Item -Recurse -Force $wasmBuild
+    Write-Host "build\wasm was configured with a different toolchain; removing it"
+    try {
+      Remove-Item -Recurse -Force $wasmBuild -ErrorAction Stop
+    } catch {
+      throw "Cannot remove $wasmBuild (files in use - close the TamiasWasmServe preview window or stop other builds): $($_.Exception.Message)"
+    }
   }
   # emcmake does not put -DCMAKE_TOOLCHAIN_FILE on the command line when
   # --preset is used; the preset must name Emscripten, and we pass it too.

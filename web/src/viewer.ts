@@ -4,6 +4,8 @@
 export interface TamiasViewerModule {
   startViewer(canvasSelector: string): boolean;
   loadFile(name: string, bytes: string): boolean;
+  // 新建文档：空文档 + 内置示例场景（几何由 wasm 里的建模内核求值）。
+  newDocument(): boolean;
   resizeViewer(width: number, height: number): void;
   pointerDown(x: number, y: number, button: number): void;
   pointerMove(x: number, y: number): void;
@@ -22,6 +24,8 @@ export interface TamiasViewerModule {
   selectionCount(): number;
   selectionIdAt(index: number): number;
   clearSelection(): void;
+  // 视口归一化坐标 → 工作平面 (y = planeY) 上的世界点，返回 "x,y,z"；无交点返回空串。
+  pickWorkPlane(nx: number, ny: number, planeY: number): string;
 }
 
 declare global {
@@ -74,4 +78,12 @@ export function toBinaryString(bytes: Uint8Array): string {
     out += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
   }
   return out;
+}
+
+// 这个 wasm 用 Asyncify 编译（WebGPU 的适配器/设备请求要走异步）。Asyncify 下
+// embind 导出**可能返回 Promise 而不是值**：调用一次挂起后，紧接着的调用也会返回
+// Promise。JS 侧若当同步值用，就会把 Promise 塞进 React 子节点而崩掉整页。
+// 统一用 settle 取值：普通值原样返回，Promise 等它 resolve。
+export function settle<T>(value: T | Promise<T>): Promise<T> {
+  return Promise.resolve(value);
 }

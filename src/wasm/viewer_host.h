@@ -23,6 +23,8 @@ class ViewerHost {
 
   Result<void> start(const char* canvas_selector);
   Result<void> load_bytes(std::string_view name, std::span<const std::uint8_t> bytes);
+  // 新建文档：清空当前内容，填一个内置示例场景（走命令层，几何由已注册内核求值）。
+  bool new_document();
   void resize(std::uint32_t width, std::uint32_t height);
   void pointer_down(float x, float y, int button);
   void pointer_move(float x, float y);
@@ -30,6 +32,9 @@ class ViewerHost {
   void wheel(float delta_y);
   void frame_all();
   void render();
+  // 视口归一化坐标 (nx, ny ∈ [0,1]) 打到 y = plane_y 水平面上的世界点，
+  // 返回 "x,y,z"；射线与平面平行或交点在相机背后时返回空串。
+  [[nodiscard]] std::string pick_work_plane(float nx, float ny, float plane_y) const;
   [[nodiscard]] const std::string& status() const { return status_; }
   [[nodiscard]] std::string document_name() const;
 

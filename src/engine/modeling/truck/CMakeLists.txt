@@ -7,10 +7,25 @@ if(NOT TAMIAS_CARGO_EXECUTABLE)
 endif()
 
 set(_truck_bridge_dir "${CMAKE_CURRENT_SOURCE_DIR}/../truck-bridge")
-if(WIN32)
+
+# 桌面：宿主目标 + release（panic=unwind，桥靠 catch_unwind 把 panic 转成错误码）。
+# WASM：wasm32-unknown-emscripten + wasm-release（panic=abort）。Rust 的 wasm std
+# 用旧的 emscripten JS 异常运行时（__cpp_exception），Emscripten 6.x 不再提供，
+# 所以 wasm 侧不能在 unwind 下链接；见 truck-bridge/Cargo.toml 的注释。
+if(EMSCRIPTEN)
+  set(_truck_cargo_platform_args --target wasm32-unknown-emscripten)
+  set(_truck_cargo_profile wasm-release)
+  set(_truck_bridge_lib
+      "${_truck_bridge_dir}/target/wasm32-unknown-emscripten/wasm-release/libtamias_truck_bridge.a")
+  set(_truck_bridge_desc "wasm32-unknown-emscripten")
+elseif(WIN32)
+  set(_truck_cargo_profile release)
   set(_truck_bridge_lib "${_truck_bridge_dir}/target/release/tamias_truck_bridge.lib")
+  set(_truck_bridge_desc "host")
 else()
+  set(_truck_cargo_profile release)
   set(_truck_bridge_lib "${_truck_bridge_dir}/target/release/libtamias_truck_bridge.a")
+  set(_truck_bridge_desc "host")
 endif()
 
 # 声明 Rust 侧依赖：不写 DEPENDS，改了 lib.rs 之后 cargo 不会重跑，
@@ -22,10 +37,11 @@ file(GLOB_RECURSE _truck_bridge_sources CONFIGURE_DEPENDS
 )
 add_custom_command(
   OUTPUT "${_truck_bridge_lib}"
-  COMMAND "${TAMIAS_CARGO_EXECUTABLE}" build --release
+  COMMAND "${TAMIAS_CARGO_EXECUTABLE}" build ${_truck_cargo_platform_args}
+          --profile ${_truck_cargo_profile}
   WORKING_DIRECTORY "${_truck_bridge_dir}"
   DEPENDS ${_truck_bridge_sources}
-  COMMENT "Building Truck bridge (cargo, Rust)"
+  COMMENT "Building Truck bridge (cargo, Rust, ${_truck_bridge_desc})"
   VERBATIM
 )
 add_custom_target(tamias_truck_bridge_build DEPENDS "${_truck_bridge_lib}")

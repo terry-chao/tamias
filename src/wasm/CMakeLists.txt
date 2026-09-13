@@ -50,12 +50,19 @@ if(TAMIAS_NODE_EXECUTABLE AND TAMIAS_NPM_EXECUTABLE)
       COMMAND "${TAMIAS_NPM_EXECUTABLE}" --prefix "${_web_ui_dir}" ci
     )
   endif()
+  # 只拷 UI 自己的产物（index.html + assets/）。**不能**整目录 copy_directory：
+  # web/dist 里还带着 vite 从 web/public 复制过去的 tamias_viewer.js/.wasm，
+  # 整目录覆盖会把刚链接好的 wasm 换成 public 里的旧副本——改了 C++ 却一直在跑
+  # 旧 wasm（踩过一次：wgpuSurfacePresent 改掉了却仍旧 abort）。
   add_custom_command(TARGET tamias_viewer POST_BUILD
     ${_ui_bootstrap_cmds}
     COMMAND "${TAMIAS_NPM_EXECUTABLE}" --prefix "${_web_ui_dir}" run build
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${_web_ui_dir}/dist/index.html"
+            $<TARGET_FILE_DIR:tamias_viewer>/index.html
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${_web_ui_dir}/dist"
-            $<TARGET_FILE_DIR:tamias_viewer>
+            "${_web_ui_dir}/dist/assets"
+            $<TARGET_FILE_DIR:tamias_viewer>/assets
     COMMENT "Building web UI (Vite + React + TS) and copying into wasm output"
     VERBATIM
   )

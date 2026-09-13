@@ -90,25 +90,30 @@ WebGPU RHI          emdawnwebgpu，绑 #viewport
 
 需要 [Emscripten SDK](https://emscripten.org/docs/getting_started/downloads.html)。Windows 上 SDK 在 `C:/dev/emsdk`。
 
-**CMake Tools（推荐）：** 状态栏按套切换，不要用 Run and Debug 里的独立 task。
+**浏览器查看器：按 F5。** Run and Debug 选 **「Tamias: WASM 预览 (F5)」**：按需配置并构建
+`tamias_viewer` → 在独立窗口起预览服务 → 打开 http://localhost:3000（并附上 JS 调试器）。
+**关掉 `TamiasWasmServe` 窗口就是停止预览**，不需要再切「停止预览」预设。预览服务强制
+`Cache-Control: no-store`，不会再出现浏览器缓存住旧 `wasm` 的情况。
 
-| 项 | 桌面 | 浏览器查看器 |
-|---|---|---|
-| Configure Preset | `msvc` | `wasm`（Emscripten WebGPU viewer） |
-| Build Preset | `debug` | `wasm-serve` 编译并开 http://localhost:3000；`wasm-stop` 停预览 |
-| Launch Target | `tamias` | `tamias_viewer` |
+再按一次 F5 也安全：已有的预览服务会先被清掉，再重起。
 
-切到 `wasm` 后跑一次 **CMake: Configure**，再 **CMake: Build**。预览选 build preset **WASM 预览 (localhost:3000)** 然后 Build；停预览选 **WASM 停止预览** 再 Build，或关掉弹出的 `TamiasWasmServe` 窗口。不要按 Debug（`tamias_viewer` 不是 exe，cppvsdbg 跟不了）。看完桌面再切回 `msvc` / `debug` / `tamias`。
+| 想做的事 | 怎么做 |
+|---|---|
+| 浏览器预览（推荐） | Run and Debug → **Tamias: WASM 预览 (F5)** |
+| 停止预览 | 关掉 `TamiasWasmServe` 窗口 |
+| 桌面调试 | Run and Debug → **CMake Launch Target**（照旧用 CMake Tools 的 preset） |
+| 只构建、不开浏览器 | `powershell -File scripts/wasm-preview.ps1 -NoBrowser` |
+| 只构建 wasm | `powershell -File scripts/wasm.ps1` |
 
-命令行（可选，等价于上面的 preset）：
+命令行（等价于 F5，只是不开浏览器）：
 
 ```
-cmake --preset wasm
-cmake --build --preset wasm-serve
-cmake --build --preset wasm-stop
+powershell -File scripts/wasm-preview.ps1 -NoBrowser
 ```
 
-或 `powershell -File scripts/wasm.ps1`。产物在 `build/wasm/bin/`。
+CMake Tools 的状态栏里，wasm 只保留一个**构建**预设「构建 WASM 查看器」（Configure
+preset 选 `wasm`）——预览统一走 F5，不再有「停止预览」这种预设。想从命令行单独起服务：
+`cmake --build build/wasm --target serve_viewer`。产物在 `build/wasm/bin/`。
 
 浏览器里：中键旋转，右键平移，滚轮缩放。顶栏打开 `.tdoc`、`.trscn` 或 `.obj`。没有文件时画演示立方体。`.trscn` 的含义见 [渲染场景快照](RENDER-SCENE.md)。
 

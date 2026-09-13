@@ -1148,7 +1148,10 @@ Result<void> WebGpuDevice::execute(CommandList& command_list) {
 }
 
 Result<void> WebGpuDevice::end_frame(SwapChain& swap_chain) {
-  wgpuSurfacePresent(surface_);
+  // 浏览器 WebGPU 没有「显式 present」这一步：queue.submit 之后由 canvas 自动上屏。
+  // wgpuSurfacePresent 是 wgpu-native（桌面）专有的，emdawnwebgpu 调用它会直接
+  // abort（"wgpuSurfacePresent is unsupported"）。本后端只在 Emscripten 下编译，
+  // 将来若接桌面 wgpu-native，需要在这里补回 present。
   static_cast<WebGpuSwapChain&>(swap_chain).release_color();
   return {};
 }

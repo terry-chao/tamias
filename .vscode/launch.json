@@ -2,7 +2,18 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "CMake Launch Target",
+      "name": "浏览器：WASM 预览 (F5)",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://localhost:3000",
+      "webRoot": "${workspaceFolder}/web",
+      "sourceMaps": true,
+      "smartStep": true,
+      "preLaunchTask": "Tamias: WASM 预览（构建 + 起服务）",
+      "detail": "构建 build/wasm 的 tamias_viewer → 在独立窗口起预览服务 → 打开浏览器并附上 JS 调试器。不依赖状态栏当前选中的 preset。关掉 TamiasWasmServe 窗口即停止预览。"
+    },
+    {
+      "name": "桌面：调试 tamias (CMake Launch Target)",
       "type": "cppvsdbg",
       "request": "launch",
       "preLaunchTask": "Tamias: 编译",

@@ -200,14 +200,18 @@ fn shaded_realistic(n: vec3<f32>, l: vec3<f32>, v: vec3<f32>, base: vec3<f32>, r
 
 @fragment
 fn main(input: FsIn) -> @location(0) vec4<f32> {
-  if (input.mode > 2.5) {
+  // 模式一律读 pc（uniform push constant），不要读 input.mode——那是插值 varying，
+  // Tint 会判定它「可能非一致」。而 textureSample / dpdx 这类带隐式导数的调用
+  // 必须处在一致控制流里，否则整个着色器编译失败（WebGPU 的硬性规则；
+  // 桌面 SPIR-V 没有这条限制，所以这段只有 WebGPU 会炸）。
+  if (pc.eye_pos_mode.w > 2.5) {
     var c = input.color * pc.color.rgb;
     if (input.selected > 0.5) {
       c = vec3<f32>(0.35, 0.72, 1.0);
     }
     return vec4<f32>(c, 1.0);
   }
-  if (input.mode < 0.5) {
+  if (pc.eye_pos_mode.w < 0.5) {
     var wire = vec3<f32>(0.82, 0.86, 0.92);
     if (input.selected > 0.5) {
       wire = vec3<f32>(0.35, 0.72, 1.0);
@@ -216,9 +220,9 @@ fn main(input: FsIn) -> @location(0) vec4<f32> {
   }
   var n = normalize(input.normal);
   let v = normalize(pc.eye_pos_mode.xyz - input.world_pos);
-  if (dot(n, v) < 0.0) {
-    discard;
-  }
+  // 背面剔除延后到函数末尾：条件 discard 挡在采样之前，同样会让后续被判定为
+  // 非一致控制流。输出一样（背面还是被丢掉），只是多算了一点。
+  let backface = dot(n, v) < 0.0;
   if (pc.material.w > 0.5) {
     n = select(sample_triplanar_normal(input.world_pos, n, input.world_scale),
                sample_uv_normal(n, input.world_pos, input.uv), pc.lighting.w > 0.5);
@@ -245,7 +249,7 @@ fn main(input: FsIn) -> @location(0) vec4<f32> {
   }
   var lit_rgb: vec3<f32>;
   var lit_a = 1.0;
-  if (input.mode > 1.5) {
+  if (pc.eye_pos_mode.w > 1.5) {
     let pbr = shaded_realistic(n, l, v, base, rough, metal,
                                clamp(input.opacity, 0.0, 1.0), ao);
     lit_rgb = pbr.rgb;
@@ -256,6 +260,9 @@ fn main(input: FsIn) -> @location(0) vec4<f32> {
   if (input.selected > 0.5) {
     lit_rgb = mix(lit_rgb, vec3<f32>(0.28, 0.62, 1.0), 0.22);
     lit_rgb += vec3<f32>(0.03, 0.07, 0.14);
+  }
+  if (backface) {
+    discard;
   }
   return vec4<f32>(lit_rgb, lit_a);
 }

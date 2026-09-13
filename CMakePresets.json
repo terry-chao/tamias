@@ -64,6 +64,7 @@
         "TAMIAS_ENABLE_WEBGL_BACKEND": "OFF",
         "TAMIAS_ENABLE_WEBGPU_BACKEND": "ON",
         "TAMIAS_ENABLE_OCCT": "OFF",
+        "TAMIAS_ENABLE_TRUCK_KERNEL": "ON",
         "TAMIAS_BUILD_TESTS": "OFF",
         "TAMIAS_USE_FETCHCONTENT": "OFF"
       },
@@ -124,16 +125,10 @@
       "configurePreset": "linux"
     },
     {
-      "name": "wasm-serve",
-      "displayName": "WASM 预览 (localhost:3000)",
+      "name": "wasm-build",
+      "displayName": "构建 WASM 查看器",
       "configurePreset": "wasm",
-      "targets": ["serve_viewer"]
-    },
-    {
-      "name": "wasm-stop",
-      "displayName": "WASM 停止预览",
-      "configurePreset": "wasm",
-      "targets": ["stop_viewer"]
+      "targets": ["tamias_viewer"]
     }
   ],
   "testPresets": [

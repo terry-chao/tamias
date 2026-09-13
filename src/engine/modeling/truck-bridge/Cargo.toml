@@ -20,3 +20,10 @@ truck-shapeops = "0.4.0"
 # 桥必须能 catch_unwind，所以 panic 不能是 abort。
 [profile.release]
 panic = "unwind"
+
+# WASM（Emscripten）专用：Rust 的 wasm std 依赖旧的 emscripten JS 异常运行时
+# （__cpp_exception），Emscripten 6.x 已不再提供，链接会挂。wasm 上用 abort
+# 绕开异常运行时；代价是 panic 不能被 catch_unwind 拦住，会直接中止模块。
+[profile.wasm-release]
+inherits = "release"
+panic = "abort"
