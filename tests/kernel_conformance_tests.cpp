@@ -153,6 +153,38 @@ TEST(KernelConformance, TransformMovesTheBody) {
   });
 }
 
+TEST(KernelConformance, CylinderVerbMakesARoundBar) {
+  for_each_kernel([](ModelKernel& kernel, const KernelCapabilities& caps) {
+    if (!caps.supports(KernelVerb::Cylinder) || !caps.supports(KernelVerb::Tessellate)) {
+      GTEST_SKIP() << "backend does not implement the cylinder verb";
+    }
+    // 沿 +Y：半径 0.5、高 2、中心在原点 → 包围盒 1 × 2 × 1。
+    auto up = kernel.cylinder(0.5, 2.0, Vec3{0.f, 0.f, 0.f}, Vec3{0.f, 1.f, 0.f});
+    ASSERT_TRUE(up) << up.error();
+    if (caps.supports(KernelVerb::Bounds)) {
+      auto bounds = kernel.bounds(**up);
+      ASSERT_TRUE(bounds) << bounds.error();
+      EXPECT_NEAR(span(bounds->min.x, bounds->max.x), 1.0, 1e-3);
+      EXPECT_NEAR(span(bounds->min.y, bounds->max.y), 2.0, 1e-3);
+      EXPECT_NEAR(span(bounds->min.z, bounds->max.z), 1.0, 1e-3);
+    }
+    auto mesh = kernel.tessellate(**up, 0.05);
+    ASSERT_TRUE(mesh) << mesh.error();
+    EXPECT_FALSE(mesh->indices.empty());
+
+    // 换一条轴（+X）：长边应该跟着转到 X 上。
+    auto along_x = kernel.cylinder(0.5, 2.0, Vec3{0.f, 0.f, 0.f}, Vec3{1.f, 0.f, 0.f});
+    ASSERT_TRUE(along_x) << along_x.error();
+    if (caps.supports(KernelVerb::Bounds)) {
+      auto bounds = kernel.bounds(**along_x);
+      ASSERT_TRUE(bounds) << bounds.error();
+      EXPECT_NEAR(span(bounds->min.x, bounds->max.x), 2.0, 1e-3);
+      EXPECT_NEAR(span(bounds->min.y, bounds->max.y), 1.0, 1e-3);
+      EXPECT_NEAR(span(bounds->min.z, bounds->max.z), 1.0, 1e-3);
+    }
+  });
+}
+
 TEST(KernelConformance, EdgesAndMeasuresAgree) {
   for_each_kernel([](ModelKernel& kernel, const KernelCapabilities& caps) {
     if (!caps.supports(KernelVerb::Edges) || !caps.supports(KernelVerb::MeasureEdges)) {

@@ -278,6 +278,52 @@ pub extern "C" fn truck_extrude(handle: u64, depth: f64, out: *mut u64) -> i32 {
     })
 }
 
+// 圆柱：在垂直于 axis 的平面里画圆，再沿 axis 拉 height。
+// center 是圆柱中心（与 OCCT 后端的约定一致：底面在 center - axis*height/2）。
+#[no_mangle]
+pub extern "C" fn truck_cylinder(
+    radius: f64,
+    height: f64,
+    cx: f64,
+    cy: f64,
+    cz: f64,
+    ax: f64,
+    ay: f64,
+    az: f64,
+    out: *mut u64,
+) -> i32 {
+    guard(|| {
+        if !(radius > 0.0) || !(height > 0.0) {
+            return Err((TRUCK_E_BAD_ARG, "cylinder needs positive radius/height".into()));
+        }
+        let mut axis = vec3(ax, ay, az);
+        if axis.magnitude() < 1e-9 {
+            axis = Vector3::unit_y();
+        }
+        let axis = axis.normalize();
+        let center = point(cx, cy, cz);
+        let base = center - axis * (height / 2.0);
+        // 取一个与轴不平行的向量，投影到垂直于轴的平面上，作为半径起始方向。
+        let seed = if axis.dot(Vector3::unit_x()).abs() < 0.9 {
+            Vector3::unit_x()
+        } else {
+            Vector3::unit_z()
+        };
+        let radial = (seed - axis * seed.dot(axis)).normalize();
+        let start = builder::vertex(base + radial * radius);
+        let wire = builder::rsweep(
+            &start,
+            base,
+            axis,
+            Rad(std::f64::consts::TAU + 1e-3),
+        );
+        let face = builder::try_attach_plane(&[wire])
+            .map_err(|e| (TRUCK_E_FAILED, format!("cylinder: attach plane failed: {e:?}")))?;
+        let solid = builder::tsweep(&face, axis * height);
+        write_out(out, store(Shape::Solid(solid)))
+    })
+}
+
 // op: 0 = Fuse, 1 = Common, 2 = Cut（与 tamias::BooleanOp 一致）。
 #[no_mangle]
 pub extern "C" fn truck_boolean(a: u64, b: u64, op: i32, out: *mut u64) -> i32 {

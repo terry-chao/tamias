@@ -44,8 +44,8 @@ KernelCapabilities TruckKernel::capabilities() const {
   // C++ 侧因此不会假装支持，UI 也能据此灰按钮。
   caps.verbs = KernelVerb::RectFace | KernelVerb::CircleFace | KernelVerb::PolygonFace |
                KernelVerb::Extrude | KernelVerb::Boolean | KernelVerb::Transform |
-               KernelVerb::Edges | KernelVerb::MeasureEdges | KernelVerb::Tessellate |
-               KernelVerb::Bounds;
+               KernelVerb::Cylinder | KernelVerb::Edges | KernelVerb::MeasureEdges |
+               KernelVerb::Tessellate | KernelVerb::Bounds;
   caps.multi_edge_fillet = false;
   caps.variable_radius_fillet = false;
   caps.step_import = false;
@@ -117,8 +117,13 @@ Result<BodyRef> TruckKernel::boolean(const Body& a, const Body& b, BooleanOp op)
   return wrap(code, handle, "boolean");
 }
 
-Result<BodyRef> TruckKernel::cylinder(double, double, Vec3, Vec3) const {
-  return Err("truck backend does not support cylinder yet");
+Result<BodyRef> TruckKernel::cylinder(double radius, double height, Vec3 center,
+                                      Vec3 axis) const {
+  std::uint64_t handle = 0;
+  const std::int32_t code =
+      truck_cylinder(radius, height, center.x, center.y, center.z, axis.x, axis.y, axis.z,
+                     &handle);
+  return wrap(code, handle, "cylinder");
 }
 
 Result<std::vector<EdgeId>> TruckKernel::edges(const Body& body) const {

@@ -39,6 +39,8 @@ std::int32_t truck_rect_face(double width, double height, std::uint64_t* out);
 std::int32_t truck_circle_face(double radius, std::uint64_t* out);
 std::int32_t truck_polygon_face(const double* xyz, std::size_t count, std::uint64_t* out);
 std::int32_t truck_extrude(std::uint64_t body, double depth, std::uint64_t* out);
+std::int32_t truck_cylinder(double radius, double height, double cx, double cy, double cz,
+                            double ax, double ay, double az, std::uint64_t* out);
 // op: 0 = Fuse, 1 = Common, 2 = Cut（与 tamias::BooleanOp 一致）
 std::int32_t truck_boolean(std::uint64_t a, std::uint64_t b, std::int32_t op,
                            std::uint64_t* out);
