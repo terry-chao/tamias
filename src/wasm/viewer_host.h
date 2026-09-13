@@ -1,5 +1,13 @@
 #pragma once
 
+// ============================================================================
+//  ⚠️ 施工中（WIP）：WebAssembly 查看器
+//
+//  这条产品线还在盖：查看 / 轻编辑 / Truck 建模已经能跑，但**和桌面端远未对齐**，
+//  embind 接口、行为细节、构建流程都可能随时变动。别当成品用、别对外承诺。
+//  现状与缺口见 docs/WEB.md（有一张 web / 桌面能力对照表）。
+// ============================================================================
+
 #include "engine/core/native_window_handle.h"
 #include "engine/core/result.h"
 #include "engine/render/render_runtime.h"

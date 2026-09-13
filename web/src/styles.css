@@ -9,6 +9,7 @@
   --accent: #4c8dff;
   --error: #ff6b6b;
   --ok: #4fd68c;
+  --warn: #f0b429;
 }
 
 * {
@@ -59,6 +60,16 @@ header {
 .brand span {
   color: var(--muted);
   font-size: 12px;
+}
+
+/* 「施工中」角标：这条产品线还在盖，和桌面端尚未对齐。 */
+.brand .wip {
+  color: var(--warn);
+  border: 1px solid var(--warn);
+  border-radius: 4px;
+  padding: 0 5px;
+  font-size: 11px;
+  letter-spacing: 1px;
 }
 
 .actions {

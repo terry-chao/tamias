@@ -1,3 +1,7 @@
+// ⚠️ 施工中（WIP）：Web 查看器前端
+//
+// 这条产品线和桌面端远未对齐：功能在陆续补，交互和接口随时可能变。顶栏那个
+// 「施工中」角标就是给使用者看的提醒。现状/缺口见 docs/WEB.md。
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { loadViewer, settle, toBinaryString, type ViewerStats } from "./viewer";
@@ -286,9 +290,15 @@ export default function App() {
         ? `s:sub_type=circle;d:diameter=0.6;d:height=3;p:points=${point}`
         : `s:sub_type=rect;d:width=0.6;d:depth=0.6;d:height=3;p:points=${point}`;
     const ok = await settle(module.dispatch("create_column", args));
-    const message = await settle(module.status());
-    setStatus(message);
-    setError(ok ? null : message);
+    if (ok) {
+      // 明确回报落点，省得"点了没反应"和"放到了别处"分不清。
+      setStatus(`已放置${subType === "circle" ? "圆柱" : "方柱"} @ ${point}`);
+      setError(null);
+    } else {
+      const message = await settle(module.status());
+      setStatus(message);
+      setError(message);
+    }
   };
 
   // 点击视口：把归一化坐标交给引擎反投影到 y = 0 工作面，命中就落构件。
@@ -335,9 +345,9 @@ export default function App() {
     fire(moduleRef.current?.pointerUp(event.clientX, event.clientY, event.button));
     const press = pressRef.current;
     pressRef.current = null;
-    // 只认「左键按下后没怎么动」的点击；拖拽过就不算点击。
+    // 左键没有拖拽手势（旋转是中键、平移是右键），所以按下+松开就算点击，
+    // 不再卡「移动不超过 4px」——那个阈值会让手稍微一抖的点击被静默丢掉。
     if (!press || press.button !== 0 || event.button !== 0) return;
-    if (Math.hypot(event.clientX - press.x, event.clientY - press.y) > 4) return;
     if (placeMode === "none") {
       // 不在放置模式时，左键点击＝点选（与桌面视口一致）。
       void pickAt(event.currentTarget, event.clientX, event.clientY);
@@ -376,6 +386,9 @@ export default function App() {
         <div className="brand">
           <strong>Tamias Viewer</strong>
           <span>引擎 WASM · Web 查看器</span>
+          <span className="wip" title="和桌面端尚未对齐，功能与接口都会变">
+            施工中
+          </span>
         </div>
         <div className="actions">
           <button

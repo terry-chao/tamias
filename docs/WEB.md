@@ -1,6 +1,8 @@
 # 引擎 WASM + Web 查看器
 
-> **状态：阶段 0/1 已落地。** 桌面仍是 Qt 壳；浏览器走另一条产品线：无 Qt 的引擎交叉编译到 WebAssembly，新 Web UI 画在 HTML canvas 上。图形默认 [WebGPU](WGPU.md)（`rhi/webgpu`）。桌面不做 wgpu-native。
+> **状态：⚠️ 施工中（WIP）。** 查看器、轻编辑、Truck 建模已经能跑，但**和桌面端远未对齐**：
+> 功能在陆续补，embind 接口与交互细节随时可能变，别当成品对外承诺。页面左上角有「施工中」角标。
+> 桌面仍是 Qt 壳；浏览器走另一条产品线：无 Qt 的引擎交叉编译到 WebAssembly，新 Web UI 画在 HTML canvas 上。图形默认 [WebGPU](WGPU.md)（`rhi/webgpu`）。桌面不做 wgpu-native。
 
 实现入口：
 

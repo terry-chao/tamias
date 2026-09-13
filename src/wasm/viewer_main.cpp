@@ -1,5 +1,12 @@
 #include "viewer_host.h"
 
+// ============================================================================
+//  ⚠️ 施工中（WIP）：WebAssembly 查看器的 embind 入口
+//
+//  这里导出的函数是 web 端的全部能力面，**还在长**：接口可能增删改名，别当成
+//  稳定 API。桌面端才是主线，两边对齐情况见 docs/WEB.md。
+// ============================================================================
+
 #include "command/command_system.h"
 #include "engine/core/log.h"
 #include "engine/modeling/linked_kernels.h"
