@@ -1,0 +1,21 @@
+[package]
+name = "tamias-truck-bridge"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "C ABI bridge between Tamias (C++) and the Truck CAD kernel (Rust)"
+publish = false
+
+[lib]
+name = "tamias_truck_bridge"
+crate-type = ["staticlib"]
+
+[dependencies]
+truck-modeling = "0.6"
+truck-meshalgo = "0.4"
+truck-polymesh = "0.6"
+truck-topology = "0.6"
+
+# 桥必须能 catch_unwind，所以 panic 不能是 abort。
+[profile.release]
+panic = "unwind"

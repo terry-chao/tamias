@@ -7,6 +7,10 @@
 #include "engine/modeling/occt/occt_kernel.h"
 #endif
 
+#if defined(TAMIAS_HAS_KERNEL_TRUCK)
+#include "engine/modeling/truck/truck_kernel.h"
+#endif
+
 namespace tamias {
 namespace {
 
@@ -19,6 +23,9 @@ std::string g_error;
 void register_linked_kernels() {
 #if defined(TAMIAS_HAS_KERNEL_OCCT)
   register_occt_kernel_backend();
+#endif
+#if defined(TAMIAS_HAS_KERNEL_TRUCK)
+  register_truck_kernel_backend();
 #endif
 }
 

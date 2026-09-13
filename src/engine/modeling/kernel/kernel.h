@@ -26,7 +26,7 @@ namespace tamias {
 // feature.h 定义这个枚举（内核层不反向 include 中间层的数据头，只做不透明声明）。
 enum class BooleanOp : std::uint8_t;
 
-enum class KernelBackend { Occt };
+enum class KernelBackend { Occt, Truck };
 
 [[nodiscard]] const char* to_string(KernelBackend backend);
 

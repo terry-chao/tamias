@@ -25,3 +25,5 @@ plugin-sdk/**/bin/
 plugin-sdk/**/obj/
 plugins/**/bin/
 plugins/**/obj/
+# Truck 桥的 cargo 产物（Cargo.lock 要提交，target 不提交）
+src/engine/modeling/truck-bridge/target/

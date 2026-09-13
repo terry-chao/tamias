@@ -11,6 +11,8 @@ const char* to_string(KernelBackend backend) {
   switch (backend) {
     case KernelBackend::Occt:
       return "occt";
+    case KernelBackend::Truck:
+      return "truck";
   }
   return "unknown";
 }
