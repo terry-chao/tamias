@@ -37,6 +37,13 @@ int main(int argc, char* argv[]) {
   tamias::register_occt_shape_ops();
 
   tamias::AppSettings::instance().load();
+  // 建模内核：用设置里选的那个（默认 occt）。必须在任何文档求值之前设置，
+  // 内核实例建好之后再改就晚了——和渲染后端一样，改完要重启。
+  tamias::set_default_kernel_backend(
+      tamias::AppSettings::instance().kernel_backend().compare(QStringLiteral("truck"),
+                                                              Qt::CaseInsensitive) == 0
+          ? tamias::KernelBackend::Truck
+          : tamias::KernelBackend::Occt);
   if (!tamias::apply_ui_language(tamias::AppSettings::instance().ui_language())) {
     tamias::log_error("Failed to load UI translation catalog; falling back to source language");
   }

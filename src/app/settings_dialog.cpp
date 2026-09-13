@@ -1,6 +1,7 @@
 #include "settings_dialog.h"
 
 #include "app_settings.h"
+#include "engine/modeling/linked_kernels.h"
 #include "i18n.h"
 #include "settings_section.h"
 
@@ -212,10 +213,32 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
   graphics_section->add_row(tr("Render backend"), backend_combo_);
   graphics_section->add_row(backend_hint_);
 
+  // 建模内核后端：OCCT（完整）或 Truck（Rust，实验性）。改完要重启才生效。
+  kernel_combo_ = new QComboBox(this);
+  for (const KernelBackend backend : available_kernels()) {
+    const QString key = QString::fromUtf8(to_string(backend));
+    kernel_combo_->addItem(key == QStringLiteral("truck") ? tr("Truck (Rust, experimental)")
+                                                          : tr("OCCT (OpenCASCADE)"),
+                           key);
+  }
+  const int kernel_index =
+      kernel_combo_->findData(AppSettings::instance().kernel_backend());
+  kernel_combo_->setCurrentIndex(kernel_index >= 0 ? kernel_index : 0);
+  kernel_hint_ = new QLabel(this);
+  kernel_hint_->setWordWrap(true);
+  kernel_hint_->setObjectName(QStringLiteral("settingsHint"));
+  kernel_hint_->setText(tr("Which kernel evaluates the feature tree. OCCT is complete; "
+                           "Truck has no boolean / fillet / chamfer yet. "
+                           "Kernel changes take effect after restarting Tamias."));
+  auto* kernel_section = new SettingsSection(tr("Modeling"), this);
+  kernel_section->add_row(tr("Kernel backend"), kernel_combo_);
+  kernel_section->add_row(kernel_hint_);
+
   stack->addWidget(wrap_page(make_page({translation_section})));
   stack->addWidget(wrap_page(make_page({theme_section})));
   stack->addWidget(wrap_page(make_page({zoom_section})));
   stack->addWidget(wrap_page(make_page({graphics_section})));
+  stack->addWidget(wrap_page(make_page({kernel_section})));
 
   auto* body = new QWidget(this);
   auto* body_layout = new QHBoxLayout(body);
@@ -258,6 +281,7 @@ void SettingsDialog::populate_categories() {
   nav_->addItem(tr("Themes"));
   nav_->addItem(tr("Navigation"));
   nav_->addItem(tr("System", "settings category"));
+  nav_->addItem(tr("Modeling", "settings category"));
 }
 
 void SettingsDialog::apply_stylesheet() {
@@ -297,11 +321,14 @@ void SettingsDialog::accept() {
   const QString language = language_combo_->currentData().toString();
   const auto theme =
       static_cast<UiColorScheme>(theme_combo_->currentData().toInt());
+  const QString kernel = kernel_combo_->currentData().toString();
   auto& settings = AppSettings::instance();
   language_changed_ = language != settings.ui_language();
   backend_changed_ = backend != settings.graphics_backend();
   theme_changed_ = theme != settings.ui_color_scheme();
+  kernel_changed_ = kernel != settings.kernel_backend();
   settings.set_graphics_backend(backend);
+  settings.set_kernel_backend(kernel);
   settings.set_ui_language(language);
   settings.set_ui_color_scheme(theme);
   settings.set_zoom_to_mouse_position(zoom_to_mouse_check_->isChecked());

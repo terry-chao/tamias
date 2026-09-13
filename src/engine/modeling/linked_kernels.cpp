@@ -17,6 +17,7 @@ namespace {
 std::once_flag g_once;
 std::unique_ptr<ModelKernel> g_default;
 std::string g_error;
+KernelBackend g_backend = KernelBackend::Occt;
 
 }  // namespace
 
@@ -29,10 +30,19 @@ void register_linked_kernels() {
 #endif
 }
 
+void set_default_kernel_backend(KernelBackend backend) { g_backend = backend; }
+
+KernelBackend default_kernel_backend() { return g_backend; }
+
+std::vector<KernelBackend> available_kernels() {
+  register_linked_kernels();
+  return registered_kernel_backends();
+}
+
 Result<ModelKernel*> default_kernel() {
   std::call_once(g_once, [] {
     register_linked_kernels();
-    auto created = ModelKernel::create(KernelCreateInfo{});
+    auto created = ModelKernel::create(KernelCreateInfo{g_backend});
     if (created) {
       g_default = std::move(*created);
     } else {

@@ -13,10 +13,18 @@ else()
   set(_truck_bridge_lib "${_truck_bridge_dir}/target/release/libtamias_truck_bridge.a")
 endif()
 
+# 声明 Rust 侧依赖：不写 DEPENDS，改了 lib.rs 之后 cargo 不会重跑，
+# 链接的还是旧静态库（踩过一次）。
+file(GLOB_RECURSE _truck_bridge_sources CONFIGURE_DEPENDS
+  "${_truck_bridge_dir}/src/*.rs"
+  "${_truck_bridge_dir}/Cargo.toml"
+  "${_truck_bridge_dir}/Cargo.lock"
+)
 add_custom_command(
   OUTPUT "${_truck_bridge_lib}"
   COMMAND "${TAMIAS_CARGO_EXECUTABLE}" build --release
   WORKING_DIRECTORY "${_truck_bridge_dir}"
+  DEPENDS ${_truck_bridge_sources}
   COMMENT "Building Truck bridge (cargo, Rust)"
   VERBATIM
 )

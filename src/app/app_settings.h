@@ -20,6 +20,10 @@ class AppSettings {
   [[nodiscard]] GraphicsBackend graphics_backend() const { return graphics_backend_; }
   void set_graphics_backend(GraphicsBackend backend);
 
+  // 建模内核后端（"occt" / "truck"）。只影响参数化求值走哪个内核，不影响文件格式。
+  [[nodiscard]] QString kernel_backend() const { return kernel_backend_; }
+  void set_kernel_backend(const QString& backend);
+
   [[nodiscard]] QString ui_language() const { return ui_language_; }
   void set_ui_language(const QString& language);
 
@@ -50,6 +54,7 @@ class AppSettings {
   AppSettings() = default;
 
   GraphicsBackend graphics_backend_ = GraphicsBackend::Vulkan;
+  QString kernel_backend_ = QStringLiteral("occt");
   QString ui_language_ = QStringLiteral("system");
   UiColorScheme ui_color_scheme_ = UiColorScheme::System;
   bool zoom_to_mouse_position_ = true;

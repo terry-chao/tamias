@@ -81,6 +81,8 @@ void AppSettings::load() {
   graphics_backend_ =
       backend_from_key(settings.value(QStringLiteral("render/backend"), QStringLiteral("Vulkan"))
                            .toString());
+  kernel_backend_ =
+      settings.value(QStringLiteral("modeling/kernel"), QStringLiteral("occt")).toString();
   ui_language_ = normalize_ui_language_preference(
       settings.value(QStringLiteral("ui/language"), default_ui_language()).toString());
   ui_color_scheme_ = color_scheme_from_key(
@@ -99,6 +101,7 @@ void AppSettings::load() {
 void AppSettings::save() const {
   QSettings settings;
   settings.setValue(QStringLiteral("render/backend"), backend_to_key(graphics_backend_));
+  settings.setValue(QStringLiteral("modeling/kernel"), kernel_backend_);
   settings.setValue(QStringLiteral("ui/language"), ui_language_);
   settings.setValue(QStringLiteral("ui/color_scheme"), color_scheme_to_key(ui_color_scheme_));
   settings.setValue(QStringLiteral("viewport/zoom_to_mouse_position"), zoom_to_mouse_position_);
@@ -110,6 +113,10 @@ void AppSettings::save() const {
 
 void AppSettings::set_graphics_backend(GraphicsBackend backend) {
   graphics_backend_ = backend;
+}
+
+void AppSettings::set_kernel_backend(const QString& backend) {
+  kernel_backend_ = backend.isEmpty() ? QStringLiteral("occt") : backend;
 }
 
 void AppSettings::set_ui_language(const QString& language) {
