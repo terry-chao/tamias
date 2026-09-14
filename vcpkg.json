@@ -33,6 +33,11 @@
       "features": ["freetype"]
     },
     {
+      "name": "tracy",
+      "default-features": false,
+      "features": ["on-demand"]
+    },
+    {
       "name": "vulkan",
       "platform": "linux"
     },

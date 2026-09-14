@@ -7,6 +7,7 @@
 #include "engine/render/gpu_instance.h"
 #include "engine/render/scene_graph.h"
 #include "engine/render/texture_mips.h"
+#include "engine/profile/timing_scope.h"
 #if defined(TAMIAS_HAS_RHI_WEBGL)
 #include "engine/render/rhi/webgl/webgl_shaders.h"
 #endif
@@ -338,6 +339,7 @@ void RenderThread::destroy_channel(std::uint64_t channel_id) {
 }
 
 Result<std::uint64_t> RenderThread::upload_mesh_on_thread(std::uint64_t asset_id, MeshCpu mesh) {
+  TAMIAS_TIMING_SCOPE("upload_mesh", TimingCategory::Render);
   if (asset_id == 0 || mesh.vertices.empty() || mesh.indices.empty() || device_ == nullptr) {
     return Err("upload_mesh: empty mesh");
   }
@@ -436,6 +438,7 @@ Result<std::uint64_t> RenderThread::upload_texture(std::uint64_t asset_id, Textu
   auto promise = std::make_shared<std::promise<Result<std::uint64_t>>>();
   auto future = promise->get_future();
   post([this, asset = std::move(asset), promise, asset_id]() mutable {
+      TAMIAS_TIMING_SCOPE("upload_texture", TimingCategory::Render);
       // 幂等：同一资产同一 generation 只上传一次；replace 后 generation 变了则重建。
       if (auto it = texture_asset_to_gpu_.find(asset_id); it != texture_asset_to_gpu_.end()) {
         auto gpu_it = textures_.find(it->second);
@@ -976,6 +979,7 @@ Result<void> RenderThread::ensure_pipelines() {
 
 Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
                                        const FrameSubmission& frame) {
+  TAMIAS_TIMING_SCOPE("draw_channel", TimingCategory::Render);
   if (channel.width == 0 || channel.height == 0 || !channel.window.valid()) {
     return {};
   }
@@ -1089,6 +1093,7 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
   };
   // 天空：采样 IBL cubemap，与模型环境倒影同源。
   if (sky_pipeline_ && sky_mesh_.index_buffer && ibl_prefilter_) {
+    TAMIAS_GPU_ZONE(*channel.command_list, "gpu.sky");
     PushConstants pc{};
     Mat4 cam_to_world = invert_affine(frame.view);
     cam_to_world(0, 3) = cam_to_world(1, 3) = cam_to_world(2, 3) = 0.f;
@@ -1127,6 +1132,7 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
 
   // 地面网格（相机锚定四边形 + 网格 shader；测深度不写深度）。
   if (grid_pipeline_ && grid_mesh_.index_buffer) {
+    TAMIAS_GPU_ZONE(*channel.command_list, "gpu.grid");
     constexpr float kGridQuadExtent = 2000.f;
     const float view_scale = std::max(frame.view_distance, 1.f);
     // Fade ends at 32× view distance; grow the camera-anchored quad so it still covers it.
@@ -1172,6 +1178,7 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
   }
 
   if (channel.scene_root) {
+    TAMIAS_GPU_ZONE(*channel.command_list, "gpu.mesh");
     // Vulkan 要求先有 pipeline layout 才能 bind descriptor set；mesh.frag 静态引用
     // 全部 5 个 set（着色模式不采样 IBL 也必须绑合法资源）。
     if (shaded_pipeline_) {
@@ -1260,6 +1267,7 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
 
   // 预览线（建墙 / 草图曲线 / 贝塞尔控制多边形与控制点 / 网格捕捉，深度测试关）。
   if (line_pipeline_ && preview_line_mesh_.index_buffer) {
+    TAMIAS_GPU_ZONE(*channel.command_list, "gpu.overlay");
     const bool has_curve = frame.preview_polyline.size() >= 2;
     const bool has_controls = frame.preview_control_polyline.size() >= 2;
     const bool has_points = !frame.preview_points.empty();
@@ -1453,10 +1461,20 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     channel.needs_recreate = true;
     return r;
   }
+  // 一帧 = 一次成功 present。多通道共享 RenderThread 时每个通道各算一帧。
+  TAMIAS_PROFILE_FRAME_MARK();
+  TAMIAS_PROFILE_PLOT_INT("draws", static_cast<std::int64_t>(last_stats_.draws));
+  TAMIAS_PROFILE_PLOT_INT("triangles", static_cast<std::int64_t>(last_stats_.triangles));
+  TAMIAS_PROFILE_PLOT_INT("lod_requests", static_cast<std::int64_t>(last_stats_.lod_requests));
+  TAMIAS_PROFILE_PLOT_INT("pending_tessellate",
+                          static_cast<std::int64_t>(last_stats_.pending_tessellate));
+  TAMIAS_PROFILE_PLOT_FLOAT(
+      "gpu_mesh_mb", static_cast<double>(last_stats_.gpu_mesh_bytes) / (1024.0 * 1024.0));
   return {};
 }
 
 void RenderThread::thread_main() {
+  profiling::set_thread_name("render");
   log_info("RenderThread started");
   for (;;) {
     std::vector<std::function<void()>> tasks;

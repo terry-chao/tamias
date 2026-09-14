@@ -117,6 +117,7 @@ include(CTest)
 include(FetchContent)
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/TamiasShaders.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/TamiasDependencies.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/TamiasTracy.cmake")
 
 add_subdirectory(src/engine)
 add_subdirectory(src/entity)

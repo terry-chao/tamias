@@ -9,6 +9,7 @@
 #include "i18n.h"
 #include "engine/modeling/linked_kernels.h"
 #include "engine/modeling/occt/occt_shape_ops.h"
+#include "engine/profile/profiling.h"
 
 #include <QApplication>
 #include <QIcon>
@@ -31,6 +32,8 @@ int main(int argc, char* argv[]) {
   app.setWindowIcon(QIcon(QStringLiteral(":/branding/logo.png")));
 
   tamias::init_logging(tamias::LogLevel::Info);
+  tamias::profiling::set_program_name("Tamias");
+  tamias::profiling::set_thread_name("ui");
   tamias::register_linked_rhi_backends();
   tamias::register_linked_kernels();
   tamias::register_commands(tamias::command_registry());

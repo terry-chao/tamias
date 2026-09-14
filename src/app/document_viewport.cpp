@@ -592,7 +592,7 @@ void DocumentViewport::ensure_channel() {
 void DocumentViewport::rebuild_bvh() { bvh_.build(*document_); }
 
 void DocumentViewport::submit_current_frame() {
-  TimingScope scope("submit_current_frame", TimingCategory::Render);
+  TAMIAS_TIMING_SCOPE("submit_current_frame", TimingCategory::Render);
   if (!alive_) {
     return;
   }

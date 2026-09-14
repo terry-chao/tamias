@@ -1,5 +1,7 @@
 #include "engine/modeling/tess_worker.h"
 
+#include "engine/profile/timing_scope.h"
+
 namespace tamias {
 
 TessWorker& TessWorker::instance() {
@@ -59,7 +61,10 @@ bool TessWorker::step() {
   TessJobResult result;
   result.geometry_id = job.geometry_id;
   result.lod = job.lod;
-  result.mesh = job.run ? job.run() : Err("empty tessellate job");
+  {
+    TAMIAS_TIMING_SCOPE("tessellate", TimingCategory::Modeling);
+    result.mesh = job.run ? job.run() : Err("empty tessellate job");
+  }
   {
     std::scoped_lock lock(mutex_);
     completed_.push_back(std::move(result));
@@ -122,6 +127,7 @@ void TessWorker::shutdown() {
 }
 
 void TessWorker::thread_main() {
+  profiling::set_thread_name("tess");
   for (;;) {
     {
       std::unique_lock lock(mutex_);

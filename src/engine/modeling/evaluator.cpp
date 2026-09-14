@@ -47,7 +47,7 @@ Result<std::unordered_map<std::uint64_t, BodyRef>> evaluate_feature_bodies(
     const FeatureModel& model, ModelKernel& kernel, std::uint64_t stop_feature_id) {
   std::unordered_map<std::uint64_t, BodyRef> bodies;
   for (const Feature& f : model.features()) {
-    TAMIAS_TIMING_SCOPE(feature_scope_name(model, f), TimingCategory::Modeling);
+    TAMIAS_TIMING_SCOPE_DYNAMIC(feature_scope_name(model, f), TimingCategory::Modeling);
     BodyRef body;
     switch (f.kind) {
       case FeatureKind::RectProfile: {
@@ -189,7 +189,7 @@ Result<MeshCpu> evaluate_feature_model(const FeatureModel& model, ModelKernel& k
   TAMIAS_TIMING_SCOPE("evaluate_feature_model", TimingCategory::Modeling);
   const Feature* out = model.output_feature();
   if (out != nullptr && is_sketch_feature(out->kind)) {
-    TAMIAS_TIMING_SCOPE(feature_kind_name(out->kind), TimingCategory::Modeling);
+    TAMIAS_TIMING_SCOPE_DYNAMIC(feature_kind_name(out->kind), TimingCategory::Modeling);
     return mesh_from_sketch_feature(model, *out);
   }
   auto bodies = evaluate_feature_bodies(model, kernel, 0);

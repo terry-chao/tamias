@@ -33,7 +33,7 @@ Result<void> CommandSystem::dispatch(Document& doc, const std::string& name,
     pending_name_ = name;
     return {};
   }
-  TimingScope scope(name, TimingCategory::Command);
+  TAMIAS_TIMING_SCOPE_DYNAMIC(name, TimingCategory::Command);
   if (auto r = command->execute(); !r) {
     return r;
   }
@@ -50,7 +50,7 @@ Result<bool> CommandSystem::feed_point(Vec3 point, std::uint64_t picked_entity_i
     return Err(done.error());
   }
   if (*done) {
-    TimingScope scope(pending_name_, TimingCategory::Command);
+    TAMIAS_TIMING_SCOPE_DYNAMIC(pending_name_, TimingCategory::Command);
     if (auto r = pending_->execute(); !r) {
       pending_.reset();
       pending_name_.clear();
@@ -79,7 +79,7 @@ Result<bool> CommandSystem::confirm() {
     return Err(done.error());
   }
   if (*done) {
-    TimingScope scope(pending_name_, TimingCategory::Command);
+    TAMIAS_TIMING_SCOPE_DYNAMIC(pending_name_, TimingCategory::Command);
     if (auto r = pending_->execute(); !r) {
       pending_.reset();
       pending_name_.clear();
@@ -98,8 +98,15 @@ void CommandSystem::cancel() {
   pending_name_.clear();
 }
 
-void CommandSystem::undo() { stack_.undo(); }
-void CommandSystem::redo() { stack_.redo(); }
+void CommandSystem::undo() {
+  TAMIAS_TIMING_SCOPE("undo", TimingCategory::Command);
+  stack_.undo();
+}
+
+void CommandSystem::redo() {
+  TAMIAS_TIMING_SCOPE("redo", TimingCategory::Command);
+  stack_.redo();
+}
 
 void CommandSystem::clear() {
   pending_.reset();

@@ -48,6 +48,7 @@ Use the `linux` preset with vcpkg (`linux-desktop` feature) or install Qt6/Vulka
 | `TAMIAS_ENABLE_OPENGL_BACKEND` | ON | OpenGL RHI (isolated thread per document) |
 | `TAMIAS_BUILD_TESTS` | ON | gtest targets |
 | `TAMIAS_USE_FETCHCONTENT` | ON | Fetch gtest when not found |
+| `TAMIAS_ENABLE_TRACY` | OFF | Link the Tracy profiler client in Debug/RelWithDebInfo only ([docs/PROFILING.md](docs/PROFILING.md)) |
 | `TAMIAS_QT_PREFIX` | (empty) | Windows system Qt prefix; set by the `msvc` preset |
 | `TAMIAS_BUILD_MSI` | ON (Windows) | Add the `tamias_msi` target |
 | `TAMIAS_ENABLE_PCH` | ON | Precompiled headers (`src/pch.h`, plus Qt/gtest). **Off** on Windows `Ninja Multi-Config` (CMake's `.pch` is phony and would rebuild every file each build) |

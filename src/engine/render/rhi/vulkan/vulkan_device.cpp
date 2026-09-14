@@ -3,6 +3,7 @@
 #include "engine/core/log.h"
 #include "engine/graphics/mesh.h"
 #include "engine/render/gpu_instance.h"
+#include "engine/render/rhi/vulkan/vulkan_gpu_timing.h"
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -273,6 +274,16 @@ class VulkanCommandList final : public CommandList {
     vkAllocateCommandBuffers(device_, &alloc, cmds_.data());
   }
 
+  ~VulkanCommandList() override { gpu_timing_.destroy(); }
+
+  // Tracy 的 Vulkan ctx 需要一个不在录制中的 command buffer 做初始化提交
+  // （内部会 vkQueueWaitIdle），所以建好 command list 后立刻调用。
+  void enable_gpu_timing(VkPhysicalDevice physical, VkQueue queue,
+                         PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT time_domains,
+                         PFN_vkGetCalibratedTimestampsEXT calibrated) {
+    gpu_timing_.create(physical, device_, queue, cmds_[0], time_domains, calibrated);
+  }
+
   void begin() override {
     active_frame_ = tls_recording_frame;
     vkResetCommandBuffer(cmds_[active_frame_], 0);
@@ -281,7 +292,17 @@ class VulkanCommandList final : public CommandList {
     vkBeginCommandBuffer(cmds_[active_frame_], &begin);
   }
 
-  void end() override { vkEndCommandBuffer(cmds_[active_frame_]); }
+  void end() override {
+    // Tracy 要求 collect 在录制中、render pass 之外：这里收上一帧的 GPU 时间戳。
+    gpu_timing_.collect(cmds_[active_frame_]);
+    vkEndCommandBuffer(cmds_[active_frame_]);
+  }
+
+  void begin_gpu_zone(const char* name, const char* file, const char* function) override {
+    gpu_timing_.begin_zone(cmds_[active_frame_], name, file, function);
+  }
+
+  void end_gpu_zone() override { gpu_timing_.end_zone(); }
 
   void begin_render_pass(SwapChain& swap_chain, const float clear_color[4],
                          float clear_depth) override {
@@ -362,6 +383,7 @@ class VulkanCommandList final : public CommandList {
   std::array<VkCommandBuffer, kFramesInFlight> cmds_{};
   std::uint32_t active_frame_ = 0;
   VkPipelineLayout active_layout_ = VK_NULL_HANDLE;
+  VulkanGpuTiming gpu_timing_;
 };
 
 class VulkanDevice final : public RHIDevice {
@@ -443,6 +465,10 @@ class VulkanDevice final : public RHIDevice {
   std::uint32_t recording_frame_ = 0;
   VulkanCommandList* pending_cmd_ = nullptr;
   VulkanSwapChain* pending_swapchain_ = nullptr;
+  // GPU 计时（Tracy GPU zone）：队列族支持 timestamp 才有意义，扩展决定是否校准。
+  bool has_calibrated_timestamps_ = false;
+  PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT calibrateable_time_domains_fn_ = nullptr;
+  PFN_vkGetCalibratedTimestampsEXT calibrated_timestamps_fn_ = nullptr;
 };
 
 VulkanSwapChain::VulkanSwapChain(VulkanDevice* device, SwapChainDesc desc)
@@ -737,6 +763,16 @@ QueueFamilyIndices VulkanDevice::find_queue_families(VkPhysicalDevice gpu,
       break;
     }
   }
+  // GPU 计时（Tracy GPU zone）只能在 timestampValidBits != 0 的队列族上工作。
+  // 首选族不支持时换一个支持 timestamp 的图形族；一个都没有就留给上层静默关掉。
+  if (indices.graphics && props[*indices.graphics].timestampValidBits == 0) {
+    for (std::uint32_t i = 0; i < count; ++i) {
+      if ((props[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0 && props[i].timestampValidBits != 0) {
+        indices.graphics = i;
+        break;
+      }
+    }
+  }
   return indices;
 }
 
@@ -758,10 +794,12 @@ Result<void> VulkanDevice::pick_device() {
     std::vector<VkExtensionProperties> exts(ext_count);
     vkEnumerateDeviceExtensionProperties(gpu, nullptr, &ext_count, exts.data());
     bool has_swapchain = false;
+    bool has_calibrated_timestamps = false;
     for (const auto& e : exts) {
       if (std::strcmp(e.extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0) {
         has_swapchain = true;
-        break;
+      } else if (std::strcmp(e.extensionName, VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME) == 0) {
+        has_calibrated_timestamps = true;
       }
     }
     if (!has_swapchain) {
@@ -770,6 +808,7 @@ Result<void> VulkanDevice::pick_device() {
     physical_ = gpu;
     graphics_family_ = *indices.graphics;
     present_family_ = indices.present.value_or(graphics_family_);
+    has_calibrated_timestamps_ = has_calibrated_timestamps;
     break;
   }
   if (!physical_) {
@@ -792,7 +831,12 @@ Result<void> VulkanDevice::create_logical_device() {
     q.pQueuePriorities = &priority;
     queues.push_back(q);
   }
-  const char* extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+  std::vector<const char*> extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+  // GPU 计时：有 VK_EXT_calibrated_timestamps 才开，Tracy 靠它把 GPU 时钟
+  // 对齐到 CPU 时钟（没有就退回未校准的 DEVICE 时间域）。
+  if (has_calibrated_timestamps_) {
+    extensions.push_back(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME);
+  }
   VkPhysicalDeviceFeatures supported{};
   vkGetPhysicalDeviceFeatures(physical_, &supported);
   VkPhysicalDeviceFeatures features{};
@@ -801,14 +845,24 @@ Result<void> VulkanDevice::create_logical_device() {
   VkDeviceCreateInfo ci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
   ci.queueCreateInfoCount = static_cast<std::uint32_t>(queues.size());
   ci.pQueueCreateInfos = queues.data();
-  ci.enabledExtensionCount = 1;
-  ci.ppEnabledExtensionNames = extensions;
+  ci.enabledExtensionCount = static_cast<std::uint32_t>(extensions.size());
+  ci.ppEnabledExtensionNames = extensions.data();
   ci.pEnabledFeatures = &features;
   if (vkCreateDevice(physical_, &ci, nullptr, &device_) != VK_SUCCESS) {
     return Err("vkCreateDevice failed");
   }
   vkGetDeviceQueue(device_, graphics_family_, 0, &graphics_queue_);
   vkGetDeviceQueue(device_, present_family_, 0, &present_queue_);
+  if (has_calibrated_timestamps_) {
+    calibrateable_time_domains_fn_ =
+        reinterpret_cast<PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT>(
+            vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceCalibrateableTimeDomainsEXT"));
+    calibrated_timestamps_fn_ = reinterpret_cast<PFN_vkGetCalibratedTimestampsEXT>(
+        vkGetDeviceProcAddr(device_, "vkGetCalibratedTimestampsEXT"));
+    if (calibrateable_time_domains_fn_ == nullptr || calibrated_timestamps_fn_ == nullptr) {
+      has_calibrated_timestamps_ = false;  // 有扩展名但拿不到函数指针：退回未校准
+    }
+  }
   return {};
 }
 
@@ -1435,7 +1489,10 @@ Result<std::unique_ptr<PipelineState>> VulkanDevice::create_pipeline(const Pipel
 }
 
 Result<std::unique_ptr<CommandList>> VulkanDevice::create_command_list() {
-  return std::make_unique<VulkanCommandList>(device_, command_pool_);
+  auto list = std::make_unique<VulkanCommandList>(device_, command_pool_);
+  list->enable_gpu_timing(physical_, graphics_queue_, calibrateable_time_domains_fn_,
+                          calibrated_timestamps_fn_);
+  return std::unique_ptr<CommandList>(std::move(list));
 }
 
 Result<std::unique_ptr<SwapChain>> VulkanDevice::create_swap_chain(const SwapChainDesc& desc) {

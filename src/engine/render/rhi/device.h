@@ -214,7 +214,43 @@ class CommandList {
                             float max_depth = 1.f) = 0;
   virtual void set_scissor(std::int32_t x, std::int32_t y, std::uint32_t w,
                            std::uint32_t h) = 0;
+
+  // GPU 计时（Tracy GPU zone，见 docs/PROFILING.md）。由 GpuZone 成对调用：
+  // 只有「Vulkan 后端 + 编了 Tracy」的构建会真的往命令流里写 timestamp，
+  // 其它后端与未编 Tracy 时是空实现。
+  virtual void begin_gpu_zone(const char* name, const char* file, const char* function) {
+    (void)name;
+    (void)file;
+    (void)function;
+  }
+  virtual void end_gpu_zone() {}
 };
+
+// GPU 计时区间：构造时在命令流里打开始时间戳，析构时打结束时间戳。
+// 区间必须完整落在 command_list 的 begin()/end() 之间，且不能跨过 end_render_pass()。
+class GpuZone {
+ public:
+  GpuZone(CommandList& command_list, const char* name, const char* file, const char* function)
+      : command_list_(command_list) {
+    command_list_.begin_gpu_zone(name, file, function);
+  }
+  ~GpuZone() { command_list_.end_gpu_zone(); }
+
+  GpuZone(const GpuZone&) = delete;
+  GpuZone& operator=(const GpuZone&) = delete;
+  GpuZone(GpuZone&&) = delete;
+  GpuZone& operator=(GpuZone&&) = delete;
+
+ private:
+  CommandList& command_list_;
+};
+
+#define TAMIAS_GPU_ZONE_CONCAT_INNER(a, b) a##b
+#define TAMIAS_GPU_ZONE_CONCAT(a, b) TAMIAS_GPU_ZONE_CONCAT_INNER(a, b)
+// TAMIAS_GPU_ZONE(*cmd_list, "gpu.mesh"); —— 名字会被拷贝，运行时字符串也安全。
+#define TAMIAS_GPU_ZONE(command_list, name)                                     \
+  const ::tamias::GpuZone TAMIAS_GPU_ZONE_CONCAT(_tamias_gpu_zone_, __LINE__)(  \
+      (command_list), (name), __FILE__, __FUNCTION__)
 
 class RHIDevice {
  public:
