@@ -60,6 +60,6 @@
 | **造型** | 特征树、求值、MCAD 深路径；内核插件口 | [特征树求值器](FEATURE-TREE-EVALUATOR.md)、[MCAD 管线](MCAD-PIPELINE.md)、[几何边界](ISHAPE-OPS.md) |
 | **渲染** | 一帧怎么画、Vulkan/OpenGL/WebGPU、屏外不画 | [管线与 RHI](RENDERING.md)、[视锥、NDC 与屏幕](NDC.md)、[OpenGL 后端](OPENGL.md)、[浏览器 WebGPU](WGPU.md)、[Web 查看器](WEB.md)、[视锥剔除](FRUSTUM-CULLING.md)、[合批 / Instancing](INSTANCING.md)、[渲染场景快照](RENDER-SCENE.md)、[超大规模三角](MASSIVE-GEOMETRY.md) |
 
-RHI 抽象写在 [渲染管线](RENDERING.md) 第 5 节；OpenGL 落地见 [OpenGL 后端](OPENGL.md)；浏览器 WebGPU 见 [WebGPU 后端](WGPU.md)。产品定位见 [MCAD 与 BIM](DECISION-MCAD-BIM.md)。
+RHI 抽象写在 [渲染管线](RENDERING.md) 第 5 节；OpenGL 落地见 [OpenGL 后端](OPENGL.md)；浏览器 WebGPU 见 [WebGPU 后端](WGPU.md)。产品定位见 [MCAD 与 BIM](DECISION-MCAD-BIM.md)；客户端要不要嵌浏览器见 [嵌浏览器决策](DECISION-EMBEDDED-BROWSER.md)。
 
 怎么验证改动有没有把内核弄坏：[测试](TESTING.md)（`tamias_tests` / `ctest`、覆盖了什么、缺什么）。
