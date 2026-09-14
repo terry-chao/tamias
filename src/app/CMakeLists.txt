@@ -23,6 +23,7 @@ add_executable(tamias
   render_scene_inspector.cpp
   document_viewport.cpp
   box_select_overlay.cpp
+  toast.cpp
   replay_viewport.cpp
   scene_debugger_window.cpp
   golden_test_runner.cpp
@@ -31,6 +32,7 @@ add_executable(tamias
   draw_panel.cpp
   drawing_document.cpp
   drawing_view.cpp
+  drawing_manager_panel.cpp
   section_preview_widget.cpp
   component_specs.cpp
   texture_library_panel.cpp
@@ -43,6 +45,7 @@ add_executable(tamias
   entity_kind_catalog.cpp
   visibility_panel.cpp
   floor_panel.cpp
+  floor_manager_panel.cpp
   floor_settings_dialog.cpp
   grid_settings_dialog.cpp
   drawing_import_dialog.cpp

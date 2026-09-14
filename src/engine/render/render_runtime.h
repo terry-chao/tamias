@@ -52,6 +52,10 @@ struct FrameSubmission {
   std::vector<Vec3> debug_line_segments;       // 调试 AABB 等，成对线段
   // 轴网：成对线段，虚线画在构件之下。轴网是定位参考，不是几何。
   std::vector<Vec3> grid_line_segments;
+  // 轴网放置预览：成对线段，高亮色画在已有轴网之上（落位前的幽灵）。
+  std::vector<Vec3> grid_preview_segments;
+  // 选中的轴线：成对线段，压在普通轴线上面画，用高亮色标出选中的那几根。
+  std::vector<Vec3> grid_selected_segments;
   std::optional<DebugVertexOverlay> debug_vertex;  // 检查器点选的网格顶点
   float fovy = 0.8f;
   std::unordered_map<std::uint64_t, LodMeshSet> lod_sets;

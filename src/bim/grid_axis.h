@@ -23,6 +23,8 @@ struct GridAxis {
   double position = 0.0;  // 固定坐标（米）：AlongZ 是 x，AlongX 是 z
   double start = 0.0;     // 沿轴方向的起点（米）
   double end = 0.0;       // 沿轴方向的终点（米）
+  // 选中（编辑器状态，不落盘；和 SceneNode.selected 同理，随文档快照一起丢）。
+  bool selected = false;
 
   [[nodiscard]] Vec3 start_point() const {
     const float p = static_cast<float>(position);

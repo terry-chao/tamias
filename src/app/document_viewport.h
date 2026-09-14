@@ -90,6 +90,21 @@ class DocumentViewport final : public QWidget {
   void toggle_visibility_panel();
   // 开合同一列的"楼层"页（Ribbon / 快捷键走这里）。
   void toggle_floor_panel();
+  // 开合同一列的"楼层管理"页（楼层视图清单）。
+  void toggle_floor_manager_panel();
+  // 开合同一列的"图纸管理"页（参考图纸清单）。
+  void toggle_drawing_panel();
+  // 图纸管理页用：把图纸挂到当前文档 / 从清单里去掉（清单随 .tdoc 存）。
+  void add_document_drawings(const std::vector<std::string>& paths);
+  void remove_document_drawing(const std::string& path);
+  // ==== 楼层视图（楼层管理页用；默认打开的是全局三维）====
+  // 当前打开的是不是"某一层的视图"；没打开时就是全局三维。
+  [[nodiscard]] bool floor_view_open() const { return floor_view_.has_value(); }
+  [[nodiscard]] std::size_t floor_view_index() const { return floor_view_.value_or(0); }
+  // 打开全局三维：所有楼层可见 + 透视 + 框住整个模型。
+  void open_global_view();
+  // 打开某一层的视图：只显示该层、把它设为当前楼层、切到平面（2D）并框到这一层。
+  void open_floor_view(std::size_t floor_index);
   [[nodiscard]] ViewportState capture_viewport_state() const;
   [[nodiscard]] RenderScene::View capture_render_scene_view() const;
   [[nodiscard]] std::vector<std::uint64_t> capture_hidden_node_ids() const;
@@ -117,6 +132,11 @@ class DocumentViewport final : public QWidget {
   void apply_storey_settings(std::vector<Storey> storeys, std::uint64_t active_storey_id);
   // 轴网设置对话框的落点：整表替换轴网（可撤销）。
   void apply_grid_settings(std::vector<GridAxis> axes);
+  // 轴网放置：对话框确定后进入"布置 → 点一下落位"的一步放置。锚点是表里对应的
+  // 基准点（生成行的原点），点击时整张轴网平移，让锚点落在点击处。Esc / 右键取消。
+  void begin_grid_placement(std::vector<GridAxis> axes, Vec2 anchor);
+  [[nodiscard]] bool grid_placement_active() const { return pending_grid_.has_value(); }
+  void cancel_grid_placement();
   // 翻模对话框的落点：把复核后的候选一次落进文档（一条命令 = 一步撤销）。
   void apply_drawing_import(DrawingImportPlan plan);
   // 轴网显示开关（视图 → 轴网）；轴网是参考线，不进实体表。
@@ -147,6 +167,9 @@ class DocumentViewport final : public QWidget {
   void status_message(const QString& text);  // 状态栏提示（如三维中拒绝画板）
   void plugin_point_input_changed(bool active);
   void visibility_changed();               // 隐藏/隔离/楼层过滤变化，面板据此刷新
+  void view_changed();  // 打开的视图变了（全局三维 ↔ 某楼层），楼层管理页据此换高亮
+  // 图纸管理页要求把某张图纸开成二维页签（主窗口接）。
+  void drawing_open_requested(const QString& path);
 
  protected:
   void showEvent(QShowEvent* event) override;
@@ -176,15 +199,26 @@ class DocumentViewport final : public QWidget {
   void start_view_animation(float target_yaw, float target_pitch,
                            bool finish_orthographic = false);
   void stop_view_animation();
+  // 平面 / 三维切换的实现体：animate=false 时立刻到位（打开楼层视图要一次落到
+  // "该层平面"，不能先转一半再被 framing 打断）。回到三维会一并丢掉楼层视图状态。
+  void apply_plan_view(bool plan, bool restore_perspective, bool animate);
   void refresh_floors();
   [[nodiscard]] bool node_visible_in_view(std::uint64_t id) const;
   // 导入网格（无 Entity 的 SceneNode）的节点 id。
   [[nodiscard]] std::vector<std::uint64_t> imported_node_ids() const;
   [[nodiscard]] Vec3 cursor_world_position(const QPoint& pos) const;
   [[nodiscard]] Vec3 cursor_ground_position(const QPoint& pos) const;
+  // 轴网放置用：射线与当前楼层标高求交。轴网预览画在那个高度上，透视下才点得准。
+  [[nodiscard]] Vec3 plan_position_at_storey(const QPoint& pos) const;
   // 绘制实体时吸附到地面网格交点（门/窗贴墙拾取除外）。
   [[nodiscard]] bool grid_snap_active() const;
   [[nodiscard]] std::uint64_t pick_node_at(const QPoint& pos) const;
+  // 轴网显示所在标高（数据恒在 y = 0，画/点都抬到当前楼层）。
+  [[nodiscard]] float grid_plane_y() const;
+  // 点选轴线（屏幕距离，容差见 kGridPickPixels）；没命中返回 0。
+  [[nodiscard]] std::uint64_t pick_grid_axis_at(const QPoint& pos) const;
+  void select_grid_axis(std::uint64_t axis_id, bool additive);
+  void show_grid_context_menu(const QPoint& global_pos);
   // 布置门窗：沿视线找最近的墙（忽略楼板等遮挡）。
   [[nodiscard]] std::optional<std::pair<std::uint64_t, Vec3>> pick_wall_at(const QPoint& pos) const;
   [[nodiscard]] bool is_opening_placement_tool() const;
@@ -198,6 +232,11 @@ class DocumentViewport final : public QWidget {
   void resync_all_meshes();
   void resync_textures();
   void cancel_tool();
+  // 丢弃放置会话（不重绘、不提示）；落位 / 取消 / 被别的工具顶掉都走它。
+  void clear_grid_placement();
+  void commit_grid_placement(const QPoint& pos);
+  // 放置预览用的表：整张轴网按光标位置平移后的副本。
+  [[nodiscard]] std::vector<GridAxis> ghost_grid_axes(const QPoint& pos) const;
   void refuse_slab_outside_plan(bool popup);
   [[nodiscard]] bool finish_pending_if_done(const Result<bool>& done);
   [[nodiscard]] Vec3 snapped_ground_position(const QPoint& pos) const;
@@ -245,6 +284,8 @@ class DocumentViewport final : public QWidget {
   bool mmb_nav_ = false;
   bool box_selecting_ = false;
   bool plugin_input_press_ = false;
+  // 这一下左键已经被轴网消费掉（落位 / 选中轴线），抬起时别再当选择点击处理。
+  bool grid_press_consumed_ = false;
   bool gripping_ = false;
   EntityGrip active_grip_{};
   FeatureModel grip_from_model_{};
@@ -266,7 +307,15 @@ class DocumentViewport final : public QWidget {
   std::unordered_set<int> hidden_floors_;  // 空 = 全部楼层可见
   std::uint64_t last_submitted_scene_generation_ = 0;  // 脏标记游标（见 Scene::dirty_since）
   bool plan_view_ = false;
+  // 打开的楼层视图（floors_ 的下标）；空 = 默认的全局三维。
+  std::optional<std::size_t> floor_view_;
   bool grid_visible_ = true;
+  // 放置中的轴网：整张表 + 锚点。只在"轴网设置 → 确定"到落位之间非空。
+  struct GridPlacement {
+    std::vector<GridAxis> axes;
+    Vec2 anchor;
+  };
+  std::optional<GridPlacement> pending_grid_;
   // 绘制面板最近一次武装的参数（连续绘制同类型构件时复用，避免回退到硬编码默认）。
   ToolMode last_arm_mode_ = ToolMode::None;
   CommandArgs last_arm_args_;

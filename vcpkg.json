@@ -38,6 +38,9 @@
       "features": ["on-demand"]
     },
     {
+      "name": "zlib"
+    },
+    {
       "name": "vulkan",
       "platform": "linux"
     },

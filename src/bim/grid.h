@@ -28,6 +28,14 @@ class Grid {
   [[nodiscard]] std::uint64_t next_id() const { return next_id_; }
   void set_next_id(std::uint64_t id) { next_id_ = id == 0 ? 1 : id; }
 
+  // ==== 选择（编辑器状态，不落盘；和 SceneNode.selected 同理）====
+  void select(std::uint64_t id);
+  void deselect(std::uint64_t id);
+  void clear_selection();
+  [[nodiscard]] bool axis_selected(std::uint64_t id) const;
+  [[nodiscard]] bool has_selection() const;
+  [[nodiscard]] std::vector<std::uint64_t> selected_ids() const;
+
   // 整表替换（轴网设置对话框）：表里已有的 id 保留，id == 0 的按新增分配，并把
   // 分配到的 id **写回调用方的表**——这样 redo 复用同一批句柄，撤销再重做不换 id。
   // 表里没有的即删除。整条命令一步撤销。
@@ -57,5 +65,13 @@ class Grid {
 [[nodiscard]] std::vector<GridAxis> make_orthogonal_grid(
     double origin_x, double origin_z, const std::vector<double>& x_spacings,
     const std::vector<double>& z_spacings, double margin = 1.0);
+
+// 一组轴线 → (起点, 终点) 两两成对（长度为 0 的轴跳过）。Grid 与放置预览共用。
+void append_axis_segments(const std::vector<GridAxis>& axes, std::vector<Vec3>& out);
+
+// 放置（整张轴网平移）：轴的方向不变，固定坐标和沿轴两端一起挪。
+// dx 落在 X 方向、dz 落在 Z 方向——编号轴的 position 是 x、字母轴的 position 是 z，
+// 端点跟着各自的方向挪，别把 start/end 当成同一种坐标。
+void translate_grid(std::vector<GridAxis>& axes, double dx, double dz);
 
 }  // namespace tamias

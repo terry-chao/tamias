@@ -66,6 +66,10 @@ void DrawPanel::set_component(ToolMode mode) {
   rebuild_form();
 }
 
+void DrawPanel::set_storey_height_provider(std::function<double()> provider) {
+  storey_height_provider_ = std::move(provider);
+}
+
 void DrawPanel::set_armed(bool armed) {
   if (armed_ == armed) {
     return;
@@ -253,7 +257,11 @@ void DrawPanel::rebuild_param_rows() {
     spin->setSingleStep(p.step);
     spin->setKeyboardTracking(false);
     spin->setButtonSymbols(QAbstractSpinBox::UpDownArrows);
-    spin->setValue(p.def);
+    // 有些参数的默认值来自文档（板的标高偏移 = 当前楼层层高 = 本层顶）。
+    const double def = (p.default_is_storey_height && storey_height_provider_)
+                           ? storey_height_provider_()
+                           : p.def;
+    spin->setValue(def);
     connect(spin, &QDoubleSpinBox::valueChanged, this, [this](double) {
       if (armed_ && !suppress_rearm_) {
         gather_and_emit(true);

@@ -26,7 +26,7 @@ namespace tamias {
 namespace {
 
 constexpr char kMagic[4] = {'T', 'M', 'A', 'S'};
-constexpr std::uint32_t kFormatVersion = 17;
+constexpr std::uint32_t kFormatVersion = 18;
 constexpr std::uint32_t kMinFormatVersion = 5;
 constexpr std::uint32_t kGripsFormatVersion = 7;
 constexpr std::uint32_t kLocationFormatVersion = 8;
@@ -56,6 +56,7 @@ constexpr std::uint32_t kChunkTex = fourcc('T', 'E', 'X', 'T');
 constexpr std::uint32_t kChunkRela = fourcc('R', 'E', 'L', 'A');
 constexpr std::uint32_t kChunkStry = fourcc('S', 'T', 'R', 'Y');
 constexpr std::uint32_t kChunkGrid = fourcc('G', 'R', 'I', 'D');
+constexpr std::uint32_t kChunkDrwg = fourcc('D', 'R', 'W', 'G');
 
 void report_load_progress(const LoadProgressCallback& progress, float value) {
   if (progress) {
@@ -1175,6 +1176,15 @@ Result<void> write_document_body(BinaryWriter& w, const Document& document) {
       return r;
     }
   }
+  // 图纸管理（同样追加在末尾：旧快照读到轴网就结束）。
+  if (auto r = w.write_u64(static_cast<std::uint64_t>(document.drawing_paths().size())); !r) {
+    return r;
+  }
+  for (const std::string& drawing : document.drawing_paths()) {
+    if (auto r = w.write_string(drawing); !r) {
+      return r;
+    }
+  }
   return {};
 }
 
@@ -1318,6 +1328,22 @@ Result<Document> read_document_body(BinaryReader& r) {
     }
     document.bim().grid().replace(grid_axes);
     document.bim().grid().set_next_id(*next_grid);
+  }
+  if (r.remaining() > 0) {
+    auto drawing_count = r.read_u64();
+    if (!drawing_count) {
+      return Err(drawing_count.error());
+    }
+    std::vector<std::string> drawings;
+    drawings.reserve(static_cast<std::size_t>(*drawing_count));
+    for (std::uint64_t i = 0; i < *drawing_count; ++i) {
+      auto path = r.read_string();
+      if (!path) {
+        return Err(path.error());
+      }
+      drawings.push_back(std::move(*path));
+    }
+    document.drawing_paths() = std::move(drawings);
   }
 
   document.set_next_mesh_id(*next_mesh);
@@ -1528,7 +1554,7 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
   if (auto r = file.write_u32(kFormatVersion); !r) {
     return r;
   }
-  if (auto r = file.write_u32(10); !r) {  // chunk_count
+  if (auto r = file.write_u32(11); !r) {  // chunk_count
     return r;
   }
   if (auto r = append_chunk(file, kChunkMeta, meta_w.data()); !r) {
@@ -1556,6 +1582,20 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
     return r;
   }
   if (auto r = append_chunk(file, kChunkGrid, grid_w.data()); !r) {
+    return r;
+  }
+  // 图纸管理：只存参考图纸的路径（图纸内容不并进 .tdoc，看图时现读）。
+  BinaryWriter drwg_w;
+  if (auto r = drwg_w.write_u64(static_cast<std::uint64_t>(document.drawing_paths().size()));
+      !r) {
+    return r;
+  }
+  for (const std::string& drawing : document.drawing_paths()) {
+    if (auto r = drwg_w.write_string(drawing); !r) {
+      return r;
+    }
+  }
+  if (auto r = append_chunk(file, kChunkDrwg, drwg_w.data()); !r) {
     return r;
   }
   if (auto r = append_chunk(file, kChunkView, view_w.data()); !r) {
@@ -1611,6 +1651,7 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes,
   std::vector<Relation> relations;
   std::vector<Storey> storeys;
   std::vector<GridAxis> grid_axes;
+  std::vector<std::string> drawing_paths;
   std::uint64_t next_grid_id = 1;
   std::uint64_t next_relation_id = 1;
   std::uint64_t active_storey_id = 0;
@@ -1804,6 +1845,20 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes,
         return Err(res.error());
       }
       has_view = true;
+    } else if (*id == kChunkDrwg) {
+      auto count = chunk_r.read_u64();
+      if (!count) {
+        return Err(count.error());
+      }
+      drawing_paths.clear();
+      drawing_paths.reserve(static_cast<std::size_t>(*count));
+      for (std::uint64_t n = 0; n < *count; ++n) {
+        auto path = chunk_r.read_string();
+        if (!path) {
+          return Err(path.error());
+        }
+        drawing_paths.push_back(std::move(*path));
+      }
     } else {
       // Unknown chunk: already consumed via read_bytes into chunk; skip.
     }
@@ -1843,6 +1898,7 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes,
   loaded.document.bim().set_active_storey_id(active_storey_id);
   loaded.document.bim().grid().replace(grid_axes);
   loaded.document.bim().grid().set_next_id(next_grid_id);
+  loaded.document.drawing_paths() = std::move(drawing_paths);
   loaded.document.bim().set_next_id(next_relation_id);
   loaded.document.set_next_mesh_id(next_mesh_id);
   loaded.document.scene().set_next_id(next_node_id);

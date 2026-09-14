@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/drawing/drawing.h"
+#include "engine/drawing/dwf_reader.h"
 
 #include <QColor>
 #include <QImage>
@@ -21,7 +22,7 @@ class QPdfDocument;
 
 namespace tamias {
 
-// 一张"参考图纸"：图片 / SVG / DXF / PDF 统一成可画的页。
+// 一张"参考图纸"：图片 / SVG / DXF / DWF(DWFx) / PDF 统一成可画的页。
 //
 // 坐标约定：世界坐标 = 图纸坐标，**Y 向上**（和 DXF/工程图一致）。
 // 绘制时 painter 上已经设好「世界 → 设备」的变换（含 Y 翻转），
@@ -64,11 +65,12 @@ class DrawingDocument {
  private:
   DrawingDocument() = default;
 
-  enum class Kind { Raster, Svg, Dxf, Pdf };
+  enum class Kind { Raster, Svg, Dxf, Dwf, Pdf };
 
-  // DXF 按「图层 + 颜色」合成一批路径，画的时候按图层可见性过滤。
+  // 矢量图按「页 + 图层 + 颜色」合成一批路径，画的时候按页与图层可见性过滤。
   struct PathBatch {
     int layer = -1;
+    int page = 0;
     QColor color;
     QPainterPath paths;
   };
@@ -77,10 +79,11 @@ class DrawingDocument {
   bool load_image(const QString& path, QString& error);
   bool load_svg(const QString& path, QString& error);
   bool load_dxf(const QString& path, QString& error);
+  bool load_dwf(const QString& path, QString& error);
   bool load_pdf(const QString& path, QString& error);
 
-  void build_dxf_batches();
-  void paint_dxf(QPainter& painter) const;
+  void build_vector_batches();
+  void paint_vector(QPainter& painter, int page) const;
   void paint_page_content(QPainter& painter, int page, double device_scale,
                           const QRectF& target) const;
   // SVG 按目标像素尺寸光栅化后缓存：QSvgRenderer 直接在镜像（Y 翻转）的 painter
@@ -99,6 +102,8 @@ class DrawingDocument {
   QImage image_;
   std::unique_ptr<QSvgRenderer> svg_;
   Drawing drawing_;
+  // 矢量图的页划分（DXF 只有一页；DWFx 一页一个 .fpage）。
+  std::vector<DwfPage> pages_;
   std::vector<PathBatch> dxf_batches_;
   std::vector<bool> layer_hidden_;
   bool dark_background_ = true;

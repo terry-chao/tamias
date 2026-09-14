@@ -3,6 +3,7 @@
 #include "command/update_grid_command.h"
 #include "engine/document/document.h"
 #include "engine/document/document_io.h"
+#include "engine/document/picking.h"
 
 #include <gtest/gtest.h>
 
@@ -26,6 +27,36 @@ std::filesystem::path temp_dir() {
   const auto dir = std::filesystem::temp_directory_path() / "tamias_grid_tests";
   std::filesystem::create_directories(dir);
   return dir;
+}
+
+// 屏幕投影用的最小假视口：world.x → 屏幕 +x、world.z → 屏幕 −y，即 800×600 的平面
+// 视图，世界 10 m 铺满一屏（水平 40 px/m、竖直 30 px/m）。depth 不参与，只判 w > 0。
+Mat4 plan_view_proj() {
+  Mat4 m{};
+  m(0, 0) = 0.1f;  // x_clip = 0.1 · world.x
+  m(1, 2) = 0.1f;  // y_clip = 0.1 · world.z
+  m(3, 3) = 1.f;   // w = 1
+  return m;
+}
+
+// 轴线「1」竖直（沿 Z，x = 0，z 从 -10 到 +10）；轴线「A」水平（沿 X，z = 0，x 从 -10 到 +10）。
+Grid two_crossing_axes() {
+  Grid grid;
+  GridAxis numbered;
+  numbered.name = "1";
+  numbered.direction = GridAxisDirection::AlongZ;
+  numbered.position = 0.0;
+  numbered.start = -10.0;
+  numbered.end = 10.0;
+  grid.add(numbered);
+  GridAxis lettered;
+  lettered.name = "A";
+  lettered.direction = GridAxisDirection::AlongX;
+  lettered.position = 0.0;
+  lettered.start = -10.0;
+  lettered.end = 10.0;
+  grid.add(lettered);
+  return grid;
 }
 
 }  // namespace
@@ -113,6 +144,158 @@ TEST(Grid, SegmentsArePairsAndBoundsCoverAxes) {
   ASSERT_TRUE(box.valid());
   EXPECT_FLOAT_EQ(box.min.x, 2.f);
   EXPECT_FLOAT_EQ(box.max.z, 10.f);
+}
+
+TEST(Grid, AppendAxisSegmentsSkipsZeroLengthAxes) {
+  std::vector<GridAxis> axes;
+  GridAxis good;
+  good.direction = GridAxisDirection::AlongZ;
+  good.position = 2.0;
+  good.start = 0.0;
+  good.end = 10.0;
+  axes.push_back(good);
+  GridAxis degenerate = good;
+  degenerate.start = 5.0;
+  degenerate.end = 5.0;
+  axes.push_back(degenerate);  // 长度 0：不成线段，跳过
+
+  std::vector<Vec3> segments;
+  append_axis_segments(axes, segments);
+  ASSERT_EQ(segments.size(), 2u);
+  EXPECT_FLOAT_EQ(segments[0].x, 2.f);
+  EXPECT_FLOAT_EQ(segments[0].z, 0.f);
+  EXPECT_FLOAT_EQ(segments[1].z, 10.f);
+}
+
+TEST(Grid, TranslateMovesFixedCoordinateAndRangePerDirection) {
+  std::vector<GridAxis> axes;
+  GridAxis numbered;  // 编号轴：固定 x，范围沿 z
+  numbered.name = "1";
+  numbered.direction = GridAxisDirection::AlongZ;
+  numbered.position = 6.0;
+  numbered.start = -1.0;
+  numbered.end = 11.0;
+  axes.push_back(numbered);
+  GridAxis lettered;  // 字母轴：固定 z，范围沿 x
+  lettered.name = "A";
+  lettered.direction = GridAxisDirection::AlongX;
+  lettered.position = 5.0;
+  lettered.start = -1.0;
+  lettered.end = 19.0;
+  axes.push_back(lettered);
+
+  translate_grid(axes, 10.0, -2.0);
+
+  EXPECT_DOUBLE_EQ(axes[0].position, 16.0);  // x + dx
+  EXPECT_DOUBLE_EQ(axes[0].start, -3.0);     // z + dz
+  EXPECT_DOUBLE_EQ(axes[0].end, 9.0);
+  EXPECT_DOUBLE_EQ(axes[1].position, 3.0);   // z + dz
+  EXPECT_DOUBLE_EQ(axes[1].start, 9.0);      // x + dx
+  EXPECT_DOUBLE_EQ(axes[1].end, 29.0);
+}
+
+TEST(Grid, SelectionToggleClearAndList) {
+  Grid grid = two_crossing_axes();
+  const std::uint64_t numbered = grid.axes()[0].id;
+  const std::uint64_t lettered = grid.axes()[1].id;
+  ASSERT_NE(numbered, 0u);
+  EXPECT_FALSE(grid.has_selection());
+
+  grid.select(lettered);
+  grid.select(numbered);
+  EXPECT_TRUE(grid.axis_selected(numbered));
+  EXPECT_TRUE(grid.has_selection());
+  EXPECT_EQ(grid.selected_ids(), (std::vector<std::uint64_t>{numbered, lettered}));
+
+  grid.deselect(numbered);
+  EXPECT_FALSE(grid.axis_selected(numbered));
+  EXPECT_EQ(grid.selected_ids(), (std::vector<std::uint64_t>{lettered}));
+
+  grid.clear_selection();
+  EXPECT_FALSE(grid.has_selection());
+  EXPECT_TRUE(grid.selected_ids().empty());
+}
+
+TEST(Grid, PickAxisUsesScreenDistanceNotWorldDistance) {
+  const Grid grid = two_crossing_axes();
+  const std::uint64_t numbered = grid.axes()[0].id;  // 屏幕上是 x = 400 那条竖线
+  const GridAxis degenerate = [] {
+    GridAxis axis;
+    axis.name = "9";
+    axis.direction = GridAxisDirection::AlongZ;
+    axis.position = 0.0;
+    axis.start = 3.0;
+    axis.end = 3.0;
+    return axis;  // 长度 0：不参与拾取
+  }();
+
+  // 竖线旁边 5 px：容差内命中「1」；此时离横轴 A 有 200 px，选的是近的那根。
+  EXPECT_EQ(pick_grid_axis_on_screen(grid.axes(), plan_view_proj(), 800.f, 600.f, 0.f, 405.f,
+                                     100.f, 8.f),
+            numbered);
+  // 交点处两条轴都在容差里：取先遍历到的（轴 1）。
+  EXPECT_EQ(pick_grid_axis_on_screen(grid.axes(), plan_view_proj(), 800.f, 600.f, 0.f, 400.f,
+                                     300.f, 8.f),
+            numbered);
+  // 离轴很远：不命中。
+  EXPECT_EQ(pick_grid_axis_on_screen(grid.axes(), plan_view_proj(), 800.f, 600.f, 0.f, 100.f,
+                                     500.f, 8.f),
+            0u);
+  // 零长轴永远点不中，哪怕光标正压在上面。
+  EXPECT_EQ(pick_grid_axis_on_screen({degenerate}, plan_view_proj(), 800.f, 600.f, 0.f, 400.f,
+                                     30.f, 8.f),
+            0u);
+}
+
+TEST(Grid, BoxSelectDistinguishesWindowAndCrossing) {
+  const Grid grid = two_crossing_axes();
+  const std::uint64_t numbered = grid.axes()[0].id;
+  const std::uint64_t lettered = grid.axes()[1].id;
+  const Mat4 vp = plan_view_proj();
+
+  // 全屏 window：两条轴整体都在框里。
+  EXPECT_EQ(grid_axes_in_screen_rect(grid.axes(), vp, 800.f, 600.f, 0.f, 0.f, 0.f, 800.f, 600.f,
+                                     /*crossing=*/false),
+            (std::vector<std::uint64_t>{numbered, lettered}));
+
+  // 右侧竖条：只有横轴 A 与框相交（它横穿整个屏幕），两条轴都不在框内。
+  EXPECT_TRUE(grid_axes_in_screen_rect(grid.axes(), vp, 800.f, 600.f, 0.f, 420.f, 0.f, 780.f,
+                                       600.f, /*crossing=*/false)
+                  .empty());
+  EXPECT_EQ(grid_axes_in_screen_rect(grid.axes(), vp, 800.f, 600.f, 0.f, 420.f, 0.f, 780.f, 600.f,
+                                     /*crossing=*/true),
+            (std::vector<std::uint64_t>{lettered}));
+
+  // 交点附近的小框：crossing 两条都要，window 一条都不要。
+  EXPECT_EQ(grid_axes_in_screen_rect(grid.axes(), vp, 800.f, 600.f, 0.f, 395.f, 295.f, 405.f,
+                                     305.f, /*crossing=*/true)
+                .size(),
+            2u);
+  EXPECT_TRUE(grid_axes_in_screen_rect(grid.axes(), vp, 800.f, 600.f, 0.f, 395.f, 295.f, 405.f,
+                                       305.f, /*crossing=*/false)
+                  .empty());
+}
+
+// 放置：整张表平移后落盘，锚点（生成原点）正好停在点击的那个平面上。
+TEST(Grid, PlacedGridPutsOriginOnTheClickPoint) {
+  Document doc("grid-place");
+  std::vector<GridAxis> table = make_orthogonal_grid(0.0, 0.0, {6.0, 6.0}, {5.0}, 1.0);
+  const Vec3 click{12.5f, 0.f, -3.25f};
+  translate_grid(table, click.x, click.z);
+
+  UpdateGridCommand command(doc, table);
+  ASSERT_TRUE(command.execute());
+
+  const std::vector<GridAxis>& axes = doc.bim().grid().axes();
+  ASSERT_EQ(axes.size(), 5u);
+  EXPECT_DOUBLE_EQ(axes.front().position, 12.5);  // 编号轴 1 落在 x = 12.5
+  EXPECT_DOUBLE_EQ(axes.front().start, -4.25);    // 范围随之平移
+  EXPECT_EQ(axes[3].name, "A");
+  EXPECT_DOUBLE_EQ(axes[3].position, -3.25);  // 字母轴 A 落在 z = -3.25
+  EXPECT_DOUBLE_EQ(axes[3].start, 11.5);      // 范围沿 x 一起挪
+
+  command.undo();
+  EXPECT_TRUE(doc.bim().grid().empty());
 }
 
 TEST(Grid, AutoGridDispatchUndoRedo) {

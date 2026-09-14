@@ -19,6 +19,14 @@ ParamSpec param(const char* key, const char* label, double def, double min, doub
   return p;
 }
 
+// 板的"标高偏移"：相对当前楼层标高的偏移，默认取当前楼层层高（= 本层顶）。
+// 0 = 本层底（地板），层高 = 本层顶（顶板）。没有楼层时由 def 兜底。
+ParamSpec elev_offset_param() {
+  ParamSpec p = param("elevation", "标高偏移", kDefaultWallHeight, -10.0, 30.0, 0.1);
+  p.default_is_storey_height = true;
+  return p;
+}
+
 SectionPreviewSpec rect_section(const char* horiz, const char* vert,
                                 SectionPreviewKind kind = SectionPreviewKind::Rectangle) {
   SectionPreviewSpec s;
@@ -169,10 +177,14 @@ ComponentSpec slab_spec() {
   };
   s.params = {
     param("thickness", "厚度", 0.2, 0.05, 3.0, 0.05),
-    param("elevation", "标高偏移", kDefaultWallHeight, -10.0, 30.0, 0.1),
+    // 相对当前楼层标高的偏移：0 = 本层底（地板），层高 = 本层顶（顶板，默认）。
+    // 默认取当前楼层层高：拿不到楼层时退回 kDefaultWallHeight。
+    elev_offset_param(),
   };
   s.pick_points = 2;
-  s.pick_hint = QStringLiteral("点击两点确定板的矩形范围（需在平面视图）");
+  s.pick_hint = QStringLiteral(
+      "点击两点确定板的矩形范围（需在平面视图）。默认画在本层顶（层高），"
+      "「标高偏移」填 0 就是本层底。");
   s.section = rect_section("", "thickness");  // 侧面示意，只标厚度
   return s;
 }

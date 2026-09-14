@@ -6,6 +6,7 @@
 
 #include <QString>
 #include <QWidget>
+#include <functional>
 #include <unordered_map>
 
 class QButtonGroup;
@@ -38,6 +39,9 @@ class DrawPanel final : public QWidget {
   [[nodiscard]] ToolMode current_mode() const { return current_mode_; }
   // 当前是否真的是一张可配置的构件表单（草图工具没有规格，面板只显示占位）。
   [[nodiscard]] bool has_component() const { return spec_ != nullptr; }
+  // 参数默认值的来源：ParamSpec.default_is_storey_height 的参数（板的标高偏移）
+  // 默认取当前楼层的层高，层高在文档里，由 MainWindow 注入。
+  void set_storey_height_provider(std::function<double()> provider);
   [[nodiscard]] bool is_armed() const { return armed_; }
   void set_armed(bool armed);
   // 只同步按钮外观、不发 disarmed：切换文档时清掉"武装"假象，
@@ -77,6 +81,7 @@ class DrawPanel final : public QWidget {
   // 参数 spinbox：key -> spinbox（公共 + 当前子类型专属）。
   // 用 std::string 做 key：QString 无 std::hash 特化。
   std::unordered_map<std::string, QDoubleSpinBox*> param_spins_;
+  std::function<double()> storey_height_provider_;
   bool armed_ = false;
   bool suppress_rearm_ = false;
 };

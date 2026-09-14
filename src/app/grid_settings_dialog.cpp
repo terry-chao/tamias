@@ -1,5 +1,6 @@
 #include "grid_settings_dialog.h"
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
@@ -148,7 +149,31 @@ GridSettingsDialog::GridSettingsDialog(std::vector<GridAxis> axes, QWidget* pare
   hint->setWordWrap(true);
   root->addWidget(hint);
 
+  // 放置步骤：轴网是定位参考，落位点得由用户在模型里点——表里只有相对形状。
+  place_with_click_ = new QCheckBox(tr("Place in the viewport with a mouse click"), this);
+  place_with_click_->setChecked(true);
+  place_with_click_->setToolTip(
+      tr("After OK the grid follows the cursor; click to drop it. Uncheck to keep the "
+         "table coordinates as they are."));
+  root->addWidget(place_with_click_);
+
+  place_hint_ = new QLabel(
+      tr("Placement: the origin lands where you click. Esc cancels, and the whole grid is "
+         "one undo step."),
+      this);
+  place_hint_->setWordWrap(true);
+  root->addWidget(place_hint_);
+  connect(place_with_click_, &QCheckBox::toggled, place_hint_, &QWidget::setVisible);
+
   auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+  // 按钮文字跟着勾选走：一眼能看出确定之后是"直接落位"还是"进放置步骤"。
+  if (QPushButton* ok = buttons->button(QDialogButtonBox::Ok)) {
+    const auto retitle = [this, ok](bool place) {
+      ok->setText(place ? tr("OK and Place") : tr("OK"));
+    };
+    retitle(place_with_click_->isChecked());
+    connect(place_with_click_, &QCheckBox::toggled, ok, retitle);
+  }
   connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
   root->addWidget(buttons);
@@ -258,6 +283,17 @@ std::vector<GridAxis> GridSettingsDialog::axes() const {
     out.push_back(std::move(axis));
   }
   return out;
+}
+
+bool GridSettingsDialog::place_with_click() const {
+  return place_with_click_ == nullptr || place_with_click_->isChecked();
+}
+
+Vec2 GridSettingsDialog::placement_anchor() const {
+  if (origin_x_ == nullptr || origin_z_ == nullptr) {
+    return {};
+  }
+  return {static_cast<float>(origin_x_->value()), static_cast<float>(origin_z_->value())};
 }
 
 }  // namespace tamias

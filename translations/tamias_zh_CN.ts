@@ -112,12 +112,36 @@
         <source>Rectangles</source>
         <translation>矩形</translation>
     </message>
+    <message>
+        <source>Click in the viewport to place the grid (Esc or right-click cancels)</source>
+        <translation>在视口中点击放置轴网（Esc 或右键取消）</translation>
+    </message>
+    <message>
+        <source>Grid placement cancelled — nothing changed</source>
+        <translation>已取消轴网放置，轴网未改动</translation>
+    </message>
+    <message>
+        <source>Grid placed: %1 axes</source>
+        <translation>轴网已放置：%1 根轴线</translation>
+    </message>
+    <message>
+        <source>Delete %1 axes</source>
+        <translation>删除 %1 根轴线</translation>
+    </message>
 </context>
 <context>
     <name>tamias::ViewportToolPanel</name>
     <message>
         <source>Show or hide floors, and set floor heights</source>
         <translation>按楼层显隐，并设置层高</translation>
+    </message>
+    <message>
+        <source>Open a view per floor (global 3D is the default)</source>
+        <translation>按楼层打开视图（默认是全局三维）</translation>
+    </message>
+    <message>
+        <source>Attach reference drawings (DWF / DXF / PDF…); double-click one to view</source>
+        <translation>挂参考图纸（DWF / DXF / PDF…），双击一张即可打开查看</translation>
     </message>
     <message>
         <source>Switch between 2D top view (Y up) and 3D perspective</source>
@@ -840,13 +864,6 @@ Overwrite scene.trscn and sidecar files?</source>
         <translation>保存成功：%1</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="726"/>
-        <source>Saved successfully:
-%1</source>
-        <translation>保存成功：
-%1</translation>
-    </message>
-    <message>
         <location filename="../src/app/main_window.cpp" line="770"/>
         <source>Tamias Document (*.tdoc);;Render Scene (*.trscn);;OBJ Mesh Export (*.obj)</source>
         <translation>Tamias 文档 (*.tdoc);;渲染场景 (*.trscn);;OBJ 网格导出 (*.obj)</translation>
@@ -1253,6 +1270,22 @@ Meshes / textures: %2
     <message>
         <source>Show or hide floors, and set floor heights</source>
         <translation>按楼层显隐，并设置层高</translation>
+    </message>
+    <message>
+        <source>Floor Views</source>
+        <translation>楼层视图</translation>
+    </message>
+    <message>
+        <source>List the global 3D view and every floor; double-click one to open it</source>
+        <translation>列出全局三维与各楼层视图，双击即可打开</translation>
+    </message>
+    <message>
+        <source>Drawings</source>
+        <translation>图纸管理</translation>
+    </message>
+    <message>
+        <source>Manage reference drawings (DWF / DWFx / DXF / PDF…): add, delete, double-click to view</source>
+        <translation>管理参考图纸（DWF / DWFx / DXF / PDF…）：添加、删除、双击打开查看</translation>
     </message>
 </context>
 <context>
@@ -2262,6 +2295,31 @@ Plugin ID: %4</source>
         <translation>视图导航</translation>
     </message>
     <message>
+        <source>Modeling</source>
+        <translation>造型</translation>
+    </message>
+    <message>
+        <comment>settings category</comment>
+        <source>Modeling</source>
+        <translation>造型</translation>
+    </message>
+    <message>
+        <source>Kernel backend</source>
+        <translation>造型后端</translation>
+    </message>
+    <message>
+        <source>Truck (Rust, experimental)</source>
+        <translation>Truck（Rust，实验性）</translation>
+    </message>
+    <message>
+        <source>OCCT (OpenCASCADE)</source>
+        <translation>OCCT (OpenCASCADE)</translation>
+    </message>
+    <message>
+        <source>Which kernel evaluates the feature tree. OCCT is complete; Truck has no boolean / fillet / chamfer yet. Kernel changes take effect after restarting Tamias.</source>
+        <translation>由哪个造型内核求值特征树。OCCT 功能完整；Truck 尚无布尔 / 圆角 / 倒角。内核更改将在重启 Tamias 后生效。</translation>
+    </message>
+    <message>
         <source>OpenGL uses an isolated render thread per document (never shared). Backend changes take effect after restarting Tamias.</source>
         <translation>OpenGL 为每个文档使用独立渲染线程（不共享）。后端更改将在重启 Tamias 后生效。</translation>
     </message>
@@ -3233,6 +3291,30 @@ Wheel zooms, drag pans, double-click a bar to focus.</source>
         <translation>无法读取 PDF：%1</translation>
     </message>
     <message>
+        <source>Cannot read DWF: %1</source>
+        <translation>无法读取 DWF：%1</translation>
+    </message>
+    <message>
+        <source>Cannot read the preview image inside this DWF.</source>
+        <translation>这张 DWF 里带的预览图读不出来。</translation>
+    </message>
+    <message>
+        <source>Binary DWF: showing the embedded preview image (%1 × %2). Vector (W2D) content is not parsed yet — export DWFx for real vector viewing.</source>
+        <translation>二进制 DWF：显示的是包里自带的预览图（%1 × %2）。W2D 矢量还没解析——想要矢量看图请导出 DWFx。</translation>
+    </message>
+    <message>
+        <source> · %1 pages</source>
+        <translation> · %1 页</translation>
+    </message>
+    <message>
+        <source> · %1 texts without glyphs</source>
+        <translation> · %1 处文字没有字形</translation>
+    </message>
+    <message>
+        <source> · %1 images skipped</source>
+        <translation> · %1 张位图未渲染</translation>
+    </message>
+    <message>
         <location filename="../src/app/drawing_document.cpp" line="119"/>
         <source>Cannot open drawing: %1</source>
         <translation>无法打开图纸：%1</translation>
@@ -3674,6 +3756,26 @@ Export the drawing to DXF, SVG or an image, or rebuild with Qt6::Pdf available.<
         <translation>生成会替换上表内容。位置单位是米，从原点算起。</translation>
     </message>
     <message>
+        <source>Place in the viewport with a mouse click</source>
+        <translation>在视口中点击放置</translation>
+    </message>
+    <message>
+        <source>After OK the grid follows the cursor; click to drop it. Uncheck to keep the table coordinates as they are.</source>
+        <translation>确定后轴网跟着光标走，点一下就落位；取消勾选则按表内坐标直接落位。</translation>
+    </message>
+    <message>
+        <source>Placement: the origin lands where you click. Esc cancels, and the whole grid is one undo step.</source>
+        <translation>放置：点在哪儿，原点就落在哪儿。Esc 取消，整张轴网一步撤销。</translation>
+    </message>
+    <message>
+        <source>OK and Place</source>
+        <translation>确定并放置</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>确定</translation>
+    </message>
+    <message>
         <source>Spacing must be a list of positive numbers, e.g. 6,6,6.</source>
         <translation>间距要写成一串正数，例如 6,6,6。</translation>
     </message>
@@ -3875,6 +3977,116 @@ Export the drawing to DXF, SVG or an image, or rebuild with Qt6::Pdf available.<
     <message>
         <source>Skipped %1 segments shorter than the minimum wall length.</source>
         <translation>跳过了 %1 段短于最小墙长的线段。</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::DrawingManagerPanel</name>
+    <message>
+        <source>Add…</source>
+        <translation>添加…</translation>
+    </message>
+    <message>
+        <source>Attach DWF / DWFx / DXF / PDF / SVG / image drawings to this document; the files stay where they are</source>
+        <translation>把 DWF / DWFx / DXF / PDF / SVG / 图片挂到当前文档（文件留在原处，不搬不复制）</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>打开</translation>
+    </message>
+    <message>
+        <source>Open the selected drawing in a 2D page</source>
+        <translation>把选中的图纸开成二维页签查看</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>删除</translation>
+    </message>
+    <message>
+        <source>Unlink the selected drawing (the file is kept)</source>
+        <translation>从清单里去掉选中的图纸（不删文件）</translation>
+    </message>
+    <message>
+        <source>Drawing</source>
+        <translation>图纸</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>状态</translation>
+    </message>
+    <message>
+        <source>Double-click a drawing to open it</source>
+        <translation>双击一张图纸即可打开</translation>
+    </message>
+    <message>
+        <source>Missing</source>
+        <translation>文件缺失</translation>
+    </message>
+    <message>
+        <source>Drawings</source>
+        <translation>图纸</translation>
+    </message>
+    <message>
+        <source>The file is not where it was when it was added</source>
+        <translation>文件已经不在加入时的位置了</translation>
+    </message>
+    <message>
+        <source>Open a model document to manage its drawings here.</source>
+        <translation>打开模型文档后，可在这里管理它的参考图纸。</translation>
+    </message>
+    <message>
+        <source>No drawings yet. Use “Add…” to attach DWF / DXF / PDF sheets to this document.</source>
+        <translation>还没有图纸。点「添加…」把 DWF / DXF / PDF 图纸挂到当前文档。</translation>
+    </message>
+    <message>
+        <source>Add Drawings</source>
+        <translation>添加图纸</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::FloorManagerPanel</name>
+    <message>
+        <source>Views</source>
+        <translation>楼层视图</translation>
+    </message>
+    <message>
+        <source>Double-click a floor to open its view</source>
+        <translation>双击某个楼层，即可打开该层的视图</translation>
+    </message>
+    <message>
+        <source>View</source>
+        <translation>视图</translation>
+    </message>
+    <message>
+        <source>Elevation</source>
+        <translation>标高</translation>
+    </message>
+    <message>
+        <source>Global 3D</source>
+        <translation>全局三维</translation>
+    </message>
+    <message>
+        <source>Double-click to open the global 3D view</source>
+        <translation>双击打开全局三维视图</translation>
+    </message>
+    <message>
+        <source>Double-click to open this floor's view</source>
+        <translation>双击打开该楼层的视图</translation>
+    </message>
+    <message>
+        <source>[Mezzanine] %1</source>
+        <translation>[夹层] %1</translation>
+    </message>
+    <message>
+        <source>Inferred from geometry: this model has no floor records yet.</source>
+        <translation>按几何标高推出：当前模型还没有楼层记录。</translation>
+    </message>
+    <message>
+        <source>This model has no floors yet. Use Floor Settings to add them.</source>
+        <translation>当前模型还没有楼层，点「楼层设置」新建。</translation>
+    </message>
+    <message>
+        <source>Open a model document to open its floor views here.</source>
+        <translation>打开模型文档后，可在这里打开楼层视图。</translation>
     </message>
 </context>
 </TS>

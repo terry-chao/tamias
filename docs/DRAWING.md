@@ -1,6 +1,6 @@
 # 参考图纸（2D 图纸页）
 
-把已有的图纸文件当参考底图看：**PDF / DXF / SVG / 位图**。它和三维视口是两类页签，
+把已有的图纸文件当参考底图看：**PDF / DXF / DWF(DWFx) / SVG / 位图**。它和三维视口是两类页签，
 同一份工程里可以一边看模型、一边对照图纸。
 
 > 这是**路线 A**：显示已有图纸。从三维模型投影出二维图纸（HLR + 标注 + 图框）是另一条线，
@@ -13,6 +13,12 @@
 - 开始 → **打开图纸**（`Ctrl+Shift+O`），或"打开"对话框里的 `图纸` 过滤项。
 - 打开后是一个独立的二维页签，标题是文件名，进"最近打开"列表（带缩略图）。
 - 图纸页是**只读**的：`Ctrl+S` 只会提示"没有需要保存的内容"，不会写回原文件。
+- **图纸管理**（视口右侧工具列里的「图纸管理」页，和构件显隐 / 楼层 / 楼层管理同一列；
+  Ribbon「视图 → 面板 → 图纸管理」也能开合）：把当前文档要用的图纸**挂**在文档下——
+  「添加…」可多选（DWF/DWFx/DXF/PDF/SVG/图片），**双击一行**就把那张图开成二维页签，
+  「删除」只是从清单里去掉，不删文件；文件不在原处会标成"文件缺失"。清单只存路径，
+  随 `.tdoc` 一起存（`DRWG` chunk，格式版本 17→18，旧文件照常打开）；图纸内容不并进文档，
+  看图时现读。
 
 | 操作 | 键 |
 |---|---|
@@ -32,6 +38,8 @@
 | 位图 | Qt `QImageReader` | PNG / JPG / BMP / TIFF / GIF / WebP |
 | SVG | `QSvgRenderer` 矢量直绘 | 放大不糊 |
 | DXF | 自研 ASCII 解析器（`src/engine/drawing/`） | 见下面的实体清单 |
+| DWFx | 自研 XPS 解析器（`dwf_reader.cpp` + `zip_archive.cpp`） | 矢量：`Path.Data` → 折线，`Glyphs` → 文字；多页可翻 |
+| DWF（二进制 W2D） | 只取包内**预览图** | 矢量流还没解；包里没有预览图会明确报错 |
 | PDF | `QPdfDocument`（可选依赖） | 按缩放按需光栅化并缓存 |
 
 DXF 解析器支持的实体：
@@ -65,9 +73,12 @@ DXF 解析器支持的实体：
 | 文件 | 角色 |
 |---|---|
 | [dxf_reader.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/drawing/dxf_reader.cpp) | 组码分词、块表、实体 → `Drawing` 曲线/文字 |
+| [zip_archive.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/drawing/zip_archive.cpp) | 最小 ZIP 读取器（store / deflate，要 zlib）——DWF 两种包装都是 ZIP |
+| [dwf_reader.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/drawing/dwf_reader.cpp) | DWF / DWFx：XPS FixedPage → `Drawing`（多页 + 页区间）；二进制 DWF 退预览图 |
 | [drawing.h](https://github.com/terry-chao/tamias/blob/main/src/engine/drawing/drawing.h) | 2D 图纸数据模型（路径 / 文字 / 图层 / 包围盒 / 归一化原点） |
 | [drawing_document.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/drawing_document.cpp) | 按扩展名分派四种加载器；按图层合成 `QPainterPath`；缩略图 |
 | [drawing_view.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/drawing_view.cpp) | 缩放/平移/翻页/图层开关、坐标读出 |
+| [drawing_manager_panel.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/drawing_manager_panel.cpp) | 视口工具列里的图纸管理页（挂图纸 / 删除 / 双击打开） |
 
 样例：[`assets/samples/drawings/floor-plan-sample.dxf`](https://github.com/terry-chao/tamias/blob/main/assets/samples/drawings/floor-plan-sample.dxf)
 （4 个图层、块引用门、凸度多段线、圆、文字）。
@@ -79,6 +90,10 @@ DXF 解析器支持的实体：
   DXF/SVG/图片。要走宽松许可就得换 pdfium（BSD-3），那是另一件事。
 - **DWG 不支持**，也不建议自研：格式闭源，只有 ODA / RealDWG（收费）或 LibreDWG（GPL）三条路。
   现实做法是让交付方出 DXF/PDF，或在转换层把 DWG 转成 DXF。
+- **二进制 DWF（W2D）只到"能看预览图"这一步**：DWFx（Autodesk 用 XPS 包出来的那种）走的是矢量解析，
+  DWF6 的 W2D 操作码流还没解。要矢量看图就导出 DWFx / DXF / PDF。
+- **DWFx 的文字靠 `Glyphs` 的 `UnicodeString`**：只带字形索引、没有 Unicode 的那段还原不出（状态栏报个数）。
+  `ImageBrush` 里的位图还没画，也只报个数。XPS 的旋转文字（`RenderTransform`）暂按未旋转处理。
 - **DXF 文字编码**：先按 UTF-8 解，出现替换字符再退回系统 ANSI 代码页（中文 Windows 上是 GBK/CP936）。
   两边都对不上才是乱码；SHX 大字体（工程字）无法还原成系统字体，字形会和 AutoCAD 里的不同。
 - **大图纸**：曲线按"图层 + 颜色"合并成 `QPainterPath`，几万条曲线够用；再大需要分块 + 空间索引，

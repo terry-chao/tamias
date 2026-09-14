@@ -4,6 +4,7 @@
 
 #include "qt_path.h"
 
+#include <QFile>
 #include <QFileInfo>
 #include <QFont>
 #include <QImageReader>
@@ -85,17 +86,19 @@ void paint_flipped(QPainter& painter, const QRectF& rect,
 
 bool DrawingDocument::is_drawing_path(const QString& path) {
   static const QStringList kExtensions{
-      QStringLiteral("pdf"), QStringLiteral("dxf"),  QStringLiteral("svg"),
-      QStringLiteral("png"), QStringLiteral("jpg"),  QStringLiteral("jpeg"),
-      QStringLiteral("bmp"), QStringLiteral("tif"),  QStringLiteral("tiff"),
-      QStringLiteral("gif"), QStringLiteral("webp")};
+      QStringLiteral("pdf"),  QStringLiteral("dxf"),  QStringLiteral("dwf"),
+      QStringLiteral("dwfx"), QStringLiteral("svg"),  QStringLiteral("png"),
+      QStringLiteral("jpg"),  QStringLiteral("jpeg"), QStringLiteral("bmp"),
+      QStringLiteral("tif"),  QStringLiteral("tiff"), QStringLiteral("gif"),
+      QStringLiteral("webp")};
   return has_extension(path, kExtensions);
 }
 
 QString DrawingDocument::file_dialog_filter() {
   return QObject::tr(
-      "Drawings (*.pdf *.dxf *.svg *.png *.jpg *.jpeg *.bmp *.tif *.tiff *.gif *.webp);;"
-      "PDF (*.pdf);;DXF (*.dxf);;Vector (*.svg);;Images (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.gif *.webp)");
+      "Drawings (*.pdf *.dxf *.dwf *.dwfx *.svg *.png *.jpg *.jpeg *.bmp *.tif *.tiff *.gif "
+      "*.webp);;PDF (*.pdf);;DXF (*.dxf);;DWF / DWFx (*.dwf *.dwfx);;Vector (*.svg);;"
+      "Images (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.gif *.webp)");
 }
 
 std::unique_ptr<DrawingDocument> DrawingDocument::open(const QString& path, QString& error) {
@@ -123,6 +126,8 @@ bool DrawingDocument::load(const QString& path, QString& error) {
   bool ok = false;
   if (suffix == QStringLiteral("dxf")) {
     ok = load_dxf(path_, error);
+  } else if (suffix == QStringLiteral("dwf") || suffix == QStringLiteral("dwfx")) {
+    ok = load_dwf(path_, error);
   } else if (suffix == QStringLiteral("svg")) {
     ok = load_svg(path_, error);
   } else if (suffix == QStringLiteral("pdf")) {
@@ -191,7 +196,14 @@ bool DrawingDocument::load_dxf(const QString& path, QString& error) {
     return false;
   }
   page_size_ = QSizeF(bounds.width(), bounds.height());
-  build_dxf_batches();
+  DwfPage single;
+  single.bounds = bounds;
+  single.path_begin = 0;
+  single.path_end = drawing_.paths().size();
+  single.text_begin = 0;
+  single.text_end = drawing_.texts().size();
+  pages_ = {single};
+  build_vector_batches();
 
   detail_ = QObject::tr("%1 curves · %2 texts · %3 layers")
                 .arg(drawing_.paths().size())
@@ -199,6 +211,66 @@ bool DrawingDocument::load_dxf(const QString& path, QString& error) {
                 .arg(drawing_.layers().size());
   if (drawing_.unsupported_entity_count() > 0) {
     detail_ += QObject::tr(" · %1 unsupported").arg(drawing_.unsupported_entity_count());
+  }
+  return true;
+}
+
+bool DrawingDocument::load_dwf(const QString& path, QString& error) {
+  QFile file(path);
+  if (!file.open(QIODevice::ReadOnly)) {
+    error = QObject::tr("Cannot read DWF: %1").arg(file.errorString());
+    return false;
+  }
+  const QByteArray bytes = file.readAll();
+  const auto span = std::span<const std::uint8_t>(
+      reinterpret_cast<const std::uint8_t*>(bytes.constData()),
+      static_cast<std::size_t>(bytes.size()));
+  auto content = read_dwf(span);
+  if (!content) {
+    error = QObject::tr("Cannot read DWF: %1").arg(QString::fromStdString(content.error()));
+    return false;
+  }
+
+  // 二进制 DWF（W2D）还没解矢量，包里有预览图就先看预览图。
+  if (!content->has_vector()) {
+    image_ = QImage::fromData(content->preview.data(), static_cast<int>(content->preview.size()));
+    if (image_.isNull()) {
+      error = QObject::tr("Cannot read the preview image inside this DWF.");
+      return false;
+    }
+    kind_ = Kind::Raster;
+    kind_label_ = QStringLiteral("DWF");
+    page_count_ = 1;
+    page_size_ = QSizeF(image_.width(), image_.height());
+    detail_ = QObject::tr(
+                  "Binary DWF: showing the embedded preview image (%1 × %2). Vector (W2D) "
+                  "content is not parsed yet — export DWFx for real vector viewing.")
+                  .arg(image_.width())
+                  .arg(image_.height());
+    return true;
+  }
+
+  drawing_ = std::move(content->drawing);
+  pages_ = std::move(content->pages);
+  kind_ = Kind::Dwf;
+  kind_label_ = content->xps ? QStringLiteral("DWFx") : QStringLiteral("DWF");
+  page_count_ = std::max<int>(1, static_cast<int>(pages_.size()));
+  const Aabb2 first = pages_.front().bounds;
+  page_size_ = QSizeF(std::max(1.f, first.width()), std::max(1.f, first.height()));
+  build_vector_batches();
+
+  detail_ = QObject::tr("%1 curves · %2 texts · %3 layers")
+                .arg(drawing_.paths().size())
+                .arg(drawing_.texts().size())
+                .arg(drawing_.layers().size());
+  if (page_count_ > 1) {
+    detail_ += QObject::tr(" · %1 pages").arg(page_count_);
+  }
+  if (content->skipped_glyphs > 0) {
+    detail_ += QObject::tr(" · %1 texts without glyphs").arg(content->skipped_glyphs);
+  }
+  if (content->skipped_images > 0) {
+    detail_ += QObject::tr(" · %1 images skipped").arg(content->skipped_images);
   }
   return true;
 }
@@ -227,21 +299,27 @@ bool DrawingDocument::load_pdf(const QString& path, QString& error) {
 #endif
 }
 
-void DrawingDocument::build_dxf_batches() {
-  // 同一 (图层, 颜色) 合成一个 QPainterPath，画的时候一次描边。
+void DrawingDocument::build_vector_batches() {
+  dxf_batches_.clear();
+  // 同一 (页, 图层, 颜色) 合成一个 QPainterPath，画的时候一次描边。
   struct Key {
+    int page = 0;
     int layer = -1;
     QRgb rgb = 0;
     bool operator<(const Key& other) const {
+      if (page != other.page) {
+        return page < other.page;
+      }
       return layer != other.layer ? layer < other.layer : rgb < other.rgb;
     }
   };
   std::map<Key, std::size_t> index;
-  const auto batch_for = [&](int layer, QColor color) -> PathBatch& {
-    const Key key{layer, color.rgb()};
+  const auto batch_for = [&](int page, int layer, QColor color) -> PathBatch& {
+    const Key key{page, layer, color.rgb()};
     auto it = index.find(key);
     if (it == index.end()) {
       PathBatch batch;
+      batch.page = page;
       batch.layer = layer;
       batch.color = color;
       dxf_batches_.push_back(std::move(batch));
@@ -250,44 +328,62 @@ void DrawingDocument::build_dxf_batches() {
     return dxf_batches_[it->second];
   };
 
-  for (const DrawingPath& path : drawing_.paths()) {
-    if (path.points.size() < 2) {
-      continue;
-    }
-    QPainterPath painter_path;
-    painter_path.moveTo(path.points.front().x, path.points.front().y);
-    for (std::size_t i = 1; i < path.points.size(); ++i) {
-      painter_path.lineTo(path.points[i].x, path.points[i].y);
-    }
-    if (path.closed) {
-      painter_path.closeSubpath();
-    }
-    batch_for(static_cast<int>(path.layer), to_qcolor(path.color)).paths.addPath(painter_path);
-  }
+  const auto belongs = [&](std::size_t index, std::size_t begin, std::size_t end) {
+    return index >= begin && index < end;
+  };
 
-  // 文字用字形轮廓，保证任意缩放都是矢量。
-  QFont font;
-  font.setPixelSize(100);
-  for (const DrawingText& text : drawing_.texts()) {
-    const QString content = decode_dxf_text(text.text);
-    if (content.isEmpty() || !(text.height > 0.f)) {
-      continue;
+  for (std::size_t p = 0; p < pages_.size(); ++p) {
+    const DwfPage& page = pages_[p];
+    const int page_index = static_cast<int>(p);
+    for (std::size_t i = 0; i < drawing_.paths().size(); ++i) {
+      if (!belongs(i, page.path_begin, page.path_end)) {
+        continue;
+      }
+      const DrawingPath& path = drawing_.paths()[i];
+      if (path.points.size() < 2) {
+        continue;
+      }
+      QPainterPath painter_path;
+      painter_path.moveTo(path.points.front().x, path.points.front().y);
+      for (std::size_t k = 1; k < path.points.size(); ++k) {
+        painter_path.lineTo(path.points[k].x, path.points[k].y);
+      }
+      if (path.closed) {
+        painter_path.closeSubpath();
+      }
+      batch_for(page_index, static_cast<int>(path.layer), to_qcolor(path.color))
+          .paths.addPath(painter_path);
     }
-    QPainterPath glyphs;
-    glyphs.addText(QPointF(0.0, 0.0), font, content);
-    if (glyphs.isEmpty()) {
-      continue;
+
+    // 文字用字形轮廓，保证任意缩放都是矢量。
+    QFont font;
+    font.setPixelSize(100);
+    for (std::size_t i = 0; i < drawing_.texts().size(); ++i) {
+      if (!belongs(i, page.text_begin, page.text_end)) {
+        continue;
+      }
+      const DrawingText& text = drawing_.texts()[i];
+      const QString content = decode_dxf_text(text.text);
+      if (content.isEmpty() || !(text.height > 0.f)) {
+        continue;
+      }
+      QPainterPath glyphs;
+      glyphs.addText(QPointF(0.0, 0.0), font, content);
+      if (glyphs.isEmpty()) {
+        continue;
+      }
+      // DXF 字高 ≈ 大写字母高，约 0.7 em。
+      const double scale = static_cast<double>(text.height) / 70.0;
+      const double angle = static_cast<double>(text.rotation_deg) * kPi / 180.0;
+      const double cs = std::cos(angle);
+      const double sn = std::sin(angle);
+      // 世界 Y 向上：旋转 + 竖直镜像一起写进矩阵（见 docs/DRAWING.md）。
+      const QTransform place(cs * scale, sn * scale, sn * scale, -cs * scale, text.position.x,
+                             text.position.y);
+      PathBatch& batch =
+          batch_for(page_index, static_cast<int>(text.layer), to_qcolor(text.color));
+      batch.paths.addPath(place.map(glyphs));
     }
-    // DXF 字高 ≈ 大写字母高，约 0.7 em。
-    const double scale = static_cast<double>(text.height) / 70.0;
-    const double angle = static_cast<double>(text.rotation_deg) * kPi / 180.0;
-    const double cs = std::cos(angle);
-    const double sn = std::sin(angle);
-    // 世界 Y 向上：旋转 + 竖直镜像一起写进矩阵（见 docs/DRAWING.md）。
-    const QTransform place(cs * scale, sn * scale, sn * scale, -cs * scale, text.position.x,
-                           text.position.y);
-    PathBatch& batch = batch_for(static_cast<int>(text.layer), to_qcolor(text.color));
-    batch.paths.addPath(place.map(glyphs));
   }
 }
 
@@ -298,6 +394,13 @@ QRectF DrawingDocument::page_rect(int page) const {
                              : page_size_;
     return QRectF(0.0, 0.0, size.width(), size.height());
 #endif
+  }
+  if ((kind_ == Kind::Dxf || kind_ == Kind::Dwf) && !pages_.empty()) {
+    const int clamped = std::clamp(page, 0, static_cast<int>(pages_.size()) - 1);
+    const Aabb2& bounds = pages_[static_cast<std::size_t>(clamped)].bounds;
+    if (bounds.valid()) {
+      return QRectF(bounds.min_x, bounds.min_y, bounds.width(), bounds.height());
+    }
   }
   (void)page;
   return QRectF(0.0, 0.0, page_size_.width(), page_size_.height());
@@ -338,9 +441,9 @@ void DrawingDocument::set_layer_visible(int index, bool visible) {
 }
 
 void DrawingDocument::paint_page(QPainter& painter, int page, double device_scale) const {
-  // DXF 本来就是 Y 向上的世界坐标，直接画；位图/SVG/PDF 是 Y 向下的，翻一次。
-  if (kind_ == Kind::Dxf) {
-    paint_dxf(painter);
+  // DXF / DWFx 本来就是 Y 向上的图纸坐标，直接画；位图/SVG/PDF 是 Y 向下的，翻一次。
+  if (kind_ == Kind::Dxf || kind_ == Kind::Dwf) {
+    paint_vector(painter, page);
     return;
   }
   const QRectF rect = page_rect(page);
@@ -353,7 +456,8 @@ void DrawingDocument::paint_page_content(QPainter& painter, int page, double dev
                                          const QRectF& target) const {
   switch (kind_) {
     case Kind::Dxf:
-      paint_dxf(painter);
+    case Kind::Dwf:
+      paint_vector(painter, page);
       return;
     case Kind::Svg:
       if (svg_) {
@@ -398,9 +502,9 @@ void DrawingDocument::paint_page_content(QPainter& painter, int page, double dev
   }
 }
 
-void DrawingDocument::paint_dxf(QPainter& painter) const {
+void DrawingDocument::paint_vector(QPainter& painter, int page) const {
   for (const PathBatch& batch : dxf_batches_) {
-    if (!layer_visible(batch.layer)) {
+    if (batch.page != page || !layer_visible(batch.layer)) {
       continue;
     }
     QPen pen(adapt_to_background(batch.color, dark_background_));

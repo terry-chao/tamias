@@ -285,6 +285,34 @@ TEST(DocumentIo, FileRoundTrip) {
   std::filesystem::remove(path, ec);
 }
 
+// 图纸管理：挂在文档下的参考图纸清单要跟着 .tdoc 走（DRWG chunk），
+// 内存里那份（撤销快照用）也要带上。
+TEST(DocumentIo, DrawingListRoundTrip) {
+  Document doc("drawings");
+  EXPECT_TRUE(doc.add_drawing_path("C:/ref/plan.dxf"));
+  EXPECT_FALSE(doc.add_drawing_path("C:/ref/plan.dxf"));  // 同一张只挂一份
+  EXPECT_TRUE(doc.add_drawing_path("C:/ref/sheet.dwfx"));
+  EXPECT_TRUE(doc.remove_drawing_path("C:/ref/plan.dxf"));
+  ASSERT_EQ(doc.drawing_paths().size(), 1u);
+
+  ViewportState viewport{};
+  const auto path = std::filesystem::temp_directory_path() / "tamias_drawings.tdoc";
+  ASSERT_TRUE(save_document(path, doc, viewport)) << "save failed";
+  auto loaded = load_document(path);
+  ASSERT_TRUE(loaded) << loaded.error();
+  ASSERT_EQ(loaded->document.drawing_paths().size(), 1u);
+  EXPECT_EQ(loaded->document.drawing_paths()[0], "C:/ref/sheet.dwfx");
+  std::error_code ec;
+  std::filesystem::remove(path, ec);
+
+  auto bytes = serialize_document(doc);
+  ASSERT_TRUE(bytes) << bytes.error();
+  auto restored = deserialize_document(*bytes);
+  ASSERT_TRUE(restored) << restored.error();
+  ASSERT_EQ(restored->drawing_paths().size(), 1u);
+  EXPECT_EQ(restored->drawing_paths()[0], "C:/ref/sheet.dwfx");
+}
+
 TEST(DocumentIo, EntityRoundTrip) {
   Document doc("entity");
   const std::uint64_t wall_id = add_wall_entity(doc, {0.f, 0.f, 0.f}, {0.f, 0.f, 5.f});
@@ -602,6 +630,44 @@ TEST(ViewportFloor, ClustersSeparateElevations) {
   EXPECT_EQ(floors[0].label, "1F");
   EXPECT_EQ(floors[1].label, "2F");
   EXPECT_LT(floors[0].y_min, floors[1].y_min);
+}
+
+// 在 1 楼画的板默认是**本层顶板**（落在层高上），但归属仍是 1 楼：
+// 它的几何压在 2F 标高上、按楼层带会算成 2F，得按 Location 的楼层把它判给 1 楼。
+// 回归的是"1 楼画的板跑到 2 楼"。
+TEST(ViewportFloor, StoreyTopSlabBelongsToTheStoreyItWasDrawnOn) {
+  Document doc("slab-floors");
+  const std::uint64_t ground = doc.add_storey("1F", 0.0).id;
+  doc.add_storey("2F", 3.0);
+  doc.set_active_storey(ground);
+
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+  ASSERT_TRUE(system.dispatch(doc, "create_slab", {{"thickness", 0.2}}));
+  ASSERT_TRUE(system.feed_point({0.f, 0.f, 0.f}));
+  auto done = system.feed_point({4.f, 0.f, 3.f});
+  ASSERT_TRUE(done) << done.error();
+  ASSERT_TRUE(*done);
+
+  const std::vector<ViewportFloor> floors = infer_viewport_floors(doc);
+  ASSERT_EQ(floors.size(), 2u);
+  const Entity* slab = doc.entities().begin()->second.get();
+  ASSERT_NE(slab, nullptr);
+  const SceneNode* node = doc.scene().find(slab->id);
+  ASSERT_NE(node, nullptr);
+  ASSERT_TRUE(node->world_bounds.valid());
+  ASSERT_NE(slab->location, nullptr);
+  EXPECT_EQ(slab->location->storey_id(), ground);
+  // 几何上它确实落在 2F 的带里——所以只看几何带是不够的。
+  EXPECT_FALSE(viewport_floor_contains(floors[0], node->world_bounds));
+  EXPECT_TRUE(viewport_floor_contains(floors[1], node->world_bounds));
+  // 按归属过滤：留 1 楼层可见，留 2 层（藏 1 层）不可见。
+  EXPECT_TRUE(viewport_floor_allows(floors, ground, node->world_bounds, {1}));
+  EXPECT_FALSE(viewport_floor_allows(floors, ground, node->world_bounds, {0}));
+  // 没有楼层归属的（导入网格 / 未归属构件）仍按几何带兜底。
+  EXPECT_TRUE(viewport_floor_allows(floors, 0, node->world_bounds, {0}));
+  EXPECT_FALSE(viewport_floor_allows(floors, 0, node->world_bounds, {1}));
 }
 
 TEST(Picking, RayHitsTransformedNode) {
@@ -970,6 +1036,37 @@ TEST(CommandSystem, DispatchCreateSlabTwoCorners) {
   ASSERT_TRUE(system.can_redo());
   system.redo();
   EXPECT_EQ(doc.entities().size(), 1u);
+}
+
+// 不显式给标高偏移时，板默认画成本层顶板：偏移 = 当前楼层层高（1F 层高 3.0 → 3.0）。
+// 本层顶板压在上一层标高上，归属仍按 Location 算（见 ViewportFloor 那条）。
+TEST(CommandSystem, DispatchCreateSlabDefaultsToStoreyTop) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document doc("cmd-slab-storey");
+  const std::uint64_t storey_id = doc.add_storey("1F", 0.0).id;
+  doc.set_active_storey(storey_id);
+
+  ASSERT_TRUE(system.dispatch(doc, "create_slab", {{"thickness", 0.2}}));
+  // 默认 = 本层顶板：工作平面抬到本层层高（1F 层高 3.0）。
+  EXPECT_FLOAT_EQ(system.work_plane_y(), 3.f);
+
+  auto p1 = system.feed_point({0.f, 0.f, 0.f});
+  ASSERT_TRUE(p1) << p1.error();
+  EXPECT_FALSE(*p1);
+  auto p2 = system.feed_point({4.f, 0.f, 3.f});
+  ASSERT_TRUE(p2) << p2.error();
+  EXPECT_TRUE(*p2);
+
+  ASSERT_EQ(doc.entities().size(), 1u);
+  const Entity* slab = doc.entities().begin()->second.get();
+  ASSERT_NE(slab, nullptr);
+  ASSERT_NE(slab->location, nullptr);
+  EXPECT_EQ(slab->location->storey_id(), storey_id);
+  EXPECT_FLOAT_EQ(slab->local_transform(1, 3), 3.f);
+  EXPECT_NEAR(slab->location->elevation_offset(), 3.0, 1e-6);
 }
 
 TEST(CommandSystem, MoveEntitiesUndoRedo) {

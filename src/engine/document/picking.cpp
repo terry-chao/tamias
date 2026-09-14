@@ -1,6 +1,7 @@
 #include "picking.h"
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <limits>
 #include <vector>
@@ -248,6 +249,91 @@ std::vector<std::uint64_t> nodes_in_screen_rect(const Document& doc, const Mat4&
     const bool overlap = sx1 >= rx0 && sy1 >= ry0 && sx0 <= rx1 && sy0 <= ry1;
     if (crossing ? overlap : inside) {
       ids.push_back(node.id);
+    }
+  }
+  return ids;
+}
+
+namespace {
+
+// 轴线的端点按标高抬到平面上：轴网数据恒在 y = 0，画和点都在当前楼层标高。
+Vec3 axis_point_at(const Vec3& p, float plane_y) { return {p.x, plane_y, p.z}; }
+
+float distance_to_segment_2d(float px, float py, float ax, float ay, float bx, float by) {
+  const float dx = bx - ax;
+  const float dy = by - ay;
+  const float len2 = dx * dx + dy * dy;
+  float t = 0.f;
+  if (len2 > 1e-12f) {
+    t = std::clamp(((px - ax) * dx + (py - ay) * dy) / len2, 0.f, 1.f);
+  }
+  const float cx = ax + dx * t;
+  const float cy = ay + dy * t;
+  return std::sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
+}
+
+}  // namespace
+
+std::uint64_t pick_grid_axis_on_screen(const std::vector<GridAxis>& axes, const Mat4& view_proj,
+                                       float width, float height, float plane_y, float px,
+                                       float py, float tol_pixels) {
+  std::uint64_t best_id = 0;
+  float best_dist = std::numeric_limits<float>::max();
+  for (const GridAxis& axis : axes) {
+    if (axis.length() <= 0.0) {
+      continue;
+    }
+    float ax = 0.f;
+    float ay = 0.f;
+    float bx = 0.f;
+    float by = 0.f;
+    if (!project_world_to_screen(view_proj, axis_point_at(axis.start_point(), plane_y), width,
+                                 height, ax, ay) ||
+        !project_world_to_screen(view_proj, axis_point_at(axis.end_point(), plane_y), width,
+                                 height, bx, by)) {
+      continue;  // 端点跑到相机后面：这一帧没法判距离，跳过
+    }
+    const float dist = distance_to_segment_2d(px, py, ax, ay, bx, by);
+    if (dist <= tol_pixels && dist < best_dist) {  // 交点处并列时取先遍历到的那根
+      best_dist = dist;
+      best_id = axis.id;
+    }
+  }
+  return best_id;
+}
+
+std::vector<std::uint64_t> grid_axes_in_screen_rect(const std::vector<GridAxis>& axes,
+                                                    const Mat4& view_proj, float width,
+                                                    float height, float plane_y, float x0,
+                                                    float y0, float x1, float y1,
+                                                    bool crossing) {
+  const float rx0 = std::min(x0, x1);
+  const float ry0 = std::min(y0, y1);
+  const float rx1 = std::max(x0, x1);
+  const float ry1 = std::max(y0, y1);
+  std::vector<std::uint64_t> ids;
+  for (const GridAxis& axis : axes) {
+    if (axis.length() <= 0.0) {
+      continue;
+    }
+    float ax = 0.f;
+    float ay = 0.f;
+    float bx = 0.f;
+    float by = 0.f;
+    if (!project_world_to_screen(view_proj, axis_point_at(axis.start_point(), plane_y), width,
+                                 height, ax, ay) ||
+        !project_world_to_screen(view_proj, axis_point_at(axis.end_point(), plane_y), width,
+                                 height, bx, by)) {
+      continue;
+    }
+    const float sx0 = std::min(ax, bx);
+    const float sy0 = std::min(ay, by);
+    const float sx1 = std::max(ax, bx);
+    const float sy1 = std::max(ay, by);
+    const bool inside = sx0 >= rx0 && sy0 >= ry0 && sx1 <= rx1 && sy1 <= ry1;
+    const bool overlap = sx1 >= rx0 && sy1 >= ry0 && sx0 <= rx1 && sy0 <= ry1;
+    if (crossing ? overlap : inside) {
+      ids.push_back(axis.id);
     }
   }
   return ids;

@@ -1275,9 +1275,11 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     const bool has_snap = frame.snap_point.has_value();
     const bool has_debug = frame.debug_line_segments.size() >= 2;
     const bool has_grid = frame.grid_line_segments.size() >= 2;
+    const bool has_grid_preview = frame.grid_preview_segments.size() >= 2;
+    const bool has_grid_selected = frame.grid_selected_segments.size() >= 2;
     const bool has_vertex = frame.debug_vertex.has_value();
     if (has_curve || has_controls || has_points || has_grips || has_snap || has_debug ||
-        has_grid || has_vertex) {
+        has_grid || has_grid_preview || has_grid_selected || has_vertex) {
       channel.command_list->set_pipeline(*line_pipeline_);
       bind_mesh_sets();
       channel.command_list->set_vertex_buffer(*preview_line_mesh_.vertex_buffer);
@@ -1376,6 +1378,20 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
         const std::vector<Vec3>& pts = frame.grid_line_segments;
         for (std::size_t i = 0; i + 1 < pts.size(); i += 2) {
           draw_segment(pts[i], pts[i + 1], 0.52f, 0.58f, 0.66f);
+        }
+      }
+      if (has_grid_preview) {
+        // 放置预览：同样的线，但用高亮色，和已经落位的轴网分得开。
+        const std::vector<Vec3>& pts = frame.grid_preview_segments;
+        for (std::size_t i = 0; i + 1 < pts.size(); i += 2) {
+          draw_segment(pts[i], pts[i + 1], 0.30f, 0.92f, 1.00f);
+        }
+      }
+      if (has_grid_selected) {
+        // 选中的轴线：琥珀色压在轴网上，一眼看出选的是哪几根。
+        const std::vector<Vec3>& pts = frame.grid_selected_segments;
+        for (std::size_t i = 0; i + 1 < pts.size(); i += 2) {
+          draw_segment(pts[i], pts[i + 1], 1.00f, 0.62f, 0.22f);
         }
       }
       if (has_controls) {

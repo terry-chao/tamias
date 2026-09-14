@@ -222,8 +222,12 @@ void register_commands(CommandRegistry& registry) {
   });
 
   registry.register_command("create_slab", [](Document& doc, const CommandArgs& args) {
-    const double default_offset =
-        doc.bim().active_storey_id() == 0 ? kDefaultWallHeight : 0.0;
+    // 偏移相对当前楼层标高：没显式给就默认画**本层顶板**——本层顶的标高就是层高。
+    // 还没有楼层表的空文档没有"本层顶"，退回默认层高（旧行为）。
+    const Storey* active = doc.bim().find_storey(doc.bim().active_storey_id());
+    const double default_offset = active != nullptr && active->height > 0.0
+                                      ? active->height
+                                      : kDefaultWallHeight;
     const double thickness = arg_double(args, "thickness", 0.2);
     const double elevation = arg_double(args, "elevation", default_offset);
     auto points = arg_points(args, "points");

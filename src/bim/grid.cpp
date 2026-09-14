@@ -36,6 +36,48 @@ void Grid::clear() {
   next_id_ = 1;
 }
 
+void Grid::select(std::uint64_t id) {
+  if (GridAxis* axis = find(id)) {
+    axis->selected = true;
+  }
+}
+
+void Grid::deselect(std::uint64_t id) {
+  if (GridAxis* axis = find(id)) {
+    axis->selected = false;
+  }
+}
+
+void Grid::clear_selection() {
+  for (GridAxis& axis : axes_) {
+    axis.selected = false;
+  }
+}
+
+bool Grid::axis_selected(std::uint64_t id) const {
+  const GridAxis* axis = find(id);
+  return axis != nullptr && axis->selected;
+}
+
+bool Grid::has_selection() const {
+  for (const GridAxis& axis : axes_) {
+    if (axis.selected) {
+      return true;
+    }
+  }
+  return false;
+}
+
+std::vector<std::uint64_t> Grid::selected_ids() const {
+  std::vector<std::uint64_t> ids;
+  for (const GridAxis& axis : axes_) {
+    if (axis.selected) {
+      ids.push_back(axis.id);
+    }
+  }
+  return ids;
+}
+
 GridAxis* Grid::find(std::uint64_t id) {
   for (GridAxis& axis : axes_) {
     if (axis.id == id) {
@@ -84,14 +126,7 @@ Aabb Grid::bounds() const {
 }
 
 void Grid::append_segments(std::vector<Vec3>& out) const {
-  out.reserve(out.size() + axes_.size() * 2);
-  for (const GridAxis& axis : axes_) {
-    if (axis.length() <= 0.0) {
-      continue;
-    }
-    out.push_back(axis.start_point());
-    out.push_back(axis.end_point());
-  }
+  append_axis_segments(axes_, out);
 }
 
 Vec2 Grid::snap_plan(Vec2 plan, double tolerance, bool* snapped) const {
@@ -187,6 +222,31 @@ std::vector<GridAxis> make_orthogonal_grid(double origin_x, double origin_z,
     axes.push_back(std::move(axis));
   }
   return axes;
+}
+
+void append_axis_segments(const std::vector<GridAxis>& axes, std::vector<Vec3>& out) {
+  out.reserve(out.size() + axes.size() * 2);
+  for (const GridAxis& axis : axes) {
+    if (axis.length() <= 0.0) {
+      continue;
+    }
+    out.push_back(axis.start_point());
+    out.push_back(axis.end_point());
+  }
+}
+
+void translate_grid(std::vector<GridAxis>& axes, double dx, double dz) {
+  for (GridAxis& axis : axes) {
+    if (axis.direction == GridAxisDirection::AlongZ) {
+      axis.position += dx;
+      axis.start += dz;
+      axis.end += dz;
+    } else {
+      axis.position += dz;
+      axis.start += dx;
+      axis.end += dx;
+    }
+  }
 }
 
 }  // namespace tamias

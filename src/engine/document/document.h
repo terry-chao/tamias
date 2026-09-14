@@ -18,6 +18,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -37,6 +38,12 @@ class Document {
   [[nodiscard]] const std::string& name() const { return name_; }
   void set_name(std::string name) { name_ = std::move(name); }
   [[nodiscard]] const std::filesystem::path& path() const { return path_; }
+  // 图纸管理：挂在这个文档下的参考图纸（只存路径，看图时现读；不把图纸内容并进 .tdoc）。
+  [[nodiscard]] const std::vector<std::string>& drawing_paths() const { return drawing_paths_; }
+  [[nodiscard]] std::vector<std::string>& drawing_paths() { return drawing_paths_; }
+  // 加一张图纸；同一个路径只留一份（重复添加返回 false）。
+  bool add_drawing_path(std::string path);
+  bool remove_drawing_path(std::string_view path);
   void set_path(std::filesystem::path path) { path_ = std::move(path); }
 
   [[nodiscard]] bool dirty() const { return dirty_; }
@@ -360,6 +367,7 @@ class Document {
                                                              MeshLod lod) const;
 
   std::string name_;
+  std::vector<std::string> drawing_paths_;
   std::filesystem::path path_;
   Scene scene_;
   BimModel bim_;

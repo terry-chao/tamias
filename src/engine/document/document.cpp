@@ -203,6 +203,26 @@ void Document::resync_storey_children(std::uint64_t storey_id) {
   }
 }
 
+bool Document::add_drawing_path(std::string path) {
+  if (path.empty()) {
+    return false;
+  }
+  if (std::find(drawing_paths_.begin(), drawing_paths_.end(), path) != drawing_paths_.end()) {
+    return false;  // 同一张图纸只挂一份
+  }
+  drawing_paths_.push_back(std::move(path));
+  return true;
+}
+
+bool Document::remove_drawing_path(std::string_view path) {
+  const auto it = std::find(drawing_paths_.begin(), drawing_paths_.end(), path);
+  if (it == drawing_paths_.end()) {
+    return false;
+  }
+  drawing_paths_.erase(it);
+  return true;
+}
+
 void Document::assign_active_storey(Entity& entity) {
   if (!entity.location) {
     return;

@@ -56,6 +56,13 @@
 
 namespace tamias {
 
+namespace {
+
+// 轴线点选的屏幕容差：轴是细线，得给点手抖的余量；比这个远就不算点中。
+constexpr float kGridPickPixels = 8.f;
+
+}  // namespace
+
 class DocumentViewport::NativeSurface final : public QWidget {
  public:
   explicit NativeSurface(QWidget* parent) : QWidget(parent) {
@@ -141,6 +148,9 @@ DocumentViewport::DocumentViewport(std::shared_ptr<Document> document,
     layout_overlays();
     request_redraw();  // 三维区域宽度变了，宽高比要重算
   });
+  // 图纸管理页双击 / 点「打开」：视口自己开不了标签页，转给主窗口去开。
+  connect(tool_panel_, &ViewportToolPanel::drawing_open_requested, this,
+          &DocumentViewport::drawing_open_requested);
 
   view_anim_timer_ = new QTimer(this);
   view_anim_timer_->setInterval(16);
@@ -718,14 +728,34 @@ void DocumentViewport::submit_current_frame() {
   if (grid_snap_active() && has_cursor_ && is_on_grid_xz(cursor)) {
     frame.snap_point = cursor;
   }
+  // 放置中的轴网：整张幽灵跟着光标走，落位前就能看出它要放在哪。
+  const float grid_y = grid_plane_y();
   if (grid_visible_ && !document_->bim().grid().empty()) {
     // 轴网画在当前楼层的标高上：平面视图里它正好落在工作面上。
-    document_->bim().grid().append_segments(frame.grid_line_segments);
-    const float y =
-        static_cast<float>(document_->bim().storey_elevation(document_->bim().active_storey_id()));
+    append_axis_segments(document_->bim().grid().axes(), frame.grid_line_segments);
     for (Vec3& point : frame.grid_line_segments) {
-      point.y = y;
+      point.y = grid_y;
     }
+    // 选中的轴线单独出一份：画在普通轴线上面的琥珀色，框选/点选后看得见选了什么。
+    for (const GridAxis& axis : document_->bim().grid().axes()) {
+      if (!axis.selected || axis.length() <= 0.0) {
+        continue;
+      }
+      frame.grid_selected_segments.push_back(axis.start_point());
+      frame.grid_selected_segments.push_back(axis.end_point());
+    }
+    for (Vec3& point : frame.grid_selected_segments) {
+      point.y = grid_y;
+    }
+  }
+  if (pending_grid_ && has_cursor_) {
+    const Vec3 drop = plan_position_at_storey(last_mouse_);
+    append_axis_segments(ghost_grid_axes(last_mouse_), frame.grid_preview_segments);
+    for (Vec3& point : frame.grid_preview_segments) {
+      point.y = grid_y;
+    }
+    // 锚点（生成行里的原点）画个方块：落位后它正好压在鼠标下。
+    frame.preview_points.push_back(Vec3{drop.x, grid_y, drop.z});
   }
   fill_grip_overlay(frame);
   fill_debug_overlay(frame);
@@ -761,6 +791,11 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
   has_cursor_ = true;
   press_hit_ = 0;
   if (event->button() == Qt::LeftButton) {
+    if (pending_grid_) {
+      commit_grid_placement(event->pos());
+      grid_press_consumed_ = true;  // 抬起时别把这一下当成选择点击 / 清空选择
+      return;
+    }
     if (plugin_point_input_.active()) {
       plugin_input_press_ = true;
       Vec3 point = cursor_ground_position(event->pos());
@@ -833,22 +868,39 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
       }
     }
     const bool shift = (event->modifiers() & Qt::ShiftModifier) != 0;
-    if (press_hit_ != 0) {
-      const SceneNode* node = document_->scene().find(press_hit_);
-      const bool already = node != nullptr && node->selected;
-      if (shift) {
-        if (already) {
-          session_->deselect(press_hit_);
-        } else {
-          session_->select(press_hit_);
+    if (press_hit_ == 0) {
+      // 没点中构件：再看看是不是点在轴线上（轴网优先级在构件之后——平面图里墙压在轴上）。
+      if (const std::uint64_t axis = pick_grid_axis_at(event->pos()); axis != 0) {
+        select_grid_axis(axis, shift);
+        grid_press_consumed_ = true;
+        return;
+      }
+      if (!shift) {
+        Grid& grid = document_->bim().grid();
+        if (grid.has_selection()) {
+          grid.clear_selection();  // 点空白：轴网选择当场清掉（构件选择在抬起时清）
+          request_redraw();
         }
-      } else if (!already) {
-        session_->clear_selection();
+      }
+      return;
+    }
+    const SceneNode* node = document_->scene().find(press_hit_);
+    const bool already = node != nullptr && node->selected;
+    if (!shift) {
+      document_->bim().grid().clear_selection();  // 选构件 = 放掉轴网选择
+    }
+    if (shift) {
+      if (already) {
+        session_->deselect(press_hit_);
+      } else {
         session_->select(press_hit_);
       }
-      emit selection_changed();
-      request_redraw();
+    } else if (!already) {
+      session_->clear_selection();
+      session_->select(press_hit_);
     }
+    emit selection_changed();
+    request_redraw();
     return;
   }
   if (event->button() == Qt::MiddleButton) {
@@ -884,6 +936,11 @@ void DocumentViewport::mouseMoveEvent(QMouseEvent* event) {
     apply_grip_at(event->pos());
     return;
   }
+  if (pending_grid_) {
+    sync_coord_readout();
+    request_redraw();  // 幽灵轴网跟着光标走
+    return;
+  }
   if (plugin_point_input_.active() || command_system_.has_pending()) {
     update_opening_hover(event->pos());
     request_redraw();  // 更新网格捕捉点与预览线
@@ -910,21 +967,25 @@ void DocumentViewport::mouseMoveEvent(QMouseEvent* event) {
 
 void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
   if (event->button() == Qt::LeftButton) {
-    if (plugin_input_press_) {
-      plugin_input_press_ = false;
-    } else if (gripping_) {
-      commit_grip_drag();
-      gripping_ = false;
-    } else if (session_->tool_mode() == ToolMode::None) {
-      if (box_selecting_) {
-        finish_box_select(event->pos(), (event->modifiers() & Qt::ShiftModifier) != 0);
-      } else if ((event->pos() - press_mouse_).manhattanLength() < 4 && press_hit_ == 0 &&
+    // 框选优先：拖动可能正好从一根轴线上起手，按下那一下的"选中轴线"不该吃掉框选。
+    if (box_selecting_) {
+      finish_box_select(event->pos(), (event->modifiers() & Qt::ShiftModifier) != 0);
+    } else if (!grid_press_consumed_) {  // 已交给轴网（落位 / 选轴）的那一下，不再当选择点击
+      if (plugin_input_press_) {
+        plugin_input_press_ = false;
+      } else if (gripping_) {
+        commit_grip_drag();
+        gripping_ = false;
+      } else if (session_->tool_mode() == ToolMode::None &&
+                 (event->pos() - press_mouse_).manhattanLength() < 4 && press_hit_ == 0 &&
                  (event->modifiers() & Qt::ShiftModifier) == 0) {
         session_->clear_selection();
+        document_->bim().grid().clear_selection();
         request_redraw();
         emit selection_changed();
       }
     }
+    grid_press_consumed_ = false;
     box_selecting_ = false;
     if (box_select_overlay_) {
       box_select_overlay_->hide_box();
@@ -936,6 +997,10 @@ void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
   if (event->button() == Qt::RightButton) {
     panning_ = false;
     if ((event->pos() - press_mouse_).manhattanLength() < 4) {
+      if (pending_grid_) {
+        cancel_grid_placement();
+        return;
+      }
       if (plugin_point_input_.active()) {
         plugin_point_input_.cancel();
         request_redraw();
@@ -967,14 +1032,22 @@ void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
         set_tool(ToolMode::None);
         return;
       }
-      if (const std::uint64_t hit = pick_node_at(event->pos());
-          hit != 0 && document_->entity(hit) != nullptr) {
+      // 右键的菜单跟着光标下的东西走：构件 > 轴线 > 当前选中（构件）。
+      const std::uint64_t hit = pick_node_at(event->pos());
+      const std::uint64_t axis_hit = pick_grid_axis_at(event->pos());
+      if (hit != 0 && document_->entity(hit) != nullptr) {
+        document_->bim().grid().clear_selection();
         session_->clear_selection();
         session_->select(hit);
         request_redraw();
         emit selection_changed();
-      }
-      if (document_->selected_entity() != nullptr) {
+        show_entity_context_menu(mapToGlobal(event->pos()));
+      } else if (axis_hit != 0) {
+        if (!document_->bim().grid().axis_selected(axis_hit)) {
+          select_grid_axis(axis_hit, /*additive=*/false);
+        }
+        show_grid_context_menu(mapToGlobal(event->pos()));
+      } else if (document_->selected_entity() != nullptr) {
         show_entity_context_menu(mapToGlobal(event->pos()));
       }
     }
@@ -1041,6 +1114,13 @@ void DocumentViewport::keyPressEvent(QKeyEvent* event) {
       break;
     case Qt::Key_Return:
     case Qt::Key_Enter:
+      if (pending_grid_) {
+        // 和左键同义：落位在光标处（预览在哪儿就放哪儿）。
+        if (has_cursor_) {
+          commit_grid_placement(last_mouse_);
+        }
+        break;
+      }
       if (command_system_.accepts_confirm()) {
         (void)finish_pending_if_done(command_system_.confirm());
       }
@@ -1066,6 +1146,9 @@ void DocumentViewport::refuse_slab_outside_plan(bool popup) {
 }
 
 void DocumentViewport::set_tool(ToolMode mode) {
+  if (mode != ToolMode::None) {
+    clear_grid_placement();  // 换工具 = 放弃这一步放置
+  }
   unsetCursor();
   session_->set_tool(mode);
   cancel_plugin_point_input();
@@ -1088,6 +1171,7 @@ void DocumentViewport::arm_create(ToolMode mode, const CommandArgs& args) {
     emit tool_mode_changed(session_->tool_mode());
     return;
   }
+  clear_grid_placement();
   session_->set_tool(mode);
   cancel_plugin_point_input();
   command_system_.cancel();
@@ -1142,10 +1226,8 @@ void DocumentViewport::dispatch_tool_command(ToolMode mode) {
       log_error(r.error());
     }
   } else if (mode == ToolMode::Slab) {
-    if (auto r = session_->dispatch(
-            "create_slab",
-            {{"thickness", 0.2}, {"elevation", kDefaultWallHeight}});
-        !r) {
+    // 不传 elevation：按当前楼层层高落在本层顶（顶板）。
+    if (auto r = session_->dispatch("create_slab", {{"thickness", 0.2}}); !r) {
       log_error(r.error());
     }
   } else if (mode == ToolMode::Door) {
@@ -1212,7 +1294,9 @@ bool DocumentViewport::finish_pending_if_done(const Result<bool>& done) {
 
 void DocumentViewport::cancel_tool() {
   unsetCursor();
-  if (plugin_point_input_.active()) {
+  if (pending_grid_) {
+    cancel_grid_placement();
+  } else if (plugin_point_input_.active()) {
     cancel_plugin_point_input();
     request_redraw();
   } else if (session_->tool_mode() == ToolMode::None &&
@@ -1431,14 +1515,21 @@ void DocumentViewport::chamfer_selected(double distance) {
 
 void DocumentViewport::delete_selected() {
   const std::vector<std::uint64_t> ids = document_->selected_ids();
-  if (ids.empty()) {
-    return;
-  }
   for (const std::uint64_t id : ids) {
     if (document_->entity(id) == nullptr) {
       continue;
     }
     run_command("delete_entity", {{"entity_id", static_cast<std::int64_t>(id)}});
+  }
+  // 选中的轴线一次删掉：留表 = 原来的表去掉选中项，仍然一步撤销。
+  if (document_->bim().grid().has_selection()) {
+    std::vector<GridAxis> keep;
+    for (const GridAxis& axis : document_->bim().grid().axes()) {
+      if (!axis.selected) {
+        keep.push_back(axis);
+      }
+    }
+    apply_grid_settings(std::move(keep));
   }
   emit selection_changed();
 }
@@ -1451,6 +1542,57 @@ std::uint64_t DocumentViewport::pick_node_at(const QPoint& pos) const {
     return hit->node_id;
   }
   return 0;
+}
+
+float DocumentViewport::grid_plane_y() const {
+  return static_cast<float>(
+      document_->bim().storey_elevation(document_->bim().active_storey_id()));
+}
+
+std::uint64_t DocumentViewport::pick_grid_axis_at(const QPoint& pos) const {
+  if (!grid_visible_ || document_->bim().grid().empty()) {
+    return 0;
+  }
+  const QSize area = scene_area_size();
+  return pick_grid_axis_on_screen(document_->bim().grid().axes(), view_proj(),
+                                  static_cast<float>(area.width()),
+                                  static_cast<float>(area.height()), grid_plane_y(),
+                                  static_cast<float>(pos.x()), static_cast<float>(pos.y()),
+                                  kGridPickPixels);
+}
+
+// 轴网不进实体表，所以它的选中态存在 BIM 层（GridAxis::selected），这里只做语义：
+// 点一根 = 换成只选它；Shift 点 = 加选 / 减选。选轴网时把实体选择放掉，反之亦然，
+// 免得删除键同时打到两拨东西。
+void DocumentViewport::select_grid_axis(std::uint64_t axis_id, bool additive) {
+  Grid& grid = document_->bim().grid();
+  if (additive) {
+    if (grid.axis_selected(axis_id)) {
+      grid.deselect(axis_id);
+    } else {
+      grid.select(axis_id);
+    }
+  } else {
+    session_->clear_selection();
+    grid.clear_selection();
+    grid.select(axis_id);
+  }
+  request_redraw();
+  emit selection_changed();
+}
+
+void DocumentViewport::show_grid_context_menu(const QPoint& global_pos) {
+  const std::vector<std::uint64_t> ids = document_->bim().grid().selected_ids();
+  if (ids.empty()) {
+    return;
+  }
+  QMenu menu(this);
+  QAction* delete_act =
+      menu.addAction(tr("Delete %1 axes").arg(static_cast<int>(ids.size())));
+  delete_act->setShortcut(QKeySequence::Delete);
+  if (menu.exec(global_pos) == delete_act) {
+    delete_selected();
+  }
 }
 
 std::optional<std::pair<std::uint64_t, Vec3>> DocumentViewport::pick_wall_at(
@@ -1642,35 +1784,73 @@ void DocumentViewport::finish_box_select(const QPoint& pos, bool additive) {
       *document_, view_proj(), static_cast<float>(area.width()), static_cast<float>(area.height()),
       static_cast<float>(press_mouse_.x()), static_cast<float>(press_mouse_.y()),
       static_cast<float>(pos.x()), static_cast<float>(pos.y()), crossing);
+  // 轴网不进实体表，得单独框一次：轴线的投影线段跟框相交（crossing）/ 整段在框内（window）。
+  const std::vector<std::uint64_t> axis_ids =
+      grid_visible_ ? grid_axes_in_screen_rect(
+                          document_->bim().grid().axes(), view_proj(),
+                          static_cast<float>(area.width()), static_cast<float>(area.height()),
+                          grid_plane_y(), static_cast<float>(press_mouse_.x()),
+                          static_cast<float>(press_mouse_.y()), static_cast<float>(pos.x()),
+                          static_cast<float>(pos.y()), crossing)
+                    : std::vector<std::uint64_t>{};
+  Grid& grid = document_->bim().grid();
   if (!additive) {
     session_->clear_selection();
+    grid.clear_selection();
   }
   for (const std::uint64_t id : ids) {
     if (node_visible_in_view(id)) {
       session_->select(id);
     }
   }
+  for (const std::uint64_t id : axis_ids) {
+    grid.select(id);
+  }
   request_redraw();
   emit selection_changed();
 }
 
 void DocumentViewport::set_plan_view(bool plan, bool restore_perspective) {
-  if (plan_view_ == plan) {
-    if (tool_panel_) {
-      tool_panel_->set_plan_view(plan_view_);
-    }
-    return;
+  const bool had_floor_view = floor_view_.has_value();
+  const bool had_floor_filter = !hidden_floors_.empty();
+  apply_plan_view(plan, restore_perspective, /*animate=*/true);
+  if (had_floor_view && !floor_view_.has_value()) {
+    emit view_changed();  // 手动切到三维 = 离开楼层视图，回到全局三维
   }
-  if (plan) {
-    persp_yaw_ = camera_.yaw();
-    persp_pitch_ = camera_.pitch();
-    plan_view_ = true;
-    start_view_animation(0.f, kHalfPi, true);
-  } else {
-    plan_view_ = false;
-    camera_.set_orthographic(false);
-    if (restore_perspective) {
-      start_view_animation(persp_yaw_, persp_pitch_);
+  if (had_floor_filter && hidden_floors_.empty()) {
+    emit visibility_changed();
+  }
+}
+
+void DocumentViewport::apply_plan_view(bool plan, bool restore_perspective, bool animate) {
+  if (!plan && floor_view_.has_value()) {
+    // 回到三维就不再是"某一层的视图"：楼层过滤一并复位，等于全局三维。
+    floor_view_.reset();
+    hidden_floors_.clear();
+  }
+  if (plan_view_ != plan) {
+    if (plan) {
+      persp_yaw_ = camera_.yaw();
+      persp_pitch_ = camera_.pitch();
+      plan_view_ = true;
+      if (animate) {
+        start_view_animation(0.f, kHalfPi, true);
+      } else {
+        stop_view_animation();
+        camera_.set_yaw_pitch(0.f, kHalfPi);
+        camera_.set_orthographic(true);
+      }
+    } else {
+      plan_view_ = false;
+      camera_.set_orthographic(false);
+      if (restore_perspective) {
+        if (animate) {
+          start_view_animation(persp_yaw_, persp_pitch_);
+        } else {
+          stop_view_animation();
+          camera_.set_yaw_pitch(persp_yaw_, persp_pitch_);
+        }
+      }
     }
   }
   if (tool_panel_) {
@@ -1681,6 +1861,70 @@ void DocumentViewport::set_plan_view(bool plan, bool restore_perspective) {
     refuse_slab_outside_plan(false);
   }
   request_redraw();
+}
+
+// 全局三维：所有楼层都在、透视、框住整个模型。楼层管理页的第一行双击走这里。
+void DocumentViewport::open_global_view() {
+  refresh_floors();
+  const bool had_view = floor_view_.has_value();
+  const bool had_filter = !hidden_floors_.empty();
+  floor_view_.reset();
+  hidden_floors_.clear();
+  apply_plan_view(false, /*restore_perspective=*/true, /*animate=*/false);
+  frame_scene();
+  if (had_filter) {
+    emit visibility_changed();
+  }
+  if (had_view) {
+    emit view_changed();
+  }
+}
+
+// 某一层的视图：只留这一层 + 把它设为当前楼层 + 切到平面（2D）+ 相机框到这一层。
+// 楼层管理页里双击某个楼层走这里。
+void DocumentViewport::open_floor_view(std::size_t floor_index) {
+  refresh_floors();
+  if (floor_index >= floors_.size()) {
+    return;
+  }
+  const std::optional<std::size_t> before = floor_view_;
+  const bool had_filter = !hidden_floors_.empty();
+  stop_view_animation();
+  floor_view_ = floor_index;
+  // 当前楼层跟着视图走；按几何临时分出来的层没有楼层记录，就保持当前楼层不动。
+  const std::uint64_t storey_id = floors_[floor_index].storey_id;
+  const bool storey_changed =
+      storey_id != 0 && document_->bim().active_storey_id() != storey_id;
+  if (storey_changed) {
+    document_->set_active_storey(storey_id);
+  }
+  // 只留这一层：跨层构件碰到任意一个可见楼层就还看得见，和楼层面板一个口径。
+  std::unordered_set<int> hidden;
+  for (std::size_t i = 0; i < floors_.size(); ++i) {
+    if (i != floor_index) {
+      hidden.insert(static_cast<int>(i));
+    }
+  }
+  const bool filter_changed = hidden != hidden_floors_;
+  hidden_floors_ = std::move(hidden);
+  apply_plan_view(true, /*restore_perspective=*/false, /*animate=*/false);
+  Aabb box = document_->bounds();
+  if (box.valid()) {
+    // 平面视图下高度不参与投影，把框压到这一层只是为了框住这一层的平面范围。
+    box.min.y = floors_[floor_index].y_min;
+    box.max.y = floors_[floor_index].y_max;
+    camera_.frame_aabb(box);
+  }
+  request_redraw();
+  if (storey_changed) {
+    emit document_changed();
+  }
+  if (filter_changed || (had_filter && hidden_floors_.empty())) {
+    emit visibility_changed();
+  }
+  if (floor_view_ != before) {
+    emit view_changed();
+  }
 }
 
 void DocumentViewport::hide_selected() {
@@ -1711,12 +1955,17 @@ void DocumentViewport::isolate_selected() {
 }
 
 void DocumentViewport::show_all_visible() {
+  const bool had_view = floor_view_.has_value();
+  floor_view_.reset();
   hidden_ids_.clear();
   isolated_ids_.clear();
   hidden_kinds_.clear();
   hidden_floors_.clear();  // "全部显示"就是真的全部：楼层过滤也复位
   request_redraw();
   emit visibility_changed();
+  if (had_view) {
+    emit view_changed();
+  }
 }
 
 void DocumentViewport::set_kind_hidden(EntityKind kind, bool hidden) {
@@ -1877,6 +2126,39 @@ void DocumentViewport::toggle_floor_panel() {
   }
 }
 
+void DocumentViewport::toggle_floor_manager_panel() {
+  if (tool_panel_ != nullptr) {
+    tool_panel_->toggle_floor_manager_page();
+  }
+}
+
+void DocumentViewport::toggle_drawing_panel() {
+  if (tool_panel_ != nullptr) {
+    tool_panel_->toggle_drawing_page();
+  }
+}
+
+// 图纸清单是文档的一部分（随 .tdoc 存），但增删都由视口落笔：标脏 + 通知面板刷新。
+void DocumentViewport::add_document_drawings(const std::vector<std::string>& paths) {
+  bool changed = false;
+  for (const std::string& path : paths) {
+    changed = document_->add_drawing_path(path) || changed;
+  }
+  if (!changed) {
+    return;
+  }
+  document_->mark_dirty();
+  emit document_changed();
+}
+
+void DocumentViewport::remove_document_drawing(const std::string& path) {
+  if (!document_->remove_drawing_path(path)) {
+    return;
+  }
+  document_->mark_dirty();
+  emit document_changed();
+}
+
 std::vector<std::uint64_t> DocumentViewport::imported_node_ids() const {
   std::vector<std::uint64_t> ids;
   for (const SceneNode& node : document_->scene().nodes()) {
@@ -1896,6 +2178,10 @@ void DocumentViewport::refresh_floors() {
     } else {
       ++it;
     }
+  }
+  // 楼层表改了以后，之前打开的楼层视图可能已经指不到任何一层。
+  if (floor_view_.has_value() && *floor_view_ >= floors_.size()) {
+    floor_view_.reset();
   }
 }
 
@@ -1918,17 +2204,31 @@ void DocumentViewport::set_floor_hidden(std::size_t index, bool hidden) {
   if (!changed) {
     return;
   }
+  // 手动调楼层显隐 = 离开"某一层的视图"（那张视图只留一层，动了就不再是它）。
+  const bool had_view = floor_view_.has_value();
+  floor_view_.reset();
   request_redraw();
   emit visibility_changed();
+  if (had_view) {
+    emit view_changed();
+  }
 }
 
 void DocumentViewport::clear_floor_filter() {
+  const bool had_view = floor_view_.has_value();
+  floor_view_.reset();
   if (hidden_floors_.empty()) {
+    if (had_view) {
+      emit view_changed();
+    }
     return;
   }
   hidden_floors_.clear();
   request_redraw();
   emit visibility_changed();
+  if (had_view) {
+    emit view_changed();
+  }
 }
 
 bool DocumentViewport::node_visible_in_view(std::uint64_t id) const {
@@ -1945,18 +2245,12 @@ bool DocumentViewport::node_visible_in_view(std::uint64_t id) const {
   if (!hidden_floors_.empty()) {
     const SceneNode* node = document_->scene().find(id);
     if (node != nullptr) {
-      // 跨层的构件（墙、柱、导入网格）只要碰到任意一个可见楼层就还看得见。
-      bool visible = false;
-      for (std::size_t i = 0; i < floors_.size(); ++i) {
-        if (hidden_floors_.count(static_cast<int>(i)) != 0) {
-          continue;
-        }
-        if (viewport_floor_contains(floors_[i], node->world_bounds)) {
-          visible = true;
-          break;
-        }
-      }
-      if (!visible) {
+      // 归属优先看 Location 的楼层（在 1 楼画的顶板就是 1 楼的），没有归属的
+      // （导入网格、未归属构件、按几何临时分层的模型）才按几何楼层带算。
+      const Entity* entity = document_->entity(id);
+      const std::uint64_t storey_id =
+          entity != nullptr && entity->location != nullptr ? entity->location->storey_id() : 0;
+      if (!viewport_floor_allows(floors_, storey_id, node->world_bounds, hidden_floors_)) {
         return false;
       }
     }
@@ -1988,6 +2282,78 @@ void DocumentViewport::apply_grid_settings(std::vector<GridAxis> axes) {
   command_system_.push_executed(std::move(cmd));
   request_redraw();
   emit document_changed();
+}
+
+void DocumentViewport::begin_grid_placement(std::vector<GridAxis> axes, Vec2 anchor) {
+  // 表是空的就没得放（清空轴网），直接落位，别让用户白点一下。
+  if (axes.empty()) {
+    clear_grid_placement();
+    apply_grid_settings(std::move(axes));
+    return;
+  }
+  cancel_plugin_point_input();
+  command_system_.cancel();
+  if (session_->tool_mode() != ToolMode::None) {
+    set_tool(ToolMode::None);
+  }
+  pending_grid_ = GridPlacement{std::move(axes), anchor};  // 已有放置会话则换成新的
+  setCursor(Qt::CrossCursor);
+  setFocus();
+  request_redraw();
+  emit status_message(
+      tr("Click in the viewport to place the grid (Esc or right-click cancels)"));
+}
+
+void DocumentViewport::cancel_grid_placement() {
+  if (!pending_grid_) {
+    return;
+  }
+  clear_grid_placement();
+  request_redraw();
+  emit status_message(tr("Grid placement cancelled — nothing changed"));
+}
+
+void DocumentViewport::clear_grid_placement() {
+  if (!pending_grid_) {
+    return;
+  }
+  pending_grid_.reset();
+  unsetCursor();
+}
+
+Vec3 DocumentViewport::plan_position_at_storey(const QPoint& pos) const {
+  const Ray ray = ray_at(pos);
+  Vec3 hit = ray.origin + ray.direction * camera_.distance();
+  const float plane_y = grid_plane_y();
+  if (std::fabs(ray.direction.y) > 1e-6f) {
+    const float t = (plane_y - ray.origin.y) / ray.direction.y;
+    if (t > 0.f) {
+      hit = ray.origin + ray.direction * t;
+    }
+  }
+  return hit;
+}
+
+std::vector<GridAxis> DocumentViewport::ghost_grid_axes(const QPoint& pos) const {
+  if (!pending_grid_) {
+    return {};
+  }
+  const Vec3 drop = plan_position_at_storey(pos);
+  std::vector<GridAxis> ghost = pending_grid_->axes;
+  translate_grid(ghost, static_cast<double>(drop.x - pending_grid_->anchor.x),
+                 static_cast<double>(drop.z - pending_grid_->anchor.y));
+  return ghost;
+}
+
+void DocumentViewport::commit_grid_placement(const QPoint& pos) {
+  if (!pending_grid_) {
+    return;
+  }
+  std::vector<GridAxis> placed = ghost_grid_axes(pos);
+  const std::size_t count = placed.size();
+  clear_grid_placement();
+  apply_grid_settings(std::move(placed));
+  emit status_message(tr("Grid placed: %1 axes").arg(static_cast<int>(count)));
 }
 
 void DocumentViewport::set_grid_visible(bool visible) {

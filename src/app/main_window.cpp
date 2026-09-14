@@ -3,6 +3,7 @@
 #include "about_dialog.h"
 #include "app_settings.h"
 #include "bim/ifc_spatial_tree.h"
+#include "bim/wall_size.h"
 #include "engine/core/log.h"
 #include "engine/document/document_io.h"
 #include "engine/io/mesh_io.h"
@@ -32,6 +33,7 @@
 #include "texture_image.h"
 #include "texture_library_panel.h"
 #include "timing_panel.h"
+#include "toast.h"
 #include "engine/profile/timing_scope.h"
 
 #include <QByteArray>
@@ -572,9 +574,20 @@ MainWindow::MainWindow(QWidget* parent)
       return;
     }
     GridSettingsDialog dialog(vp->document().bim().grid().axes(), this);
-    if (dialog.exec() == QDialog::Accepted) {
-      vp->apply_grid_settings(dialog.axes());
+    if (dialog.exec() != QDialog::Accepted) {
+      return;
     }
+    if (!dialog.place_with_click()) {
+      vp->apply_grid_settings(dialog.axes());
+      return;
+    }
+    // 布置完还要落位：把轴网显示打开（否则放完看不见），再让视口接管点击放置。
+    vp->set_grid_visible(true);
+    if (grid_action_ != nullptr) {
+      const QSignalBlocker block(grid_action_);
+      grid_action_->setChecked(true);
+    }
+    vp->begin_grid_placement(dialog.axes(), dialog.placement_anchor());
   });
   addAction(grid_settings_action_);
 
@@ -619,6 +632,16 @@ MainWindow::MainWindow(QWidget* parent)
   // 左侧绘制设置面板：点构件 icon 后在此选子类型/参数，再"开始绘制"武装命令。
   // 默认收起——没有文档时它没有意义；用构件工具或"视图 · 面板 · 绘制设置"唤出。
   draw_panel_ = new DrawPanel(this);
+  // 板的"标高偏移"默认取当前楼层层高（= 本层顶板）。层高在文档里，面板拿不到，
+  // 这里注入；没有模型文档就退回默认层高。
+  draw_panel_->set_storey_height_provider([this] {
+    DocumentViewport* vp = current_viewport();
+    const Storey* active =
+        vp != nullptr ? vp->document().bim().find_storey(
+                            vp->document().bim().active_storey_id())
+                      : nullptr;
+    return active != nullptr && active->height > 0.0 ? active->height : kDefaultWallHeight;
+  });
   draw_dock_ = new QDockWidget(tr("Draw"), this);
   draw_dock_->setObjectName(QStringLiteral("drawDock"));
   draw_dock_->setWidget(draw_panel_);
@@ -657,6 +680,7 @@ MainWindow::MainWindow(QWidget* parent)
   auto* texture_toggle = texture_library_dock_->toggleViewAction();
   texture_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/texture_library.svg")));
   addAction(texture_toggle);
+
 
   handle_inspector_ = new HandleInspector(this);
   auto* handle_dock = new QDockWidget(tr("Handle Inspector"), this);
@@ -810,6 +834,30 @@ MainWindow::MainWindow(QWidget* parent)
   });
   addAction(floors_action);
   panels_group->add_action(floors_action);
+  // 楼层管理：同一列里的第三个功能页，把楼层当视图清单用（双击打开某层视图）。
+  auto* floor_views_action = new QAction(
+      ribbon_icon(QStringLiteral(":/icons/floor_manager.svg")), tr("Floor Views"), this);
+  floor_views_action->setToolTip(
+      tr("List the global 3D view and every floor; double-click one to open it"));
+  connect(floor_views_action, &QAction::triggered, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->toggle_floor_manager_panel();
+    }
+  });
+  addAction(floor_views_action);
+  panels_group->add_action(floor_views_action);
+  // 图纸管理：住在视口右侧工具列里的功能页（和构件显隐 / 楼层同一列）。
+  auto* drawings_action =
+      new QAction(ribbon_icon(QStringLiteral(":/icons/drawing.svg")), tr("Drawings"), this);
+  drawings_action->setToolTip(
+      tr("Manage reference drawings (DWF / DWFx / DXF / PDF…): add, delete, double-click to view"));
+  connect(drawings_action, &QAction::triggered, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->toggle_drawing_panel();
+    }
+  });
+  addAction(drawings_action);
+  panels_group->add_action(drawings_action);
   panels_group->add_action(draw_toggle_);
   panels_group->add_action(property_toggle);
   panels_group->add_action(texture_toggle);
@@ -1347,6 +1395,8 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
   connect(vp, &DocumentViewport::document_changed, this, &MainWindow::refresh_handle_inspector);
   connect(vp, &DocumentViewport::document_changed, this,
           &MainWindow::refresh_texture_library_panel);
+  connect(vp, &DocumentViewport::drawing_open_requested, this,
+          [this](const QString& path) { open_drawing_tab(path); });
   connect(vp, &DocumentViewport::selection_changed, this,
           &MainWindow::refresh_texture_library_panel);
   connect(vp, &DocumentViewport::plugin_point_input_changed, this,
@@ -1958,8 +2008,8 @@ bool MainWindow::write_tdoc_document(const QString& path) {
 }
 
 void MainWindow::notify_save_success(const QString& path) {
-  statusBar()->showMessage(tr("Saved successfully: %1").arg(path), 8000);
-  QMessageBox::information(this, tr("Save"), tr("Saved successfully:\n%1").arg(path));
+  // 保存成功只飘一条提示：不弹窗、不用点「确定」，几秒后自己消失。
+  Toast::show_message(stack_, tr("Saved successfully: %1").arg(path), ToastLevel::Info);
 }
 
 bool MainWindow::save_file() {
@@ -1967,7 +2017,8 @@ bool MainWindow::save_file() {
   if (!vp) {
     if (current_drawing_view() != nullptr) {
       // 图纸是只读参考底图，没有可回写的内容。
-      statusBar()->showMessage(tr("Reference drawings are read-only — nothing to save."), 5000);
+      Toast::show_message(stack_, tr("Reference drawings are read-only — nothing to save."),
+                          ToastLevel::Warning);
       return false;
     }
     QMessageBox::information(this, tr("Save"), tr("Open a document first."));
@@ -1990,7 +2041,8 @@ bool MainWindow::save_file_as() {
   auto* vp = current_viewport();
   if (!vp) {
     if (current_drawing_view() != nullptr) {
-      statusBar()->showMessage(tr("Reference drawings are read-only — nothing to save."), 5000);
+      Toast::show_message(stack_, tr("Reference drawings are read-only — nothing to save."),
+                          ToastLevel::Warning);
       return false;
     }
     QMessageBox::information(this, tr("Save"), tr("Open a document first."));

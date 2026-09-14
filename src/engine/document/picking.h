@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bim/grid_axis.h"
 #include "engine/document/document.h"
 #include "engine/math/camera.h"
 #include "engine/math/math.h"
@@ -50,5 +51,17 @@ Ray camera_ray(const TurntableCamera& camera, float aspect, float mouse_x, float
 [[nodiscard]] std::vector<std::uint64_t> nodes_in_screen_rect(
     const Document& doc, const Mat4& view_proj, float width, float height, float x0, float y0,
     float x1, float y1, bool crossing);
+
+// 轴网点选：轴线画在平面标高 plane_y 上，按那个高度投到屏幕后比**屏幕距离**——
+// 这样远处/缩小后的轴仍然点得中，和肉眼看到的一致。tol_pixels 内没轴就返回 0。
+[[nodiscard]] std::uint64_t pick_grid_axis_on_screen(const std::vector<GridAxis>& axes,
+                                                     const Mat4& view_proj, float width,
+                                                     float height, float plane_y, float px,
+                                                     float py, float tol_pixels);
+
+// 轴网框选：轴线投影后与矩形相交（crossing）/ 两端都落在框内（window）。
+[[nodiscard]] std::vector<std::uint64_t> grid_axes_in_screen_rect(
+    const std::vector<GridAxis>& axes, const Mat4& view_proj, float width, float height,
+    float plane_y, float x0, float y0, float x1, float y1, bool crossing);
 
 }  // namespace tamias
