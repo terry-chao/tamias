@@ -7,15 +7,27 @@
 ```
 src/
 ├── app/         Qt 壳：窗口、视口、面板、工具条（只发命令、只显示结果）
+│   ├── core/     应用级服务：设置、主题、翻译、最近文件、后端登记
+│   ├── shell/    窗口骨架：主窗口、欢迎页、Ribbon、通用对话框
+│   ├── viewport/ 三维视口与其叠加层（ViewCube、框选、工具列、楼层带）
+│   ├── bim/      构件的界面：属性 / 绘制 / 显隐 / 楼层 / 轴网面板与规格
+│   ├── drawing/  二维图纸：加载、视图、图纸管理页
+│   ├── texture/  贴图：库面板、检查对话框、图片解码
+│   └── debug/    调试诊断：句柄检查、渲染场景检查、金样、计时
 ├── command/     命令系统：每个编辑操作 = 一个可撤销的 Command
+│   ├── core/    命令接口、撤销栈、命令系统、登记入口
+│   ├── create/  创建：构件 / 曲线 / 基础体 / 轴网 / 楼层
+│   ├── edit/    编辑：改特征参数 / 夹点 / 移动 / 定位 / 布尔 / 材质 / 贴图
+│   ├── delete/  删除：构件、轴网
+│   └── import/  导入：图纸、贴图
 ├── plugin/      C# 插件宿主：HostApi C ABI、hostfxr、Ribbon「插件」页
 ├── entity/      参数化实体：BoxEntity、WallEntity、DoorEntity…（写特征树配方）
-│   ├── core/          实体基类、夹点、识别色
-│   ├── family/        族实体：FamilyEntity + 扣减（开洞）实体（门、窗）
-│   ├── architectural/ 建筑专业：墙、幕墙（宿主构件）
-│   ├── structural/    结构专业：梁、柱、板、结构墙、基础
-│   ├── sketch/        草图曲线：直线、折线、圆、圆弧、贝塞尔、矩形、B 样条、NURBS
-│   └── primitive/     基础体：盒子、圆柱
+│   ├── core/      实体基类、夹点、识别色
+│   ├── family/    族实体：FamilyEntity + 扣减（开洞）实体（门、窗）
+│   │   ├── architectural/ 建筑族：墙、幕墙（宿主构件）
+│   │   └── structural/    结构族：梁、柱、板、结构墙、基础
+│   ├── sketch/    草图曲线：直线、折线、圆、圆弧、贝塞尔、矩形、B 样条、NURBS
+│   └── primitive/ 基础体：盒子、圆柱
 ├── bim/         BIM 业务层：楼层、宿主、关联关系、IFC 空间结构
 ├── engine/
 │   ├── core/    日志、结果类型、原生窗口句柄

@@ -1,6 +1,6 @@
 #include "bim/drawing_import.h"
-#include "command/command_system.h"
-#include "command/import_drawing_command.h"
+#include "command/core/command_system.h"
+#include "command/import/import_drawing_command.h"
 #include "engine/document/document.h"
 #include "engine/drawing/dxf_reader.h"
 

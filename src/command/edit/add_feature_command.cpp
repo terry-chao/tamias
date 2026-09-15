@@ -1,0 +1,56 @@
+#include "command/edit/add_feature_command.h"
+
+#include "entity/core/entity_grip.h"
+#include "engine/modeling/edge_fingerprint.h"
+#include "engine/modeling/geom_builder.h"
+
+namespace tamias {
+
+AddFeatureCommand::AddFeatureCommand(Document& document, std::uint64_t entity_id, FeatureKind kind,
+                                     std::unordered_map<std::string, double> params)
+    : document_(&document),
+      entity_id_(entity_id),
+      kind_(kind),
+      params_(std::move(params)) {}
+
+Result<void> AddFeatureCommand::apply(bool add) {
+  Entity* entity = document_->entity(entity_id_);
+  if (entity == nullptr) {
+    return Err("AddFeatureCommand: entity not found");
+  }
+  const FeatureModel saved = entity->model;  // 求值失败时回滚
+  if (add) {
+    if (entity->model.features().empty()) {
+      return Err("AddFeatureCommand: entity has no geometry");
+    }
+    const std::uint64_t input = entity->model.output_feature()->id;
+    Feature& added = entity->model.add_feature(kind_, {input}, params_);
+    feature_id_ = added.id;
+    // 圆角 / 倒角：连「这条边长什么样」一起记下来，上游改了才认得回来。
+    if (kind_ == FeatureKind::Fillet || kind_ == FeatureKind::Chamfer) {
+      refresh_edge_fingerprint(entity->model, feature_id_);
+    }
+  } else {
+    entity->model.remove_feature(feature_id_);
+  }
+
+  auto mesh = geometry_builder().build(entity->model, 0.05);
+  if (!mesh) {
+    entity->model = saved;
+    return Err(mesh.error());
+  }
+  if (!document_->replace_entity_mesh(entity_id_, std::move(*mesh))) {
+    entity->model = saved;
+    return Err("AddFeatureCommand: mesh asset not found");
+  }
+  sync_entity_grips(*entity);
+  document_->recompute_scene();
+  document_->mark_dirty();
+  return {};
+}
+
+Result<void> AddFeatureCommand::execute() { return apply(true); }
+void AddFeatureCommand::undo() { (void)apply(false); }
+void AddFeatureCommand::redo() { (void)apply(true); }
+
+}  // namespace tamias

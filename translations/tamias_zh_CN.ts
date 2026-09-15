@@ -8,7 +8,7 @@
         <translation>翻模完成：墙 %1、柱 %2、门窗 %3</translation>
     </message>
     <message>
-        <location filename="../src/app/document_viewport.cpp"/>
+        <location filename="../src/app/viewport/document_viewport.cpp"/>
         <source>X %1  Y %2  Z %3</source>
         <translation>X %1  Y %2  Z %3</translation>
     </message>
@@ -167,82 +167,82 @@
 <context>
     <name>tamias::HomePage</name>
     <message>
-        <location filename="../src/app/home_page.cpp" line="162"/>
+        <location filename="../src/app/shell/home_page.cpp" line="162"/>
         <source>Unknown</source>
         <translation>未知</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="166"/>
+        <location filename="../src/app/shell/home_page.cpp" line="166"/>
         <source>Today, %1</source>
         <translation>今天，%1</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="170"/>
+        <location filename="../src/app/shell/home_page.cpp" line="170"/>
         <source>Yesterday, %1</source>
         <translation>昨天，%1</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="386"/>
+        <location filename="../src/app/shell/home_page.cpp" line="386"/>
         <source>Remove from recent</source>
         <translation>从最近打开中移除</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="436"/>
+        <location filename="../src/app/shell/home_page.cpp" line="436"/>
         <source>Missing</source>
         <translation>文件缺失</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="242"/>
+        <location filename="../src/app/shell/home_page.cpp" line="242"/>
         <source>CAD Viewer</source>
         <translation>CAD 查看器</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="248"/>
+        <location filename="../src/app/shell/home_page.cpp" line="248"/>
         <source>Open…</source>
         <translation>打开…</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="255"/>
+        <location filename="../src/app/shell/home_page.cpp" line="255"/>
         <source>Open Demo</source>
         <translation>打开演示</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="261"/>
+        <location filename="../src/app/shell/home_page.cpp" line="261"/>
         <source>Settings</source>
         <translation>设置</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="270"/>
+        <location filename="../src/app/shell/home_page.cpp" line="270"/>
         <source>Version %1</source>
         <translation>版本 %1</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="285"/>
+        <location filename="../src/app/shell/home_page.cpp" line="285"/>
         <source>Open Documents</source>
         <translation>已打开文档</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="297"/>
+        <location filename="../src/app/shell/home_page.cpp" line="297"/>
         <source>Recent Files</source>
         <translation>最近打开</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="301"/>
+        <location filename="../src/app/shell/home_page.cpp" line="301"/>
         <source>Double-click to open · Right-click for more</source>
         <translation>双击打开 · 右键更多操作</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="384"/>
+        <location filename="../src/app/shell/home_page.cpp" line="384"/>
         <source>Open</source>
         <translation>打开</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="339"/>
+        <location filename="../src/app/shell/home_page.cpp" line="339"/>
         <source>No recent files</source>
         <translation>暂无最近文件</translation>
     </message>
     <message>
-        <location filename="../src/app/home_page.cpp" line="343"/>
+        <location filename="../src/app/shell/home_page.cpp" line="343"/>
         <source>Use Open above to load OBJ / GLB / STEP / TDOC files.</source>
         <translation>使用上方「打开」加载 OBJ / GLB / STEP / TDOC 文件。</translation>
     </message>
@@ -354,137 +354,137 @@
         <translation>文件已打开。</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="188"/>
-        <location filename="../src/app/main_window.cpp" line="1387"/>
-        <location filename="../src/app/main_window.cpp" line="1406"/>
+        <location filename="../src/app/shell/main_window.cpp" line="188"/>
+        <location filename="../src/app/shell/main_window.cpp" line="1387"/>
+        <location filename="../src/app/shell/main_window.cpp" line="1406"/>
         <source>Open Drawing</source>
         <translation>打开图纸</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="191"/>
+        <location filename="../src/app/shell/main_window.cpp" line="191"/>
         <source>Open a reference drawing (PDF / DXF / SVG / image) in a 2D page</source>
         <translation>打开参考图纸（PDF / DXF / SVG / 图片），以二维图纸页显示</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="1368"/>
+        <location filename="../src/app/shell/main_window.cpp" line="1368"/>
         <source>All Supported (*.tdoc *.trscn *.gltf *.glb *.obj *.step *.stp *.iges *.igs *.brep *.ifc *.pdf *.dxf *.svg *.png *.jpg *.jpeg *.bmp *.tif *.tiff);;Tamias (*.tdoc);;Render Scene (*.trscn);;Meshes (*.gltf *.glb *.obj);;CAD (*.step *.stp *.iges *.igs *.brep);;IFC (*.ifc);;Drawings (*.pdf *.dxf *.svg *.png *.jpg *.jpeg *.bmp *.tif *.tiff);;glTF (*.gltf *.glb);;OBJ (*.obj);;STEP (*.step *.stp);;IGES (*.iges *.igs);;BREP (*.brep)</source>
         <translation>所有支持的类型 (*.tdoc *.trscn *.gltf *.glb *.obj *.step *.stp *.iges *.igs *.brep *.ifc *.pdf *.dxf *.svg *.png *.jpg *.jpeg *.bmp *.tif *.tiff);;Tamias 文档 (*.tdoc);;渲染场景 (*.trscn);;网格 (*.gltf *.glb *.obj);;CAD (*.step *.stp *.iges *.igs *.brep);;IFC (*.ifc);;图纸 (*.pdf *.dxf *.svg *.png *.jpg *.jpeg *.bmp *.tif *.tiff);;glTF (*.gltf *.glb);;OBJ (*.obj);;STEP (*.step *.stp);;IGES (*.iges *.igs);;BREP (*.brep)</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="1426"/>
+        <location filename="../src/app/shell/main_window.cpp" line="1426"/>
         <source>Opened drawing %1 (%2) — wheel to zoom, drag to pan, F to fit</source>
         <translation>已打开图纸 %1（%2）—— 滚轮缩放，拖拽平移，F 适配窗口</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="1720"/>
-        <location filename="../src/app/main_window.cpp" line="1743"/>
+        <location filename="../src/app/shell/main_window.cpp" line="1720"/>
+        <location filename="../src/app/shell/main_window.cpp" line="1743"/>
         <source>Reference drawings are read-only — nothing to save.</source>
         <translation>参考图纸是只读底图，没有需要保存的内容。</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="199"/>
+        <location filename="../src/app/shell/main_window.cpp" line="199"/>
         <source>&amp;File</source>
         <translation>文件(&amp;F)</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="97"/>
+        <location filename="../src/app/shell/main_window.cpp" line="97"/>
         <source>Open File</source>
         <translation>打开文件</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="99"/>
+        <location filename="../src/app/shell/main_window.cpp" line="99"/>
         <source>Open a model file</source>
         <translation>打开模型文件</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="104"/>
-        <location filename="../src/app/main_window.cpp" line="645"/>
-        <location filename="../src/app/main_window.cpp" line="651"/>
-        <location filename="../src/app/main_window.cpp" line="662"/>
-        <location filename="../src/app/main_window.cpp" line="683"/>
-        <location filename="../src/app/main_window.cpp" line="699"/>
-        <location filename="../src/app/main_window.cpp" line="726"/>
-        <location filename="../src/app/main_window.cpp" line="732"/>
-        <location filename="../src/app/main_window.cpp" line="749"/>
+        <location filename="../src/app/shell/main_window.cpp" line="104"/>
+        <location filename="../src/app/shell/main_window.cpp" line="645"/>
+        <location filename="../src/app/shell/main_window.cpp" line="651"/>
+        <location filename="../src/app/shell/main_window.cpp" line="662"/>
+        <location filename="../src/app/shell/main_window.cpp" line="683"/>
+        <location filename="../src/app/shell/main_window.cpp" line="699"/>
+        <location filename="../src/app/shell/main_window.cpp" line="726"/>
+        <location filename="../src/app/shell/main_window.cpp" line="732"/>
+        <location filename="../src/app/shell/main_window.cpp" line="749"/>
         <source>Save</source>
         <translation>保存</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp"/>
+        <location filename="../src/app/shell/main_window.cpp"/>
         <source>Unsaved changes</source>
         <translation>未保存的更改</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp"/>
+        <location filename="../src/app/shell/main_window.cpp"/>
         <source>Do you want to save changes to "%1"?</source>
         <translation>是否保存对“%1”的更改？</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp"/>
+        <location filename="../src/app/shell/main_window.cpp"/>
         <source>Don't Save</source>
         <translation>不保存</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp"/>
+        <location filename="../src/app/shell/main_window.cpp"/>
         <source>Cancel</source>
         <translation>取消</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="113"/>
+        <location filename="../src/app/shell/main_window.cpp" line="113"/>
         <source>Save As…</source>
         <translation>另存为…</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="645"/>
-        <location filename="../src/app/main_window.cpp" line="683"/>
-        <location filename="../src/app/main_window.cpp" line="732"/>
-        <location filename="../src/app/main_window.cpp" line="749"/>
+        <location filename="../src/app/shell/main_window.cpp" line="645"/>
+        <location filename="../src/app/shell/main_window.cpp" line="683"/>
+        <location filename="../src/app/shell/main_window.cpp" line="732"/>
+        <location filename="../src/app/shell/main_window.cpp" line="749"/>
         <source>Open a document first.</source>
         <translation>请先打开文档。</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="769"/>
+        <location filename="../src/app/shell/main_window.cpp" line="769"/>
         <source>Save As</source>
         <translation>另存为</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="124"/>
+        <location filename="../src/app/shell/main_window.cpp" line="124"/>
         <source>Frame all geometry in the view</source>
         <translation>框显视图中的全部几何</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="163"/>
-        <location filename="../src/app/main_window.cpp" line="392"/>
+        <location filename="../src/app/shell/main_window.cpp" line="163"/>
+        <location filename="../src/app/shell/main_window.cpp" line="392"/>
         <source>Settings</source>
         <translation>设置</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="165"/>
+        <location filename="../src/app/shell/main_window.cpp" line="165"/>
         <source>Open settings</source>
         <translation>打开设置</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="253"/>
+        <location filename="../src/app/shell/main_window.cpp" line="253"/>
         <source>Wireframe</source>
         <translation>线框</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="254"/>
+        <location filename="../src/app/shell/main_window.cpp" line="254"/>
         <source>Shaded</source>
         <translation>着色</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="255"/>
+        <location filename="../src/app/shell/main_window.cpp" line="255"/>
         <source>Realistic</source>
         <translation>真实感</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="256"/>
+        <location filename="../src/app/shell/main_window.cpp" line="256"/>
         <source>Render mode</source>
         <translation>渲染模式</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="263"/>
+        <location filename="../src/app/shell/main_window.cpp" line="263"/>
         <source>&amp;Create</source>
         <translation>创建(&amp;C)</translation>
     </message>
@@ -509,27 +509,27 @@
         <translation>修改选中的构件</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="271"/>
+        <location filename="../src/app/shell/main_window.cpp" line="271"/>
         <source>New Parametric Demo (Wall)</source>
         <translation>新建参数化演示（墙）</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="272"/>
+        <location filename="../src/app/shell/main_window.cpp" line="272"/>
         <source>Create a parametric wall; press [ or ] to change thickness</source>
         <translation>创建参数化墙；按 [ 或 ] 调整墙厚</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="277"/>
+        <location filename="../src/app/shell/main_window.cpp" line="277"/>
         <source>Main</source>
         <translation>主工具栏</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="164"/>
+        <location filename="../src/app/shell/main_window.cpp" line="164"/>
         <source>Ctrl+,</source>
         <translation>Ctrl+,</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="90"/>
+        <location filename="../src/app/shell/main_window.cpp" line="90"/>
         <source>New</source>
         <translation>新建</translation>
     </message>
@@ -542,106 +542,106 @@
         <translation>新建文档</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="106"/>
+        <location filename="../src/app/shell/main_window.cpp" line="106"/>
         <source>Save the document</source>
         <translation>保存文档</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="115"/>
+        <location filename="../src/app/shell/main_window.cpp" line="115"/>
         <source>Save the document to a new file</source>
         <translation>将文档另存为新文件</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp"/>
+        <location filename="../src/app/shell/main_window.cpp"/>
         <source>Save Render Scene Snapshot</source>
         <translation>保存渲染场景快照</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp"/>
+        <location filename="../src/app/shell/main_window.cpp"/>
         <source>Write the current view to a .trscn and open it as a read-only snapshot</source>
         <translation>把当前视口写成 .trscn 并立刻打开只读快照</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp"/>
+        <location filename="../src/app/shell/main_window.cpp"/>
         <source>Export</source>
         <translation>导出</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp"/>
+        <location filename="../src/app/shell/main_window.cpp"/>
         <source>Render Scene (*.trscn)</source>
         <translation>渲染场景 (*.trscn)</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp"/>
+        <location filename="../src/app/shell/main_window.cpp"/>
         <source>Saved snapshot %1  digest=%2</source>
         <translation>已保存快照 %1  digest=%2</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp"/>
+        <location filename="../src/app/shell/main_window.cpp"/>
         <source>Render scene exported</source>
         <translation>渲染场景已导出</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp"/>
+        <location filename="../src/app/shell/main_window.cpp"/>
         <source>Wrote render scene: %1</source>
         <translation>已写入渲染场景：%1</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp"/>
+        <location filename="../src/app/shell/main_window.cpp"/>
         <source>Loaded render scene %1 (read-only draw list)</source>
         <translation>已加载渲染场景 %1（只读绘制清单）</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp"/>
+        <location filename="../src/app/shell/main_window.cpp"/>
         <source>Pin Render Scene for Tests</source>
         <translation>钉进测试</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp"/>
+        <location filename="../src/app/shell/main_window.cpp"/>
         <source>Write the current view to assets/samples/render/&lt;name&gt;/ and run RenderSceneGolden*</source>
         <translation>把当前视图写入 assets/samples/render/&lt;name&gt;/，并跑 RenderSceneGolden*</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp"/>
+        <location filename="../src/app/shell/main_window.cpp"/>
         <source>Pin</source>
         <translation>钉入</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp"/>
+        <location filename="../src/app/shell/main_window.cpp"/>
         <source>Source tree not found. Pin is for a local checkout:
 %1</source>
         <translation>找不到源码目录。钉入仅适用于本地检出：
 %1</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp"/>
+        <location filename="../src/app/shell/main_window.cpp"/>
         <source>Fixture name (letters, digits, '-' '_'; saved under assets/samples/render/):</source>
         <translation>夹具名（字母数字、'-'、'_'；保存到 assets/samples/render/）：</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp"/>
+        <location filename="../src/app/shell/main_window.cpp"/>
         <source>Name must start with a letter and use only A–Z, a–z, 0–9, '-' or '_'.</source>
         <translation>名称必须以字母开头，且只能包含 A–Z、a–z、0–9、'-' 或 '_'。</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp"/>
+        <location filename="../src/app/shell/main_window.cpp"/>
         <source>Golden "%1" already exists.
 Overwrite scene.trscn and sidecar files?</source>
         <translation>金样“%1”已存在。
 是否覆盖 scene.trscn 及附属文件？</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp"/>
+        <location filename="../src/app/shell/main_window.cpp"/>
         <source>Pinned golden %1  digest=%2</source>
         <translation>已钉入金样 %1  digest=%2</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp"/>
+        <location filename="../src/app/shell/main_window.cpp"/>
         <source>Render scene pinned</source>
         <translation>渲染场景已钉入</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="134"/>
+        <location filename="../src/app/shell/main_window.cpp" line="134"/>
         <source>Wall</source>
         <translation>墙</translation>
     </message>
@@ -774,218 +774,218 @@ Overwrite scene.trscn and sidecar files?</source>
         <translation>创建贝塞尔：点击控制点，Enter 或双击结束</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="169"/>
+        <location filename="../src/app/shell/main_window.cpp" line="169"/>
         <source>&amp;Home</source>
         <translation>首页(&amp;H)</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="170"/>
+        <location filename="../src/app/shell/main_window.cpp" line="170"/>
         <source>Back to the welcome page</source>
         <translation>返回欢迎页</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="175"/>
+        <location filename="../src/app/shell/main_window.cpp" line="175"/>
         <source>&amp;Undo</source>
         <translation>撤销(&amp;U)</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="185"/>
+        <location filename="../src/app/shell/main_window.cpp" line="185"/>
         <source>&amp;Redo</source>
         <translation>重做(&amp;R)</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="208"/>
+        <location filename="../src/app/shell/main_window.cpp" line="208"/>
         <source>&amp;Edit</source>
         <translation>编辑(&amp;E)</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="221"/>
+        <location filename="../src/app/shell/main_window.cpp" line="221"/>
         <source>&amp;Wireframe</source>
         <translation>线框(&amp;W)</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="223"/>
+        <location filename="../src/app/shell/main_window.cpp" line="223"/>
         <source>Ctrl+1</source>
         <translation>Ctrl+1</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="224"/>
+        <location filename="../src/app/shell/main_window.cpp" line="224"/>
         <source>Line drawing — edges only</source>
         <translation>仅显示边线</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="231"/>
+        <location filename="../src/app/shell/main_window.cpp" line="231"/>
         <source>&amp;Shaded</source>
         <translation>着色(&amp;S)</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="234"/>
+        <location filename="../src/app/shell/main_window.cpp" line="234"/>
         <source>Ctrl+2</source>
         <translation>Ctrl+2</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="235"/>
+        <location filename="../src/app/shell/main_window.cpp" line="235"/>
         <source>Simple shaded solid display</source>
         <translation>简单着色实体显示</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="242"/>
+        <location filename="../src/app/shell/main_window.cpp" line="242"/>
         <source>&amp;Realistic</source>
         <translation>真实感(&amp;R)</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="244"/>
+        <location filename="../src/app/shell/main_window.cpp" line="244"/>
         <source>Ctrl+3</source>
         <translation>Ctrl+3</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="245"/>
+        <location filename="../src/app/shell/main_window.cpp" line="245"/>
         <source>Lit display with specular highlights</source>
         <translation>带高光的光照显示</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="595"/>
+        <location filename="../src/app/shell/main_window.cpp" line="595"/>
         <source>All Supported (*.tdoc *.gltf *.glb *.obj);;Tamias (*.tdoc);;Meshes (*.gltf *.glb *.obj);;glTF (*.gltf *.glb);;OBJ (*.obj)</source>
         <translation>全部支持 (*.tdoc *.gltf *.glb *.obj);;Tamias (*.tdoc);;网格 (*.gltf *.glb *.obj);;glTF (*.gltf *.glb);;OBJ (*.obj)</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="601"/>
+        <location filename="../src/app/shell/main_window.cpp" line="601"/>
         <source>All Supported (*.tdoc *.trscn *.gltf *.glb *.obj *.step *.stp *.iges *.igs *.brep *.ifc);;Tamias (*.tdoc);;Render Scene (*.trscn);;Meshes (*.gltf *.glb *.obj);;CAD (*.step *.stp *.iges *.igs *.brep);;IFC (*.ifc);;glTF (*.gltf *.glb);;OBJ (*.obj);;STEP (*.step *.stp);;IGES (*.iges *.igs);;BREP (*.brep)</source>
         <translation>全部支持 (*.tdoc *.trscn *.gltf *.glb *.obj *.step *.stp *.iges *.igs *.brep *.ifc);;Tamias (*.tdoc);;渲染场景 (*.trscn);;网格 (*.gltf *.glb *.obj);;CAD (*.step *.stp *.iges *.igs *.brep);;IFC (*.ifc);;glTF (*.gltf *.glb);;OBJ (*.obj);;STEP (*.step *.stp);;IGES (*.iges *.igs);;BREP (*.brep)</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="651"/>
+        <location filename="../src/app/shell/main_window.cpp" line="651"/>
         <source>The document has no mesh to export.</source>
         <translation>文档没有可导出的网格。</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="725"/>
+        <location filename="../src/app/shell/main_window.cpp" line="725"/>
         <source>Saved successfully: %1</source>
         <translation>保存成功：%1</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="770"/>
+        <location filename="../src/app/shell/main_window.cpp" line="770"/>
         <source>Tamias Document (*.tdoc);;Render Scene (*.trscn);;OBJ Mesh Export (*.obj)</source>
         <translation>Tamias 文档 (*.tdoc);;渲染场景 (*.trscn);;OBJ 网格导出 (*.obj)</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="212"/>
+        <location filename="../src/app/shell/main_window.cpp" line="212"/>
         <source>&amp;View</source>
         <translation>视图(&amp;V)</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="217"/>
+        <location filename="../src/app/shell/main_window.cpp" line="217"/>
         <source>&amp;Display Mode</source>
         <translation>显示模式(&amp;D)</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="122"/>
+        <location filename="../src/app/shell/main_window.cpp" line="122"/>
         <source>&amp;Frame All</source>
         <translation>全部框显(&amp;F)</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="123"/>
+        <location filename="../src/app/shell/main_window.cpp" line="123"/>
         <source>F</source>
         <translation>F</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="268"/>
+        <location filename="../src/app/shell/main_window.cpp" line="268"/>
         <source>&amp;Tools</source>
         <translation>工具(&amp;T)</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="194"/>
+        <location filename="../src/app/shell/main_window.cpp" line="194"/>
         <source>E&amp;xit</source>
         <translation>退出(&amp;X)</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="297"/>
+        <location filename="../src/app/shell/main_window.cpp" line="297"/>
         <source>Ready — Open a model</source>
         <translation>就绪 — 打开模型</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="386"/>
+        <location filename="../src/app/shell/main_window.cpp" line="386"/>
         <source>Language changes take effect after restarting Tamias.</source>
         <translation>语言更改将在重启 Tamias 后生效。</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="389"/>
+        <location filename="../src/app/shell/main_window.cpp" line="389"/>
         <source>Render backend changes take effect after restarting Tamias.</source>
         <translation>渲染后端更改将在重启 Tamias 后生效。</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="402"/>
+        <location filename="../src/app/shell/main_window.cpp" line="402"/>
         <source>Render</source>
         <translation>渲染</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="403"/>
+        <location filename="../src/app/shell/main_window.cpp" line="403"/>
         <source>Failed to create %1 render thread.</source>
         <translation>无法创建 %1 渲染线程。</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="408"/>
+        <location filename="../src/app/shell/main_window.cpp" line="408"/>
         <source>Upload</source>
         <translation>上传</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="441"/>
+        <location filename="../src/app/shell/main_window.cpp" line="441"/>
         <source>Demo</source>
         <translation>演示</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="442"/>
+        <location filename="../src/app/shell/main_window.cpp" line="442"/>
         <source>Demo model not found:
 %1</source>
         <translation>找不到演示模型：
 %1</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="458"/>
+        <location filename="../src/app/shell/main_window.cpp" line="458"/>
         <source>Parametric Demo</source>
         <translation>参数化演示</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="506"/>
-        <location filename="../src/app/main_window.cpp" line="515"/>
-        <location filename="../src/app/main_window.cpp" line="548"/>
-        <location filename="../src/app/main_window.cpp" line="553"/>
-        <location filename="../src/app/main_window.cpp" line="559"/>
-        <location filename="../src/app/main_window.cpp" line="567"/>
-        <location filename="../src/app/main_window.cpp" line="608"/>
+        <location filename="../src/app/shell/main_window.cpp" line="506"/>
+        <location filename="../src/app/shell/main_window.cpp" line="515"/>
+        <location filename="../src/app/shell/main_window.cpp" line="548"/>
+        <location filename="../src/app/shell/main_window.cpp" line="553"/>
+        <location filename="../src/app/shell/main_window.cpp" line="559"/>
+        <location filename="../src/app/shell/main_window.cpp" line="567"/>
+        <location filename="../src/app/shell/main_window.cpp" line="608"/>
         <source>Open</source>
         <translation>打开</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="506"/>
+        <location filename="../src/app/shell/main_window.cpp" line="506"/>
         <source>File not found:
 %1</source>
         <translation>找不到文件：
 %1</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="548"/>
+        <location filename="../src/app/shell/main_window.cpp" line="548"/>
         <source>OCCT ShapeOps is not registered.</source>
         <translation>OCCT ShapeOps 未注册。</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="560"/>
+        <location filename="../src/app/shell/main_window.cpp" line="560"/>
         <source>This build was compiled without OCCT. Set OCCT_ROOT and rebuild.</source>
         <translation>当前构建未包含 OCCT。请设置 OCCT_ROOT 并重新编译。</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="539"/>
-        <location filename="../src/app/main_window.cpp" line="589"/>
+        <location filename="../src/app/shell/main_window.cpp" line="539"/>
+        <location filename="../src/app/shell/main_window.cpp" line="589"/>
         <source>Loaded %1</source>
         <translation>已加载 %1</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="786"/>
+        <location filename="../src/app/shell/main_window.cpp" line="786"/>
         <source>Missing file</source>
         <translation>文件缺失</translation>
     </message>
     <message>
-        <location filename="../src/app/main_window.cpp" line="787"/>
+        <location filename="../src/app/shell/main_window.cpp" line="787"/>
         <source>This file no longer exists:
 %1
 
@@ -2233,7 +2233,7 @@ Plugin ID: %4</source>
         <translation>语言</translation>
     </message>
     <message>
-        <location filename="../src/app/i18n.cpp" line="82"/>
+        <location filename="../src/app/core/i18n.cpp" line="82"/>
         <source>System</source>
         <translation>跟随系统</translation>
     </message>
@@ -2331,37 +2331,37 @@ Plugin ID: %4</source>
 <context>
     <name>tamias::ViewCubeWidget</name>
     <message>
-        <location filename="../src/app/view_cube_widget.cpp" line="139"/>
+        <location filename="../src/app/viewport/view_cube_widget.cpp" line="139"/>
         <source>Drag to orbit · Click a face or corner to snap the view</source>
         <translation>拖动旋转视角 · 点击面或角对齐视角</translation>
     </message>
     <message>
-        <location filename="../src/app/view_cube_widget.cpp" line="207"/>
+        <location filename="../src/app/viewport/view_cube_widget.cpp" line="207"/>
         <source>Front</source>
         <translation>前</translation>
     </message>
     <message>
-        <location filename="../src/app/view_cube_widget.cpp" line="214"/>
+        <location filename="../src/app/viewport/view_cube_widget.cpp" line="214"/>
         <source>Back</source>
         <translation>后</translation>
     </message>
     <message>
-        <location filename="../src/app/view_cube_widget.cpp" line="221"/>
+        <location filename="../src/app/viewport/view_cube_widget.cpp" line="221"/>
         <source>Left</source>
         <translation>左</translation>
     </message>
     <message>
-        <location filename="../src/app/view_cube_widget.cpp" line="228"/>
+        <location filename="../src/app/viewport/view_cube_widget.cpp" line="228"/>
         <source>Right</source>
         <translation>右</translation>
     </message>
     <message>
-        <location filename="../src/app/view_cube_widget.cpp" line="235"/>
+        <location filename="../src/app/viewport/view_cube_widget.cpp" line="235"/>
         <source>Top</source>
         <translation>上</translation>
     </message>
     <message>
-        <location filename="../src/app/view_cube_widget.cpp" line="242"/>
+        <location filename="../src/app/viewport/view_cube_widget.cpp" line="242"/>
         <source>Bottom</source>
         <translation>下</translation>
     </message>
@@ -2465,7 +2465,7 @@ Plugin ID: %4</source>
         <translation>高</translation>
     </message>
     <message>
-        <location filename="../src/app/property_panel.cpp" line="195"/>
+        <location filename="../src/app/bim/property_panel.cpp" line="195"/>
         <source>Sill Height</source>
         <translation>离地高度</translation>
     </message>
@@ -3241,52 +3241,52 @@ Wheel zooms, drag pans, double-click a bar to focus.</source>
 <context>
     <name>QObject</name>
     <message>
-        <location filename="../src/app/drawing_document.cpp" line="93"/>
+        <location filename="../src/app/drawing/drawing_document.cpp" line="93"/>
         <source>Drawings (*.pdf *.dxf *.svg *.png *.jpg *.jpeg *.bmp *.tif *.tiff *.gif *.webp);;PDF (*.pdf);;DXF (*.dxf);;Vector (*.svg);;Images (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.gif *.webp)</source>
         <translation>图纸 (*.pdf *.dxf *.svg *.png *.jpg *.jpeg *.bmp *.tif *.tiff *.gif *.webp);;PDF (*.pdf);;DXF (*.dxf);;矢量图 (*.svg);;图片 (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.gif *.webp)</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_document.cpp" line="136"/>
+        <location filename="../src/app/drawing/drawing_document.cpp" line="136"/>
         <source>Cannot read image: %1</source>
         <translation>无法读取图片：%1</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_document.cpp" line="140"/>
+        <location filename="../src/app/drawing/drawing_document.cpp" line="140"/>
         <source>Image</source>
         <translation>图片</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_document.cpp" line="143"/>
+        <location filename="../src/app/drawing/drawing_document.cpp" line="143"/>
         <source>%1 × %2 px</source>
         <translation>%1 × %2 像素</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_document.cpp" line="150"/>
+        <location filename="../src/app/drawing/drawing_document.cpp" line="150"/>
         <source>Cannot read SVG: %1</source>
         <translation>无法读取 SVG：%1</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_document.cpp" line="162"/>
+        <location filename="../src/app/drawing/drawing_document.cpp" line="162"/>
         <source>%1 × %2 units</source>
         <translation>%1 × %2 单位</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_document.cpp" line="179"/>
+        <location filename="../src/app/drawing/drawing_document.cpp" line="179"/>
         <source>DXF has no measurable extent.</source>
         <translation>DXF 没有可显示的范围。</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_document.cpp" line="185"/>
+        <location filename="../src/app/drawing/drawing_document.cpp" line="185"/>
         <source>%1 curves · %2 texts · %3 layers</source>
         <translation>%1 条曲线 · %2 处文字 · %3 个图层</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_document.cpp" line="190"/>
+        <location filename="../src/app/drawing/drawing_document.cpp" line="190"/>
         <source> · %1 unsupported</source>
         <translation> · %1 个图元未支持</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_document.cpp" line="200"/>
+        <location filename="../src/app/drawing/drawing_document.cpp" line="200"/>
         <source>Cannot read PDF: %1</source>
         <translation>无法读取 PDF：%1</translation>
     </message>
@@ -3315,17 +3315,17 @@ Wheel zooms, drag pans, double-click a bar to focus.</source>
         <translation> · %1 张位图未渲染</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_document.cpp" line="119"/>
+        <location filename="../src/app/drawing/drawing_document.cpp" line="119"/>
         <source>Cannot open drawing: %1</source>
         <translation>无法打开图纸：%1</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_document.cpp" line="208"/>
+        <location filename="../src/app/drawing/drawing_document.cpp" line="208"/>
         <source>%1 page(s)</source>
         <translation>%1 页</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_document.cpp" line="212"/>
+        <location filename="../src/app/drawing/drawing_document.cpp" line="212"/>
         <source>PDF viewing needs the Qt PDF module (Qt6::Pdf), which is not part of this build.
 Export the drawing to DXF, SVG or an image, or rebuild with Qt6::Pdf available.</source>
         <translation>查看 PDF 需要 Qt PDF 模块（Qt6::Pdf），当前构建未包含。
@@ -3335,72 +3335,72 @@ Export the drawing to DXF, SVG or an image, or rebuild with Qt6::Pdf available.<
 <context>
     <name>tamias::DrawingView</name>
     <message>
-        <location filename="../src/app/drawing_view.cpp" line="144"/>
+        <location filename="../src/app/drawing/drawing_view.cpp" line="144"/>
         <source>%1%</source>
         <translation>%1%</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_view.cpp" line="146"/>
+        <location filename="../src/app/drawing/drawing_view.cpp" line="146"/>
         <source> · page %1/%2</source>
         <translation> · 第 %1/%2 页</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_view.cpp" line="187"/>
+        <location filename="../src/app/drawing/drawing_view.cpp" line="187"/>
         <source>X %1   Y %2</source>
         <translation>X %1   Y %2</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_view.cpp" line="192"/>
+        <location filename="../src/app/drawing/drawing_view.cpp" line="192"/>
         <source>Zoom %1%</source>
         <translation>缩放 %1%</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_view.cpp" line="194"/>
+        <location filename="../src/app/drawing/drawing_view.cpp" line="194"/>
         <source>   Page %1/%2</source>
         <translation>   第 %1/%2 页</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_view.cpp" line="295"/>
+        <location filename="../src/app/drawing/drawing_view.cpp" line="295"/>
         <source>Fit to window</source>
         <translation>适配窗口</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_view.cpp" line="297"/>
+        <location filename="../src/app/drawing/drawing_view.cpp" line="297"/>
         <source>Zoom 100%</source>
         <translation>缩放到 100%</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_view.cpp" line="299"/>
+        <location filename="../src/app/drawing/drawing_view.cpp" line="299"/>
         <source>Zoom in</source>
         <translation>放大</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_view.cpp" line="301"/>
+        <location filename="../src/app/drawing/drawing_view.cpp" line="301"/>
         <source>Zoom out</source>
         <translation>缩小</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_view.cpp" line="306"/>
+        <location filename="../src/app/drawing/drawing_view.cpp" line="306"/>
         <source>Previous page</source>
         <translation>上一页</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_view.cpp" line="309"/>
+        <location filename="../src/app/drawing/drawing_view.cpp" line="309"/>
         <source>Next page</source>
         <translation>下一页</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_view.cpp" line="315"/>
+        <location filename="../src/app/drawing/drawing_view.cpp" line="315"/>
         <source>Light background</source>
         <translation>浅色背景</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_view.cpp" line="322"/>
+        <location filename="../src/app/drawing/drawing_view.cpp" line="322"/>
         <source>Layers</source>
         <translation>图层</translation>
     </message>
     <message>
-        <location filename="../src/app/drawing_view.cpp" line="325"/>
+        <location filename="../src/app/drawing/drawing_view.cpp" line="325"/>
         <source>(unnamed)</source>
         <translation>（未命名）</translation>
     </message>

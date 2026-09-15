@@ -4,53 +4,60 @@ set(CMAKE_AUTOUIC ON)
 
 add_executable(tamias
   main.cpp
-  main_window.cpp
-  ribbon_bar.cpp
-  ribbon_page.cpp
-  ribbon_group.cpp
-  home_page.cpp
-  recent_files.cpp
-  mesh_thumbnail.cpp
-  app_settings.cpp
-  i18n.cpp
-  settings_dialog.cpp
-  settings_section.cpp
-  plugin_manager_dialog.cpp
-  plugin_prompt_dialog.cpp
-  about_dialog.cpp
-  pin_result_dialog.cpp
-  selection_accent_delegate.cpp
-  render_scene_inspector.cpp
-  document_viewport.cpp
-  box_select_overlay.cpp
-  toast.cpp
-  replay_viewport.cpp
-  scene_debugger_window.cpp
-  golden_test_runner.cpp
-  handle_inspector.cpp
-  property_panel.cpp
-  draw_panel.cpp
-  drawing_document.cpp
-  drawing_view.cpp
-  drawing_manager_panel.cpp
-  section_preview_widget.cpp
-  component_specs.cpp
-  texture_library_panel.cpp
-  texture_inspector_dialog.cpp
-  texture_image.cpp
-  timing_panel.cpp
-  timing_timeline_widget.cpp
-  view_cube_widget.cpp
-  viewport_tool_panel.cpp
-  entity_kind_catalog.cpp
-  visibility_panel.cpp
-  floor_panel.cpp
-  floor_manager_panel.cpp
-  floor_settings_dialog.cpp
-  grid_settings_dialog.cpp
-  drawing_import_dialog.cpp
-  theme.cpp
-  rhi_backends.cpp
+  # 应用级服务：设置、主题、翻译、最近文件、渲染后端登记
+  core/app_settings.cpp
+  core/theme.cpp
+  core/i18n.cpp
+  core/recent_files.cpp
+  core/rhi_backends.cpp
+  # 窗口骨架：主窗口、欢迎页、Ribbon、通用对话框、提示条
+  shell/main_window.cpp
+  shell/home_page.cpp
+  shell/ribbon_bar.cpp
+  shell/ribbon_page.cpp
+  shell/ribbon_group.cpp
+  shell/toast.cpp
+  shell/mesh_thumbnail.cpp
+  shell/about_dialog.cpp
+  shell/settings_dialog.cpp
+  shell/settings_section.cpp
+  shell/plugin_manager_dialog.cpp
+  shell/plugin_prompt_dialog.cpp
+  # 三维视口与其叠加层
+  viewport/document_viewport.cpp
+  viewport/viewport_tool_panel.cpp
+  viewport/view_cube_widget.cpp
+  viewport/box_select_overlay.cpp
+  viewport/replay_viewport.cpp
+  # 构件 / 楼层 / 轴网界面
+  bim/property_panel.cpp
+  bim/draw_panel.cpp
+  bim/section_preview_widget.cpp
+  bim/component_specs.cpp
+  bim/entity_kind_catalog.cpp
+  bim/visibility_panel.cpp
+  bim/floor_panel.cpp
+  bim/floor_manager_panel.cpp
+  bim/floor_settings_dialog.cpp
+  bim/grid_settings_dialog.cpp
+  # 二维图纸
+  drawing/drawing_document.cpp
+  drawing/drawing_view.cpp
+  drawing/drawing_manager_panel.cpp
+  drawing/drawing_import_dialog.cpp
+  # 贴图
+  texture/texture_image.cpp
+  texture/texture_library_panel.cpp
+  texture/texture_inspector_dialog.cpp
+  # 调试 / 诊断：句柄检查、渲染场景检查、金样、计时
+  debug/handle_inspector.cpp
+  debug/render_scene_inspector.cpp
+  debug/scene_debugger_window.cpp
+  debug/pin_result_dialog.cpp
+  debug/golden_test_runner.cpp
+  debug/selection_accent_delegate.cpp
+  debug/timing_panel.cpp
+  debug/timing_timeline_widget.cpp
   resources.qrc
 )
 
@@ -78,7 +85,7 @@ add_custom_command(
   COMMENT "Refreshing Tamias version header from git"
   VERBATIM
 )
-set_source_files_properties(main.cpp about_dialog.cpp PROPERTIES
+set_source_files_properties(main.cpp shell/about_dialog.cpp PROPERTIES
   OBJECT_DEPENDS "${TAMIAS_VERSION_HEADER}"
 )
 

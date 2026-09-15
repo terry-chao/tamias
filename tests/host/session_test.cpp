@@ -1,4 +1,4 @@
-#include "command/command_system.h"
+#include "command/core/command_system.h"
 #include "engine/document/document.h"
 #include "host/host_event.h"
 #include "host/session.h"

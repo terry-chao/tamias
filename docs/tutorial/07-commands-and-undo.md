@@ -13,7 +13,7 @@
 
 ## 7.2 Command 接口
 
-打开 [`command.h`](https://github.com/terry-chao/tamias/blob/main/src/command/command.h)：
+打开 [`command.h`](https://github.com/terry-chao/tamias/blob/main/src/command/core/command.h)：
 
 ```cpp
 class Command {
@@ -39,7 +39,7 @@ class Command {
 
 ## 7.3 命令从哪来：注册表
 
-启动时 `register_commands()`（[register_commands.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/register_commands.cpp)）把所有命令注册进 `CommandSystem`。工具条上的按钮 → 选一个命令类型 → 进入交互模式 → 输入齐了 → `execute()`。
+启动时 `register_commands()`（[register_commands.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/core/register_commands.cpp)）把所有命令注册进 `CommandSystem`。工具条上的按钮 → 选一个命令类型 → 进入交互模式 → 输入齐了 → `execute()`。
 
 ## 7.4 交互式命令：以「拖墙」为例
 
@@ -74,7 +74,7 @@ class Command {
 
 ## 7.7 动手练习
 
-1. 读 [`create_wall_command.cpp`](https://github.com/terry-chao/tamias/blob/main/src/command/create_wall_command.cpp)，标出它实现了 `Command` 的哪些虚函数。
+1. 读 [`create_wall_command.cpp`](https://github.com/terry-chao/tamias/blob/main/src/command/create/create_wall_command.cpp)，标出它实现了 `Command` 的哪些虚函数。
 2. 放一个盒子 → 改参数 → `Ctrl+Z` 撤销，观察属性面板和视口的变化。
 3. 在 `Command::execute()` 打日志，看一次拖墙打了哪几条命令。
 

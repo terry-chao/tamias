@@ -1,6 +1,6 @@
 #include "bim/grid.h"
-#include "command/command_system.h"
-#include "command/update_grid_command.h"
+#include "command/core/command_system.h"
+#include "command/edit/update_grid_command.h"
 #include "engine/document/document.h"
 #include "engine/document/document_io.h"
 #include "engine/document/picking.h"

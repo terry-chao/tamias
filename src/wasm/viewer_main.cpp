@@ -7,7 +7,7 @@
 //  稳定 API。桌面端才是主线，两边对齐情况见 docs/WEB.md。
 // ============================================================================
 
-#include "command/command_system.h"
+#include "command/core/command_system.h"
 #include "engine/core/log.h"
 #include "engine/modeling/linked_kernels.h"
 

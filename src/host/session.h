@@ -1,6 +1,6 @@
 #pragma once
 
-#include "command/command_system.h"
+#include "command/core/command_system.h"
 #include "engine/document/document.h"
 #include "host/camera_controller.h"
 #include "host/host_event.h"

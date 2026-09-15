@@ -1,6 +1,6 @@
 #pragma once
 
-#include "command/command_system.h"
+#include "command/core/command_system.h"
 #include "engine/core/result.h"
 #include "engine/document/document.h"
 #include "plugin/host_api.h"

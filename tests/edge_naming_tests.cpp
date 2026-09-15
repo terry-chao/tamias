@@ -1,4 +1,4 @@
-#include "command/command_system.h"
+#include "command/core/command_system.h"
 #include "engine/document/document.h"
 #include "engine/document/document_io.h"
 #include "engine/graphics/mesh.h"

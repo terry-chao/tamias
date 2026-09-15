@@ -18,7 +18,7 @@ OpenGL 后端  → 把这些动词变成 glBind* / glDrawElements / SwapBuffers
 
 设置里选 OpenGL 后，每个文档**独占一条渲染线程、一个 GL 上下文**，不和别的视口、也不和 Vulkan 共用（`shares_execution_thread_with` 对 OpenGL 永远为假）。Vulkan 可以多视口共线程；OpenGL 的上下文绑定是线程局部的，所以必须隔离。
 
-启动：`main()` → [`register_opengl_backend()`](https://github.com/terry-chao/tamias/blob/main/src/app/rhi_backends.cpp) 登记工厂。视口 `acquire(OpenGL)` 才真正 `wglCreateContextAttribsARB` 做出 **OpenGL 4.5 Core**。
+启动：`main()` → [`register_opengl_backend()`](https://github.com/terry-chao/tamias/blob/main/src/app/core/rhi_backends.cpp) 登记工厂。视口 `acquire(OpenGL)` 才真正 `wglCreateContextAttribsARB` 做出 **OpenGL 4.5 Core**。
 
 ---
 

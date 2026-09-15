@@ -132,6 +132,6 @@ class Session {
 ## 7. 关键文件
 
 - `src/host/session.h/.cpp`、`camera_controller.h/.cpp`、`tool_mode.h`、`host_event.h`、`command_arg_text.h/.cpp`
-- `src/app/document_viewport.*`、`src/app/main_window.cpp`
+- `src/app/viewport/document_viewport.*`、`src/app/shell/main_window.cpp`
 - `src/wasm/viewer_host.*`、`src/wasm/viewer_main.cpp`
 - `web/src/viewer.ts`、`web/src/App.tsx`

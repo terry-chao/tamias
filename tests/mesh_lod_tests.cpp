@@ -4,7 +4,7 @@
 #include "engine/render/resident_cache.h"
 #include "engine/render/scene_graph.h"
 #include "entity/primitive/box_entity.h"
-#include "entity/structural/column_entity.h"
+#include "entity/family/structural/column_entity.h"
 
 #include <gtest/gtest.h>
 

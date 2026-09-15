@@ -96,8 +96,8 @@ DXF 文件
 |---|---|
 | [drawing_import.h](https://github.com/terry-chao/tamias/blob/main/src/bim/drawing_import.h) | 候选 / 选项 / 计划的纯数据定义 |
 | [drawing_import.cpp](https://github.com/terry-chao/tamias/blob/main/src/bim/drawing_import.cpp) | 规则识别（墙 / 柱 / 门窗 + 宿主匹配 + 轴网吸附） |
-| [import_drawing_command.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/import_drawing_command.cpp) | 计划 → 文档（一条命令、一步撤销） |
-| [drawing_import_dialog.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/drawing_import_dialog.cpp) | 复核界面：图层映射、默认尺寸、候选表勾选 |
+| [import_drawing_command.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/import/import_drawing_command.cpp) | 计划 → 文档（一条命令、一步撤销） |
+| [drawing_import_dialog.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/drawing/drawing_import_dialog.cpp) | 复核界面：图层映射、默认尺寸、候选表勾选 |
 | [dxf_reader.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/drawing/dxf_reader.cpp) | 解析器：单位 / 图元类型 / 块名 / 标高 / 块内图层继承 |
 | [grid.h](https://github.com/terry-chao/tamias/blob/main/src/bim/grid.h) | 轴网（翻模的定位基准） |
 

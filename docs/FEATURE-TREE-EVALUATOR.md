@@ -40,7 +40,7 @@ BIM 构件（墙梁板柱）几何仍走这条路；**挂到哪一层**将来由
 
 ### 1.1 点一下：先有配方，还没有实体形状
 
-以盒子为例。工具武装后点地面，[`CreatePrimitiveCommand`](https://github.com/terry-chao/tamias/blob/main/src/command/create_primitive_command.cpp) 用点击位置构造 `BoxEntity`。构造函数只写特征树，不调 OCCT：
+以盒子为例。工具武装后点地面，[`CreatePrimitiveCommand`](https://github.com/terry-chao/tamias/blob/main/src/command/create/create_primitive_command.cpp) 用点击位置构造 `BoxEntity`。构造函数只写特征树，不调 OCCT：
 
 ```cpp
 // box_entity.cpp
@@ -58,7 +58,7 @@ local_transform = translate(position);
 放置    local_transform = 点到的位置
 ```
 
-墙同理：两点算出长度、中点、朝向，配方仍是 `RectProfile(厚×长) + Extrude(高)`，变换是平移到中点再绕 Y 转（[wall_entity.cpp](https://github.com/terry-chao/tamias/blob/main/src/entity/architectural/wall_entity.cpp)）。柱、板、门、窗都是这一套，只是默认尺寸不同。
+墙同理：两点算出长度、中点、朝向，配方仍是 `RectProfile(厚×长) + Extrude(高)`，变换是平移到中点再绕 Y 转（[wall_entity.cpp](https://github.com/terry-chao/tamias/blob/main/src/entity/family/architectural/wall_entity.cpp)）。柱、板、门、窗都是这一套，只是默认尺寸不同。
 
 ### 1.2 createGeom：配方交给几何边界
 
@@ -86,7 +86,7 @@ return geometry_builder().build(model, deflection);
 
 ### 1.5 改参数：只改配方，整棵树重算
 
-属性面板改 `depth` → [`SetFeatureParamCommand`](https://github.com/terry-chao/tamias/blob/main/src/command/set_feature_param_command.cpp)：
+属性面板改 `depth` → [`SetFeatureParamCommand`](https://github.com/terry-chao/tamias/blob/main/src/command/edit/set_feature_param_command.cpp)：
 
 ```
 entity->model.set_param(feature_id, "depth", 2.0)   // 只改配方
@@ -97,7 +97,7 @@ recompute_scene()
 
 视口发现网格脏了就重新 upload。屏幕上的盒子变高，id 没变。
 
-加圆角：[`AddFeatureCommand`](https://github.com/terry-chao/tamias/blob/main/src/command/add_feature_command.cpp) 在当前输出特征后面再挂一个 `Fillet`，再 `build` 一次。布尔则是把另一棵特征树 `append` 进来再加 `Boolean` 节点。
+加圆角：[`AddFeatureCommand`](https://github.com/terry-chao/tamias/blob/main/src/command/edit/add_feature_command.cpp) 在当前输出特征后面再挂一个 `Fillet`，再 `build` 一次。布尔则是把另一棵特征树 `append` 进来再加 `Boolean` 节点。
 
 ### 1.6 两条入口不要混
 

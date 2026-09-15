@@ -32,7 +32,7 @@ app / document / 特征树（纯数据）
 
 | 接口 | 方向 | 干什么 | 谁在用 |
 |---|---|---|---|
-| `IShapeOps` | **文件 → 几何** | `read_file` 读 STEP / IGES / BREP，得到 `Shape`，再 `tessellate` 成三角网 | 打开交换文件（[`main_window.cpp`](https://github.com/terry-chao/tamias/blob/main/src/app/main_window.cpp)） |
+| `IShapeOps` | **文件 → 几何** | `read_file` 读 STEP / IGES / BREP，得到 `Shape`，再 `tessellate` 成三角网 | 打开交换文件（[`main_window.cpp`](https://github.com/terry-chao/tamias/blob/main/src/app/shell/main_window.cpp)） |
 | `IGeometryBuilder` | **配方 → 几何** | `build(FeatureModel)`：求值特征树 → BRep → 三角网 | 参数化实体改参数后重算 |
 
 `Shape` 是内核无关的句柄：`backend_name()` + `tessellate()`。OCCT 实现里它内部握着 `TopoDS_Shape`，出边界只交出 `MeshCpu`。

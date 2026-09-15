@@ -92,7 +92,7 @@ C# 用链式 setter，序列化成一段文本再过 ABI：
 
 ## 4. 可 `Dispatch` 的内核命令
 
-与工具条同一张表（[`register_commands.cpp`](https://github.com/terry-chao/tamias/blob/main/src/command/register_commands.cpp)）。
+与工具条同一张表（[`register_commands.cpp`](https://github.com/terry-chao/tamias/blob/main/src/command/core/register_commands.cpp)）。
 
 ### 4.1 立刻执行（适合脚本 / 插件绘制）
 

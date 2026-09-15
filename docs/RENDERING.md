@@ -69,7 +69,7 @@ CAD 内核里的精确实体是 [BRep](FEATURE-TREE-EVALUATOR.md)（曲面方程
 
 每个打开的文档有一个 `DocumentViewport`（Qt 窗口 + 原生 HWND）。鼠标转相机、点选、改参数都在这条线程。
 
-真正提交在 `submit_current_frame()`（[document_viewport.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/document_viewport.cpp)）：
+真正提交在 `submit_current_frame()`（[document_viewport.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/document_viewport.cpp)）：
 
 1. 向线程池要一条 `RenderThread`（设置里选 Vulkan 或 OpenGL）。
 2. 为这个视口开一个 **channel**（一条独立的「银幕」：窗口句柄 + 宽高）。
@@ -337,7 +337,7 @@ IBL 是 split-sum：CPU 烘焙工作室环境立方体 → irradiance / GGX pref
 
 | 文件 | 角色 |
 |---|---|
-| [document_viewport.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/document_viewport.cpp) | 相机、提交帧、上传网格、点选 |
+| [document_viewport.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/document_viewport.cpp) | 相机、提交帧、上传网格、点选 |
 | [document.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.cpp) | `render_items()` 展平清单；`seed_default_materials()` 预设 albedo / 法线 / PBR |
 | [render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_types.h) | `SceneDrawItem` / `RenderMode` |
 | [render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.cpp) | 线程、上传、一帧绘制顺序 |
@@ -345,4 +345,4 @@ IBL 是 split-sum：CPU 烘焙工作室环境立方体 → irradiance / GGX pref
 | [rhi/vulkan](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/vulkan/vulkan_device.cpp) / [rhi/opengl](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/opengl/opengl_device.cpp) / [rhi/webgpu](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/webgpu/webgpu_device.cpp) | 桌面 Vulkan/OpenGL；浏览器 WebGPU 见 [WebGPU 后端](WGPU.md) |
 | [material.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/material.h) | `Material` / `TextureAsset` |
 | [mesh.frag.hlsl](https://github.com/terry-chao/tamias/blob/main/shaders/mesh.frag.hlsl) | 线框 / 着色 / 真实（PBR + 法线采样） |
-| [rhi_backends.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/rhi_backends.cpp) | 启动时登记后端 |
+| [rhi_backends.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/core/rhi_backends.cpp) | 启动时登记后端 |

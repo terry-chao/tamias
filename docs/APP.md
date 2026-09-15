@@ -4,6 +4,21 @@
 
 代码在 [`src/app/`](https://github.com/terry-chao/tamias/tree/main/src/app)。命令与实体紧贴这一层，但不属于 Qt：[`src/command/`](https://github.com/terry-chao/tamias/tree/main/src/command)、[`src/entity/`](https://github.com/terry-chao/tamias/tree/main/src/entity)。BIM 命令落地后应调 `src/bim`，而不是在窗口里写宿主规则。
 
+目录按职责分组（只留 `main.cpp`、`qt_pch.h`、`resources.qrc`、`app.rc` 在 `src/app/` 根下）：
+
+```
+src/app/
+├── core/      应用级服务：app_settings、theme、i18n、recent_files、qt_path.h、rhi_backends.cpp
+├── shell/     窗口骨架：main_window、home_page、ribbon_*、toast、mesh_thumbnail、设置/关于/插件对话框
+├── viewport/  三维视口：document_viewport、viewport_tool_panel、view_cube_widget、box_select_overlay、replay_viewport、viewport_floor.h
+├── bim/       构件 / 楼层 / 轴网的界面：property_panel、draw_panel、visibility_panel、floor_panel、floor_manager_panel、floor_settings_dialog、grid_settings_dialog、entity_kind_catalog、component_specs、section_preview_*
+├── drawing/   二维图纸：drawing_document、drawing_view、drawing_manager_panel、drawing_import_dialog
+├── texture/   贴图：texture_image、texture_library_panel、texture_inspector_dialog
+└── debug/     调试诊断：handle_inspector、render_scene_inspector、scene_debugger_window、timing_panel、timing_timeline_widget、golden_test_runner、pin_result_dialog
+```
+
+BIM 业务层的分组只影响「谁在管哪个面板」，不放宽上面那条：`bim/` 里的面板照样只发命令、只显示结果。
+
 ---
 
 ## 干什么

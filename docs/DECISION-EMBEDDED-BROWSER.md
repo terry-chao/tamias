@@ -93,10 +93,10 @@ GPLv3 / 商业双许可（LGPL 不覆盖），被做成 `find_package(... QUIET)
 ### 4.1 合成与窗口层：这是最大的坑
 
 桌面视口是**原生子窗口**（Vulkan 一个 HWND，OpenGL 另建一个，见
-[`document_viewport.cpp`](https://github.com/terry-chao/tamias/blob/main/src/app/document_viewport.cpp)），
+[`document_viewport.cpp`](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/document_viewport.cpp)），
 而且仓库已经为「原生子窗口吃掉 Win32 鼠标消息、叠放顺序」写过专门的补丁
-（[`box_select_overlay.cpp`](https://github.com/terry-chao/tamias/blob/main/src/app/box_select_overlay.cpp)、
-[`view_cube_widget.cpp`](https://github.com/terry-chao/tamias/blob/main/src/app/view_cube_widget.cpp)）。
+（[`box_select_overlay.cpp`](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/box_select_overlay.cpp)、
+[`view_cube_widget.cpp`](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/view_cube_widget.cpp)）。
 
 - **网页只做独立 dock / 独立标签页**（不叠在三维视口上）：风险可控，优先这个形态。
 - **网页要叠在三维视口上**（HTML 浮层、地图底图跟相机联动）：`QWebEngineView` 基本不是答案

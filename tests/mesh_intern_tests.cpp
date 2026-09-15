@@ -1,9 +1,9 @@
-#include "command/set_feature_param_command.h"
+#include "command/edit/set_feature_param_command.h"
 #include "engine/document/document.h"
 #include "engine/io/mesh_io.h"
 #include "engine/modeling/feature.h"
 #include "entity/primitive/box_entity.h"
-#include "entity/structural/column_entity.h"
+#include "entity/family/structural/column_entity.h"
 
 #include <gtest/gtest.h>
 

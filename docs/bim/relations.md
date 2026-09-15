@@ -116,6 +116,6 @@ count            : u64
 ## 附录
 
 - [BIM 业务层](../BIM.md) —— 这一层还管楼层 / 轴网（尚未实现）
-- [create_primitive_command.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/create_primitive_command.cpp) —— 点中墙时绑宿主
-- [set_feature_param_command.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/set_feature_param_command.cpp) —— 改参后通知从属
-- [handle_inspector.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/handle_inspector.cpp) —— Ctrl+D
+- [create_primitive_command.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/create/create_primitive_command.cpp) —— 点中墙时绑宿主
+- [set_feature_param_command.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/edit/set_feature_param_command.cpp) —— 改参后通知从属
+- [handle_inspector.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/debug/handle_inspector.cpp) —— Ctrl+D

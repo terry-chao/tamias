@@ -1,0 +1,2324 @@
+#include "app/shell/main_window.h"
+
+#include "app/shell/about_dialog.h"
+#include "app/core/app_settings.h"
+#include "bim/ifc_spatial_tree.h"
+#include "bim/wall_size.h"
+#include "engine/core/log.h"
+#include "engine/document/document_io.h"
+#include "engine/io/mesh_io.h"
+#include "engine/render/render_scene_golden.h"
+#include "app/debug/golden_test_runner.h"
+#include "app/shell/mesh_thumbnail.h"
+#include "engine/modeling/occt/occt_shape_ops.h"
+#include "engine/modeling/kernel/shape_ops.h"
+#include "app/debug/handle_inspector.h"
+#include "plugin/plugin_host.h"
+#include "plugin/plugin_manager.h"
+#include "app/shell/plugin_manager_dialog.h"
+#include "app/shell/plugin_prompt_dialog.h"
+#include "app/debug/pin_result_dialog.h"
+#include "app/bim/property_panel.h"
+#include "app/bim/draw_panel.h"
+#include "app/drawing/drawing_document.h"
+#include "app/drawing/drawing_import_dialog.h"
+#include "app/drawing/drawing_view.h"
+#include "app/bim/grid_settings_dialog.h"
+#include "app/core/qt_path.h"
+#include "app/shell/ribbon_bar.h"
+#include "app/shell/ribbon_group.h"
+#include "app/shell/ribbon_page.h"
+#include "app/debug/scene_debugger_window.h"
+#include "app/shell/settings_dialog.h"
+#include "app/texture/texture_image.h"
+#include "app/texture/texture_library_panel.h"
+#include "app/debug/timing_panel.h"
+#include "app/shell/toast.h"
+#include "engine/profile/timing_scope.h"
+
+#include <QByteArray>
+#include <QAction>
+#include <QActionGroup>
+#include <QApplication>
+#include <QCloseEvent>
+#include <QCoreApplication>
+#include <QEventLoop>
+#include <QGuiApplication>
+#include <QScreen>
+#include <QShowEvent>
+#include <QStyle>
+#include <QStatusBar>
+#include <QDesktopServices>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QDir>
+#include <QDockWidget>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QFontDatabase>
+#include <QIcon>
+#include <QImage>
+#include <QInputDialog>
+#include <QKeySequence>
+#include <QLineEdit>
+#include <QAbstractButton>
+#include <QMessageBox>
+#include <QPainter>
+#include <QPushButton>
+#include <QPixmap>
+#include <QPlainTextEdit>
+#include <QProgressDialog>
+#include <QSignalBlocker>
+#include <QSize>
+#include <QStatusBar>
+#include <QToolButton>
+#include <QUrl>
+#include <QVector>
+#include <QVBoxLayout>
+#include <QWidget>
+
+#include <algorithm>
+#include <cstdint>
+#include <filesystem>
+#include <optional>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+
+namespace tamias {
+namespace {
+
+QIcon themed_mask_icon(const QString& resource, const QColor& color) {
+  const QIcon source(resource);
+  QIcon result;
+  for (int extent : {16, 32}) {
+    for (int scale = 1; scale <= 2; ++scale) {
+      const int px = extent * scale;
+      QPixmap canvas(px, px);
+      canvas.setDevicePixelRatio(scale);
+      canvas.fill(Qt::transparent);
+      {
+        QPainter painter(&canvas);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        source.paint(&painter, QRect(0, 0, extent, extent));
+        painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+        painter.fillRect(QRect(0, 0, extent, extent), color);
+      }
+      result.addPixmap(canvas);
+    }
+  }
+  return result;
+}
+
+QIcon ribbon_icon(const QString& resource) {
+  return themed_mask_icon(resource, QColor(47, 125, 222));
+}
+
+void center_on_primary_screen(QWidget* widget) {
+  QScreen* screen = QGuiApplication::primaryScreen();
+  if (screen == nullptr || widget == nullptr) {
+    return;
+  }
+  const QRect avail = screen->availableGeometry();
+  const QSize size(qMin(widget->width(), avail.width()), qMin(widget->height(), avail.height()));
+  if (size != widget->size()) {
+    widget->resize(size);
+  }
+  widget->setGeometry(QStyle::alignedRect(Qt::LeftToRight, Qt::AlignCenter, size, avail));
+}
+
+void reveal_path(const std::filesystem::path& path) {
+  QDesktopServices::openUrl(QUrl::fromLocalFile(path_to_qstring(path)));
+}
+
+class OpenProgressDialog final {
+ public:
+  OpenProgressDialog(QWidget* parent, const QString& title, const QString& label)
+      : dialog_(title, label, 0, 100, parent) {
+    dialog_.setWindowTitle(title);
+    dialog_.setWindowModality(Qt::WindowModal);
+    dialog_.setMinimumDuration(0);
+    dialog_.setAutoClose(false);
+    dialog_.setAutoReset(false);
+    dialog_.setCancelButton(nullptr);
+    dialog_.setValue(0);
+    dialog_.show();
+    QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+  }
+
+  ~OpenProgressDialog() { close(); }
+
+  OpenProgressDialog(const OpenProgressDialog&) = delete;
+  OpenProgressDialog& operator=(const OpenProgressDialog&) = delete;
+
+  void stage(int percent, const QString& label) {
+    if (dialog_.maximum() == 0) {
+      dialog_.setRange(0, 100);
+    }
+    dialog_.setLabelText(label);
+    dialog_.setValue(std::clamp(percent, 0, 100));
+    QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+  }
+
+  void busy(const QString& label) {
+    dialog_.setLabelText(label);
+    dialog_.setRange(0, 0);
+    QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+  }
+
+  void close() {
+    if (dialog_.isVisible()) {
+      dialog_.close();
+    }
+  }
+
+ private:
+  QProgressDialog dialog_;
+};
+
+}  // namespace
+
+MainWindow::MainWindow(QWidget* parent)
+    : QMainWindow(parent), plugin_manager_(plugin_host_) {
+  setWindowTitle("Tamias");
+  setWindowIcon(QIcon(QStringLiteral(":/branding/logo.png")));
+  resize(1800, 1000);
+  center_on_primary_screen(this);
+
+  recent_.load();
+  AppSettings::instance().load();
+
+  stack_ = new QStackedWidget(this);
+  home_ = new HomePage(stack_);
+  tabs_ = new QTabWidget(stack_);
+  tabs_->setTabsClosable(true);
+  tabs_->setDocumentMode(true);
+  stack_->addWidget(home_);
+  stack_->addWidget(tabs_);
+  setCentralWidget(stack_);
+
+  connect(tabs_, &QTabWidget::tabCloseRequested, this, &MainWindow::close_tab);
+  connect(tabs_, &QTabWidget::currentChanged, this, [this](int) {
+    for (int i = 0; i < tabs_->count(); ++i) {
+      if (i != tabs_->currentIndex()) {
+        if (auto* viewport = qobject_cast<DocumentViewport*>(tabs_->widget(i))) {
+          viewport->cancel_plugin_point_input();
+        }
+      }
+    }
+    sync_render_mode_actions();
+    sync_bim_actions();
+    refresh_property_panel();
+    refresh_handle_inspector();
+    refresh_texture_library_panel();
+    sync_draw_panel();
+    bind_plugin_session();
+  });
+  connect(home_, &HomePage::openRequested, this, &MainWindow::open_file);
+  connect(home_, &HomePage::fileActivated, this, &MainWindow::open_recent_path);
+  connect(home_, &HomePage::missingFileActivated, this, &MainWindow::on_missing_recent);
+  connect(home_, &HomePage::recentRemoveRequested, this, [this](const QString& path) {
+    recent_.remove(path);
+    refresh_home();
+  });
+  connect(home_, &HomePage::openDocumentActivated, this, &MainWindow::activate_open_document);
+  connect(home_, &HomePage::settingsRequested, this, &MainWindow::open_settings);
+
+  auto* new_action = new QAction(ribbon_icon(QStringLiteral(":/icons/new.svg")),
+                                 tr("New"), this);
+  new_action->setShortcut(QKeySequence::New);
+  new_action->setToolTip(tr("New document"));
+  connect(new_action, &QAction::triggered, this, &MainWindow::new_document);
+  addAction(new_action);
+
+  auto* open_action = new QAction(ribbon_icon(QStringLiteral(":/icons/open.svg")),
+                                  tr("Open"), this);
+  open_action->setShortcut(QKeySequence::Open);
+  open_action->setToolTip(tr("Open a model file"));
+  connect(open_action, &QAction::triggered, this, &MainWindow::open_file);
+  addAction(open_action);
+
+  auto* open_drawing_action =
+      new QAction(ribbon_icon(QStringLiteral(":/icons/drawing.svg")),
+                  tr("Open Drawing"), this);
+  open_drawing_action->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+O")));
+  open_drawing_action->setToolTip(
+      tr("Open a reference drawing (PDF / DXF / SVG / image) in a 2D page"));
+  connect(open_drawing_action, &QAction::triggered, this, &MainWindow::open_drawing_file);
+  addAction(open_drawing_action);
+
+  auto* save_action = new QAction(ribbon_icon(QStringLiteral(":/icons/save.svg")),
+                                  tr("Save"), this);
+  save_action->setShortcut(QKeySequence::Save);
+  save_action->setToolTip(tr("Save the document"));
+  connect(save_action, &QAction::triggered, this, &MainWindow::save_file);
+  addAction(save_action);
+
+  auto* save_as_action = new QAction(ribbon_icon(QStringLiteral(":/icons/save_as.svg")),
+                                    tr("Save As"), this);
+  save_as_action->setShortcut(QKeySequence::SaveAs);
+  save_as_action->setToolTip(tr("Save the document to a new file"));
+  connect(save_as_action, &QAction::triggered, this, &MainWindow::save_file_as);
+  addAction(save_as_action);
+
+  auto* pin_render_action = new QAction(tr("Pin Render Scene for Tests"), this);
+  pin_render_action->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+P")));
+  pin_render_action->setToolTip(
+      tr("Write the current view to assets/samples/render/<name>/ and run RenderSceneGolden*"));
+  connect(pin_render_action, &QAction::triggered, this, &MainWindow::pin_render_scene_golden);
+  addAction(pin_render_action);
+
+  auto* debug_scene_action = new QAction(tr("Debug This Frame"), this);
+  debug_scene_action->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+D")));
+  debug_scene_action->setToolTip(
+      tr("Capture the current viewport's draw list and open the scene debugger"));
+  connect(debug_scene_action, &QAction::triggered, this, &MainWindow::debug_current_frame);
+  addAction(debug_scene_action);
+  auto* debug_scene_alias = new QAction(this);
+  debug_scene_alias->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+I")));
+  connect(debug_scene_alias, &QAction::triggered, this, &MainWindow::debug_current_frame);
+  addAction(debug_scene_alias);
+
+  auto* frame_all_action = new QAction(ribbon_icon(QStringLiteral(":/icons/frame_all.svg")),
+                                      tr("Fit All"), this);
+  frame_all_action->setShortcut(QKeySequence(tr("F")));
+  frame_all_action->setToolTip(tr("Frame all geometry in the view"));
+  connect(frame_all_action, &QAction::triggered, this, &MainWindow::frame_all);
+  addAction(frame_all_action);
+
+  create_group_ = new QActionGroup(this);
+  create_group_->setExclusive(true);
+
+  wall_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/wall.svg")),
+                            tr("Wall"), this);
+  wall_action_->setCheckable(true);
+  wall_action_->setProperty("toolMode", static_cast<int>(ToolMode::Wall));
+  wall_action_->setToolTip(tr("Create a wall: click start, then click end"));
+  connect(wall_action_, &QAction::triggered, this, [this] { set_create_tool(ToolMode::Wall); });
+  create_group_->addAction(wall_action_);
+  addAction(wall_action_);
+
+  beam_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/beam.svg")),
+                            tr("Beam"), this);
+  beam_action_->setCheckable(true);
+  beam_action_->setProperty("toolMode", static_cast<int>(ToolMode::Beam));
+  beam_action_->setToolTip(tr("Create a beam: click start, then click end"));
+  connect(beam_action_, &QAction::triggered, this, [this] { set_create_tool(ToolMode::Beam); });
+  create_group_->addAction(beam_action_);
+  addAction(beam_action_);
+
+  column_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/column.svg")),
+                              tr("Column"), this);
+  column_action_->setCheckable(true);
+  column_action_->setProperty("toolMode", static_cast<int>(ToolMode::Column));
+  column_action_->setToolTip(tr("Create a column: click to place"));
+  connect(column_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::Column); });
+  create_group_->addAction(column_action_);
+  addAction(column_action_);
+
+  slab_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/slab.svg")),
+                            tr("Slab"), this);
+  slab_action_->setCheckable(true);
+  slab_action_->setProperty("toolMode", static_cast<int>(ToolMode::Slab));
+  slab_action_->setToolTip(
+      tr("Create a slab in plan view: click two opposite corners"));
+  connect(slab_action_, &QAction::triggered, this, [this] { set_create_tool(ToolMode::Slab); });
+  create_group_->addAction(slab_action_);
+  addAction(slab_action_);
+
+  door_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/door.svg")),
+                            tr("Door"), this);
+  door_action_->setCheckable(true);
+  door_action_->setProperty("toolMode", static_cast<int>(ToolMode::Door));
+  door_action_->setToolTip(tr("Create a door: click a wall to host it"));
+  connect(door_action_, &QAction::triggered, this, [this] { set_create_tool(ToolMode::Door); });
+  create_group_->addAction(door_action_);
+  addAction(door_action_);
+
+  window_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/window.svg")),
+                              tr("Window"), this);
+  window_action_->setCheckable(true);
+  window_action_->setProperty("toolMode", static_cast<int>(ToolMode::Window));
+  window_action_->setToolTip(tr("Create a window: click a wall to host it"));
+  connect(window_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::Window); });
+  create_group_->addAction(window_action_);
+  addAction(window_action_);
+
+  structural_wall_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/structural_wall.svg")),
+                                        tr("Struct. Wall"), this);
+  structural_wall_action_->setCheckable(true);
+  structural_wall_action_->setProperty("toolMode", static_cast<int>(ToolMode::StructuralWall));
+  structural_wall_action_->setToolTip(tr("Create a structural / shear wall: click start, then end"));
+  connect(structural_wall_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::StructuralWall); });
+  create_group_->addAction(structural_wall_action_);
+  addAction(structural_wall_action_);
+
+  foundation_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/foundation.svg")),
+                                   tr("Foundation"), this);
+  foundation_action_->setCheckable(true);
+  foundation_action_->setProperty("toolMode", static_cast<int>(ToolMode::Foundation));
+  foundation_action_->setToolTip(tr("Create a foundation: click to place"));
+  connect(foundation_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::Foundation); });
+  create_group_->addAction(foundation_action_);
+  addAction(foundation_action_);
+
+  curtain_wall_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/curtain_wall.svg")),
+                                     tr("Curtain Wall"), this);
+  curtain_wall_action_->setCheckable(true);
+  curtain_wall_action_->setProperty("toolMode", static_cast<int>(ToolMode::CurtainWall));
+  curtain_wall_action_->setToolTip(tr("Create a curtain wall: click start, then end"));
+  connect(curtain_wall_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::CurtainWall); });
+  create_group_->addAction(curtain_wall_action_);
+  addAction(curtain_wall_action_);
+
+  line_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/line.svg")),
+                            tr("Line"), this);
+  line_action_->setCheckable(true);
+  line_action_->setProperty("toolMode", static_cast<int>(ToolMode::Line));
+  line_action_->setToolTip(tr("Create a line: click start, then click end"));
+  connect(line_action_, &QAction::triggered, this, [this] { set_create_tool(ToolMode::Line); });
+  create_group_->addAction(line_action_);
+  addAction(line_action_);
+
+  polyline_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/polyline.svg")),
+                                tr("Polyline"), this);
+  polyline_action_->setCheckable(true);
+  polyline_action_->setProperty("toolMode", static_cast<int>(ToolMode::Polyline));
+  polyline_action_->setToolTip(tr("Create a polyline: click points, Enter or double-click to finish"));
+  connect(polyline_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::Polyline); });
+  create_group_->addAction(polyline_action_);
+  addAction(polyline_action_);
+
+  rectangle_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/rectangle.svg")),
+                                 tr("Rectangle"), this);
+  rectangle_action_->setCheckable(true);
+  rectangle_action_->setProperty("toolMode", static_cast<int>(ToolMode::Rectangle));
+  rectangle_action_->setToolTip(tr("Create a rectangle: click two opposite corners"));
+  connect(rectangle_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::Rectangle); });
+  create_group_->addAction(rectangle_action_);
+  addAction(rectangle_action_);
+
+  circle_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/circle.svg")),
+                              tr("Circle"), this);
+  circle_action_->setCheckable(true);
+  circle_action_->setProperty("toolMode", static_cast<int>(ToolMode::Circle));
+  circle_action_->setToolTip(tr("Create a circle: click center, then click radius"));
+  connect(circle_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::Circle); });
+  create_group_->addAction(circle_action_);
+  addAction(circle_action_);
+
+  arc_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/arc.svg")),
+                           tr("Arc"), this);
+  arc_action_->setCheckable(true);
+  arc_action_->setProperty("toolMode", static_cast<int>(ToolMode::Arc));
+  arc_action_->setToolTip(tr("Create an arc: click start, through, then end"));
+  connect(arc_action_, &QAction::triggered, this, [this] { set_create_tool(ToolMode::Arc); });
+  create_group_->addAction(arc_action_);
+  addAction(arc_action_);
+
+  bezier_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/bezier.svg")),
+                              tr("Bezier"), this);
+  bezier_action_->setCheckable(true);
+  bezier_action_->setProperty("toolMode", static_cast<int>(ToolMode::Bezier));
+  bezier_action_->setToolTip(
+      tr("Create a Bezier: click control points, Enter or double-click to finish"));
+  connect(bezier_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::Bezier); });
+  create_group_->addAction(bezier_action_);
+  addAction(bezier_action_);
+
+  bspline_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/bspline.svg")),
+                               tr("B-spline"), this);
+  bspline_action_->setCheckable(true);
+  bspline_action_->setProperty("toolMode", static_cast<int>(ToolMode::BSpline));
+  bspline_action_->setToolTip(
+      tr("Create a B-spline: click control points, Enter or double-click to finish"));
+  connect(bspline_action_, &QAction::triggered, this,
+          [this] { set_create_tool(ToolMode::BSpline); });
+  create_group_->addAction(bspline_action_);
+  addAction(bspline_action_);
+
+  fillet_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/fillet.svg")),
+                              tr("Fillet"), this);
+  fillet_action_->setToolTip(tr("Fillet the selected entity's first edge"));
+  connect(fillet_action_, &QAction::triggered, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->fillet_selected(0.05);
+    }
+  });
+  addAction(fillet_action_);
+
+  chamfer_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/chamfer.svg")),
+                               tr("Chamfer"), this);
+  chamfer_action_->setToolTip(tr("Chamfer the selected entity's first edge"));
+  connect(chamfer_action_, &QAction::triggered, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->chamfer_selected(0.05);
+    }
+  });
+  addAction(chamfer_action_);
+
+  auto* settings_action = new QAction(ribbon_icon(QStringLiteral(":/icons/settings.svg")),
+                                     tr("Settings"), this);
+  settings_action->setShortcut(QKeySequence(tr("Ctrl+,")));
+  settings_action->setToolTip(tr("Open settings"));
+  connect(settings_action, &QAction::triggered, this, &MainWindow::open_settings);
+  addAction(settings_action);
+
+  auto* about_action = new QAction(ribbon_icon(QStringLiteral(":/icons/about.svg")),
+                                   tr("About"), this);
+  about_action->setToolTip(tr("About Tamias"));
+  connect(about_action, &QAction::triggered, this, &MainWindow::open_about);
+  addAction(about_action);
+
+  auto* manage_action = new QAction(ribbon_icon(QStringLiteral(":/icons/settings.svg")),
+                                    tr("Plugin Manager"), this);
+  manage_action->setToolTip(tr("Choose which loaded plugins appear on the ribbon"));
+  connect(manage_action, &QAction::triggered, this, &MainWindow::open_plugin_manager);
+  addAction(manage_action);
+
+  auto* home_action = new QAction(ribbon_icon(QStringLiteral(":/icons/home.svg")),
+                                 tr("Welcome"), this);
+  home_action->setToolTip(tr("Back to the welcome page"));
+  connect(home_action, &QAction::triggered, this, &MainWindow::show_home);
+  addAction(home_action);
+
+  auto* undo_action = new QAction(ribbon_icon(QStringLiteral(":/icons/undo.svg")),
+                                 tr("Undo"), this);
+  undo_action->setShortcut(QKeySequence::Undo);
+  connect(undo_action, &QAction::triggered, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->undo();
+    }
+  });
+  addAction(undo_action);
+
+  auto* redo_action = new QAction(ribbon_icon(QStringLiteral(":/icons/redo.svg")),
+                                 tr("Redo"), this);
+  redo_action->setShortcut(QKeySequence::Redo);
+  connect(redo_action, &QAction::triggered, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->redo();
+    }
+  });
+  addAction(redo_action);
+
+  auto* exit_action = new QAction(tr("E&xit"), this);
+  exit_action->setShortcut(QKeySequence::Quit);
+  connect(exit_action, &QAction::triggered, this, &QWidget::close);
+  addAction(exit_action);
+
+  auto* display_group = new QActionGroup(this);
+  display_group->setExclusive(true);
+
+  wireframe_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/wireframe.svg")),
+                                 tr("Wireframe"), this);
+  wireframe_action_->setCheckable(true);
+  wireframe_action_->setShortcut(QKeySequence(tr("Ctrl+1")));
+  wireframe_action_->setToolTip(tr("Line drawing — edges only"));
+  display_group->addAction(wireframe_action_);
+  connect(wireframe_action_, &QAction::triggered, this, [this] {
+    set_render_mode(RenderMode::Wireframe);
+  });
+  addAction(wireframe_action_);
+
+  shaded_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/shaded.svg")),
+                              tr("Shaded"), this);
+  shaded_action_->setCheckable(true);
+  shaded_action_->setChecked(true);
+  shaded_action_->setShortcut(QKeySequence(tr("Ctrl+2")));
+  shaded_action_->setToolTip(tr("Simple shaded solid display"));
+  display_group->addAction(shaded_action_);
+  connect(shaded_action_, &QAction::triggered, this, [this] {
+    set_render_mode(RenderMode::Shaded);
+  });
+  addAction(shaded_action_);
+
+  realistic_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/realistic.svg")),
+                                 tr("Realistic"), this);
+  realistic_action_->setCheckable(true);
+  realistic_action_->setShortcut(QKeySequence(tr("Ctrl+3")));
+  realistic_action_->setToolTip(tr("Lit display with specular highlights"));
+  display_group->addAction(realistic_action_);
+  connect(realistic_action_, &QAction::triggered, this, [this] {
+    set_render_mode(RenderMode::Realistic);
+  });
+  addAction(realistic_action_);
+
+  // 轴网：显示开关 + 设置。轴网是定位参考（不是构件），只在视口画线、不进实体表。
+  grid_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/grid.svg")), tr("Grid"), this);
+  grid_action_->setCheckable(true);
+  grid_action_->setChecked(true);
+  grid_action_->setToolTip(tr("Show the structural grid"));
+  connect(grid_action_, &QAction::triggered, this, [this](bool on) {
+    if (auto* vp = current_viewport()) {
+      vp->set_grid_visible(on);
+    }
+  });
+  addAction(grid_action_);
+
+  grid_settings_action_ =
+      new QAction(ribbon_icon(QStringLiteral(":/icons/settings.svg")), tr("Grid Settings"), this);
+  grid_settings_action_->setToolTip(tr("Create or edit the structural grid"));
+  connect(grid_settings_action_, &QAction::triggered, this, [this] {
+    auto* vp = current_viewport();
+    if (vp == nullptr) {
+      return;
+    }
+    GridSettingsDialog dialog(vp->document().bim().grid().axes(), this);
+    if (dialog.exec() != QDialog::Accepted) {
+      return;
+    }
+    if (!dialog.place_with_click()) {
+      vp->apply_grid_settings(dialog.axes());
+      return;
+    }
+    // 布置完还要落位：把轴网显示打开（否则放完看不见），再让视口接管点击放置。
+    vp->set_grid_visible(true);
+    if (grid_action_ != nullptr) {
+      const QSignalBlocker block(grid_action_);
+      grid_action_->setChecked(true);
+    }
+    vp->begin_grid_placement(dialog.axes(), dialog.placement_anchor());
+  });
+  addAction(grid_settings_action_);
+
+  // 翻模：从 DXF 平面图生成墙 / 柱 / 门窗。识别结果先给用户复核，再落地。
+  trace_drawing_action_ =
+      new QAction(ribbon_icon(QStringLiteral(":/icons/tracing.svg")), tr("Trace Drawing"), this);
+  trace_drawing_action_->setToolTip(
+      tr("Create walls, columns and doors/windows from a DXF floor plan"));
+  connect(trace_drawing_action_, &QAction::triggered, this, [this] {
+    auto* vp = current_viewport();
+    if (vp == nullptr) {
+      statusBar()->showMessage(tr("Open or create a model first."), 6000);
+      return;
+    }
+    // 停在图纸页时就默认用那张图（只有 DXF 能翻模）。
+    QString path;
+    if (DrawingView* drawing = current_drawing_view()) {
+      const QString candidate = drawing->document().path();
+      if (QFileInfo(candidate).suffix().compare(QStringLiteral("dxf"), Qt::CaseInsensitive) == 0) {
+        path = candidate;
+      }
+    }
+    DrawingImportDialog dialog(path, &vp->document().bim().grid(), this);
+    if (dialog.exec() != QDialog::Accepted || dialog.plan().empty()) {
+      return;
+    }
+    vp->apply_drawing_import(dialog.plan());
+  });
+  addAction(trace_drawing_action_);
+
+  // 右侧属性面板：展示/编辑选中实体的参数。
+  property_panel_ = new PropertyPanel(this);
+  auto* property_dock = new QDockWidget(tr("Properties"), this);
+  property_dock->setObjectName(QStringLiteral("propertyDock"));
+  property_dock->setWidget(property_panel_);
+  property_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+  addDockWidget(Qt::RightDockWidgetArea, property_dock);
+  QAction* property_toggle = property_dock->toggleViewAction();
+  property_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/properties.svg")));
+  addAction(property_toggle);
+
+  // 左侧绘制设置面板：点构件 icon 后在此选子类型/参数，再"开始绘制"武装命令。
+  // 默认收起——没有文档时它没有意义；用构件工具或"视图 · 面板 · 绘制设置"唤出。
+  draw_panel_ = new DrawPanel(this);
+  // 板的"标高偏移"默认取当前楼层层高（= 本层顶板）。层高在文档里，面板拿不到，
+  // 这里注入；没有模型文档就退回默认层高。
+  draw_panel_->set_storey_height_provider([this] {
+    DocumentViewport* vp = current_viewport();
+    const Storey* active =
+        vp != nullptr ? vp->document().bim().find_storey(
+                            vp->document().bim().active_storey_id())
+                      : nullptr;
+    return active != nullptr && active->height > 0.0 ? active->height : kDefaultWallHeight;
+  });
+  draw_dock_ = new QDockWidget(tr("Draw"), this);
+  draw_dock_->setObjectName(QStringLiteral("drawDock"));
+  draw_dock_->setWidget(draw_panel_);
+  draw_dock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+  addDockWidget(Qt::LeftDockWidgetArea, draw_dock_);
+  draw_dock_->hide();
+  draw_toggle_ = draw_dock_->toggleViewAction();
+  draw_toggle_->setText(tr("Draw Settings"));
+  draw_toggle_->setIcon(ribbon_icon(QStringLiteral(":/icons/draw_panel.svg")));
+  draw_toggle_->setToolTip(tr("Show the draw settings panel"));
+  addAction(draw_toggle_);
+  connect(draw_panel_, &DrawPanel::armed_args, this, [this](ToolMode mode, const CommandArgs& args) {
+    if (auto* vp = current_viewport()) {
+      vp->arm_create(mode, args);
+    }
+  });
+  connect(draw_panel_, &DrawPanel::disarmed, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->set_tool(ToolMode::None);
+    }
+  });
+
+  texture_library_panel_ = new TextureLibraryPanel(this);
+  texture_library_dock_ = new QDockWidget(tr("Texture Library"), this);
+  texture_library_dock_->setObjectName(QStringLiteral("textureLibraryDock"));
+  texture_library_dock_->setWidget(texture_library_panel_);
+  texture_library_dock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+  addDockWidget(Qt::RightDockWidgetArea, texture_library_dock_);
+  tabifyDockWidget(property_dock, texture_library_dock_);
+  property_dock->raise();
+  connect(texture_library_dock_, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+    if (visible) {
+      refresh_texture_library_panel();
+    }
+  });
+  auto* texture_toggle = texture_library_dock_->toggleViewAction();
+  texture_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/texture_library.svg")));
+  addAction(texture_toggle);
+
+
+  handle_inspector_ = new HandleInspector(this);
+  auto* handle_dock = new QDockWidget(tr("Handle Inspector"), this);
+  handle_dock->setObjectName(QStringLiteral("handleInspectorDock"));
+  handle_dock->setWidget(handle_inspector_);
+  handle_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+  addDockWidget(Qt::RightDockWidgetArea, handle_dock);
+  auto* handle_toggle = handle_dock->toggleViewAction();
+  handle_toggle->setText(tr("Inspector"));
+  handle_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/inspector.svg")));
+  handle_toggle->setShortcut(QKeySequence(tr("Ctrl+D")));
+  handle_toggle->setToolTip(tr("Inspect the selected component's document handle"));
+  addAction(handle_toggle);
+  connect(handle_inspector_, &HandleInspector::locate_requested, this,
+          [this](std::uint64_t node_id) {
+            if (auto* vp = current_viewport()) {
+              vp->frame_node(node_id);
+            }
+          });
+
+  timing_panel_ = new TimingPanel(this);
+  timing_panel_->setMinimumWidth(360);
+  timing_dock_ = new QDockWidget(tr("Timing"), this);
+  timing_dock_->setObjectName(QStringLiteral("timingDock"));
+  timing_dock_->setWidget(timing_panel_);
+  timing_dock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea |
+                                Qt::BottomDockWidgetArea);
+  timing_dock_->setMinimumWidth(360);
+  addDockWidget(Qt::BottomDockWidgetArea, timing_dock_);
+  timing_dock_->hide();
+  auto* timing_toggle = timing_dock_->toggleViewAction();
+  timing_toggle->setText(tr("Timing"));
+  timing_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/timing.svg")));
+  timing_toggle->setToolTip(tr("Show the timing timeline"));
+  addAction(timing_toggle);
+
+  timing_record_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/timing.svg")),
+                                      tr("Record"), this);
+  timing_record_action_->setCheckable(true);
+  timing_record_action_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+T")));
+  timing_record_action_->setToolTip(tr("Start recording, then stop to inspect the timeline"));
+  addAction(timing_record_action_);
+
+  connect(timing_record_action_, &QAction::toggled, this, [this](bool checked) {
+    if (checked) {
+      timing_dock_->show();
+      timing_dock_->raise();
+    }
+    timing_panel_->set_recording(checked);
+  });
+  connect(timing_panel_, &TimingPanel::recording_changed, this, [this](bool recording) {
+    QSignalBlocker block(timing_record_action_);
+    timing_record_action_->setChecked(recording);
+    timing_record_action_->setText(recording ? tr("Stop") : tr("Record"));
+    if (recording) {
+      timing_dock_->show();
+      timing_dock_->raise();
+    }
+  });
+
+  debug_scene_action->setIcon(ribbon_icon(QStringLiteral(":/icons/shaded.svg")));
+  debug_scene_action->setText(tr("Scene Debugger"));
+
+  auto* ribbon = new RibbonBar(this);
+  ribbon->add_quick_action(undo_action);
+  ribbon->add_quick_action(redo_action);
+
+  RibbonPage* home_page = ribbon->add_page(QStringLiteral("home"), tr("Home"));
+  RibbonGroup* file_group = home_page->add_group(QStringLiteral("file"), tr("File"));
+  file_group->add_action(new_action);
+  file_group->add_action(open_action);
+  file_group->add_action(open_drawing_action);
+  file_group->add_action(trace_drawing_action_);
+  file_group->add_action(save_action);
+  file_group->add_action(save_as_action);
+
+  RibbonGroup* draw_group = home_page->add_group(QStringLiteral("draw"), tr("Draw"));
+  draw_group->add_action(line_action_);
+  draw_group->add_action(polyline_action_);
+  draw_group->add_action(rectangle_action_);
+  draw_group->add_action(circle_action_);
+  draw_group->add_action(arc_action_);
+  draw_group->add_action(bezier_action_);
+  draw_group->add_action(bspline_action_);
+
+  RibbonGroup* architectural_group =
+      home_page->add_group(QStringLiteral("architectural"), tr("Architectural"));
+  architectural_group->add_action(wall_action_);
+  architectural_group->add_action(door_action_);
+  architectural_group->add_action(window_action_);
+  architectural_group->add_action(curtain_wall_action_);
+
+  RibbonGroup* structural_group =
+      home_page->add_group(QStringLiteral("structural"), tr("Structural"));
+  structural_group->add_action(beam_action_);
+  structural_group->add_action(column_action_);
+  structural_group->add_action(slab_action_);
+  structural_group->add_action(structural_wall_action_);
+  structural_group->add_action(foundation_action_);
+
+  RibbonGroup* modify_group = home_page->add_group(QStringLiteral("modify"), tr("Modify"));
+  modify_group->add_action(fillet_action_);
+  modify_group->add_action(chamfer_action_);
+
+  RibbonGroup* navigation_group =
+      home_page->add_group(QStringLiteral("navigation"), tr("Navigation"));
+  navigation_group->add_action(frame_all_action);
+
+  RibbonGroup* setting_group =
+      home_page->add_group(QStringLiteral("settings"), tr("Settings"));
+  setting_group->add_action(settings_action);
+
+  RibbonGroup* plugins_group =
+      home_page->add_group(QStringLiteral("plugins"), tr("Plugins"));
+  plugins_group->add_action(manage_action);
+
+  RibbonGroup* help_group = home_page->add_group(QStringLiteral("help"), tr("Help"));
+  help_group->add_action(about_action);
+
+  RibbonPage* view_page = ribbon->add_page(QStringLiteral("view"), tr("View"));
+  RibbonGroup* display_ribbon =
+      view_page->add_group(QStringLiteral("display"), tr("Display"));
+  display_ribbon->add_action(wireframe_action_);
+  display_ribbon->add_action(shaded_action_);
+  display_ribbon->add_action(realistic_action_);
+  display_ribbon->add_action(grid_action_);
+  display_ribbon->add_action(grid_settings_action_);
+
+  RibbonGroup* panels_group = view_page->add_group(QStringLiteral("panels"), tr("Panels"));
+  // 构件显隐面板住在视口右上角的工具面板里（不在停靠区），这里只给入口与快捷键。
+  auto* components_action =
+      new QAction(ribbon_icon(QStringLiteral(":/icons/components.svg")), tr("Components"), this);
+  components_action->setShortcut(QKeySequence(tr("Ctrl+L")));
+  components_action->setToolTip(tr("Show or hide components by category"));
+  connect(components_action, &QAction::triggered, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->toggle_visibility_panel();
+    }
+  });
+  addAction(components_action);
+  panels_group->add_action(components_action);
+  // 楼层面板同样住在视口右侧的工具列里（同一列的第二个功能页）。
+  auto* floors_action =
+      new QAction(ribbon_icon(QStringLiteral(":/icons/storey.svg")), tr("Floors"), this);
+  floors_action->setShortcut(QKeySequence(tr("Ctrl+Shift+L")));
+  floors_action->setToolTip(tr("Show or hide floors, and set floor heights"));
+  connect(floors_action, &QAction::triggered, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->toggle_floor_panel();
+    }
+  });
+  addAction(floors_action);
+  panels_group->add_action(floors_action);
+  // 楼层管理：同一列里的第三个功能页，把楼层当视图清单用（双击打开某层视图）。
+  auto* floor_views_action = new QAction(
+      ribbon_icon(QStringLiteral(":/icons/floor_manager.svg")), tr("Floor Views"), this);
+  floor_views_action->setToolTip(
+      tr("List the global 3D view and every floor; double-click one to open it"));
+  connect(floor_views_action, &QAction::triggered, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->toggle_floor_manager_panel();
+    }
+  });
+  addAction(floor_views_action);
+  panels_group->add_action(floor_views_action);
+  // 图纸管理：住在视口右侧工具列里的功能页（和构件显隐 / 楼层同一列）。
+  auto* drawings_action =
+      new QAction(ribbon_icon(QStringLiteral(":/icons/drawing.svg")), tr("Drawings"), this);
+  drawings_action->setToolTip(
+      tr("Manage reference drawings (DWF / DWFx / DXF / PDF…): add, delete, double-click to view"));
+  connect(drawings_action, &QAction::triggered, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->toggle_drawing_panel();
+    }
+  });
+  addAction(drawings_action);
+  panels_group->add_action(drawings_action);
+  panels_group->add_action(draw_toggle_);
+  panels_group->add_action(property_toggle);
+  panels_group->add_action(texture_toggle);
+  panels_group->add_action(handle_toggle);
+  panels_group->add_action(debug_scene_action);
+  panels_group->add_action(timing_toggle);
+
+  RibbonGroup* workspace_group =
+      view_page->add_group(QStringLiteral("workspace"), tr("Workspace"));
+  workspace_group->add_action(home_action);
+
+  plugin_host_.set_log_sink([this](std::string_view msg) {
+    statusBar()->showMessage(QString::fromUtf8(msg.data(), static_cast<int>(msg.size())), 8000);
+  });
+  plugin_host_.set_dialog_handler(
+      [this](std::int32_t kind, std::int32_t buttons, std::string_view spec, std::string& out) {
+        return show_plugin_dialog(this, kind, buttons, spec, out);
+      });
+  if (auto loaded = plugin_host_.load(); !loaded) {
+    log_warn(loaded.error());
+    statusBar()->showMessage(QString::fromStdString(loaded.error()), 8000);
+  }
+  {
+    std::unordered_set<std::string> disabled;
+    for (const QString& id : AppSettings::instance().disabled_plugin_ids()) {
+      disabled.insert(id.toStdString());
+    }
+    plugin_manager_.set_disabled_ids(std::move(disabled));
+    std::vector<std::string> order;
+    for (const QString& id : AppSettings::instance().ribbon_command_order()) {
+      order.push_back(id.toStdString());
+    }
+    plugin_manager_.set_command_order(std::move(order));
+  }
+  std::vector<const PluginCommand*> plugin_commands;
+  plugin_commands.reserve(plugin_host_.commands().size());
+  for (const auto& cmd : plugin_host_.commands()) {
+    plugin_commands.push_back(&cmd);
+  }
+  std::unordered_map<std::string, std::size_t> command_rank;
+  for (std::size_t i = 0; i < plugin_manager_.command_order().size(); ++i) {
+    command_rank.emplace(plugin_manager_.command_order()[i], i);
+  }
+  std::stable_sort(
+      plugin_commands.begin(), plugin_commands.end(),
+      [&command_rank](const PluginCommand* a, const PluginCommand* b) {
+        const auto ar = command_rank.find(a->id);
+        const auto br = command_rank.find(b->id);
+        if (ar != command_rank.end() || br != command_rank.end()) {
+          if (ar == command_rank.end()) {
+            return false;
+          }
+          if (br == command_rank.end()) {
+            return true;
+          }
+          return ar->second < br->second;
+        }
+        if (a->placement.order != b->placement.order) {
+          return a->placement.order < b->placement.order;
+        }
+        return a->id < b->id;
+      });
+  for (const PluginCommand* command : plugin_commands) {
+    const PluginCommand& cmd = *command;
+    const QString page_id = QString::fromStdString(cmd.placement.page_id);
+    const QString group_id = QString::fromStdString(cmd.placement.group_id);
+    RibbonPage* target_page = ribbon->find_page(page_id);
+    if (target_page == nullptr) {
+      target_page = ribbon->add_page(page_id, page_id);
+    }
+    RibbonGroup* target_group = target_page->find_group(group_id);
+    if (target_group == nullptr) {
+      target_group = target_page->add_group(group_id, group_id);
+    }
+    const QString icon_path = cmd.placement.icon_path.empty()
+                                  ? QStringLiteral(":/icons/inspector.svg")
+                                  : QString::fromStdString(cmd.placement.icon_path);
+    auto* action = new QAction(ribbon_icon(icon_path),
+                               QString::fromUtf8(cmd.title.data(), static_cast<int>(cmd.title.size())),
+                               this);
+    action->setCheckable(cmd.placement.checkable);
+    if (!cmd.tooltip.empty()) {
+      action->setToolTip(
+          QString::fromUtf8(cmd.tooltip.data(), static_cast<int>(cmd.tooltip.size())));
+    }
+    const std::string id = cmd.id;
+    connect(action, &QAction::triggered, this, [this, id, action](bool checked) {
+      if (!plugin_manager_.is_command_enabled(id)) {
+        action->setChecked(false);
+        statusBar()->showMessage(tr("This plugin is disabled."), 4000);
+        return;
+      }
+      bind_plugin_session();
+      if (action->isCheckable() && !checked) {
+        if (auto* vp = current_viewport()) {
+          vp->cancel_plugin_point_input();
+        }
+        return;
+      }
+      if (auto r = plugin_host_.invoke(id); !r) {
+        action->setChecked(false);
+        statusBar()->showMessage(QString::fromStdString(r.error()), 5000);
+        log_error(r.error());
+      }
+    });
+    PluginRibbonButton item;
+    item.command_id = cmd.id;
+    item.plugin_id = cmd.plugin_id;
+    item.page_id = cmd.placement.page_id;
+    item.group_id = cmd.placement.group_id;
+    item.group = target_group;
+    item.button = target_group->add_action(action);
+    item.action = action;
+    plugin_ribbon_buttons_.push_back(item);
+  }
+  apply_plugin_visibility();
+  apply_plugin_order();
+
+  setMenuWidget(ribbon);
+
+  connect(property_panel_, &PropertyPanel::param_edited, this,
+          [this](std::uint64_t entity_id, std::uint64_t feature_id, const QString& param_name,
+                 double value) {
+            if (auto* vp = current_viewport()) {
+              vp->set_entity_param(entity_id, feature_id, param_name.toStdString(), value);
+            }
+          });
+  connect(property_panel_, &PropertyPanel::material_edited, this,
+          [this](std::uint64_t entity_id, Material material) {
+            if (auto* vp = current_viewport()) {
+              vp->set_entity_material(entity_id, std::move(material));
+            }
+          });
+  connect(property_panel_, &PropertyPanel::material_shared_updated, this,
+          [this](Material material) {
+            if (auto* vp = current_viewport()) {
+              vp->update_library_material(material);
+            }
+          });
+  connect(property_panel_, &PropertyPanel::texture_import_requested, this,
+          [this](quint64 target_id, TextureAsset asset, int slot, bool edit_shared) {
+            auto* vp = current_viewport();
+            if (vp == nullptr) {
+              return;
+            }
+            Document& doc = vp->document();
+            const std::uint64_t tid = vp->import_texture(std::move(asset));
+            if (tid == 0) {
+              return;
+            }
+            Material material{};
+            const Entity* entity = doc.entity(target_id);
+            const SceneNode* node = doc.scene().find(target_id);
+            const std::uint64_t mid =
+                entity != nullptr ? entity->material_id : (node != nullptr ? node->material_id : 0);
+            if (mid != 0) {
+              if (const Material* m = doc.material(mid)) {
+                material = *m;
+              }
+            }
+            if (slot == 1) {
+              material.normal_texture_id = tid;
+            } else if (slot == 2) {
+              material.orm_texture_id = tid;
+            } else {
+              material.albedo_texture_id = tid;
+            }
+            if (edit_shared && material.id != 0) {
+              vp->update_library_material(material);
+            } else {
+              material.id = 0;
+              material.name.clear();
+              vp->set_entity_material(target_id, material);
+            }
+            refresh_property_panel();
+          });
+  connect(texture_library_panel_, &TextureLibraryPanel::texture_import_requested, this,
+          [this](TextureAsset asset) {
+            if (auto* vp = current_viewport()) {
+              vp->import_texture(std::move(asset));
+            }
+          });
+  connect(texture_library_panel_, &TextureLibraryPanel::texture_replace_requested, this,
+          [this](quint64 id, TextureAsset asset) {
+            if (auto* vp = current_viewport()) {
+              vp->replace_texture(id, std::move(asset));
+            }
+          });
+  connect(property_panel_, &PropertyPanel::location_edited, this,
+          [this](std::uint64_t entity_id, std::uint64_t storey_id,
+                 double elevation_offset) {
+            if (auto* vp = current_viewport()) {
+              vp->set_entity_location(entity_id, storey_id, elevation_offset);
+            }
+          });
+  refresh_property_panel();
+  refresh_handle_inspector();
+  refresh_texture_library_panel();
+
+  statusBar()->showMessage(tr("Ready — Open a model"));
+  show_home();
+}
+
+MainWindow::~MainWindow() {
+  if (tabs_ != nullptr) {
+    for (int i = 0; i < tabs_->count(); ++i) {
+      if (auto* vp = qobject_cast<DocumentViewport*>(tabs_->widget(i))) {
+        vp->cancel_plugin_point_input();
+      }
+    }
+  }
+  plugin_host_.shutdown();
+}
+
+void MainWindow::showEvent(QShowEvent* event) {
+  QMainWindow::showEvent(event);
+  if (placed_on_primary_) {
+    return;
+  }
+  center_on_primary_screen(this);
+  placed_on_primary_ = true;
+}
+
+void MainWindow::set_create_tool(ToolMode mode) {
+  auto* vp = current_viewport();
+  if (vp == nullptr) {
+    // 没有模型文档（起始页 / 参考图纸页）时构件工具无处落地，也不该弹面板。
+    sync_create_tool_actions(ToolMode::None);
+    sync_draw_panel();
+    statusBar()->showMessage(tr("Open a document to draw components"), 5000);
+    return;
+  }
+  // 同一构件已经武装：只把面板拉回前台，别重设工具——set_tool 会取消视口里的 pending，
+  // 让"再点一次图标"变成静默取消绘制。
+  const bool keep_armed = draw_panel_ != nullptr && draw_panel_->is_armed() &&
+                          draw_panel_->current_mode() == mode;
+  if (!keep_armed) {
+    if (draw_panel_ != nullptr) {
+      // 先换面板：set_component 可能 emit disarmed（换构件 = 放弃上一个 pending），
+      // 顺序反了会把刚设好的工具又取消掉。
+      draw_panel_->set_component(mode);
+    }
+    vp->set_tool(mode);
+    sync_create_tool_actions(vp->tool_mode());
+  }
+  // 只有真正带规格的构件才需要这块面板；草图工具（直线/圆/多段线…）点了就画，
+  // 弹出一张占位表单只会添乱。
+  const bool has_component = draw_panel_ != nullptr &&
+                             draw_panel_->current_mode() == mode &&
+                             draw_panel_->has_component();
+  if (has_component && draw_dock_ != nullptr) {
+    draw_dock_->show();
+    draw_dock_->raise();
+  }
+}
+
+void MainWindow::sync_draw_panel() {
+  DocumentViewport* vp = current_viewport();
+  const bool has_document = vp != nullptr;
+  if (draw_toggle_ != nullptr) {
+    draw_toggle_->setEnabled(has_document);
+    draw_toggle_->setToolTip(has_document ? tr("Show the draw settings panel")
+                                          : tr("Open a document to draw components"));
+  }
+  if (draw_panel_ == nullptr || draw_dock_ == nullptr) {
+    return;
+  }
+  if (!has_document) {
+    // 文档关闭后绘制设置没有意义：收起面板、清掉构件选择与武装状态。
+    draw_dock_->hide();
+    draw_panel_->set_component(ToolMode::None);
+    sync_create_tool_actions(ToolMode::None);
+    return;
+  }
+  // 工具状态跟着活跃文档走（和 sync_render_mode_actions 一个道理）：切到别的文档时
+  // 功能区高亮必须反映那个文档自己的工具，而不是上一个文档留下的。
+  sync_create_tool_actions(vp->tool_mode());
+  // 面板武装状态属于具体文档：切到工具不同的文档时按钮要回到"开始绘制"，
+  // 否则会留在"结束绘制"却没有任何 pending 命令的假状态。
+  if (draw_panel_->is_armed() && draw_panel_->current_mode() != vp->tool_mode()) {
+    draw_panel_->clear_armed();
+  }
+}
+
+void MainWindow::sync_create_tool_actions(ToolMode mode) {
+  if (!create_group_) {
+    return;
+  }
+  const bool was_exclusive = create_group_->isExclusive();
+  create_group_->setExclusive(false);
+  const auto actions = create_group_->actions();
+  for (QAction* action : actions) {
+    action->setChecked(false);
+  }
+  if (mode != ToolMode::None) {
+    const int expected = static_cast<int>(mode);
+    for (QAction* action : actions) {
+      if (action->property("toolMode").toInt() == expected) {
+        action->setChecked(true);
+        break;
+      }
+    }
+  }
+  create_group_->setExclusive(was_exclusive);
+}
+
+void MainWindow::show_home() {
+  refresh_home();
+  stack_->setCurrentWidget(home_);
+  sync_draw_panel();
+}
+
+void MainWindow::show_documents() {
+  if (tabs_->count() == 0) {
+    show_home();
+    return;
+  }
+  stack_->setCurrentWidget(tabs_);
+  // addTab emits currentChanged before the stack leaves the home page, so
+  // current_viewport() is still null and the texture library would stay empty.
+  refresh_property_panel();
+  refresh_handle_inspector();
+  refresh_texture_library_panel();
+  sync_draw_panel();
+}
+
+void MainWindow::activate_open_document(int index) {
+  if (index < 0 || index >= tabs_->count()) {
+    return;
+  }
+  tabs_->setCurrentIndex(index);
+  show_documents();
+}
+
+void MainWindow::refresh_home() {
+  home_->refresh(recent_.items());
+  QVector<OpenDocumentItem> open_items;
+  open_items.reserve(tabs_->count());
+  for (int i = 0; i < tabs_->count(); ++i) {
+    OpenDocumentItem item;
+    item.index = i;
+    item.name = tabs_->tabText(i);
+    if (auto* vp = qobject_cast<DocumentViewport*>(tabs_->widget(i))) {
+      const auto& path = vp->document().path();
+      if (!path.empty()) {
+        item.path = path_to_qstring(path);
+      }
+    }
+    open_items.push_back(item);
+  }
+  home_->set_open_documents(open_items);
+}
+
+int MainWindow::find_open_document(const QString& path) const {
+  if (path.isEmpty()) {
+    return -1;
+  }
+  const QString abs = QFileInfo(path).absoluteFilePath();
+  for (int i = 0; i < tabs_->count(); ++i) {
+    if (auto* drawing = qobject_cast<DrawingView*>(tabs_->widget(i))) {
+      const QString& drawing_path = drawing->document().path();
+      if (!drawing_path.isEmpty() &&
+          QFileInfo(drawing_path).absoluteFilePath() == abs) {
+        return i;
+      }
+      continue;
+    }
+    auto* vp = qobject_cast<DocumentViewport*>(tabs_->widget(i));
+    if (!vp) {
+      continue;
+    }
+    const auto& doc_path = vp->document().path();
+    if (doc_path.empty()) {
+      continue;
+    }
+    if (QFileInfo(path_to_qstring(doc_path)).absoluteFilePath() == abs) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+Result<void> MainWindow::populate_document_meshes(
+    Document& document, RenderThread& thread,
+    const UiLoadProgressCallback& progress) {
+  const int mesh_count = static_cast<int>(document.meshes().size());
+  int uploaded = 0;
+  for (auto& [asset_id, asset] : document.meshes()) {
+    if (progress && mesh_count > 0) {
+      progress(uploaded * 100 / mesh_count,
+               tr("Uploading geometry (%1 / %2)…")
+                   .arg(uploaded + 1)
+                   .arg(mesh_count));
+    }
+    auto gpu_id = thread.upload_mesh(asset_id, asset.cpu);
+    if (!gpu_id) {
+      return Err(gpu_id.error());
+    }
+    ++uploaded;
+  }
+  if (progress) {
+    progress(100, tr("Preparing the scene…"));
+  }
+  document.recompute_scene();
+  return {};
+}
+
+void MainWindow::open_about() {
+  AboutDialog dialog(this);
+  dialog.exec();
+}
+
+void MainWindow::open_settings() {
+  SettingsDialog dialog(this);
+  if (dialog.exec() != QDialog::Accepted) {
+    return;
+  }
+  QStringList notes;
+  if (dialog.language_changed()) {
+    notes << tr("Language changes take effect after restarting Tamias.");
+  }
+  if (dialog.backend_changed()) {
+    notes << tr("Render backend changes take effect after restarting Tamias.");
+  }
+  if (!notes.isEmpty()) {
+    QMessageBox::information(this, tr("Settings"), notes.join(QStringLiteral("\n\n")));
+  }
+}
+
+void MainWindow::open_plugin_manager() {
+  PluginManagerDialog dialog(plugin_manager_, this);
+  if (dialog.exec() != QDialog::Accepted) {
+    return;
+  }
+  plugin_manager_.commit_disabled_among_loaded(
+      dialog.disabled_loaded_ids());
+  plugin_manager_.commit_command_order_among_loaded(
+      dialog.ordered_command_ids());
+  QStringList stored;
+  stored.reserve(static_cast<int>(plugin_manager_.disabled_ids().size()));
+  for (const auto& id : plugin_manager_.disabled_ids()) {
+    stored.push_back(QString::fromStdString(id));
+  }
+  stored.sort();
+  AppSettings::instance().set_disabled_plugin_ids(stored);
+  QStringList command_order;
+  command_order.reserve(
+      static_cast<int>(plugin_manager_.command_order().size()));
+  for (const std::string& id : plugin_manager_.command_order()) {
+    command_order.push_back(QString::fromStdString(id));
+  }
+  AppSettings::instance().set_ribbon_command_order(command_order);
+  AppSettings::instance().save();
+  apply_plugin_visibility();
+  apply_plugin_order();
+}
+
+void MainWindow::apply_plugin_visibility() {
+  for (const auto& item : plugin_ribbon_buttons_) {
+    const bool visible = plugin_manager_.is_enabled(item.plugin_id);
+    if (!visible && item.action != nullptr && item.action->isChecked()) {
+      if (auto* viewport = current_viewport()) {
+        viewport->cancel_plugin_point_input();
+      }
+      item.action->setChecked(false);
+    }
+    if (item.button != nullptr) {
+      item.button->setVisible(visible);
+    }
+  }
+}
+
+void MainWindow::apply_plugin_order() {
+  std::unordered_map<RibbonGroup*, std::pair<std::string, std::string>>
+      locations;
+  for (const auto& item : plugin_ribbon_buttons_) {
+    if (item.group != nullptr) {
+      locations.emplace(item.group,
+                        std::pair{item.page_id, item.group_id});
+    }
+  }
+  for (const auto& [group, location] : locations) {
+    std::unordered_map<std::string, QToolButton*> buttons;
+    for (const auto& item : plugin_ribbon_buttons_) {
+      if (item.group == group && item.button != nullptr) {
+        buttons.emplace(item.command_id, item.button);
+      }
+    }
+    std::vector<QToolButton*> ordered;
+    for (const PluginCommand* command :
+         plugin_manager_.ordered_commands(location.first, location.second)) {
+      if (const auto it = buttons.find(command->id); it != buttons.end()) {
+        ordered.push_back(it->second);
+      }
+    }
+    group->reorder_buttons(ordered);
+  }
+}
+
+void MainWindow::add_document_tab(std::shared_ptr<Document> document,
+                                  const ViewportState* viewport,
+                                  const UiLoadProgressCallback& progress) {
+  const RenderDeviceConfig config = AppSettings::instance().render_device_config();
+  auto thread = RenderThreadPool::instance().acquire(config);
+  if (!thread) {
+    QMessageBox::critical(
+        this, tr("Render"),
+        tr("Failed to create %1 render thread.")
+            .arg(QString::fromUtf8(to_string(config.backend))));
+    return;
+  }
+  if (auto r = populate_document_meshes(*document, *thread, progress); !r) {
+    QMessageBox::critical(this, tr("Upload"), QString::fromStdString(r.error()));
+    return;
+  }
+  // Parent after addTab so the first present sees a real laid-out size. Applying
+  // viewport (and redrawing) before addTab can create a tiny swapchain that only
+  // fills the top-left corner of the window.
+  auto* vp = new DocumentViewport(document, thread, nullptr);
+  connect(vp, &DocumentViewport::tool_mode_changed, this, [this](ToolMode mode) {
+    sync_create_tool_actions(mode);
+    if (draw_panel_ != nullptr) {
+      // 工具退出（Esc / 右键 / 切换）时取消面板武装状态。
+      if (mode == ToolMode::None) {
+        draw_panel_->set_armed(false);
+      }
+    }
+  });
+  connect(vp, &DocumentViewport::status_message, this, [this](const QString& text) {
+    statusBar()->showMessage(text, 5000);
+  });
+  connect(vp, &DocumentViewport::selection_changed, this, &MainWindow::refresh_property_panel);
+  connect(vp, &DocumentViewport::document_changed, this, &MainWindow::refresh_property_panel);
+  connect(vp, &DocumentViewport::selection_changed, this, &MainWindow::refresh_handle_inspector);
+  connect(vp, &DocumentViewport::document_changed, this, &MainWindow::refresh_handle_inspector);
+  connect(vp, &DocumentViewport::document_changed, this,
+          &MainWindow::refresh_texture_library_panel);
+  connect(vp, &DocumentViewport::drawing_open_requested, this,
+          [this](const QString& path) { open_drawing_tab(path); });
+  connect(vp, &DocumentViewport::selection_changed, this,
+          &MainWindow::refresh_texture_library_panel);
+  connect(vp, &DocumentViewport::plugin_point_input_changed, this,
+          [this](bool active) {
+            if (active) {
+              return;
+            }
+            for (const auto& item : plugin_ribbon_buttons_) {
+              if (item.action != nullptr && item.action->isCheckable()) {
+                item.action->setChecked(false);
+              }
+            }
+          });
+  const int index = tabs_->addTab(vp, QString::fromStdString(document->name()));
+  tabs_->setCurrentIndex(index);
+  show_documents();
+  if (viewport) {
+    vp->apply_viewport_state(*viewport);
+    vp->request_redraw();
+  }
+  sync_render_mode_actions();
+  sync_bim_actions();
+  bind_plugin_session();
+  // add_entity / add_import_mesh mark dirty while assembling the initial scene.
+  // That baseline is not a user edit, so closing without further changes must
+  // not prompt to save.
+  document->clear_dirty();
+}
+
+void MainWindow::new_document() {
+  auto document = std::make_shared<Document>(tr("Untitled").toStdString());
+  add_document_tab(document);
+}
+
+bool MainWindow::open_path(const QString& path) {
+  if (path.isEmpty()) {
+    return false;
+  }
+  if (const int existing = find_open_document(path); existing >= 0) {
+    activate_open_document(existing);
+    return true;
+  }
+  const QFileInfo info(path);
+  if (!info.exists()) {
+    QMessageBox::warning(this, tr("Open"), tr("File not found:\n%1").arg(path));
+    return false;
+  }
+
+  const auto file = qstring_to_path(info.absoluteFilePath());
+  OpenProgressDialog progress(this, tr("Open Project"),
+                              tr("Opening %1…").arg(info.fileName()));
+  progress.stage(3, tr("Opening %1…").arg(info.fileName()));
+
+  if (DrawingDocument::is_drawing_path(path)) {
+    progress.busy(tr("Reading drawing %1…").arg(info.fileName()));
+    open_drawing_tab(info.absoluteFilePath());
+    progress.stage(100, tr("Drawing opened."));
+    return true;
+  }
+
+  if (is_render_scene_path(file)) {
+    progress.busy(tr("Reading render scene %1…").arg(info.fileName()));
+    auto loaded = load_render_scene(file);
+    if (!loaded) {
+      progress.close();
+      QMessageBox::critical(this, tr("Open"), QString::fromStdString(loaded.error()));
+      return false;
+    }
+    progress.stage(82, tr("Generating preview…"));
+    QString thumb_path;
+    if (!loaded->meshes.empty()) {
+      const QImage thumb = render_mesh_thumbnail(loaded->meshes.begin()->second);
+      thumb_path = save_mesh_thumbnail(info.absoluteFilePath(), thumb);
+    }
+    progress.stage(94, tr("Opening render scene…"));
+    open_scene_debugger(std::move(*loaded), file, nullptr);
+    recent_.add(info.absoluteFilePath(), thumb_path);
+    refresh_home();
+    progress.stage(100, tr("Render scene opened."));
+    statusBar()->showMessage(tr("Opened render scene in debugger: %1").arg(info.absoluteFilePath()),
+                             5000);
+    return true;
+  }
+
+  if (is_tdoc_document_path(file)) {
+    auto loaded = load_document(file, [&progress, &info](float fraction) {
+      progress.stage(5 + static_cast<int>(fraction * 60.0f),
+                     tr("Reading project %1…").arg(info.fileName()));
+    });
+    if (!loaded) {
+      progress.close();
+      QMessageBox::critical(this, tr("Open"), QString::fromStdString(loaded.error()));
+      return false;
+    }
+    ViewportState vp_storage = loaded->viewport;
+    const bool has_viewport = loaded->has_viewport;
+    auto document = std::make_shared<Document>(std::move(loaded->document));
+    // Prefer the on-disk filename so tabs/recent show .tdoc even if an older
+    // file still has an imported .obj name in META.
+    document->set_path(file);
+    document->set_name(path_to_utf8(file.filename()));
+    progress.stage(68, tr("Uploading geometry…"));
+    add_document_tab(document, has_viewport ? &vp_storage : nullptr,
+                     [&progress](int percent, const QString& label) {
+                       progress.stage(68 + percent * 24 / 100, label);
+                     });
+
+    progress.stage(94, tr("Generating preview…"));
+    const MeshCpu* thumb_mesh = nullptr;
+    if (!document->meshes().empty()) {
+      thumb_mesh = &document->meshes().begin()->second.cpu;
+    }
+    if (thumb_mesh) {
+      const QImage thumb = render_mesh_thumbnail(*thumb_mesh);
+      const QString thumb_path = save_mesh_thumbnail(info.absoluteFilePath(), thumb);
+      recent_.add(info.absoluteFilePath(), thumb_path);
+    } else {
+      recent_.add(info.absoluteFilePath(), QString());
+    }
+    refresh_home();
+    progress.stage(100, tr("Project opened."));
+    statusBar()->showMessage(tr("Loaded %1").arg(info.absoluteFilePath()), 5000);
+    return true;
+  }
+
+  if (info.suffix().compare(QStringLiteral("ifc"), Qt::CaseInsensitive) == 0) {
+    progress.busy(tr("Parsing IFC structure %1…").arg(info.fileName()));
+    auto tree = format_ifc_spatial_tree(file);
+    if (!tree) {
+      progress.close();
+      QMessageBox::critical(this, tr("Open"), QString::fromStdString(tree.error()));
+      return false;
+    }
+    progress.close();
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("IFC spatial structure"));
+    dlg.resize(640, 480);
+    auto* layout = new QVBoxLayout(&dlg);
+    auto* edit = new QPlainTextEdit(&dlg);
+    edit->setReadOnly(true);
+    edit->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    edit->setPlainText(QString::fromStdString(*tree));
+    layout->addWidget(edit);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok, &dlg);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    layout->addWidget(buttons);
+    dlg.exec();
+    statusBar()->showMessage(
+        tr("Parsed %1 (geometry import not yet)").arg(info.absoluteFilePath()), 5000);
+    return true;
+  }
+
+  std::unique_ptr<Shape> cad_shape;
+  std::optional<ImportedModel> imported;
+  if (occt_supports_extension(file)) {
+    progress.busy(tr("Reading CAD geometry %1…").arg(info.fileName()));
+    TAMIAS_TIMING_SCOPE("open_file", TimingCategory::Command);
+    auto* ops = ShapeOpsRegistry::instance().find("occt");
+    if (!ops) {
+      progress.close();
+      QMessageBox::critical(this, tr("Open"), tr("OCCT ShapeOps is not registered."));
+      return false;
+    }
+    auto shape = ops->read_file(file);
+    if (!shape) {
+      progress.close();
+      QMessageBox::critical(this, tr("Open"), QString::fromStdString(shape.error()));
+      return false;
+    }
+    cad_shape = std::move(*shape);
+    progress.stage(45, tr("Preparing CAD geometry…"));
+  } else {
+    progress.busy(tr("Reading mesh %1…").arg(info.fileName()));
+    auto model = load_mesh_model(file);
+    if (!model) {
+      progress.close();
+      QMessageBox::critical(this, tr("Open"), QString::fromStdString(model.error()));
+      return false;
+    }
+    imported = std::move(*model);
+    progress.stage(45, tr("Preparing mesh materials…"));
+  }
+  auto document = std::make_shared<Document>(path_to_utf8(file.filename()));
+  document->set_path(file);
+  std::uint64_t mesh_id = 0;
+  if (cad_shape) {
+    mesh_id = document->add_import_shape(path_to_utf8(file.filename()), std::move(cad_shape),
+                                         Mat4::identity(), {0.75f, 0.78f, 0.82f});
+  } else if (imported) {
+    auto import_slot = [&](const std::string& path, const std::vector<std::uint8_t>& bytes,
+                           TextureUsage usage, bool srgb) -> std::uint64_t {
+      Result<TextureAsset> asset = Err("none");
+      if (!bytes.empty()) {
+        const QByteArray raw(reinterpret_cast<const char*>(bytes.data()),
+                             static_cast<int>(bytes.size()));
+        std::string name = "imported";
+        if (!path.empty()) {
+          name = std::filesystem::path(path).stem().string();
+        }
+        asset = decode_texture_image(raw, std::move(name), usage, srgb);
+      } else if (!path.empty()) {
+        asset = load_texture_image(QString::fromStdString(path), usage, srgb);
+      } else {
+        return 0;
+      }
+      if (!asset) {
+        return 0;
+      }
+      return document->import_texture(std::move(*asset)).id;
+    };
+    Material mat{};
+    mat.name = path_to_utf8(file.stem());
+    mat.base_color = imported->base_color;
+    mat.roughness = imported->roughness;
+    mat.metallic = imported->metallic;
+    mat.opacity = imported->opacity;
+    mat.albedo_texture_id =
+        import_slot(imported->albedo_path, imported->albedo_bytes, TextureUsage::Albedo, true);
+    mat.normal_texture_id =
+        import_slot(imported->normal_path, imported->normal_bytes, TextureUsage::Normal, false);
+    mat.orm_texture_id =
+        import_slot(imported->orm_path, imported->orm_bytes, TextureUsage::Orm, false);
+    const std::uint64_t mat_id = document->add_material(std::move(mat)).id;
+    const bool has_colors = mesh_has_vertex_colors(imported->mesh);
+    const Vec3 color = has_colors ? Vec3{1.f, 1.f, 1.f} : imported->base_color;
+    mesh_id = document->add_import_mesh(path_to_utf8(file.filename()), std::move(imported->mesh),
+                                        Mat4::identity(), color, mat_id);
+  }
+  if (mesh_id == 0) {
+    progress.close();
+    QMessageBox::critical(this, tr("Open"), tr("Failed to add imported geometry."));
+    return false;
+  }
+  add_document_tab(document, nullptr, [&progress](int percent, const QString& label) {
+    progress.stage(55 + percent * 35 / 100, label);
+  });
+
+  progress.stage(94, tr("Generating preview…"));
+  const MeshAsset* asset = document->mesh(mesh_id);
+  MeshCpu thumb_mesh;
+  if (asset != nullptr && !asset->cpu.vertices.empty()) {
+    thumb_mesh = asset->cpu;
+  } else if (asset != nullptr && asset->cpu.bounds.valid()) {
+    const Vec3 e = asset->cpu.bounds.extent();
+    thumb_mesh = make_box_mesh(std::max(e.x, 0.01f), std::max(e.y, 0.01f), std::max(e.z, 0.01f));
+  } else {
+    thumb_mesh = make_box_mesh(1.f, 1.f, 1.f);
+  }
+  const QImage thumb = render_mesh_thumbnail(thumb_mesh);
+  const QString thumb_path = save_mesh_thumbnail(info.absoluteFilePath(), thumb);
+  recent_.add(info.absoluteFilePath(), thumb_path);
+  refresh_home();
+  progress.stage(100, tr("File opened."));
+  statusBar()->showMessage(tr("Loaded %1").arg(info.absoluteFilePath()), 5000);
+  return true;
+}
+
+void MainWindow::open_file() {
+  const QString filters =
+      tr("All Supported (*.tdoc *.trscn *.gltf *.glb *.obj *.step *.stp *.iges *.igs *.brep *.ifc "
+         "*.pdf *.dxf *.svg *.png *.jpg *.jpeg *.bmp *.tif *.tiff);;"
+         "Tamias (*.tdoc);;"
+         "Render Scene (*.trscn);;"
+         "Meshes (*.gltf *.glb *.obj);;"
+         "CAD (*.step *.stp *.iges *.igs *.brep);;"
+         "IFC (*.ifc);;"
+         "Drawings (*.pdf *.dxf *.svg *.png *.jpg *.jpeg *.bmp *.tif *.tiff);;"
+         "glTF (*.gltf *.glb);;OBJ (*.obj);;"
+         "STEP (*.step *.stp);;IGES (*.iges *.igs);;BREP (*.brep)");
+  const QString path = QFileDialog::getOpenFileName(this, tr("Open"), QString(), filters);
+  if (path.isEmpty()) {
+    return;
+  }
+  open_path(path);
+}
+
+void MainWindow::open_paths(const QStringList& paths) {
+  for (const QString& path : paths) {
+    if (path.isEmpty() || path.startsWith(QLatin1Char('-'))) {
+      continue;
+    }
+    open_path(path);
+  }
+}
+
+void MainWindow::open_drawing_file() {
+  const QString path =
+      QFileDialog::getOpenFileName(this, tr("Open Drawing"), QString(),
+                                   DrawingDocument::file_dialog_filter());
+  if (path.isEmpty()) {
+    return;
+  }
+  open_drawing_tab(QFileInfo(path).absoluteFilePath());
+}
+
+void MainWindow::open_drawing_tab(const QString& path) {
+  if (path.isEmpty()) {
+    return;
+  }
+  if (const int existing = find_open_document(path); existing >= 0) {
+    activate_open_document(existing);
+    return;
+  }
+  QString error;
+  std::unique_ptr<DrawingDocument> document = DrawingDocument::open(path, error);
+  if (!document) {
+    QMessageBox::critical(this, tr("Open Drawing"), error);
+    return;
+  }
+  const QString title = document->title();
+  const QString detail = document->detail_text();
+  auto* view = new DrawingView(std::move(document), nullptr);
+  connect(view, &DrawingView::status_message, this, [this](const QString& text) {
+    statusBar()->showMessage(text, 4000);
+  });
+  const int index = tabs_->addTab(view, title);
+  tabs_->setCurrentIndex(index);
+  show_documents();
+  view->setFocus();
+  view->fit_to_window();
+
+  const QImage thumb = view->document().render_thumbnail(QSize(320, 180));
+  const QString thumb_path = save_mesh_thumbnail(path, thumb);
+  recent_.add(path, thumb_path);
+  refresh_home();
+  statusBar()->showMessage(
+      tr("Opened drawing %1 (%2) — wheel to zoom, drag to pan, F to fit").arg(title, detail),
+      8000);
+}
+
+bool MainWindow::is_obj_path(const QString& path) {
+  return QFileInfo(path).suffix().compare(QStringLiteral("obj"), Qt::CaseInsensitive) == 0;
+}
+
+bool MainWindow::is_tdoc_path(const QString& path) {
+  return QFileInfo(path).suffix().compare(QStringLiteral("tdoc"), Qt::CaseInsensitive) == 0;
+}
+
+bool MainWindow::is_trscn_path(const QString& path) {
+  return QFileInfo(path).suffix().compare(QStringLiteral("trscn"), Qt::CaseInsensitive) == 0;
+}
+
+const MeshCpu* MainWindow::selected_mesh(Document& document) const {
+  const MeshAsset* asset = document.selected_mesh();
+  return asset ? &asset->cpu : nullptr;
+}
+
+const MeshCpu* MainWindow::mesh_for_obj_export(Document& document) const {
+  if (const MeshCpu* selected = selected_mesh(document)) {
+    return selected;
+  }
+  if (document.meshes().empty()) {
+    return nullptr;
+  }
+  return &document.meshes().begin()->second.cpu;
+}
+
+bool MainWindow::write_selected_mesh(const QString& path) {
+  auto* vp = current_viewport();
+  if (!vp) {
+    QMessageBox::information(this, tr("Save"), tr("Open a document first."));
+    return false;
+  }
+  Document& document = vp->document();
+  const MeshCpu* mesh = mesh_for_obj_export(document);
+  if (!mesh) {
+    QMessageBox::information(this, tr("Save"), tr("The document has no mesh to export."));
+    return false;
+  }
+
+  QString out_path = path;
+  if (!is_obj_path(out_path)) {
+    out_path += QStringLiteral(".obj");
+  }
+  const QString abs_path = QFileInfo(out_path).absoluteFilePath();
+  const auto file = qstring_to_path(abs_path);
+  if (auto r = save_mesh_file(file, *mesh); !r) {
+    QMessageBox::critical(this, tr("Save"), QString::fromStdString(r.error()));
+    return false;
+  }
+
+  document.set_path(file);
+  document.set_name(path_to_utf8(file.filename()));
+  if (const int index = tabs_->indexOf(vp); index >= 0) {
+    tabs_->setTabText(index, QString::fromStdString(document.name()));
+  }
+
+  const QImage thumb = render_mesh_thumbnail(*mesh);
+  const QString thumb_path = save_mesh_thumbnail(abs_path, thumb);
+  recent_.add(abs_path, thumb_path);
+  refresh_home();
+  notify_save_success(abs_path);
+  return true;
+}
+
+bool MainWindow::export_render_scene() {
+  auto* vp = current_viewport();
+  if (!vp) {
+    QMessageBox::information(this, tr("Render Scene"), tr("Open a document first."));
+    return false;
+  }
+  QString suggested = QString::fromStdString(vp->document().name());
+  if (suggested.isEmpty()) {
+    suggested = QStringLiteral("scene");
+  }
+  if (!is_trscn_path(suggested)) {
+    suggested = QFileInfo(suggested).completeBaseName() + QStringLiteral(".trscn");
+  }
+  const QString path = QFileDialog::getSaveFileName(
+      this, tr("Save Render Scene Snapshot"), suggested, tr("Render Scene (*.trscn)"));
+  if (path.isEmpty()) {
+    return false;
+  }
+  QString out_path = path;
+  if (!is_trscn_path(out_path)) {
+    out_path += QStringLiteral(".trscn");
+  }
+  const QString abs_path = QFileInfo(out_path).absoluteFilePath();
+  const RenderScene scene = vp->capture_debug_scene();
+  if (auto r = save_render_scene(qstring_to_path(abs_path), scene); !r) {
+    QMessageBox::critical(this, tr("Render Scene"), QString::fromStdString(r.error()));
+    return false;
+  }
+  if (auto r = write_render_scene_debug_sidecars(qstring_to_path(abs_path), scene); !r) {
+    QMessageBox::warning(this, tr("Render Scene"),
+                         tr("Scene saved, but debug dump failed:\n%1")
+                             .arg(QString::fromStdString(r.error())));
+  }
+  statusBar()->showMessage(
+      tr("Saved snapshot %1  digest=%2")
+          .arg(abs_path, QString::fromStdString(render_scene_digest(scene))),
+      8000);
+  reveal_path(qstring_to_path(QFileInfo(abs_path).absolutePath()));
+  return true;
+}
+
+bool MainWindow::pin_render_scene_golden() {
+  auto* vp = current_viewport();
+  if (!vp) {
+    QMessageBox::information(this, tr("Pin"), tr("Open a document first."));
+    return false;
+  }
+
+  const std::filesystem::path source_dir{TAMIAS_SOURCE_DIR};
+  const auto root = render_scene_golden_root(source_dir);
+  if (!std::filesystem::exists(source_dir)) {
+    QMessageBox::warning(this, tr("Pin"),
+                         tr("Source tree not found. Pin is for a local checkout:\n%1")
+                             .arg(QString::fromUtf8(TAMIAS_SOURCE_DIR)));
+    return false;
+  }
+
+  QString suggested = QString::fromStdString(
+      suggest_render_scene_golden_slug(vp->document().name()));
+  bool ok = false;
+  const QString slug_q = QInputDialog::getText(
+      this, tr("Pin Render Scene for Tests"),
+      tr("Fixture name (letters, digits, '-' '_'; saved under assets/samples/render/):"),
+      QLineEdit::Normal, suggested, &ok);
+  if (!ok || slug_q.trimmed().isEmpty()) {
+    return false;
+  }
+  const std::string slug = slug_q.trimmed().toStdString();
+  if (!is_render_scene_golden_slug(slug)) {
+    QMessageBox::warning(
+        this, tr("Pin"),
+        tr("Name must start with a letter and use only A–Z, a–z, 0–9, '-' or '_'."));
+    return false;
+  }
+
+  const auto dir = root / slug;
+  bool overwrite = false;
+  std::error_code ec;
+  if (std::filesystem::exists(dir / "scene.trscn", ec)) {
+    const auto answer = QMessageBox::question(
+        this, tr("Pin"),
+        tr("Golden \"%1\" already exists.\nOverwrite scene.trscn and sidecar files?")
+            .arg(QString::fromStdString(slug)),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (answer != QMessageBox::Yes) {
+      return false;
+    }
+    overwrite = true;
+  }
+
+  const RenderScene scene = vp->capture_debug_scene();
+  auto meta = save_render_scene_golden(root, slug, scene, overwrite);
+  if (!meta) {
+    QMessageBox::critical(this, tr("Pin"), QString::fromStdString(meta.error()));
+    return false;
+  }
+
+  const QString dir_q = path_to_qstring(dir);
+
+  const GoldenTestRun tests = run_render_scene_golden_tests(source_dir, this);
+
+  QString inspect = tr("Full dump: %1\nMeshes / textures: %2\n\n")
+                        .arg(path_to_qstring(dir / "scene.inspect.txt"),
+                             path_to_qstring(dir / "debug"));
+  inspect += QStringLiteral("--- RenderSceneGolden* ---\n");
+  inspect += tests.log;
+
+  if (tests.ok) {
+    statusBar()->showMessage(
+        tr("Pinned golden %1  digest=%2").arg(dir_q, QString::fromStdString(meta->digest)), 8000);
+  } else {
+    statusBar()->showMessage(tr("Pinned %1 but RenderSceneGolden* failed").arg(dir_q), 12000);
+  }
+  PinResultDialog dlg(scene, dir_q, inspect, tests, this);
+  dlg.exec();
+  return true;
+}
+
+bool MainWindow::write_render_scene_document(const QString& path, bool show_inspect) {
+  auto* vp = current_viewport();
+  if (!vp) {
+    QMessageBox::information(this, tr("Export"), tr("Open a document first."));
+    return false;
+  }
+  QString out_path = path;
+  if (!is_trscn_path(out_path)) {
+    out_path += QStringLiteral(".trscn");
+  }
+  const QString abs_path = QFileInfo(out_path).absoluteFilePath();
+  const auto file = qstring_to_path(abs_path);
+  Document& document = vp->document();
+  const RenderScene scene = vp->capture_debug_scene();
+  if (auto r = save_render_scene(file, scene); !r) {
+    QMessageBox::critical(this, show_inspect ? tr("Export") : tr("Save"),
+                          QString::fromStdString(r.error()));
+    return false;
+  }
+  if (auto r = write_render_scene_debug_sidecars(file, scene); !r) {
+    QMessageBox::warning(this, show_inspect ? tr("Export") : tr("Save"),
+                         tr("Scene saved, but debug dump failed:\n%1")
+                             .arg(QString::fromStdString(r.error())));
+  }
+  document.set_path(file);
+  document.set_name(path_to_utf8(file.filename()));
+  document.set_render_snapshot(scene);
+  document.clear_dirty();
+  if (const int index = tabs_->indexOf(vp); index >= 0) {
+    tabs_->setTabText(index, QString::fromStdString(document.name()));
+  }
+  statusBar()->showMessage(tr("Wrote render scene: %1").arg(abs_path), 8000);
+  if (!show_inspect) {
+    notify_save_success(abs_path);
+    return true;
+  }
+
+  QDialog dlg(this);
+  dlg.setWindowTitle(tr("Render scene exported"));
+  dlg.resize(640, 400);
+  auto* layout = new QVBoxLayout(&dlg);
+  auto* edit = new QPlainTextEdit(&dlg);
+  edit->setReadOnly(true);
+  edit->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+  edit->setPlainText(QString::fromStdString(inspect_render_scene(scene)));
+  layout->addWidget(edit);
+  auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok, &dlg);
+  QObject::connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  layout->addWidget(buttons);
+  dlg.exec();
+  return true;
+}
+
+bool MainWindow::write_tdoc_document(const QString& path) {
+  auto* vp = current_viewport();
+  if (!vp) {
+    QMessageBox::information(this, tr("Save"), tr("Open a document first."));
+    return false;
+  }
+  Document& document = vp->document();
+  QString out_path = path;
+  if (!is_tdoc_path(out_path)) {
+    out_path += QStringLiteral(".tdoc");
+  }
+  const QString abs_path = QFileInfo(out_path).absoluteFilePath();
+  const auto file = qstring_to_path(abs_path);
+  // Update identity before serialize so META stores the .tdoc name, not the
+  // imported .obj/.step source name.
+  document.set_path(file);
+  document.set_name(path_to_utf8(file.filename()));
+  const ViewportState viewport = vp->capture_viewport_state();
+  if (auto r = save_document(file, document, viewport); !r) {
+    QMessageBox::critical(this, tr("Save"), QString::fromStdString(r.error()));
+    return false;
+  }
+
+  document.clear_dirty();
+  if (const int index = tabs_->indexOf(vp); index >= 0) {
+    tabs_->setTabText(index, QString::fromStdString(document.name()));
+  }
+
+  const MeshCpu* thumb_mesh = selected_mesh(document);
+  if (!thumb_mesh && !document.meshes().empty()) {
+    thumb_mesh = &document.meshes().begin()->second.cpu;
+  }
+  if (thumb_mesh) {
+    const QImage thumb = render_mesh_thumbnail(*thumb_mesh);
+    const QString thumb_path = save_mesh_thumbnail(abs_path, thumb);
+    recent_.add(abs_path, thumb_path);
+  } else {
+    recent_.add(abs_path, QString());
+  }
+  refresh_home();
+  notify_save_success(abs_path);
+  return true;
+}
+
+void MainWindow::notify_save_success(const QString& path) {
+  // 保存成功只飘一条提示：不弹窗、不用点「确定」，几秒后自己消失。
+  Toast::show_message(stack_, tr("Saved successfully: %1").arg(path), ToastLevel::Info);
+}
+
+bool MainWindow::save_file() {
+  auto* vp = current_viewport();
+  if (!vp) {
+    if (current_drawing_view() != nullptr) {
+      // 图纸是只读参考底图，没有可回写的内容。
+      Toast::show_message(stack_, tr("Reference drawings are read-only — nothing to save."),
+                          ToastLevel::Warning);
+      return false;
+    }
+    QMessageBox::information(this, tr("Save"), tr("Open a document first."));
+    return false;
+  }
+
+  // Save .tdoc in place. Opened .trscn snapshots write back as render scenes.
+  // Imported .obj/.step paths are not overwritten — prompt Save As.
+  const auto& doc_path = vp->document().path();
+  if (!doc_path.empty() && is_tdoc_path(path_to_qstring(doc_path))) {
+    return write_tdoc_document(path_to_qstring(doc_path));
+  }
+  if (!doc_path.empty() && is_trscn_path(path_to_qstring(doc_path))) {
+    return write_render_scene_document(path_to_qstring(doc_path), false);
+  }
+  return save_file_as();
+}
+
+bool MainWindow::save_file_as() {
+  auto* vp = current_viewport();
+  if (!vp) {
+    if (current_drawing_view() != nullptr) {
+      Toast::show_message(stack_, tr("Reference drawings are read-only — nothing to save."),
+                          ToastLevel::Warning);
+      return false;
+    }
+    QMessageBox::information(this, tr("Save"), tr("Open a document first."));
+    return false;
+  }
+
+  QString suggested;
+  const auto& doc_path = vp->document().path();
+  const bool snapshot = vp->document().render_snapshot() != nullptr;
+  if (!doc_path.empty()) {
+    QFileInfo info(path_to_qstring(doc_path));
+    const QString ext = snapshot || is_trscn_path(info.fileName())
+                            ? QStringLiteral(".trscn")
+                            : QStringLiteral(".tdoc");
+    suggested = info.absolutePath() + QLatin1Char('/') + info.completeBaseName() + ext;
+  } else {
+    suggested = QString::fromStdString(vp->document().name());
+    if (snapshot) {
+      if (!is_trscn_path(suggested)) {
+        suggested = QFileInfo(suggested).completeBaseName() + QStringLiteral(".trscn");
+      }
+    } else if (!is_tdoc_path(suggested) && !is_obj_path(suggested)) {
+      suggested += QStringLiteral(".tdoc");
+    } else if (is_obj_path(suggested)) {
+      suggested = QFileInfo(suggested).completeBaseName() + QStringLiteral(".tdoc");
+    }
+  }
+
+  const QString path = QFileDialog::getSaveFileName(
+      this, tr("Save As"), suggested,
+      tr("Tamias Document (*.tdoc);;Render Scene (*.trscn);;OBJ Mesh Export (*.obj)"));
+  if (path.isEmpty()) {
+    return false;
+  }
+  if (is_obj_path(path) ||
+      (!is_tdoc_path(path) && path.endsWith(QStringLiteral(".obj"), Qt::CaseInsensitive))) {
+    return write_selected_mesh(path);
+  }
+  if (is_trscn_path(path)) {
+    return write_render_scene_document(path, false);
+  }
+  return write_tdoc_document(path);
+}
+
+void MainWindow::open_recent_path(const QString& path) { open_path(path); }
+
+void MainWindow::on_missing_recent(const QString& path) {
+  const auto answer = QMessageBox::question(
+      this, tr("Missing file"),
+      tr("This file no longer exists:\n%1\n\nRemove it from Recent?").arg(path),
+      QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+  if (answer == QMessageBox::Yes) {
+    recent_.remove(path);
+    refresh_home();
+  }
+}
+
+DocumentViewport* MainWindow::current_viewport() const {
+  if (stack_->currentWidget() != tabs_) {
+    return nullptr;
+  }
+  return qobject_cast<DocumentViewport*>(tabs_->currentWidget());
+}
+
+DrawingView* MainWindow::current_drawing_view() const {
+  if (stack_->currentWidget() != tabs_) {
+    return nullptr;
+  }
+  return qobject_cast<DrawingView*>(tabs_->currentWidget());
+}
+
+void MainWindow::refresh_property_panel() {
+  if (property_panel_ == nullptr) {
+    return;
+  }
+  DocumentViewport* vp = current_viewport();
+  if (vp == nullptr) {
+    property_panel_->show_entity(nullptr, nullptr, tr("No document open"));
+    return;
+  }
+  Document& doc = vp->document();
+  if (const Entity* entity = doc.selected_entity()) {
+    property_panel_->show_entity(entity, &doc, QString());
+    return;
+  }
+  if (const SceneNode* node = doc.scene().selected_node()) {
+    property_panel_->show_imported_mesh(node, &doc);
+    return;
+  }
+  property_panel_->show_entity(
+      nullptr, nullptr, tr("No selection\nClick an object to select it, or use a create tool"));
+}
+
+void MainWindow::refresh_handle_inspector() {
+  if (handle_inspector_ == nullptr) {
+    return;
+  }
+  DocumentViewport* vp = current_viewport();
+  if (vp == nullptr) {
+    handle_inspector_->show_selection(nullptr, 0);
+    return;
+  }
+  Document& doc = vp->document();
+  const SceneNode* node = doc.scene().selected_node();
+  handle_inspector_->show_selection(&doc, node ? node->id : 0);
+}
+
+void MainWindow::refresh_texture_library_panel() {
+  if (texture_library_panel_ == nullptr) {
+    return;
+  }
+  DocumentViewport* vp = current_viewport();
+  texture_library_panel_->set_document(vp != nullptr ? &vp->document() : nullptr);
+}
+
+void MainWindow::ensure_scene_debugger() {
+  if (scene_debugger_ != nullptr) {
+    return;
+  }
+  const RenderDeviceConfig config = AppSettings::instance().render_device_config();
+  scene_debugger_ = new SceneDebuggerWindow(RenderThreadPool::instance().acquire(config), this);
+}
+
+void MainWindow::open_scene_debugger(RenderScene scene, const std::filesystem::path& path,
+                                     DocumentViewport* source) {
+  ensure_scene_debugger();
+  scene_debugger_->open_scene(std::move(scene), path, source);
+}
+
+void MainWindow::debug_current_frame() {
+  auto* vp = current_viewport();
+  if (vp == nullptr) {
+    QMessageBox::information(this, tr("Scene Debugger"), tr("Open a document first."));
+    return;
+  }
+  open_scene_debugger(vp->capture_debug_scene(), {}, vp);
+}
+
+void MainWindow::frame_all() {
+  if (auto* vp = current_viewport()) {
+    vp->frame_scene();
+    return;
+  }
+  if (auto* drawing = current_drawing_view()) {
+    drawing->fit_to_window();
+  }
+}
+
+void MainWindow::set_render_mode(RenderMode mode) {
+  if (auto* vp = current_viewport()) {
+    vp->set_render_mode(mode);
+  }
+  sync_render_mode_actions();
+}
+
+void MainWindow::sync_render_mode_actions() {
+  if (!wireframe_action_ || !shaded_action_ || !realistic_action_) {
+    return;
+  }
+  RenderMode mode = RenderMode::Shaded;
+  if (auto* vp = current_viewport()) {
+    mode = vp->render_mode();
+  }
+  const QSignalBlocker b0(wireframe_action_);
+  const QSignalBlocker b1(shaded_action_);
+  const QSignalBlocker b2(realistic_action_);
+  wireframe_action_->setChecked(mode == RenderMode::Wireframe);
+  shaded_action_->setChecked(mode == RenderMode::Shaded);
+  realistic_action_->setChecked(mode == RenderMode::Realistic);
+}
+
+// 轴网与翻模的勾选/可用状态跟着活跃文档走（和渲染模式一个道理）：切标签页时按钮要
+// 反映那个文档自己的状态，而不是上一个文档留下的。
+void MainWindow::sync_bim_actions() {
+  auto* vp = current_viewport();
+  if (grid_action_ != nullptr && grid_settings_action_ != nullptr) {
+    const QSignalBlocker block(grid_action_);
+    grid_action_->setEnabled(vp != nullptr);
+    grid_action_->setChecked(vp == nullptr || vp->grid_visible());
+    grid_settings_action_->setEnabled(vp != nullptr);
+  }
+  if (trace_drawing_action_ != nullptr) {
+    trace_drawing_action_->setEnabled(vp != nullptr);
+  }
+}
+
+void MainWindow::bind_plugin_session() {
+  auto* vp = current_viewport();
+  if (vp == nullptr) {
+    plugin_host_.unbind();
+    plugin_host_.set_point_input_handlers({}, {});
+    plugin_host_.set_selection_changed({});
+    return;
+  }
+  plugin_host_.bind(&vp->document(), &vp->command_system(), [vp] { vp->refresh_after_edit(); });
+  plugin_host_.set_selection_changed([vp] { vp->notify_selection_changed(); });
+  plugin_host_.set_point_input_handlers(
+      [vp](PluginPointInputRequest request,
+           PluginHost::PointInputCompletion completion) {
+        return vp->begin_plugin_point_input(std::move(request),
+                                            std::move(completion));
+      },
+      [vp](std::uint64_t request_id) {
+        vp->cancel_plugin_point_input(request_id);
+      });
+}
+
+void MainWindow::activate_viewport(DocumentViewport* vp) {
+  if (vp == nullptr) {
+    return;
+  }
+  const int index = tabs_->indexOf(vp);
+  if (index < 0) {
+    return;
+  }
+  tabs_->setCurrentIndex(index);
+  show_documents();
+}
+
+bool MainWindow::confirm_close_document(DocumentViewport* vp) {
+  if (vp == nullptr || !vp->document().dirty()) {
+    return true;
+  }
+
+  const QString name = QString::fromStdString(vp->document().name());
+  QMessageBox box(this);
+  box.setIcon(QMessageBox::Warning);
+  box.setWindowTitle(tr("Unsaved changes"));
+  box.setText(tr("Do you want to save changes to \"%1\"?").arg(name));
+  QAbstractButton* save_btn = box.addButton(tr("Save"), QMessageBox::AcceptRole);
+  QAbstractButton* discard_btn =
+      box.addButton(tr("Don't Save"), QMessageBox::DestructiveRole);
+  QAbstractButton* cancel_btn = box.addButton(tr("Cancel"), QMessageBox::RejectRole);
+  box.setDefaultButton(qobject_cast<QPushButton*>(save_btn));
+  box.setEscapeButton(cancel_btn);
+  box.exec();
+
+  if (box.clickedButton() == save_btn) {
+    activate_viewport(vp);
+    if (!save_file()) {
+      return false;
+    }
+    // OBJ export does not clear dirty; keep the tab open so the project
+    // is not silently discarded after an incomplete save.
+    return !vp->document().dirty();
+  }
+  if (box.clickedButton() == discard_btn) {
+    return true;
+  }
+  return false;
+}
+
+void MainWindow::closeEvent(QCloseEvent* event) {
+  for (int i = 0; i < tabs_->count(); ++i) {
+    auto* vp = qobject_cast<DocumentViewport*>(tabs_->widget(i));
+    if (!confirm_close_document(vp)) {
+      event->ignore();
+      return;
+    }
+  }
+  QMainWindow::closeEvent(event);
+}
+
+void MainWindow::close_tab(int index) {
+  if (auto* vp = qobject_cast<DocumentViewport*>(tabs_->widget(index))) {
+    if (!confirm_close_document(vp)) {
+      return;
+    }
+  }
+  if (auto* w = tabs_->widget(index)) {
+    tabs_->removeTab(index);
+    delete w;
+  }
+  if (tabs_->count() == 0) {
+    show_home();
+  }
+}
+
+}  // namespace tamias

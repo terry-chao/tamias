@@ -1,13 +1,13 @@
 #include "bim/host_geometry.h"
 #include "bim/host_update.h"
 #include "bim/wall_join.h"
-#include "command/move_entities_command.h"
+#include "command/edit/move_entities_command.h"
 #include "engine/document/document.h"
 #include "engine/graphics/mesh.h"
 #include "engine/modeling/edge_fingerprint.h"
 #include "engine/modeling/feature.h"
 #include "engine/modeling/evaluator.h"
-#include "entity/architectural/wall_entity.h"
+#include "entity/family/architectural/wall_entity.h"
 #include "entity/family/window_entity.h"
 
 #include <gtest/gtest.h>

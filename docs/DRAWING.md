@@ -76,9 +76,9 @@ DXF 解析器支持的实体：
 | [zip_archive.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/drawing/zip_archive.cpp) | 最小 ZIP 读取器（store / deflate，要 zlib）——DWF 两种包装都是 ZIP |
 | [dwf_reader.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/drawing/dwf_reader.cpp) | DWF / DWFx：XPS FixedPage → `Drawing`（多页 + 页区间）；二进制 DWF 退预览图 |
 | [drawing.h](https://github.com/terry-chao/tamias/blob/main/src/engine/drawing/drawing.h) | 2D 图纸数据模型（路径 / 文字 / 图层 / 包围盒 / 归一化原点） |
-| [drawing_document.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/drawing_document.cpp) | 按扩展名分派四种加载器；按图层合成 `QPainterPath`；缩略图 |
-| [drawing_view.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/drawing_view.cpp) | 缩放/平移/翻页/图层开关、坐标读出 |
-| [drawing_manager_panel.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/drawing_manager_panel.cpp) | 视口工具列里的图纸管理页（挂图纸 / 删除 / 双击打开） |
+| [drawing_document.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/drawing/drawing_document.cpp) | 按扩展名分派四种加载器；按图层合成 `QPainterPath`；缩略图 |
+| [drawing_view.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/drawing/drawing_view.cpp) | 缩放/平移/翻页/图层开关、坐标读出 |
+| [drawing_manager_panel.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/drawing/drawing_manager_panel.cpp) | 视口工具列里的图纸管理页（挂图纸 / 删除 / 双击打开） |
 
 样例：[`assets/samples/drawings/floor-plan-sample.dxf`](https://github.com/terry-chao/tamias/blob/main/assets/samples/drawings/floor-plan-sample.dxf)
 （4 个图层、块引用门、凸度多段线、圆、文字）。
