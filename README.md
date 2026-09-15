@@ -18,6 +18,7 @@ cmake --build --preset relwithdebinfo --parallel
 
 - [**入门教程**](docs/tutorial/index.md) —— 把 Tamias 当教学样例，带你入门 C++ 3D 开发（10 章 + 术语表）
 - 总览 —— [路线图](docs/ROADMAP.md)、[MCAD 与 BIM](docs/DECISION-MCAD-BIM.md)、[架构](docs/ARCHITECTURE.md)
+- [答疑（Q&A）](docs/FAQ.md) —— 场景规模、BRep、mipmap、UE / OSG / VSG、RHI、插件、拾取、文字、浮点、LOD
 - [测试](docs/TESTING.md) —— `ctest` / GoogleTest、覆盖面与缺口
 - 模块文档 —— 按 [客户端](docs/APP.md) / [插件](docs/plugin/index.md) / [BIM](docs/BIM.md) / [场景图](docs/SCENE-GRAPH.md) / [造型](docs/FEATURE-TREE-EVALUATOR.md) / [渲染](docs/RENDERING.md) 分类
 

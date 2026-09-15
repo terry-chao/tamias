@@ -62,4 +62,6 @@
 
 RHI 抽象写在 [渲染管线](RENDERING.md) 第 5 节；OpenGL 落地见 [OpenGL 后端](OPENGL.md)；浏览器 WebGPU 见 [WebGPU 后端](WGPU.md)。产品定位见 [MCAD 与 BIM](DECISION-MCAD-BIM.md)；客户端要不要嵌浏览器见 [嵌浏览器决策](DECISION-EMBEDDED-BROWSER.md)。
 
+散落的「为什么」（场景规模、BRep、mipmap、UE / OSG / VSG、RHI、插件 C#、拾取容差、相机旋转中心、绘制流程、计时工具、文字、浮点精度、LOD）集中回答在 [答疑（Q&A）](FAQ.md)。
+
 怎么验证改动有没有把内核弄坏：[测试](TESTING.md)（`tamias_tests` / `ctest`、覆盖了什么、缺什么）。
