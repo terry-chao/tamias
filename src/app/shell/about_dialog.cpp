@@ -65,7 +65,7 @@ AboutDialog::AboutDialog(QWidget* parent) : QDialog(parent) {
   auto* logo = new QLabel(this);
   logo->setFixedSize(64, 64);
   logo->setAlignment(Qt::AlignCenter);
-  const QPixmap brand(QStringLiteral(":/branding/logo.png"));
+  const QPixmap brand(QStringLiteral(":/branding/logo2_rounded.png"));
   if (!brand.isNull()) {
     logo->setPixmap(
         brand.scaled(64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation));

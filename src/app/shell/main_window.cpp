@@ -181,7 +181,7 @@ class OpenProgressDialog final {
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent), plugin_manager_(plugin_host_) {
   setWindowTitle("Tamias");
-  setWindowIcon(QIcon(QStringLiteral(":/branding/logo.png")));
+  setWindowIcon(QIcon(QStringLiteral(":/branding/logo2_rounded.png")));
   resize(1800, 1000);
   center_on_primary_screen(this);
 

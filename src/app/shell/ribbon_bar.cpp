@@ -138,7 +138,7 @@ RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
   auto* logo = new QLabel(tab_row_);
   logo->setFixedSize(22, 22);
   logo->setAlignment(Qt::AlignCenter);
-  const QPixmap brand(QStringLiteral(":/branding/logo.png"));
+  const QPixmap brand(QStringLiteral(":/branding/logo2_rounded.png"));
   if (!brand.isNull()) {
     logo->setPixmap(brand.scaled(22, 22, Qt::KeepAspectRatio, Qt::SmoothTransformation));
   }
