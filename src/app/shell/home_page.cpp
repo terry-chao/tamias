@@ -179,7 +179,7 @@ QIcon make_thumb_icon(const QString& thumbnail_path) {
     src.load(thumbnail_path);
   }
   if (src.isNull()) {
-    src = QPixmap(QStringLiteral(":/branding/logo2_rounded.png"));
+    src = QPixmap(QStringLiteral(":/branding/logo.png"));
     if (src.isNull()) {
       QPixmap blank(kThumbW, kThumbH);
       blank.fill(QColor(40, 42, 45));
@@ -227,7 +227,7 @@ HomePage::HomePage(QWidget* parent) : QWidget(parent) {
   auto* logo = new QLabel(header_);
   logo->setFixedSize(36, 36);
   logo->setAlignment(Qt::AlignCenter);
-  const QPixmap brand(QStringLiteral(":/branding/logo2_rounded.png"));
+  const QPixmap brand(QStringLiteral(":/branding/logo.png"));
   if (!brand.isNull()) {
     logo->setPixmap(brand.scaled(36, 36, Qt::KeepAspectRatio, Qt::SmoothTransformation));
   }

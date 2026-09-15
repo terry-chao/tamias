@@ -2,7 +2,6 @@
 <RCC version="1.0">
   <qresource prefix="/branding">
     <file alias="logo.png">../../assets/branding/logo.png</file>
-    <file alias="logo2_rounded.png">../../assets/branding/logo2_rounded.png</file>
   </qresource>
   <qresource prefix="/icons">
     <file alias="frame_all.svg">../../assets/icons/frame_all.svg</file>

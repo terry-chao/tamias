@@ -29,7 +29,7 @@ int main(int argc, char* argv[]) {
   QApplication::setOrganizationName("tamias");
   QApplication::setApplicationName("tamias");
   QApplication::setApplicationVersion(QStringLiteral(TAMIAS_VERSION_FULL));
-  app.setWindowIcon(QIcon(QStringLiteral(":/branding/logo2_rounded.png")));
+  app.setWindowIcon(QIcon(QStringLiteral(":/branding/logo.png")));
 
   tamias::init_logging(tamias::LogLevel::Info);
   tamias::profiling::set_program_name("Tamias");
