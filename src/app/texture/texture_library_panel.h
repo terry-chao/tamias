@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/render/texture_asset.h"
+#include "engine/render/resource/texture_asset.h"
 
 #include <QWidget>
 #include <cstdint>

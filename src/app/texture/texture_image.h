@@ -1,7 +1,7 @@
 #pragma once
 
 #include "engine/base/result.h"
-#include "engine/render/texture_asset.h"
+#include "engine/render/resource/texture_asset.h"
 
 #include <QImage>
 #include <QPixmap>

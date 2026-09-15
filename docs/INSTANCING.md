@@ -170,7 +170,7 @@ Scene 实例（node → geometry_id + world）
 | [mesh.h](https://github.com/terry-chao/tamias/blob/main/src/engine/graphics/mesh.h) | `MeshCpu` | 内容指纹 |
 | [mesh_asset.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/mesh_asset.h) | 一资产一份 CPU 网 | intern + `content_hash` |
 | [document.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.cpp) `add_entity` | 每次 `add_mesh` | `intern_mesh` / `replace_entity_mesh` |
-| [gpu_instance.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/gpu_instance.h) | 80B 实例记录 | 仿射行 + 颜色/材质 |
-| [batch_key.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/batch_key.h) | 合批键 | 网格 / PSO / 贴图 / 线 |
-| [scene_graph.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene_graph.cpp) `RecordCommands` | 按 `BatchKey` 分桶，flush 时 `instance_count = N` | 半透明仍单画 |
+| [gpu_instance.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/gpu_instance.h) | 80B 实例记录 | 仿射行 + 颜色/材质 |
+| [batch_key.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/batch_key.h) | 合批键 | 网格 / PSO / 贴图 / 线 |
+| [scene_graph.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene/scene_graph.cpp) `RecordCommands` | 按 `BatchKey` 分桶，flush 时 `instance_count = N` | 半透明仍单画 |
 | [device.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/device.h) | `set_instance_buffer` + `PipelineDesc.instanced` | 四后端 instance rate |

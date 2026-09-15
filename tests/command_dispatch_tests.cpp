@@ -2,8 +2,8 @@
 #include "command/import/import_texture_command.h"
 #include "command/edit/update_material_command.h"
 #include "engine/document/document.h"
-#include "engine/modeling/feature.h"
-#include "engine/render/texture_asset.h"
+#include "engine/modeling/feature/feature.h"
+#include "engine/render/resource/texture_asset.h"
 #include "entity/core/entity.h"
 
 #include <gtest/gtest.h>

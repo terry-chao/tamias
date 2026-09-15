@@ -2,7 +2,7 @@
 
 #include "command/core/command.h"
 #include "engine/document/document.h"
-#include "engine/modeling/feature.h"
+#include "engine/modeling/feature/feature.h"
 
 #include <cstdint>
 #include <string>

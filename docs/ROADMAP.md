@@ -79,7 +79,7 @@
 
 ### 决策一：语义树 与 渲染场景图 分离 ✅（M6 已落地）
 
-用稳定 ID 关联，不要让一个结构同时干两件事。当前 [scene.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/scene.h) 的 `SceneNode` 已是树（parent/children + local/world transform + 缓存 world bounds），`gpu_mesh_id` 已从语义侧移除、迁到渲染侧（[render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.h) 的 `asset_to_gpu_`）。
+用稳定 ID 关联，不要让一个结构同时干两件事。当前 [scene.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/scene.h) 的 `SceneNode` 已是树（parent/children + local/world transform + 缓存 world bounds），`gpu_mesh_id` 已从语义侧移除、迁到渲染侧（[render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.h) 的 `asset_to_gpu_`）。
 
 「墙属于几楼」这类**建筑规则不写在 `SceneNode` 上**。语义树只记 `parent`；楼层、轴网、当前标高、宿主由 [BIM 业务层](BIM.md) 决定后写入。现状还没有楼层系统，构件入树 `parent = 0`。
 
@@ -122,7 +122,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 
 ## 5. 渲染：重点难点
 
-现在渲染器是 [render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.h) 里的 forward + push constant + 单材质（颜色 + 光照方向 + eye/模式），wireframe/shaded/realistic 三模式基本退化。重点难点按优先级排：
+现在渲染器是 [render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.h) 里的 forward + push constant + 单材质（颜色 + 光照方向 + eye/模式），wireframe/shaded/realistic 三模式基本退化。重点难点按优先级排：
 
 ### 当前渲染路径的真实现状（先看清基线）
 

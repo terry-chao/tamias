@@ -1,8 +1,8 @@
-#include "engine/render/mesh_lod.h"
+#include "engine/render/resource/mesh_lod.h"
 #include "engine/document/document.h"
 #include "engine/document/tess_cache.h"
-#include "engine/render/resident_cache.h"
-#include "engine/render/scene_graph.h"
+#include "engine/render/runtime/resident_cache.h"
+#include "engine/render/scene/scene_graph.h"
 #include "entity/primitive/box_entity.h"
 #include "entity/family/structural/column_entity.h"
 

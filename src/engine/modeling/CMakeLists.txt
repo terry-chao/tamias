@@ -5,12 +5,15 @@ add_subdirectory(kernel)
 
 # 中间层：特征树、求值器、草图数学、拓扑命名。不含任何内核实现。
 add_library(tamias_modeling STATIC
-  curve_geom.cpp
-  edge_fingerprint.cpp
-  evaluator.cpp
-  geom_builder.cpp
+  # 配方：特征树数据 + 曲线定义与参数转换
+  feature/curve_geom.cpp
+  # 求值链路：求值器、几何建造器、异步离散、边指纹
+  evaluate/edge_fingerprint.cpp
+  evaluate/evaluator.cpp
+  evaluate/geom_builder.cpp
+  evaluate/tess_worker.cpp
+  # 后端装配：把编进来的内核登记成默认实现
   linked_kernels.cpp
-  tess_worker.cpp
 )
 
 add_library(tamias::modeling ALIAS tamias_modeling)

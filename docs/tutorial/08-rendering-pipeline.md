@@ -18,7 +18,7 @@
 | 渲染线程 `RenderThread` | 真去 GPU 上画 | 摄影棚 |
 | RHI（Vulkan / OpenGL） | 把「画」翻译成两种 GPU 方言 | 两套摄影机说明书 |
 
-中间那张快递单叫 **`SceneDrawItem`**（[render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_types.h)）：网格 id + 世界矩阵 + 材质 + 选中标志。语义侧填好，渲染侧照着画。
+中间那张快递单叫 **`SceneDrawItem`**（[render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_types.h)）：网格 id + 世界矩阵 + 材质 + 选中标志。语义侧填好，渲染侧照着画。
 
 ## 8.3 三角网：GPU 唯一认得的形状
 
@@ -42,7 +42,7 @@ Scene（语义树）
               → 窗口像素
 ```
 
-`draw_channel` 是整套渲染的心脏（[render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.cpp)）。**绘制代码不认 Vulkan / OpenGL**——它只认 RHI 的动词：`create_buffer` / `set_texture` / `draw_indexed`。
+`draw_channel` 是整套渲染的心脏（[render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.cpp)）。**绘制代码不认 Vulkan / OpenGL**——它只认 RHI 的动词：`create_buffer` / `set_texture` / `draw_indexed`。
 
 ## 8.5 RHI：为什么要自己写一层
 

@@ -1,6 +1,6 @@
 #include "engine/modeling/occt/occt_kernel.h"
 
-#include "engine/modeling/feature.h"
+#include "engine/modeling/feature/feature.h"
 #include "engine/profile/timing_scope.h"
 
 #include <Bnd_Box.hxx>

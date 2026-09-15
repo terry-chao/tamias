@@ -2,9 +2,9 @@
 
 #include "entity/core/entity.h"
 #include "engine/document/scene.h"
-#include "engine/modeling/feature.h"
-#include "engine/render/material.h"
-#include "engine/render/texture_asset.h"
+#include "engine/modeling/feature/feature.h"
+#include "engine/render/resource/material.h"
+#include "engine/render/resource/texture_asset.h"
 
 #include <QString>
 #include <QWidget>

@@ -6,7 +6,7 @@
 #include "entity/family/opening_entity.h"
 #include "engine/base/log.h"
 #include "engine/document/document.h"
-#include "engine/modeling/feature.h"
+#include "engine/modeling/feature/feature.h"
 
 #include <string>
 

@@ -242,16 +242,16 @@ CPU 录两万次 draw 仍会顶满。下一步：
 | 文件 | 现在干什么 | 方案落点 |
 |---|---|---|
 | [mesh.h](https://github.com/terry-chao/tamias/blob/main/src/engine/graphics/mesh.h) `Vertex` / `MeshCpu` | 44 字节顶点；`faces` 为 Face 范围 + AABB | 量化顶点；按面流式加载 |
-| [mesh_lod.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/mesh_lod.h) | `MeshLod` + `select_mesh_lod` 滞回 | 连续 deflection / Close 档 |
+| [mesh_lod.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/resource/mesh_lod.h) | `MeshLod` + `select_mesh_lod` 滞回 | 连续 deflection / Close 档 |
 | [tess_cache.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/tess_cache.h) | `(geometry_id, lod) → MeshAsset` | 落盘 |
 | [occt/occt_kernel.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt/occt_kernel.cpp) `tessellate_shape` | 按 Face 出网并记下范围 | 按 deflection 多档 + 按面剔除 |
-| [tess_worker.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/tess_worker.cpp) | OCCT 单线程队列 | — |
+| [tess_worker.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/evaluate/tess_worker.cpp) | OCCT 单线程队列 | — |
 | [mesh_asset.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/mesh_asset.h) | 一资产一份 CPU 网；intern 按指纹 | 引用计数 / 几何指纹复用 |
 | [scene.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/scene.h) | 语义树，线性 find；`mesh_asset_id` = 几何身份 | find 改索引 |
 | [document.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.cpp) | 持有导入 `Shape`；`replace_entity_mesh` 失效 LOD | BVH 查询产出清单 |
-| [scene_graph.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene_graph.cpp) `RecordCommands` | 视锥 + 选档 + 合批 | G6 MDI |
-| [resident_cache.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/resident_cache.h) | GPU LRU 2GB | 可配预算；丢 CPU 副本 |
-| [render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.cpp) | `request_upload_mesh` 非阻塞；缺网降档 | — |
+| [scene_graph.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene/scene_graph.cpp) `RecordCommands` | 视锥 + 选档 + 合批 | G6 MDI |
+| [resident_cache.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/resident_cache.h) | GPU LRU 2GB | 可配预算；丢 CPU 副本 |
+| [render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.cpp) | `request_upload_mesh` 非阻塞；缺网降档 | — |
 | [picking.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/picking.h) | 物体 BVH + `resolved_mesh` | G2 复用视锥；大网加 cluster 层 |
 | [FRUSTUM-CULLING.md](FRUSTUM-CULLING.md) | 一期已落地 | G2 的设计原文 |
 | [ROADMAP.md](ROADMAP.md) §5 / 支撑线 | 「大模型渲染」 | 本文把那句话拆成 G0–G6 |

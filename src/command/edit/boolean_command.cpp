@@ -1,6 +1,6 @@
 #include "command/edit/boolean_command.h"
 
-#include "engine/modeling/geom_builder.h"
+#include "engine/modeling/evaluate/geom_builder.h"
 
 namespace tamias {
 

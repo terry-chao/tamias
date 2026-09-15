@@ -4,8 +4,8 @@
 #include "engine/document/picking.h"
 #include "engine/document/document_io.h"
 #include "engine/io/mesh_io.h"
-#include "engine/modeling/tess_worker.h"
-#include "engine/render/render_scene.h"
+#include "engine/modeling/evaluate/tess_worker.h"
+#include "engine/render/scene/render_scene.h"
 #if defined(TAMIAS_HAS_RHI_WEBGPU)
 #include "engine/render/rhi/webgpu/webgpu_backend.h"
 #endif

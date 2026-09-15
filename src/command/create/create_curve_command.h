@@ -2,7 +2,7 @@
 
 #include "command/core/command.h"
 #include "engine/document/document.h"
-#include "engine/modeling/curve_definition.h"
+#include "engine/modeling/feature/curve_definition.h"
 
 #include <memory>
 

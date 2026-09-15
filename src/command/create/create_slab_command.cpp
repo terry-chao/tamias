@@ -1,7 +1,7 @@
 #include "command/create/create_slab_command.h"
 
 #include "entity/family/structural/slab_entity.h"
-#include "engine/modeling/curve_geom.h"
+#include "engine/modeling/feature/curve_geom.h"
 
 namespace tamias {
 namespace {

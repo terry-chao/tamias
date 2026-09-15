@@ -4,9 +4,9 @@
 #include "command/edit/move_entities_command.h"
 #include "engine/document/document.h"
 #include "engine/graphics/mesh.h"
-#include "engine/modeling/edge_fingerprint.h"
-#include "engine/modeling/feature.h"
-#include "engine/modeling/evaluator.h"
+#include "engine/modeling/evaluate/edge_fingerprint.h"
+#include "engine/modeling/feature/feature.h"
+#include "engine/modeling/evaluate/evaluator.h"
 #include "entity/family/architectural/wall_entity.h"
 #include "entity/family/window_entity.h"
 

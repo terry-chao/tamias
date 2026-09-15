@@ -90,16 +90,20 @@ class ModelKernel {
 
 ```
 src/engine/modeling/
-  feature.h  curve_geom.*  curve_kind.h       纯数据 / 纯数学，内核无关
+  feature/                                    配方：纯数据 / 纯数学，内核无关
+    feature.h          特征树（FeatureKind / Feature / FeatureModel）
+    curve_geom.*       曲线点集 ↔ 特征参数、采样
+    curve_kind.h  curve_definition.h  曲线种类与定义
   kernel/                                     接口层（≈ render/rhi）
     kernel.h            ModelKernel / Body / EdgeId / EdgeMeasure / 能力 / 注册表
     kernel_registry.cpp register_kernel_backend / ModelKernel::create
     shape_ops.h/.cpp    导入路径的边界（Shape / IShapeOps）
-  evaluator.h/.cpp                            中间层：特征树 → 体 → 三角网
-  edge_fingerprint.h/.cpp                     中间层：指纹存储 + 匹配（索引 + 几何指纹）
+  evaluate/                                   求值链路：特征树 → 体 → 三角网
+    evaluator.h/.cpp                    遍历特征、调内核动词
+    edge_fingerprint.h/.cpp             指纹存储 + 匹配（索引 + 几何指纹）
+    geom_builder.h/.cpp                 过渡 shim（老调用方要的 IGeometryBuilder）
+    tess_worker.*                       后台离散队列
   linked_kernels.cpp                          把编译进来的后端注册进注册表
-  geom_builder.h/.cpp                         过渡 shim（老调用方要的 IGeometryBuilder）
-  tess_worker.*                               后台离散队列
   occt/                                       后端 1：唯一 include BRep* 的地方
     occt_kernel.h/.cpp   动词实现 + 边的测量
     occt_shape_ops.h/.cpp 导入路径（STEP / IGES / BREP + XCAF 颜色）

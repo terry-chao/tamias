@@ -25,16 +25,16 @@
 #include "entity/family/structural/slab_entity.h"
 #include "entity/family/architectural/wall_entity.h"
 #include "entity/family/window_entity.h"
-#include "engine/modeling/curve_geom.h"
+#include "engine/modeling/feature/curve_geom.h"
 #include "engine/io/mesh_io.h"
 #include "engine/math/grid.h"
 #include "engine/math/math.h"
 #include "engine/document/picking.h"
 #include "engine/math/camera.h"
-#include "engine/modeling/evaluator.h"
+#include "engine/modeling/evaluate/evaluator.h"
 #include "engine/modeling/occt/occt_shape_ops.h"
 #include "engine/modeling/kernel/shape_ops.h"
-#include "engine/render/render_runtime.h"
+#include "engine/render/runtime/render_runtime.h"
 
 #include <gtest/gtest.h>
 

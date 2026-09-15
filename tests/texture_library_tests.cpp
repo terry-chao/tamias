@@ -1,8 +1,8 @@
 #include "engine/document/document.h"
 #include "engine/document/document_io.h"
 #include "engine/document/texture_library.h"
-#include "engine/render/material.h"
-#include "engine/render/texture_mips.h"
+#include "engine/render/resource/material.h"
+#include "engine/render/resource/texture_mips.h"
 
 #include <gtest/gtest.h>
 

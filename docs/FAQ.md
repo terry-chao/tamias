@@ -75,11 +75,11 @@ BIM 的「三角多」常常是「同一段墙截面复制八千次」，所以�
 
 | 来源 | 现状 | 对策 |
 |---|---|---|
-| OCCT 离散占主线程 | OCCT 不在 UI / 渲染线程跑，走 `TessWorker` 后台队列（[tess_worker.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/tess_worker.h)） | 已落地。Emscripten 没 pthread 时靠 `pump(max_jobs)` 把一帧的工作摊到多帧 |
+| OCCT 离散占主线程 | OCCT 不在 UI / 渲染线程跑，走 `TessWorker` 后台队列（[tess_worker.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/evaluate/tess_worker.h)） | 已落地。Emscripten 没 pthread 时靠 `pump(max_jobs)` 把一帧的工作摊到多帧 |
 | 打开大 STEP 首帧出不来 | 导入时只算 `Shape::bounds()`，按 `LodRequest` 懒离散（[occt_shape_ops.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt/occt_shape_ops.cpp)） | 已落地：先出 L0 盒 / 粗档，细档异步补 |
 | upload 阻塞 UI | `upload_mesh` / `upload_texture` 会阻塞 UI 直到 GPU 侧写完（[RENDERING.md](RENDERING.md) §4） | 部分落地：`request_upload_mesh` 提交即返回；大贴图的 mip 链仍在渲染线程算（见 §4） |
 
-还有一类不是崩溃而是**手感**问题：LOD 档次抖动。修法是滞回，不是加预算 —— `select_mesh_lod` 升档要 1.25×、降档要 0.8×（[mesh_lod.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/mesh_lod.h)）。
+还有一类不是崩溃而是**手感**问题：LOD 档次抖动。修法是滞回，不是加预算 —— `select_mesh_lod` 升档要 1.25×、降档要 0.8×（[mesh_lod.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/resource/mesh_lod.h)）。
 
 ### 现在会在哪爆
 
@@ -106,7 +106,7 @@ BIM 的「三角多」常常是「同一段墙截面复制八千次」，所以�
 | **BRep** | 精确几何与拓扑（曲面方程、面边界、容差） | 内核里（OCCT 的 `TopoDS_Shape`），`Body` 只给不透明句柄 | 不是。是**求值结果**，可重建 |
 | **三角网** | `MeshCpu` / `GpuMesh` | `MeshAsset` + 显存 | 不是。是**多分辨率缓存** |
 
-`Feature` 的定义很直白：`FeatureKind` + `inputs`（依赖的特征 id）+ `params`（命名参数表），旁边就是求值器要跑的东西（[feature.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/feature.h)）。
+`Feature` 的定义很直白：`FeatureKind` + `inputs`（依赖的特征 id）+ `params`（命名参数表），旁边就是求值器要跑的东西（[feature.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/feature/feature.h)）。
 
 `.tdoc` 是「magic + chunk」的分块格式，一共 11 个 chunk：`META` / `MESH` / `SCEN` / `FEAT` / `MATL` / `TEXT` / `RELA` / `STRY` / `GRID` / `DRWG` / `VIEW`。所以要精确说：
 
@@ -145,7 +145,7 @@ TopoDS_Shape = TShape（共享的拓扑数据）+ TopLoc_Location（放在哪）
 内核接口刻意停在「BRep 操作」层（[kernel.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/kernel/kernel.h)）：
 
 - `Body` 是 `shared_ptr<const Body>` 不透明句柄，**外面永远看不到 `TopoDS_Shape`**；
-- `EdgeId` 只在**一个 Body 的生命周期内**有效；跨求值、跨会话的持久标识由中间层的**几何指纹**负责（[edge_fingerprint.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/edge_fingerprint.cpp)），不是内核的事；
+- `EdgeId` 只在**一个 Body 的生命周期内**有效；跨求值、跨会话的持久标识由中间层的**几何指纹**负责（[edge_fingerprint.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/evaluate/edge_fingerprint.cpp)），不是内核的事；
 - 唯一允许 `#include <BRep*.hxx>` 的地方是 `src/engine/modeling/occt/`。
 
 离散时按 Face 走，并把每个面在索引里的范围记进 `MeshCpu.faces`（`MeshFaceRange` + 面 AABB，见 [mesh_face_range.h](https://github.com/terry-chao/tamias/blob/main/src/engine/graphics/mesh_face_range.h)）。这样以后「按面剔除 / 按面剖切 / 按面流式」不需要改顶点格式，也不动 `.tdoc` 序列化。
@@ -183,7 +183,7 @@ TopoDS_Shape = TShape（共享的拓扑数据）+ TopLoc_Location（放在哪）
 
 ### 和 Tamias 的接口对上
 
-`ModelKernel::boolean(a, b, op)` 返回一个新的 `BodyRef`，`BooleanOp{Fuse, Common, Cut}` 作为 `Boolean` 特征的 `operation` 参数存进 `.tdoc`（[feature.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/feature.h)）。**第二个后端 Truck 也实现了布尔**（经 `truck-shapeops`），所以同一份 `.tdoc` 可以被不同内核求值 —— 这正是分层要换来的东西。跨后端验收见 `tests/kernel_conformance_tests.cpp`（[TESTING.md](TESTING.md)）。
+`ModelKernel::boolean(a, b, op)` 返回一个新的 `BodyRef`，`BooleanOp{Fuse, Common, Cut}` 作为 `Boolean` 特征的 `operation` 参数存进 `.tdoc`（[feature.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/feature/feature.h)）。**第二个后端 Truck 也实现了布尔**（经 `truck-shapeops`），所以同一份 `.tdoc` 可以被不同内核求值 —— 这正是分层要换来的东西。跨后端验收见 `tests/kernel_conformance_tests.cpp`（[TESTING.md](TESTING.md)）。
 
 已知坑：**共面的两个体做布尔是退化情形**，Truck 直接返回 none，验收用例里把工具体挪开一点避开（[MODELING-KERNEL.md](MODELING-KERNEL.md) §6）。
 
@@ -193,7 +193,7 @@ TopoDS_Shape = TShape（共享的拓扑数据）+ TopLoc_Location（放在哪）
 
 ### 算术上的快：每一级只有上一级的 1/4
 
-`build_texture_mips`（[texture_mips.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/texture_mips.cpp)）是逐级 2×2 box filter：第 `i` 级从第 `i-1` 级降采样，尺寸 `w/2 × h/2`。总工作量：
+`build_texture_mips`（[texture_mips.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/resource/texture_mips.cpp)）是逐级 2×2 box filter：第 `i` 级从第 `i-1` 级降采样，尺寸 `w/2 × h/2`。总工作量：
 
 ```
 N + N/4 + N/16 + … = (4/3) · N
@@ -207,7 +207,7 @@ N + N/4 + N/16 + … = (4/3) · N
 
 ### 一次生成，不是每帧生成
 
-mip 在做 `upload_texture` 时**生成一次**（[render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.cpp) 里 `mips = build_texture_mips(asset)`，然后逐级 `write_subresource`），之后每帧只是采样。所以它不进每帧预算。
+mip 在做 `upload_texture` 时**生成一次**（[render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.cpp) 里 `mips = build_texture_mips(asset)`，然后逐级 `write_subresource`），之后每帧只是采样。所以它不进每帧预算。
 
 ### 渲染为什么也快（这才是 mipmap 的本职）
 
@@ -343,7 +343,7 @@ OSG 分了「不透明 bin（按状态排序）」和「透明 bin（`DepthSorte
 | 描述符 | 逐 draw 绑 GL 状态 | descriptor set / bindless 池化 |
 | 视图组织 | Viewer → Camera → Scene | `View` + `CommandGraph` + `RenderGraph`，多视图可共享录制结果 |
 
-**Tamias 抄的是 VSG 这一支。** [scene_graph.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene_graph.h) 开头写得很直白：
+**Tamias 抄的是 VSG 这一支。** [scene_graph.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene/scene_graph.h) 开头写得很直白：
 
 > 渲染场景图骨架（VSG 式：节点 + 访问者 + 命令图状态）…… 语义是 VSG StateCommands 式的显式命令图 —— 状态沿遍历线性累积，子树要覆盖什么就在自己的 StateGroup 里再下命令，**不做 OSG StateSet 式隐式继承**。
 
@@ -363,7 +363,7 @@ OSG 分了「不透明 bin（按状态排序）」和「透明 bin（`DepthSorte
 
 ### Tamias 现在怎么做
 
-渲染线程每个 channel 走**两遍**（[render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.cpp)）：
+渲染线程每个 channel 走**两遍**（[render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.cpp)）：
 
 ```
 第一遍  RecordCommands(ctx)              ← 跳过 opacity < 1 的
@@ -409,7 +409,7 @@ else if (transmissive) return;
 | **临时 / overlay**（每帧重建） | 拖墙预览线、草图曲线、贝塞尔控制多边形与控制点、夹点、捕捉点、轴网、网格线、框选、调试段 | 独立 overlay 通道，每帧重传，`depth_test = false` |
 | **二维图纸** | DXF / DWF 的曲线与文字 | 完全另一条路：Qt `QPainter`（[DRAWING.md](DRAWING.md)） |
 
-临时图元的数据都在 `FrameSubmission` 里，每帧现填（见 [render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.h)）：
+临时图元的数据都在 `FrameSubmission` 里，每帧现填（见 [render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.h)）：
 
 ```
 preview_polyline / preview_control_polyline / preview_points
@@ -428,7 +428,7 @@ debug_line_segments
 
 ### 实例化怎么处理
 
-实例数据是 `GpuInstance`（80 字节：world 3×4 仿射矩阵 + 颜色 + 材质，[gpu_instance.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/gpu_instance.h)），走**顶点 instance rate** 的第二个顶点缓冲，而不是一个一个 push constant：
+实例数据是 `GpuInstance`（80 字节：world 3×4 仿射矩阵 + 颜色 + 材质，[gpu_instance.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/gpu_instance.h)），走**顶点 instance rate** 的第二个顶点缓冲，而不是一个一个 push constant：
 
 ```
 RecordCommands::enqueue(batch, instance)   → 按 BatchKey 找桶
@@ -498,7 +498,7 @@ Document（主数据）
 
 每次换 pipeline、换贴图绑定、换顶点缓冲，驱动都要做一次状态校验 / 重编程。切换代价**比 draw 本身还贵**，而且贵得多。所以减少状态切换不是「省几条指令」，是省掉绝大部分驱动工作。
 
-本仓库的手段就是 **`BatchKey` 分桶**（[batch_key.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/batch_key.h)）：
+本仓库的手段就是 **`BatchKey` 分桶**（[batch_key.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/batch_key.h)）：
 
 ```cpp
 struct BatchKey {
@@ -705,7 +705,7 @@ intersect_segment(local_ray, a, b, kSketchPickRadius, hit_t);
 几个关键点：
 
 - **0.03 是本地 / 世界单位，不是像素**。`to_local_ray` 只做「旋转 + 平移」的逆变换（`Rᵀ(p − t)`），并要求场景变换是刚体（无缩放），所以刚体保距、交点参数 `t` 不变，半径也就等价于世界单位（注释写明了这个前提）；
-- 包围盒会按同样厚度膨胀（[curve_geom.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/curve_geom.cpp) 里 `kSketchPickRadius` 那处），避免轴对齐线段退化成零厚度的盒子；
+- 包围盒会按同样厚度膨胀（[curve_geom.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/feature/curve_geom.cpp) 里 `kSketchPickRadius` 那处），避免轴对齐线段退化成零厚度的盒子；
 - 闭合曲线（圆 / 弧）统一按折线段的集合处理。
 
 **为什么只有草图给半径？** 因为草图线在屏幕上可能只有 1–2 像素宽，用「零容差」几乎点不中。这是**手感**决定的，不是数学决定的。
@@ -1183,14 +1183,14 @@ float32 尾数 24 位，相对精度 ≈ `2⁻²⁴ ≈ 6e-8`。**能表示的�
 | 东西 | 是什么 |
 |---|---|
 | [tess_cache.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/tess_cache.h) | `geometry_id → LodMeshSet`，**LOD 的唯一真相源**；同时记 `pending` 集合避免重复排队 |
-| [lod_mesh_set.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/lod_mesh_set.h) | 三条资产 id：`coarse` / `work` / `close`（`Box` 不进表，因为是共享单位盒） |
-| [mesh_lod.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/mesh_lod.h) | 档次阈值与滞回：`< 4 px` → Box，`< 80 px` → Coarse，否则 Work；升档 ×1.25、降档 ×0.8 |
-| [lod_request.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/lod_request.h) | 渲染线程要的「缺哪一档」，可哈希、可去重 |
-| [tess_worker.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/tess_worker.h) | 后台离散队列；桌面单 worker 线程，WASM 靠 `pump()` 每帧跑几个 |
+| [lod_mesh_set.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/resource/lod_mesh_set.h) | 三条资产 id：`coarse` / `work` / `close`（`Box` 不进表，因为是共享单位盒） |
+| [mesh_lod.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/resource/mesh_lod.h) | 档次阈值与滞回：`< 4 px` → Box，`< 80 px` → Coarse，否则 Work；升档 ×1.25、降档 ×0.8 |
+| [lod_request.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/resource/lod_request.h) | 渲染线程要的「缺哪一档」，可哈希、可去重 |
+| [tess_worker.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/evaluate/tess_worker.h) | 后台离散队列；桌面单 worker 线程，WASM 靠 `pump()` 每帧跑几个 |
 
 ### 三个容易猜错的点
 
-**① L0 盒不属于任何模型。** 它是渲染线程里**唯一一份**单位盒网格（`lod_box_mesh_` / `lod_box_gpu_id_`），世界矩阵由 `lod_box_world_matrix(bounds) = translate(center) * scale(extent)` 现算（[mesh_lod.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/mesh_lod.h)）。所以「远处十万个构件退化成一个盒子」的实际代价是**十万个实例、一份网格、一次 draw 左右**。
+**① L0 盒不属于任何模型。** 它是渲染线程里**唯一一份**单位盒网格（`lod_box_mesh_` / `lod_box_gpu_id_`），世界矩阵由 `lod_box_world_matrix(bounds) = translate(center) * scale(extent)` 现算（[mesh_lod.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/resource/mesh_lod.h)）。所以「远处十万个构件退化成一个盒子」的实际代价是**十万个实例、一份网格、一次 draw 左右**。
 
 **② 档次选择不在文档侧，在录制侧。** `select_mesh_lod(projected_px, previous, selected, lines)` 需要 `eye_position` / `fovy` / `framebuffer_height`，这些都是**每帧、每 channel** 的信息。写进 `SceneNode` 或 `render_items()` 的话，相机一动就会把「留存树」整棵打脏（[MASSIVE-GEOMETRY.md](MASSIVE-GEOMETRY.md) G3 专门解释了这条）。所以滞回状态也存在 channel 上（`ChannelState.lod_by_node`），不是文档上。
 
@@ -1228,7 +1228,7 @@ float32 尾数 24 位，相对精度 ≈ `2⁻²⁴ ≈ 6e-8`。**能表示的�
 
 | 已有物 | 是什么 | 不是什么 |
 |---|---|---|
-| `FeatureKind::Line / Polyline / CircleWire / Arc / Bezier / BSpline / Nurbs`（[feature.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/feature.h)） | **参数化曲线特征**：点序列 / 控制点直接存在 `params` 里 | 不是带约束的草图几何 |
+| `FeatureKind::Line / Polyline / CircleWire / Arc / Bezier / BSpline / Nurbs`（[feature.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/feature/feature.h)） | **参数化曲线特征**：点序列 / 控制点直接存在 `params` 里 | 不是带约束的草图几何 |
 | `is_sketch_feature(kind)` | 用来判断「这是曲线、不是实体」 | 不代表有草图解算 |
 | 曲线拾取半径 `kSketchPickRadius`（§14） | 让细线可点中的手感参数 | 不是几何容差 |
 | `select_mesh_lod` 里 `lines → Work` | 草图**永不 LOD**（线退化成盒就没法用了） | —— |
@@ -1257,11 +1257,11 @@ float32 尾数 24 位，相对精度 ≈ `2⁻²⁴ ≈ 6e-8`。**能表示的�
 | 数学 / 拾取几何 | [math.h](https://github.com/terry-chao/tamias/blob/main/src/engine/math/math.h)、[camera.h](https://github.com/terry-chao/tamias/blob/main/src/engine/math/camera.h) |
 | 拾取 | [picking.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/picking.h)、[picking.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/picking.cpp) |
 | 文档 / 场景 / LOD 表 | [document.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.h)、[document.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.cpp)、[scene.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/scene.h)、[tess_cache.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/tess_cache.h) |
-| 渲染树 / 录制 / 合批 | [scene_graph.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene_graph.h)、[scene_graph.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene_graph.cpp)、[batch_key.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/batch_key.h)、[gpu_instance.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/gpu_instance.h) |
-| 渲染线程 / 驻留 / 纹理 | [render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.h)、[render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.cpp)、[resident_cache.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/resident_cache.h)、[texture_mips.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/texture_mips.cpp) |
-| LOD 策略 | [mesh_lod.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/mesh_lod.h)、[lod_mesh_set.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/lod_mesh_set.h)、[lod_request.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/lod_request.h) |
+| 渲染树 / 录制 / 合批 | [scene_graph.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene/scene_graph.h)、[scene_graph.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene/scene_graph.cpp)、[batch_key.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/batch_key.h)、[gpu_instance.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/gpu_instance.h) |
+| 渲染线程 / 驻留 / 纹理 | [render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.h)、[render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.cpp)、[resident_cache.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/resident_cache.h)、[texture_mips.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/resource/texture_mips.cpp) |
+| LOD 策略 | [mesh_lod.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/resource/mesh_lod.h)、[lod_mesh_set.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/resource/lod_mesh_set.h)、[lod_request.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/resource/lod_request.h) |
 | RHI | [device.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/device.h)、[opengl_device.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/opengl/opengl_device.cpp)、[vulkan_device.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/vulkan/vulkan_device.cpp) |
-| 造型 / 内核 | [kernel.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/kernel/kernel.h)、[occt_kernel.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt/occt_kernel.cpp)、[occt_shape_ops.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt/occt_shape_ops.cpp)、[feature.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/feature.h)、[tess_worker.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/tess_worker.h) |
+| 造型 / 内核 | [kernel.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/kernel/kernel.h)、[occt_kernel.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt/occt_kernel.cpp)、[occt_shape_ops.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt/occt_shape_ops.cpp)、[feature.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/feature/feature.h)、[tess_worker.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/evaluate/tess_worker.h) |
 | 命令 / 会话 | [command_system.h](https://github.com/terry-chao/tamias/blob/main/src/command/core/command_system.h)、[session.h](https://github.com/terry-chao/tamias/blob/main/src/host/session.h)、[camera_controller.cpp](https://github.com/terry-chao/tamias/blob/main/src/host/camera_controller.cpp) |
 | 视口 | [document_viewport.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/document_viewport.cpp)、[drawing_view.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/drawing/drawing_view.cpp)、[view_cube_widget.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/view_cube_widget.cpp) |
 | 图纸 / 文字 | [drawing.h](https://github.com/terry-chao/tamias/blob/main/src/engine/drawing/drawing.h)、[drawing_text.h](https://github.com/terry-chao/tamias/blob/main/src/engine/drawing/drawing_text.h)、[drawing_document.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/drawing/drawing_document.cpp) |

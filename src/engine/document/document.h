@@ -5,12 +5,12 @@
 #include "engine/document/scene.h"
 #include "entity/core/entity.h"
 #include "engine/document/texture_library.h"
-#include "engine/render/material.h"
-#include "engine/render/render_scene.h"
+#include "engine/render/resource/material.h"
+#include "engine/render/scene/render_scene.h"
 #include "engine/document/tess_cache.h"
 #include "engine/modeling/kernel/shape_ops.h"
-#include "engine/modeling/tess_worker.h"
-#include "engine/render/lod_request.h"
+#include "engine/modeling/evaluate/tess_worker.h"
+#include "engine/render/resource/lod_request.h"
 
 #include <algorithm>
 #include <filesystem>

@@ -2,8 +2,8 @@
 
 #include "app/viewport/document_viewport.h"
 #include "engine/base/fs_utf8.h"
-#include "engine/render/render_scene_golden.h"
-#include "engine/render/scene_debug_log.h"
+#include "engine/render/scene/render_scene_golden.h"
+#include "engine/render/debug/scene_debug_log.h"
 #include "app/debug/golden_test_runner.h"
 #include "app/debug/pin_result_dialog.h"
 #include "app/base/qt_path.h"

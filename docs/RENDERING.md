@@ -61,7 +61,7 @@ CAD 内核里的精确实体是 [BRep](FEATURE-TREE-EVALUATOR.md)（曲面方程
 5. 若节点对应实体且有材质，填上 `base_color` / 粗糙度 / 金属度 / 贴图 id。
 6. 带上 `selected`。
 
-产出一列 `SceneDrawItem`（[render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_types.h)）。到这里，「楼层」信息已经烤没了，只剩「这块网格放在这个世界矩阵上，用这个颜色画」。视口传入视锥时，世界包围盒完全在镜头外的叶子不会进清单，见 [视锥剔除](FRUSTUM-CULLING.md)。
+产出一列 `SceneDrawItem`（[render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_types.h)）。到这里，「楼层」信息已经烤没了，只剩「这块网格放在这个世界矩阵上，用这个颜色画」。视口传入视锥时，世界包围盒完全在镜头外的叶子不会进清单，见 [视锥剔除](FRUSTUM-CULLING.md)。
 
 ---
 
@@ -91,7 +91,7 @@ CAD 内核里的精确实体是 [BRep](FEATURE-TREE-EVALUATOR.md)（曲面方程
 
 ## 4. 渲染线程：摄影棚里发生什么
 
-`RenderThread`（[render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.h)）是**一条专门跟 GPU 说话的线程**。UI 绝不能直接调 Vulkan/OpenGL 画图，否则和 Qt 抢消息循环、也和 GPU 驱动抢队列。
+`RenderThread`（[render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.h)）是**一条专门跟 GPU 说话的线程**。UI 绝不能直接调 Vulkan/OpenGL 画图，否则和 Qt 抢消息循环、也和 GPU 驱动抢队列。
 
 线程循环（`thread_main`）大致是：
 
@@ -248,7 +248,7 @@ RGB = n * 0.5 + 0.5
 
 512×512，线性空间（`TextureAsset.srgb = false`）。Concrete / Wood / Steel 用和 albedo 同源的 FBM / 木纹 / 拉丝高度；Default / Plaster 是细颗粒；Glass 是低频、很弱的起伏。上传时走 `R8G8B8A8_UNORM`，**不要**当 sRGB，否则 GPU 会做 gamma 解码，法线会偏。
 
-**绑定（绘制）。** [scene_graph.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene_graph.cpp) 只在真实模式（`mode > 1.5`）解析贴图：
+**绑定（绘制）。** [scene_graph.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene/scene_graph.cpp) 只在真实模式（`mode > 1.5`）解析贴图：
 
 - slot 0 = albedo，没有则 1×1 白
 - slot 1 = 法线，没有则 1×1 `(128,128,255)`（切线空间 +Z，即「完全平坦」）
@@ -339,10 +339,10 @@ IBL 是 split-sum：CPU 烘焙工作室环境立方体 → irradiance / GGX pref
 |---|---|
 | [document_viewport.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/document_viewport.cpp) | 相机、提交帧、上传网格、点选 |
 | [document.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.cpp) | `render_items()` 展平清单；`seed_default_materials()` 预设 albedo / 法线 / PBR |
-| [render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_types.h) | `SceneDrawItem` / `RenderMode` |
-| [render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.cpp) | 线程、上传、一帧绘制顺序 |
+| [render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_types.h) | `SceneDrawItem` / `RenderMode` |
+| [render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.cpp) | 线程、上传、一帧绘制顺序 |
 | [rhi/device.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/device.h) | GPU 抽象 |
 | [rhi/vulkan](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/vulkan/vulkan_device.cpp) / [rhi/opengl](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/opengl/opengl_device.cpp) / [rhi/webgpu](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/webgpu/webgpu_device.cpp) | 桌面 Vulkan/OpenGL；浏览器 WebGPU 见 [WebGPU 后端](WGPU.md) |
-| [material.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/material.h) | `Material` / `TextureAsset` |
+| [material.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/resource/material.h) | `Material` / `TextureAsset` |
 | [mesh.frag.hlsl](https://github.com/terry-chao/tamias/blob/main/shaders/mesh.frag.hlsl) | 线框 / 着色 / 真实（PBR + 法线采样） |
 | [rhi_backends.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/base/rhi_backends.cpp) | 启动时登记后端 |

@@ -3,7 +3,7 @@
 #include "bim/wall_size.h"
 #include "engine/base/result.h"
 #include "engine/math/math.h"
-#include "engine/modeling/feature.h"
+#include "engine/modeling/feature/feature.h"
 #include "entity/core/entity.h"
 
 #include <cstdint>

@@ -2,9 +2,9 @@
 #include "engine/document/document.h"
 #include "engine/document/document_io.h"
 #include "engine/graphics/mesh.h"
-#include "engine/modeling/edge_fingerprint.h"
-#include "engine/modeling/feature.h"
-#include "engine/modeling/evaluator.h"
+#include "engine/modeling/evaluate/edge_fingerprint.h"
+#include "engine/modeling/feature/feature.h"
+#include "engine/modeling/evaluate/evaluator.h"
 
 #include <gtest/gtest.h>
 

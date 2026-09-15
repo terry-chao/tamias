@@ -1,6 +1,6 @@
 #include "engine/graphics/mesh.h"
-#include "engine/modeling/evaluator.h"
-#include "engine/modeling/feature.h"
+#include "engine/modeling/evaluate/evaluator.h"
+#include "engine/modeling/feature/feature.h"
 #include "engine/modeling/kernel/kernel.h"
 #include "engine/modeling/linked_kernels.h"
 

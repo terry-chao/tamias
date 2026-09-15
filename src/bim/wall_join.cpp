@@ -4,8 +4,8 @@
 #include "bim/host_update.h"
 #include "bim/line_location.h"
 #include "engine/document/document.h"
-#include "engine/modeling/curve_geom.h"
-#include "engine/modeling/geom_builder.h"
+#include "engine/modeling/feature/curve_geom.h"
+#include "engine/modeling/evaluate/geom_builder.h"
 
 #include <algorithm>
 #include <cmath>

@@ -2,7 +2,7 @@
 
 #include "engine/base/log.h"
 #include "engine/graphics/mesh.h"
-#include "engine/render/gpu_instance.h"
+#include "engine/render/runtime/gpu_instance.h"
 
 #include <algorithm>
 #include <cstddef>

@@ -4,7 +4,7 @@
 #include "tamias_version.h"
 #include "command/core/command_system.h"
 #include "engine/base/log.h"
-#include "engine/render/render_runtime.h"
+#include "engine/render/runtime/render_runtime.h"
 #include "engine/graphics/graphics_backend.h"
 #include "app/base/i18n.h"
 #include "engine/modeling/linked_kernels.h"

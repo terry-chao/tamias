@@ -2,7 +2,7 @@
 
 #include "command/core/command.h"
 #include "engine/document/document.h"
-#include "engine/render/texture_asset.h"
+#include "engine/render/resource/texture_asset.h"
 
 #include <cstdint>
 

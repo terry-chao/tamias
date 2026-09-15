@@ -2,8 +2,8 @@
 
 #include "bim/line_location.h"
 #include "entity/core/entity.h"
-#include "engine/modeling/curve_geom.h"
-#include "engine/modeling/feature.h"
+#include "engine/modeling/feature/curve_geom.h"
+#include "engine/modeling/feature/feature.h"
 
 #include <algorithm>
 #include <cmath>

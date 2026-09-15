@@ -4,7 +4,7 @@
 #include "engine/base/result.h"
 #include "engine/graphics/mesh.h"
 #include "engine/math/math.h"
-#include "engine/modeling/feature.h"
+#include "engine/modeling/feature/feature.h"
 
 #include <cstdint>
 #include <memory>

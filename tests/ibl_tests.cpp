@@ -1,4 +1,4 @@
-#include "engine/render/ibl.h"
+#include "engine/render/resource/ibl.h"
 
 #include <gtest/gtest.h>
 

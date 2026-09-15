@@ -1,7 +1,7 @@
 #include "app/debug/pin_result_dialog.h"
 
 #include "engine/document/document.h"
-#include "engine/render/render_scene_golden.h"
+#include "engine/render/scene/render_scene_golden.h"
 #include "app/debug/golden_test_case.h"
 #include "app/base/qt_path.h"
 

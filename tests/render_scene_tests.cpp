@@ -1,10 +1,10 @@
 #include "engine/document/document.h"
 #include "engine/base/fs_utf8.h"
 #include "engine/io/mesh_io.h"
-#include "engine/render/render_scene.h"
-#include "engine/render/render_scene_golden.h"
-#include "engine/render/scene_graph.h"
-#include "engine/render/gpu_instance.h"
+#include "engine/render/scene/render_scene.h"
+#include "engine/render/scene/render_scene_golden.h"
+#include "engine/render/scene/scene_graph.h"
+#include "engine/render/runtime/gpu_instance.h"
 
 #include <gtest/gtest.h>
 

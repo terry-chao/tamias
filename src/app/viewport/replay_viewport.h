@@ -1,8 +1,8 @@
 #pragma once
 
 #include "engine/math/camera.h"
-#include "engine/render/render_runtime.h"
-#include "engine/render/scene_debug_player.h"
+#include "engine/render/runtime/render_runtime.h"
+#include "engine/render/debug/scene_debug_player.h"
 #include "host/camera_controller.h"
 #include "app/viewport/view_cube_widget.h"
 

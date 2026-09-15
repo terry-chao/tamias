@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/render/render_scene.h"
+#include "engine/render/scene/render_scene.h"
 
 #include <QMainWindow>
 #include <QPointer>

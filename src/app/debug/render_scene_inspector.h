@@ -1,8 +1,8 @@
 #pragma once
 
 #include "engine/math/math.h"
-#include "engine/render/debug_vertex_overlay.h"
-#include "engine/render/render_scene.h"
+#include "engine/render/debug/debug_vertex_overlay.h"
+#include "engine/render/scene/render_scene.h"
 
 #include <QWidget>
 #include <cstdint>

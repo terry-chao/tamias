@@ -1,5 +1,5 @@
-#include "engine/modeling/feature.h"
-#include "engine/modeling/evaluator.h"
+#include "engine/modeling/feature/feature.h"
+#include "engine/modeling/evaluate/evaluator.h"
 
 #include <gtest/gtest.h>
 

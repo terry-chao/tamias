@@ -4,7 +4,7 @@
 
 卡在 `Document::render_items()` 之后、`upload_mesh` 之前。管线总述见 [管线与 RHI](RENDERING.md)；展平见 [语义树](SCENE-GRAPH.md)。
 
-实现：[`render_scene.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_scene.h)、[`render_scene.cpp`](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_scene.cpp)、[`render_scene_io.cpp`](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_scene_io.cpp)。测试：[`tests/render_scene_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/render_scene_tests.cpp)。
+实现：[`render_scene.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene/render_scene.h)、[`render_scene.cpp`](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene/render_scene.cpp)、[`render_scene_io.cpp`](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene/render_scene_io.cpp)。测试：[`tests/render_scene_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/render_scene_tests.cpp)。
 
 ---
 

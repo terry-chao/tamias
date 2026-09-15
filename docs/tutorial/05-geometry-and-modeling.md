@@ -49,7 +49,7 @@ local_transform = translate(position);
 
 ## 5.3 求值器：照配方做菜
 
-求值器（[evaluator.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/evaluator.cpp)）拿着配方去调内核动词（OCCT 在后端实现）：
+求值器（[evaluator.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/evaluate/evaluator.cpp)）拿着配方去调内核动词（OCCT 在后端实现）：
 
 | 特征 | OCCT 调用 | 得到 |
 |---|---|---|

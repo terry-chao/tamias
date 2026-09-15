@@ -140,7 +140,7 @@ for (const auto& node : scene_.nodes()) {
 }
 ```
 
-[render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_types.h) 里的 `SceneDrawItem`：
+[render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_types.h) 里的 `SceneDrawItem`：
 
 ```cpp
 struct SceneDrawItem {
@@ -156,7 +156,7 @@ struct SceneDrawItem {
 
 ### 3.4 渲染侧：留存 GPU 网格 + 每帧展平提交（半留存）
 
-[render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.h) 里，`RenderThread` 持有 `meshes_`（`upload_mesh` 幂等缓存，几何**留存**），而 `FrameSubmission` 每帧带一整份 `SceneDrawItem` 列表（场景结构**非留存**）。
+[render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.h) 里，`RenderThread` 持有 `meshes_`（`upload_mesh` 幂等缓存，几何**留存**），而 `FrameSubmission` 每帧带一整份 `SceneDrawItem` 列表（场景结构**非留存**）。
 
 所以 Tamias 是「**半留存**」：
 
@@ -192,9 +192,9 @@ RenderThread::draw_channel()（渲染线程）
 |---|---|---|
 | [scene.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/scene.h) / [scene.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/scene.cpp) | 语义树 + 脏标记源头 | `generation()` / `dirty_since(last)` / `mark_dirty` / `mark_subtree_dirty`；所有 mutator 挂钩，变换/换父标记整棵子树 |
 | [document.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.cpp) `render_items()` | 展平桥 | 语义节点 → `SceneDrawItem`（网格 + 世界矩阵 + 世界包围盒 + 解析后的材质/选中/线条） |
-| [render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_types.h) | 共享类型 | `SceneDrawItem`、`GpuMesh`、`GpuTexture`、`PushConstants`（从渲染线程私有区提出，供场景图共用） |
-| [scene_graph.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene_graph.h) / [scene_graph.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene_graph.cpp) | **渲染侧核心** | 节点（`Group`/`Transform`/`StateGroup`/`Drawable`）、`StateCommand` 命令、`RenderVisitor` / `RecordCommands` 访问者、`build_scene_graph`（全量）/ `update_scene_graph`（增量） |
-| [render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.h) / [render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.cpp) | 传输 + 集成 | `FrameSubmission` 字段；channel 留存树（`scene_root` + 节点索引）；`draw_channel` 增量同步与录制；GPU 网格/纹理缓存（`meshes_` / `textures_`） |
+| [render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_types.h) | 共享类型 | `SceneDrawItem`、`GpuMesh`、`GpuTexture`、`PushConstants`（从渲染线程私有区提出，供场景图共用） |
+| [scene_graph.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene/scene_graph.h) / [scene_graph.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene/scene_graph.cpp) | **渲染侧核心** | 节点（`Group`/`Transform`/`StateGroup`/`Drawable`）、`StateCommand` 命令、`RenderVisitor` / `RecordCommands` 访问者、`build_scene_graph`（全量）/ `update_scene_graph`（增量） |
+| [render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.h) / [render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.cpp) | 传输 + 集成 | `FrameSubmission` 字段；channel 留存树（`scene_root` + 节点索引）；`draw_channel` 增量同步与录制；GPU 网格/纹理缓存（`meshes_` / `textures_`） |
 | [document_viewport.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/document_viewport.cpp) / [viewer_host.cpp](https://github.com/terry-chao/tamias/blob/main/src/wasm/viewer_host.cpp) | 消费侧组装帧 | 每帧提交 `scene_generation` + `dirty_since(上次游标)`；视口隐藏过滤（floor/类别/isolate）收集成 `hidden_node_ids` |
 | [set_material_command.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/edit/set_material_command.cpp) | 旁路脏标记 | 材质引用变更不走 `Scene` mutator，命令里显式 `mark_scene_dirty(entity_id)` |
 | [scene_graph_tests.cpp](https://github.com/terry-chao/tamias/blob/main/tests/scene_graph_tests.cpp) | 验证 | 脏标记（`SceneDirty`）+ 增量同步（`SceneGraphIncremental`）+ 录制剔除/隐藏的单测 |
@@ -280,7 +280,7 @@ Tamias 渲染 (render_runtime)     OCCT 渲染 (V3d_Viewer + OpenGl 驱动)
 
 > **已定（记录于 [ROADMAP.md](ROADMAP.md) 第 4/9 节）**：将来实现渲染侧结构时，采用 **VSG 式「节点 + 访问者」+ 命令图状态**（`StateGroup` + `StateCommands`），而非 OSG 的 `StateSet` 隐式继承。注意：这里的「节点」是 draw-oriented（drawable + transform + material + 可见性），**不是语义树的复制**——VSG 的节点树本身就是「数据数组 + 命令」导向，与「展平渲染」同向，不冲突。
 
-> **现状（已落地）**：上述设计已落地为 [scene_graph.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene_graph.h) / [scene_graph.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene_graph.cpp)（`Group` / `Transform` / `StateGroup` / `Drawable` 节点 + `StateCommand` 命令 + `RecordCommands` 访问者），`draw_channel` 的模型循环已切换到访问者录制。**增量同步已接**：`Scene` 每个 mutator 递增 `generation` 并按代次盖章脏节点（变换/换父标记整棵子树，选中/材质只标记节点）；app 每帧把 `scene_generation` + `dirty_since(last)` 随 `FrameSubmission` 发给渲染线程，渲染线程按 channel 留存场景图，只在代次变化时 `update_scene_graph` 就地更新/增删对应子树；代次变了但无脏 id（clear / 整档恢复）走整树重建兜底。视锥剔除与可见性过滤移到录制时按节点判断，树本身保持完整内容。状态语义是命令图式的显式覆盖（状态沿遍历线性累积，子树要覆盖就在自己的 `StateGroup` 里再下命令），不是 OSG 的隐式继承。
+> **现状（已落地）**：上述设计已落地为 [scene_graph.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene/scene_graph.h) / [scene_graph.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene/scene_graph.cpp)（`Group` / `Transform` / `StateGroup` / `Drawable` 节点 + `StateCommand` 命令 + `RecordCommands` 访问者），`draw_channel` 的模型循环已切换到访问者录制。**增量同步已接**：`Scene` 每个 mutator 递增 `generation` 并按代次盖章脏节点（变换/换父标记整棵子树，选中/材质只标记节点）；app 每帧把 `scene_generation` + `dirty_since(last)` 随 `FrameSubmission` 发给渲染线程，渲染线程按 channel 留存场景图，只在代次变化时 `update_scene_graph` 就地更新/增删对应子树；代次变了但无脏 id（clear / 整档恢复）走整树重建兜底。视锥剔除与可见性过滤移到录制时按节点判断，树本身保持完整内容。状态语义是命令图式的显式覆盖（状态沿遍历线性累积，子树要覆盖就在自己的 `StateGroup` 里再下命令），不是 OSG 的隐式继承。
 
 ---
 
@@ -288,12 +288,12 @@ Tamias 渲染 (render_runtime)     OCCT 渲染 (V3d_Viewer + OpenGl 驱动)
 
 - [BIM.md](BIM.md) —— 楼层 / 轴网 / 宿主；语义树只记账
 - [scene.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/scene.h) / [scene.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/scene.cpp) —— 语义树 + 局部→全局变换累积
-- [scene_graph.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene_graph.h) / [scene_graph.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene_graph.cpp) —— 渲染场景图核心（VSG 式节点 + 命令 + 访问者；全量构建 + 脏标记增量更新）
+- [scene_graph.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene/scene_graph.h) / [scene_graph.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene/scene_graph.cpp) —— 渲染场景图核心（VSG 式节点 + 命令 + 访问者；全量构建 + 脏标记增量更新）
 - [document.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.h) / [document.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.cpp) —— 展平 `render_items()`
-- [render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.h) / [render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.cpp) —— 留存树 + `draw_channel` 增量同步与录制
+- [render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.h) / [render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.cpp) —— 留存树 + `draw_channel` 增量同步与录制
 - [scene_graph_tests.cpp](https://github.com/terry-chao/tamias/blob/main/tests/scene_graph_tests.cpp) —— 脏标记与增量同步的单测
 - [视锥剔除](FRUSTUM-CULLING.md) —— 展平时丢掉屏外叶子；二期语义树剪枝；三期复用拾取 BVH
 - [超大规模三角](MASSIVE-GEOMETRY.md) —— 亿级三角的虚拟离散流水线（合批 / LOD / 驻留）
-- [render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_types.h) —— 展平结果 `SceneDrawItem`
-- [render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.h) —— 半留存渲染侧
+- [render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_types.h) —— 展平结果 `SceneDrawItem`
+- [render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.h) —— 半留存渲染侧
 - [occt_shape_ops.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt_shape_ops.cpp) —— BRep → 三角网（渲染侧数据来源）

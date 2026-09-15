@@ -7,7 +7,7 @@
 #include "entity/sketch/line_entity.h"
 #include "entity/sketch/polyline_entity.h"
 #include "entity/sketch/rectangle_entity.h"
-#include "engine/modeling/curve_geom.h"
+#include "engine/modeling/feature/curve_geom.h"
 
 namespace tamias {
 namespace {

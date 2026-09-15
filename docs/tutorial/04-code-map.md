@@ -35,8 +35,8 @@ src/
 │   ├── document/ Document（一个打开的文件）、Scene（语义树）、拾取
 │   ├── graphics/ Mesh、GraphicsBackend 枚举
 │   ├── io/      文件读写：binary_archive、mesh_io
-│   ├── modeling/ 特征树、求值器、几何边界（IShapeOps / OCCT）
-│   └── render/   渲染线程、RHI 抽象、Vulkan/OpenGL/WebGL 后端
+│   ├── modeling/ 造型：feature/（配方）、evaluate/（求值）、kernel/（内核接口）、occt/ 等后端
+│   └── render/   渲染：runtime/（线程与帧）、scene/（场景图与快照）、resource/（材质贴图）、debug/（回放）、rhi/（后端）
 ├── web/         Web 查看器宿主（ViewerHost）
 └── …（tests/ 在仓库根；plugin-sdk/csharp/ 是 C# 插件 SDK，plugins/ 是插件示例）
 ```
@@ -114,7 +114,7 @@ MainWindow window; window.show();      // 5. 显示主窗口
 ## 4.6 动手练习
 
 1. 在 `main.cpp` 里找到上面四个调用，读一遍周围代码，确认你理解每一行。
-2. 打开 [`render_types.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_types.h)，找出 `SceneDrawItem` 有哪些字段。数一数：渲染侧是不是真的不知道「这是墙」？
+2. 打开 [`render_types.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_types.h)，找出 `SceneDrawItem` 有哪些字段。数一数：渲染侧是不是真的不知道「这是墙」？
 3. 用调试器（或 `log`）在 `SetFeatureParamCommand::execute()` 断一次，走一遍 4.3 的链路。
 
 ## 延伸阅读

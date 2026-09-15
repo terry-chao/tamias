@@ -1,7 +1,7 @@
 #pragma once
 
-#include "engine/render/lod_mesh_set.h"
-#include "engine/render/mesh_lod.h"
+#include "engine/render/resource/lod_mesh_set.h"
+#include "engine/render/resource/mesh_lod.h"
 
 #include <cstdint>
 #include <unordered_map>

@@ -2,7 +2,7 @@
 
 #include "command/core/command.h"
 #include "engine/document/document.h"
-#include "engine/render/material.h"
+#include "engine/render/resource/material.h"
 
 #include <cstdint>
 

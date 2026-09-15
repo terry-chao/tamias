@@ -1,7 +1,7 @@
 #include "app/bim/properties/property_panel.h"
 
 #include "engine/document/document.h"
-#include "engine/modeling/edge_fingerprint.h"
+#include "engine/modeling/evaluate/edge_fingerprint.h"
 #include "app/texture/texture_image.h"
 
 #include <QAbstractSpinBox>

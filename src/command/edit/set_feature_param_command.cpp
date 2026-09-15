@@ -4,9 +4,9 @@
 #include "bim/host_update.h"
 #include "command/edit/edit_entity_grip_command.h"
 #include "entity/core/entity_grip.h"
-#include "engine/modeling/curve_geom.h"
-#include "engine/modeling/edge_fingerprint.h"
-#include "engine/modeling/feature.h"
+#include "engine/modeling/feature/curve_geom.h"
+#include "engine/modeling/evaluate/edge_fingerprint.h"
+#include "engine/modeling/feature/feature.h"
 
 #include <algorithm>
 #include <cmath>

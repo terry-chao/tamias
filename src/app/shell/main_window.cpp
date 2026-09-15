@@ -7,7 +7,7 @@
 #include "engine/base/log.h"
 #include "engine/document/document_io.h"
 #include "engine/io/mesh_io.h"
-#include "engine/render/render_scene_golden.h"
+#include "engine/render/scene/render_scene_golden.h"
 #include "app/debug/golden_test_runner.h"
 #include "app/shell/mesh_thumbnail.h"
 #include "engine/modeling/occt/occt_shape_ops.h"

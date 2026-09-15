@@ -1,9 +1,9 @@
 #include "engine/document/document.h"
 #include "engine/graphics/mesh.h"
 #include "engine/math/math.h"
-#include "engine/render/render_scene.h"
-#include "engine/render/scene_debug_log.h"
-#include "engine/render/scene_debug_player.h"
+#include "engine/render/scene/render_scene.h"
+#include "engine/render/debug/scene_debug_log.h"
+#include "engine/render/debug/scene_debug_player.h"
 
 #include <gtest/gtest.h>
 

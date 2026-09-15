@@ -1,6 +1,6 @@
 #include "app/texture/texture_image.h"
 
-#include "engine/render/builtin_textures.h"
+#include "engine/render/resource/builtin_textures.h"
 
 #include <QByteArray>
 #include <QCoreApplication>

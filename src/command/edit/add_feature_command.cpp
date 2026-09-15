@@ -1,8 +1,8 @@
 #include "command/edit/add_feature_command.h"
 
 #include "entity/core/entity_grip.h"
-#include "engine/modeling/edge_fingerprint.h"
-#include "engine/modeling/geom_builder.h"
+#include "engine/modeling/evaluate/edge_fingerprint.h"
+#include "engine/modeling/evaluate/geom_builder.h"
 
 namespace tamias {
 

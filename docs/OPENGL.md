@@ -44,7 +44,7 @@ Linux 是 GLX + X11 窗口，逻辑一样。
 
 `MeshCpu` = `vertices[]`（位置 / 法线 / UV / 色）+ `indices[]`（每三个下标一个三角）。结构见 [mesh.h](https://github.com/terry-chao/tamias/blob/main/src/engine/graphics/mesh.h)。
 
-视口 `upload_mesh` 把这份 CPU 数据丢进渲染线程。[`RenderThread::upload_mesh`](https://github.com/terry-chao/tamias/blob/main/src/engine/render/render_runtime.cpp)：
+视口 `upload_mesh` 把这份 CPU 数据丢进渲染线程。[`RenderThread::upload_mesh`](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.cpp)：
 
 1. `glGenBuffers` 建 VBO，`glBufferSubData` 写入顶点
 2. 再建 IBO，写入 `uint32` 索引

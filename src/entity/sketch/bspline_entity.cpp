@@ -1,6 +1,6 @@
 #include "entity/sketch/bspline_entity.h"
 
-#include "engine/modeling/curve_geom.h"
+#include "engine/modeling/feature/curve_geom.h"
 
 namespace tamias {
 

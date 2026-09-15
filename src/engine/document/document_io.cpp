@@ -11,7 +11,7 @@
 #include "engine/graphics/mesh.h"
 #include "engine/io/binary_archive.h"
 #include "engine/io/mesh_binary.h"
-#include "engine/render/builtin_textures.h"
+#include "engine/render/resource/builtin_textures.h"
 #include "entity/family/door_entity.h"
 #include "entity/core/entity_grip.h"
 

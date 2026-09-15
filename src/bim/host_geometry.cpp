@@ -1,6 +1,6 @@
 #include "bim/host_geometry.h"
 
-#include "engine/modeling/feature.h"
+#include "engine/modeling/feature/feature.h"
 #include "entity/family/opening_entity.h"
 
 #include <algorithm>
