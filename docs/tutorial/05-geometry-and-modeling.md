@@ -45,7 +45,7 @@ local_transform = translate(position);
 放置    local_transform = 点到的位置
 ```
 
-墙、梁、板、柱、门、窗都是同一套，只是参数不同（[wall_entity.cpp](https://github.com/terry-chao/tamias/blob/main/src/entity/family/architectural/wall_entity.cpp) 用两点算长度和朝向）。
+墙、梁、板、柱、门、窗都是同一套，只是参数不同（[wall_entity.cpp](https://github.com/terry-chao/tamias/blob/main/src/entity/family/host/architectural/wall_entity.cpp) 用两点算长度和朝向）。
 
 ## 5.3 求值器：照配方做菜
 

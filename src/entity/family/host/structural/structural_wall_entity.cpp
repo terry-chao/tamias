@@ -1,4 +1,4 @@
-#include "entity/family/structural/structural_wall_entity.h"
+#include "entity/family/host/structural/structural_wall_entity.h"
 
 #include "bim/line_location.h"
 

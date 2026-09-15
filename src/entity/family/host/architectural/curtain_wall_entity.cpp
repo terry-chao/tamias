@@ -1,4 +1,4 @@
-#include "entity/family/architectural/curtain_wall_entity.h"
+#include "entity/family/host/architectural/curtain_wall_entity.h"
 
 #include "bim/line_location.h"
 

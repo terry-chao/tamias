@@ -1,6 +1,6 @@
 #include "command/create/create_beam_command.h"
 
-#include "entity/family/structural/beam_entity.h"
+#include "entity/family/host/structural/beam_entity.h"
 
 namespace tamias {
 

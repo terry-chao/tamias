@@ -3,7 +3,7 @@
 #include "engine/io/mesh_io.h"
 #include "engine/modeling/feature/feature.h"
 #include "entity/primitive/box_entity.h"
-#include "entity/family/structural/column_entity.h"
+#include "entity/family/host/structural/column_entity.h"
 
 #include <gtest/gtest.h>
 

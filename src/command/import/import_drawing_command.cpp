@@ -1,10 +1,10 @@
 #include "command/import/import_drawing_command.h"
 
 #include "bim/host_update.h"
-#include "entity/family/structural/column_entity.h"
-#include "entity/family/opening/door_entity.h"
-#include "entity/family/architectural/wall_entity.h"
-#include "entity/family/opening/window_entity.h"
+#include "entity/family/host/structural/column_entity.h"
+#include "entity/family/attached/opening/door_entity.h"
+#include "entity/family/host/architectural/wall_entity.h"
+#include "entity/family/attached/opening/window_entity.h"
 
 #include <utility>
 

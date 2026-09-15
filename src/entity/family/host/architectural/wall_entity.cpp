@@ -1,4 +1,4 @@
-#include "entity/family/architectural/wall_entity.h"
+#include "entity/family/host/architectural/wall_entity.h"
 
 #include "bim/line_location.h"
 

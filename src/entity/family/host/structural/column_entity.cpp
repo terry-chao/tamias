@@ -1,4 +1,4 @@
-#include "entity/family/structural/column_entity.h"
+#include "entity/family/host/structural/column_entity.h"
 
 #include "bim/point_location.h"
 

@@ -1,6 +1,6 @@
 #include "command/create/create_structural_wall_command.h"
 
-#include "entity/family/structural/structural_wall_entity.h"
+#include "entity/family/host/structural/structural_wall_entity.h"
 
 namespace tamias {
 

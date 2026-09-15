@@ -1,4 +1,4 @@
-#include "entity/family/structural/beam_entity.h"
+#include "entity/family/host/structural/beam_entity.h"
 
 #include <algorithm>
 #include <cmath>

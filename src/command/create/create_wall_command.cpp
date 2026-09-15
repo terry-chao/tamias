@@ -1,6 +1,6 @@
 #include "command/create/create_wall_command.h"
 
-#include "entity/family/architectural/wall_entity.h"
+#include "entity/family/host/architectural/wall_entity.h"
 
 namespace tamias {
 

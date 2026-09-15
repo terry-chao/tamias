@@ -1,4 +1,4 @@
-#include "entity/family/opening/window_entity.h"
+#include "entity/family/attached/opening/window_entity.h"
 
 namespace tamias {
 

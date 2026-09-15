@@ -1,4 +1,4 @@
-#include "entity/family/structural/slab_entity.h"
+#include "entity/family/host/structural/slab_entity.h"
 
 #include "bim/surface_location.h"
 

@@ -4,10 +4,10 @@
 #include "engine/render/runtime/gpu_instance.h"
 #include "engine/document/document.h"
 #include "engine/io/mesh_io.h"
-#include "entity/family/structural/column_entity.h"
+#include "entity/family/host/structural/column_entity.h"
 #include "entity/core/kind_display_color.h"
-#include "entity/family/structural/slab_entity.h"
-#include "entity/family/architectural/wall_entity.h"
+#include "entity/family/host/structural/slab_entity.h"
+#include "entity/family/host/architectural/wall_entity.h"
 
 #include <gtest/gtest.h>
 

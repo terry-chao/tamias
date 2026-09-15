@@ -1,4 +1,4 @@
-#include "entity/family/structural/foundation_entity.h"
+#include "entity/family/host/structural/foundation_entity.h"
 
 #include "bim/point_location.h"
 

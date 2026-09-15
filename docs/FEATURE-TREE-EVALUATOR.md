@@ -58,7 +58,7 @@ local_transform = translate(position);
 放置    local_transform = 点到的位置
 ```
 
-墙同理：两点算出长度、中点、朝向，配方仍是 `RectProfile(厚×长) + Extrude(高)`，变换是平移到中点再绕 Y 转（[wall_entity.cpp](https://github.com/terry-chao/tamias/blob/main/src/entity/family/architectural/wall_entity.cpp)）。柱、板、门、窗都是这一套，只是默认尺寸不同。
+墙同理：两点算出长度、中点、朝向，配方仍是 `RectProfile(厚×长) + Extrude(高)`，变换是平移到中点再绕 Y 转（[wall_entity.cpp](https://github.com/terry-chao/tamias/blob/main/src/entity/family/host/architectural/wall_entity.cpp)）。柱、板、门、窗都是这一套，只是默认尺寸不同。
 
 ### 1.2 createGeom：配方交给几何边界
 

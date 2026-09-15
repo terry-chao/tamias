@@ -20,7 +20,7 @@
 #include "command/edit/set_material_command.h"
 #include "command/edit/update_grid_command.h"
 #include "bim/wall_size.h"
-#include "entity/family/structural/column_entity.h"
+#include "entity/family/host/structural/column_entity.h"
 
 #include <memory>
 #include <optional>
