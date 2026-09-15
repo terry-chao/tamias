@@ -1,6 +1,6 @@
 #include "app/bim/floors/floor_panel.h"
 
-#include "app/viewport/document_viewport.h"
+#include "app/viewport/canvas/document_viewport.h"
 #include "app/bim/floors/floor_settings_dialog.h"
 #include "app/base/theme.h"
 

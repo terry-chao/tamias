@@ -4,7 +4,7 @@
 #include "engine/render/runtime/render_runtime.h"
 #include "engine/render/debug/scene_debug_player.h"
 #include "host/camera_controller.h"
-#include "app/viewport/view_cube_widget.h"
+#include "app/viewport/overlay/view_cube_widget.h"
 
 #include <QWidget>
 #include <cstdint>

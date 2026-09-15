@@ -1,4 +1,4 @@
-#include "app/viewport/document_viewport.h"
+#include "app/viewport/canvas/document_viewport.h"
 
 #include "app/base/app_settings.h"
 #include "bim/host_geometry.h"

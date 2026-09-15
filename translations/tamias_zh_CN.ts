@@ -8,7 +8,7 @@
         <translation>翻模完成：墙 %1、柱 %2、门窗 %3</translation>
     </message>
     <message>
-        <location filename="../src/app/viewport/document_viewport.cpp"/>
+        <location filename="../src/app/viewport/canvas/document_viewport.cpp"/>
         <source>X %1  Y %2  Z %3</source>
         <translation>X %1  Y %2  Z %3</translation>
     </message>
@@ -2331,37 +2331,37 @@ Plugin ID: %4</source>
 <context>
     <name>tamias::ViewCubeWidget</name>
     <message>
-        <location filename="../src/app/viewport/view_cube_widget.cpp" line="139"/>
+        <location filename="../src/app/viewport/overlay/view_cube_widget.cpp" line="139"/>
         <source>Drag to orbit · Click a face or corner to snap the view</source>
         <translation>拖动旋转视角 · 点击面或角对齐视角</translation>
     </message>
     <message>
-        <location filename="../src/app/viewport/view_cube_widget.cpp" line="207"/>
+        <location filename="../src/app/viewport/overlay/view_cube_widget.cpp" line="207"/>
         <source>Front</source>
         <translation>前</translation>
     </message>
     <message>
-        <location filename="../src/app/viewport/view_cube_widget.cpp" line="214"/>
+        <location filename="../src/app/viewport/overlay/view_cube_widget.cpp" line="214"/>
         <source>Back</source>
         <translation>后</translation>
     </message>
     <message>
-        <location filename="../src/app/viewport/view_cube_widget.cpp" line="221"/>
+        <location filename="../src/app/viewport/overlay/view_cube_widget.cpp" line="221"/>
         <source>Left</source>
         <translation>左</translation>
     </message>
     <message>
-        <location filename="../src/app/viewport/view_cube_widget.cpp" line="228"/>
+        <location filename="../src/app/viewport/overlay/view_cube_widget.cpp" line="228"/>
         <source>Right</source>
         <translation>右</translation>
     </message>
     <message>
-        <location filename="../src/app/viewport/view_cube_widget.cpp" line="235"/>
+        <location filename="../src/app/viewport/overlay/view_cube_widget.cpp" line="235"/>
         <source>Top</source>
         <translation>上</translation>
     </message>
     <message>
-        <location filename="../src/app/viewport/view_cube_widget.cpp" line="242"/>
+        <location filename="../src/app/viewport/overlay/view_cube_widget.cpp" line="242"/>
         <source>Bottom</source>
         <translation>下</translation>
     </message>

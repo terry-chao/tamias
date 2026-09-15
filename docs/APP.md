@@ -10,7 +10,11 @@
 src/app/
 ├── base/      应用基础设施：app_settings、theme、i18n、recent_files、qt_path.h、rhi_backends.cpp
 ├── shell/     窗口骨架：main_window、home_page、ribbon_*、toast、mesh_thumbnail、设置/关于/插件对话框
-├── viewport/  三维视口：document_viewport、viewport_tool_panel、view_cube_widget、box_select_overlay、replay_viewport、viewport_floor.h
+├── viewport/  三维视口，按部件再分一层：
+│   ├── canvas/  画布本体（document_viewport、viewport_floor.h：相机、点选、提交帧、楼层带）
+│   ├── overlay/ 画布上的浮层（view_cube_widget 朝向立方体、box_select_overlay 框选）
+│   ├── panel/   视口右侧工具列（viewport_tool_panel）
+│   └── replay/  渲染场景录制回放（replay_viewport）
 ├── bim/       构件界面，按功能域再分一层：
 │   ├── properties/ 属性面板（改特征参数）
 │   ├── components/ 绘制面板 + 构件规格 + 截面预览（draw_panel、component_specs、param_spec、section_preview_*）

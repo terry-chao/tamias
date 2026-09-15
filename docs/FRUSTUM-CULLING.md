@@ -159,6 +159,6 @@ BVH **不是**场景图。它依赖的是「一堆带世界包围盒的可画物
 | [scene.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/scene.h) `world_bounds` | 叶子 / 子树并盒（已有） |
 | [scene.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/scene.cpp) `recompute_world()` | 自底向上算盒 |
 | [math.h](https://github.com/terry-chao/tamias/blob/main/src/engine/math/math.h) `Frustum` / `Aabb` / `perspective` / `look_at` | 六平面 + 盒子 vs 平面 |
-| [document_viewport.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/document_viewport.cpp) `submit_current_frame()` | 传入 `proj * view` |
+| [document_viewport.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/canvas/document_viewport.cpp) `submit_current_frame()` | 传入 `proj * view` |
 | [picking.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/picking.h) / [picking.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/picking.cpp) | 三期复用的 BVH |
 | [render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.cpp) `draw_channel` | 消费清单；剔除发生在提交之前 |

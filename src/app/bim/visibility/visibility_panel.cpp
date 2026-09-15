@@ -1,6 +1,6 @@
 #include "app/bim/visibility/visibility_panel.h"
 
-#include "app/viewport/document_viewport.h"
+#include "app/viewport/canvas/document_viewport.h"
 #include "app/bim/visibility/entity_kind_catalog.h"
 #include "app/base/theme.h"
 

@@ -1,6 +1,6 @@
 #include "app/debug/scene_debugger_window.h"
 
-#include "app/viewport/document_viewport.h"
+#include "app/viewport/canvas/document_viewport.h"
 #include "engine/base/fs_utf8.h"
 #include "engine/render/scene/render_scene_golden.h"
 #include "engine/render/debug/scene_debug_log.h"
@@ -8,7 +8,7 @@
 #include "app/debug/pin_result_dialog.h"
 #include "app/base/qt_path.h"
 #include "app/debug/render_scene_inspector.h"
-#include "app/viewport/replay_viewport.h"
+#include "app/viewport/replay/replay_viewport.h"
 #include "app/debug/selection_accent_delegate.h"
 
 #include <QAbstractItemView>

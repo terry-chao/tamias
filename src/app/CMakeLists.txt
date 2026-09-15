@@ -23,12 +23,12 @@ add_executable(tamias
   shell/settings_section.cpp
   shell/plugin_manager_dialog.cpp
   shell/plugin_prompt_dialog.cpp
-  # 三维视口与其叠加层
-  viewport/document_viewport.cpp
-  viewport/viewport_tool_panel.cpp
-  viewport/view_cube_widget.cpp
-  viewport/box_select_overlay.cpp
-  viewport/replay_viewport.cpp
+  # 三维视口：画布本体 / 画布上的浮层 / 右侧工具列 / 录制回放
+  viewport/canvas/document_viewport.cpp
+  viewport/overlay/view_cube_widget.cpp
+  viewport/overlay/box_select_overlay.cpp
+  viewport/panel/viewport_tool_panel.cpp
+  viewport/replay/replay_viewport.cpp
   # 构件界面：属性面板 / 绘制规格 / 构件显隐 / 楼层 / 轴网
   bim/properties/property_panel.cpp
   bim/components/draw_panel.cpp

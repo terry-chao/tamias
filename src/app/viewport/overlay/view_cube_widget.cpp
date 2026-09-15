@@ -1,4 +1,4 @@
-#include "app/viewport/view_cube_widget.h"
+#include "app/viewport/overlay/view_cube_widget.h"
 
 #include <QBitmap>
 #include <QEvent>

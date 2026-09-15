@@ -719,7 +719,7 @@ const float dist = distance_to_segment_2d(px, py, ax, ay, bx, by);  // 点到线
 if (dist <= tol_pixels && dist < best_dist) { … }                   // tol_pixels = 8.0f
 ```
 
-容差 `kGridPickPixels = 8.f`（[document_viewport.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/document_viewport.cpp)），**8 个屏幕像素**。两个端点都要投影成功（跑到相机后面就跳过这一帧的判距）。同一个函数也被轴网框选复用。
+容差 `kGridPickPixels = 8.f`（[document_viewport.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/canvas/document_viewport.cpp)），**8 个屏幕像素**。两个端点都要投影成功（跑到相机后面就跳过这一帧的判距）。同一个函数也被轴网框选复用。
 
 | 拾取对象 | 空间 | 容差 | 好处 |
 |---|---|---|---|
@@ -1033,7 +1033,7 @@ Tamias 现在没做**内存**和**锁**的埋点（需要重载全局 `operator 
 | 位置 | 文字怎么画 |
 |---|---|
 | 三维视口的坐标读数 / 统计（draw / tri / gpu MB / tess） | **Qt 的叠加 `QLabel`**（`coord_label_`，`sync_coord_readout()` 拼串后 `setText`） |
-| ViewCube 的上 / 下 / 左 / 右 / 前 / 后 | Qt `QPainter::drawText` 画在控件上（[view_cube_widget.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/view_cube_widget.cpp)） |
+| ViewCube 的上 / 下 / 左 / 右 / 前 / 后 | Qt `QPainter::drawText` 画在控件上（[view_cube_widget.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/overlay/view_cube_widget.cpp)） |
 | 二维图纸查看器（DXF / DWF） | 字形轮廓 → `QPainterPath` → 并入批次（见下） |
 | 三维场景里的世界空间文字（标注 / 尺寸） | **没有。** 现在不渲染任何世界空间文字 |
 
@@ -1263,7 +1263,7 @@ float32 尾数 24 位，相对精度 ≈ `2⁻²⁴ ≈ 6e-8`。**能表示的�
 | RHI | [device.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/device.h)、[opengl_device.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/opengl/opengl_device.cpp)、[vulkan_device.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/vulkan/vulkan_device.cpp) |
 | 造型 / 内核 | [kernel.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/kernel/kernel.h)、[occt_kernel.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt/occt_kernel.cpp)、[occt_shape_ops.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt/occt_shape_ops.cpp)、[feature.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/feature/feature.h)、[tess_worker.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/evaluate/tess_worker.h) |
 | 命令 / 会话 | [command_system.h](https://github.com/terry-chao/tamias/blob/main/src/command/core/command_system.h)、[session.h](https://github.com/terry-chao/tamias/blob/main/src/host/session.h)、[camera_controller.cpp](https://github.com/terry-chao/tamias/blob/main/src/host/camera_controller.cpp) |
-| 视口 | [document_viewport.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/document_viewport.cpp)、[drawing_view.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/drawing/drawing_view.cpp)、[view_cube_widget.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/view_cube_widget.cpp) |
+| 视口 | [document_viewport.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/canvas/document_viewport.cpp)、[drawing_view.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/drawing/drawing_view.cpp)、[view_cube_widget.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/overlay/view_cube_widget.cpp) |
 | 图纸 / 文字 | [drawing.h](https://github.com/terry-chao/tamias/blob/main/src/engine/drawing/drawing.h)、[drawing_text.h](https://github.com/terry-chao/tamias/blob/main/src/engine/drawing/drawing_text.h)、[drawing_document.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/drawing/drawing_document.cpp) |
 | 性能分析 | [timing_session.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/profile/timing_session.cpp)、[timing_scope.h](https://github.com/terry-chao/tamias/blob/main/src/engine/profile/timing_scope.h)、[timing_event.h](https://github.com/terry-chao/tamias/blob/main/src/engine/profile/timing_event.h) |
 | 插件 | [host_api.h](https://github.com/terry-chao/tamias/blob/main/src/plugin/host_api.h)、[plugin_host.h](https://github.com/terry-chao/tamias/blob/main/src/plugin/plugin_host.h)、[csharp_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/plugin/csharp_runtime.cpp)、[Bootstrap.cs](https://github.com/terry-chao/tamias/blob/main/plugin-sdk/csharp/Tamias.Host/Bootstrap.cs)、[HostApi.cs](https://github.com/terry-chao/tamias/blob/main/plugin-sdk/csharp/Tamias.Api/HostApi.cs) |

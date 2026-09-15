@@ -1,6 +1,6 @@
 #include "app/drawing/drawing_manager_panel.h"
 
-#include "app/viewport/document_viewport.h"
+#include "app/viewport/canvas/document_viewport.h"
 #include "app/drawing/drawing_document.h"
 #include "engine/document/document.h"
 #include "app/base/theme.h"

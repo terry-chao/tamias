@@ -1,4 +1,4 @@
-#include "app/viewport/viewport_tool_panel.h"
+#include "app/viewport/panel/viewport_tool_panel.h"
 
 #include "app/drawing/drawing_manager_panel.h"
 #include "app/bim/floors/floor_manager_panel.h"
