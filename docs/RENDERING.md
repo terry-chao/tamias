@@ -345,4 +345,4 @@ IBL 是 split-sum：CPU 烘焙工作室环境立方体 → irradiance / GGX pref
 | [rhi/vulkan](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/vulkan/vulkan_device.cpp) / [rhi/opengl](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/opengl/opengl_device.cpp) / [rhi/webgpu](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/webgpu/webgpu_device.cpp) | 桌面 Vulkan/OpenGL；浏览器 WebGPU 见 [WebGPU 后端](WGPU.md) |
 | [material.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/material.h) | `Material` / `TextureAsset` |
 | [mesh.frag.hlsl](https://github.com/terry-chao/tamias/blob/main/shaders/mesh.frag.hlsl) | 线框 / 着色 / 真实（PBR + 法线采样） |
-| [rhi_backends.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/core/rhi_backends.cpp) | 启动时登记后端 |
+| [rhi_backends.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/base/rhi_backends.cpp) | 启动时登记后端 |

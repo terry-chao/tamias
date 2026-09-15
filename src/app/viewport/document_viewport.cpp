@@ -1,6 +1,6 @@
 #include "app/viewport/document_viewport.h"
 
-#include "app/core/app_settings.h"
+#include "app/base/app_settings.h"
 #include "bim/host_geometry.h"
 #include "bim/wall_size.h"
 #include "command/edit/edit_entity_grip_command.h"
@@ -10,8 +10,8 @@
 #include "command/edit/update_material_command.h"
 #include "command/edit/update_grid_command.h"
 #include "command/edit/update_storeys_command.h"
-#include "app/bim/component_specs.h"
-#include "engine/core/log.h"
+#include "app/bim/components/component_specs.h"
+#include "engine/base/log.h"
 #include "engine/math/grid.h"
 #include "engine/modeling/curve_geom.h"
 #include "engine/modeling/feature.h"

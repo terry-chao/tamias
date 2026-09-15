@@ -5,7 +5,7 @@ add_library(tamias::ifc ALIAS tamias_ifc)
 target_include_directories(tamias_ifc PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tamias_ifc
   PUBLIC
-    tamias::core
+    tamias::base
     IfcOpenShell::IfcParse
 )
 

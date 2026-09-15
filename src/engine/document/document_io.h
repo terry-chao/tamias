@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/core/result.h"
+#include "engine/base/result.h"
 #include "engine/document/document.h"
 #include "engine/math/math.h"
 

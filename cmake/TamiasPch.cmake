@@ -46,7 +46,7 @@ function(tamias_accelerate_target target)
 endfunction()
 
 function(tamias_apply_build_acceleration)
-  tamias_accelerate_target(tamias_core)
+  tamias_accelerate_target(tamias_base)
   tamias_accelerate_target(tamias_io)
   tamias_accelerate_target(tamias_modeling)
   tamias_accelerate_target(tamias_render)

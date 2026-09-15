@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/core/result.h"
+#include "engine/base/result.h"
 #include "plugin/plugin_host.h"
 #include "plugin/plugin_pick_point.h"
 #include "plugin/plugin_point_input_request.h"

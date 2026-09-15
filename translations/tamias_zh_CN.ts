@@ -2233,7 +2233,7 @@ Plugin ID: %4</source>
         <translation>语言</translation>
     </message>
     <message>
-        <location filename="../src/app/core/i18n.cpp" line="82"/>
+        <location filename="../src/app/base/i18n.cpp" line="82"/>
         <source>System</source>
         <translation>跟随系统</translation>
     </message>
@@ -2465,7 +2465,7 @@ Plugin ID: %4</source>
         <translation>高</translation>
     </message>
     <message>
-        <location filename="../src/app/bim/property_panel.cpp" line="195"/>
+        <location filename="../src/app/bim/properties/property_panel.cpp" line="195"/>
         <source>Sill Height</source>
         <translation>离地高度</translation>
     </message>

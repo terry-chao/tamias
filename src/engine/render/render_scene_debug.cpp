@@ -1,6 +1,6 @@
 #include "engine/render/render_scene.h"
 
-#include "engine/core/fs_utf8.h"
+#include "engine/base/fs_utf8.h"
 #include "engine/render/debug_vertex_overlay.h"
 
 #include <algorithm>

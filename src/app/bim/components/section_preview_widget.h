@@ -1,7 +1,7 @@
 #pragma once
 
-#include "app/bim/param_spec.h"
-#include "app/bim/section_preview_spec.h"
+#include "app/bim/components/param_spec.h"
+#include "app/bim/components/section_preview_spec.h"
 
 #include <QString>
 #include <QWidget>

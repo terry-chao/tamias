@@ -2,7 +2,7 @@
 
 #include "engine/drawing/dxf_reader.h"
 
-#include "app/core/qt_path.h"
+#include "app/base/qt_path.h"
 
 #include <QFile>
 #include <QFileInfo>
@@ -179,7 +179,7 @@ bool DrawingDocument::load_svg(const QString& path, QString& error) {
 
 bool DrawingDocument::load_dxf(const QString& path, QString& error) {
   // 必须走 qstring_to_path：Windows 上 std::filesystem::path(std::string) 按 ANSI
-  // 代码页解释窄字符串，中文路径会抛 std::system_error（见 engine/core/fs_utf8.h）。
+  // 代码页解释窄字符串，中文路径会抛 std::system_error（见 engine/base/fs_utf8.h）。
   auto loaded = tamias::load_dxf(qstring_to_path(path));
   if (!loaded) {
     error = QString::fromStdString(loaded.error());

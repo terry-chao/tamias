@@ -6,7 +6,7 @@
 
 实现入口：
 
-- 契约：[`native_window_handle.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/core/native_window_handle.h)、[`document_io.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document_io.h)、[`mesh_io.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/io/mesh_io.h)
+- 契约：[`native_window_handle.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/base/native_window_handle.h)、[`document_io.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document_io.h)、[`mesh_io.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/io/mesh_io.h)
 - RHI：[`src/engine/render/rhi/webgpu/`](https://github.com/terry-chao/tamias/tree/main/src/engine/render/rhi/webgpu)（默认）；可选 [`src/engine/render/rhi/webgl/`](https://github.com/terry-chao/tamias/tree/main/src/engine/render/rhi/webgl)
 - 宿主：[`ViewerHost`](https://github.com/terry-chao/tamias/blob/main/src/wasm/viewer_host.h) + [`web/index.html`](https://github.com/terry-chao/tamias/blob/main/web/index.html)
 

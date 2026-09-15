@@ -1,6 +1,6 @@
 #include "engine/profile/timing_xml_writer.h"
 
-#include "engine/core/fs_utf8.h"
+#include "engine/base/fs_utf8.h"
 #include "engine/profile/timing_session.h"
 
 #include <fstream>

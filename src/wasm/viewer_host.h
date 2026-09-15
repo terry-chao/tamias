@@ -8,8 +8,8 @@
 //  现状与缺口见 docs/WEB.md（有一张 web / 桌面能力对照表）。
 // ============================================================================
 
-#include "engine/core/native_window_handle.h"
-#include "engine/core/result.h"
+#include "engine/base/native_window_handle.h"
+#include "engine/base/result.h"
 #include "engine/render/render_runtime.h"
 #include "host/session.h"
 

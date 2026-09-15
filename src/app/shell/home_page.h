@@ -1,6 +1,6 @@
 #pragma once
 
-#include "app/core/recent_files.h"
+#include "app/base/recent_files.h"
 
 #include <QString>
 #include <QVector>

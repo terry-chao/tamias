@@ -1,8 +1,8 @@
 #include "app/shell/settings_dialog.h"
 
-#include "app/core/app_settings.h"
+#include "app/base/app_settings.h"
 #include "engine/modeling/linked_kernels.h"
-#include "app/core/i18n.h"
+#include "app/base/i18n.h"
 #include "app/shell/settings_section.h"
 
 #include <QApplication>

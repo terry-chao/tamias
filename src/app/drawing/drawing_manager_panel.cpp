@@ -3,7 +3,7 @@
 #include "app/viewport/document_viewport.h"
 #include "app/drawing/drawing_document.h"
 #include "engine/document/document.h"
-#include "app/core/theme.h"
+#include "app/base/theme.h"
 
 #include <QColor>
 #include <QFileDialog>

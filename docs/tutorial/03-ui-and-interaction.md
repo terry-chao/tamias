@@ -7,11 +7,11 @@
 | 界面元素 | 干什么 | 背后的代码模块 |
 |---|---|---|
 | 主窗口 + 菜单 | 开文件、保存、设置 | [`main_window`](https://github.com/terry-chao/tamias/blob/main/src/app/shell/main_window.cpp) |
-| 欢迎页 | 新建/最近打开 | [`home_page`](https://github.com/terry-chao/tamias/blob/main/src/app/shell/home_page.cpp)、[`recent_files`](https://github.com/terry-chao/tamias/blob/main/src/app/core/recent_files.cpp) |
+| 欢迎页 | 新建/最近打开 | [`home_page`](https://github.com/terry-chao/tamias/blob/main/src/app/shell/home_page.cpp)、[`recent_files`](https://github.com/terry-chao/tamias/blob/main/src/app/base/recent_files.cpp) |
 | 三维视口 | 看模型、转相机、点选 | [`document_viewport`](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/document_viewport.cpp) |
 | 视口右侧工具列 | 从视口右缘到右停靠面板之间、上下通高的一列：左边是按钮（2D/3D、构件显隐、楼层、适应窗口），点开后右边展开对应功能页 | [`viewport_tool_panel`](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/viewport_tool_panel.cpp) |
-| 属性面板 | 改选中构件的参数 | [`property_panel`](https://github.com/terry-chao/tamias/blob/main/src/app/bim/property_panel.cpp) |
-| 构件显隐页（视口右上，Ctrl+L） | 一眼看清、一下切换每类构件的显隐 | [`visibility_panel`](https://github.com/terry-chao/tamias/blob/main/src/app/bim/visibility_panel.cpp) |
+| 属性面板 | 改选中构件的参数 | [`property_panel`](https://github.com/terry-chao/tamias/blob/main/src/app/bim/properties/property_panel.cpp) |
+| 构件显隐页（视口右上，Ctrl+L） | 一眼看清、一下切换每类构件的显隐 | [`visibility_panel`](https://github.com/terry-chao/tamias/blob/main/src/app/bim/visibility/visibility_panel.cpp) |
 | ViewCube | 快速换视角 | [`view_cube_widget`](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/view_cube_widget.cpp) |
 | 设置对话框 | 选渲染后端（Vulkan/OpenGL）等 | [`settings_dialog`](https://github.com/terry-chao/tamias/blob/main/src/app/shell/settings_dialog.cpp) |
 | 句柄检查（Ctrl+D） | 显示构件在 `.tdoc` 里的 id | [`handle_inspector`](https://github.com/terry-chao/tamias/blob/main/src/app/debug/handle_inspector.cpp) |

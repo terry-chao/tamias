@@ -1,4 +1,4 @@
-#include "app/bim/floor_settings_dialog.h"
+#include "app/bim/floors/floor_settings_dialog.h"
 
 #include "bim/wall_size.h"
 

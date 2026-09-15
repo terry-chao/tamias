@@ -1,7 +1,7 @@
 #include "app/viewport/replay_viewport.h"
 
-#include "app/core/app_settings.h"
-#include "engine/core/log.h"
+#include "app/base/app_settings.h"
+#include "engine/base/log.h"
 #include "engine/document/picking.h"
 
 #if defined(TAMIAS_HAS_RHI_OPENGL)

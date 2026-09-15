@@ -1,4 +1,4 @@
-#include "app/bim/property_panel.h"
+#include "app/bim/properties/property_panel.h"
 
 #include "engine/document/document.h"
 #include "engine/modeling/edge_fingerprint.h"

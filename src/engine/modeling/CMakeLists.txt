@@ -19,7 +19,7 @@ target_include_directories(tamias_modeling PUBLIC
 )
 target_link_libraries(tamias_modeling PUBLIC
   tamias::kernel
-  tamias::core
+  tamias::base
   tamias::graphics
   Threads::Threads
 )

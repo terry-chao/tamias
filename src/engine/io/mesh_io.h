@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/core/result.h"
+#include "engine/base/result.h"
 #include "engine/graphics/mesh.h"
 #include "engine/io/imported_model.h"
 

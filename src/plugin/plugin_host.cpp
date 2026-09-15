@@ -1,7 +1,7 @@
 #include "plugin/plugin_host.h"
 
-#include "engine/core/executable_directory.h"
-#include "engine/core/log.h"
+#include "engine/base/executable_directory.h"
+#include "engine/base/log.h"
 #include "entity/core/entity.h"
 #include "host/command_arg_text.h"
 #include "plugin/csharp_runtime.h"

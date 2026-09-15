@@ -1,7 +1,7 @@
 #pragma once
 
 #include "command/core/command_system.h"
-#include "engine/core/result.h"
+#include "engine/base/result.h"
 #include "engine/document/document.h"
 #include "plugin/host_api.h"
 #include "plugin/plugin_command.h"

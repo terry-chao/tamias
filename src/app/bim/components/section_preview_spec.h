@@ -1,6 +1,6 @@
 #pragma once
 
-#include "app/bim/section_preview_kind.h"
+#include "app/bim/components/section_preview_kind.h"
 
 #include <QString>
 #include <vector>

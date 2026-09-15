@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/core/fs_utf8.h"
+#include "engine/base/fs_utf8.h"
 
 #include <QString>
 

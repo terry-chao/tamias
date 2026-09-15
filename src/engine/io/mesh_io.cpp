@@ -1,7 +1,7 @@
 #include "mesh_io.h"
 
-#include "engine/core/fs_utf8.h"
-#include "engine/core/log.h"
+#include "engine/base/fs_utf8.h"
+#include "engine/base/log.h"
 #include "engine/io/imported_model.h"
 
 #if !defined(__EMSCRIPTEN__)

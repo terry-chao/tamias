@@ -8,10 +8,15 @@
 
 ```
 src/app/
-├── core/      应用级服务：app_settings、theme、i18n、recent_files、qt_path.h、rhi_backends.cpp
+├── base/      应用基础设施：app_settings、theme、i18n、recent_files、qt_path.h、rhi_backends.cpp
 ├── shell/     窗口骨架：main_window、home_page、ribbon_*、toast、mesh_thumbnail、设置/关于/插件对话框
 ├── viewport/  三维视口：document_viewport、viewport_tool_panel、view_cube_widget、box_select_overlay、replay_viewport、viewport_floor.h
-├── bim/       构件 / 楼层 / 轴网的界面：property_panel、draw_panel、visibility_panel、floor_panel、floor_manager_panel、floor_settings_dialog、grid_settings_dialog、entity_kind_catalog、component_specs、section_preview_*
+├── bim/       构件界面，按功能域再分一层：
+│   ├── properties/ 属性面板（改特征参数）
+│   ├── components/ 绘制面板 + 构件规格 + 截面预览（draw_panel、component_specs、param_spec、section_preview_*）
+│   ├── visibility/ 构件显隐页 + 类别目录（visibility_panel、entity_kind_catalog）
+│   ├── floors/     楼层面板 / 楼层管理页 / 楼层设置（floor_*）
+│   └── grid/       轴网设置（grid_settings_dialog）
 ├── drawing/   二维图纸：drawing_document、drawing_view、drawing_manager_panel、drawing_import_dialog
 ├── texture/   贴图：texture_image、texture_library_panel、texture_inspector_dialog
 └── debug/     调试诊断：handle_inspector、render_scene_inspector、scene_debugger_window、timing_panel、timing_timeline_widget、golden_test_runner、pin_result_dialog

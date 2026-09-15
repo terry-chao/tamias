@@ -1,4 +1,4 @@
-#include "app/bim/component_specs.h"
+#include "app/bim/components/component_specs.h"
 
 #include "bim/wall_size.h"
 

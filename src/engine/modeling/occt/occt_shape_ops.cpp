@@ -1,7 +1,7 @@
 #include "engine/modeling/occt/occt_shape_ops.h"
 
-#include "engine/core/fs_utf8.h"
-#include "engine/core/log.h"
+#include "engine/base/fs_utf8.h"
+#include "engine/base/log.h"
 #include "engine/profile/timing_scope.h"
 
 #include <Bnd_Box.hxx>

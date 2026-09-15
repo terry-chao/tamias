@@ -1,7 +1,7 @@
 #pragma once
 
 #include "command/core/command_system.h"
-#include "app/bim/component_specs.h"
+#include "app/bim/components/component_specs.h"
 #include "host/tool_mode.h"
 
 #include <QString>

@@ -1,4 +1,4 @@
-#include "app/bim/grid_settings_dialog.h"
+#include "app/bim/grid/grid_settings_dialog.h"
 
 #include <QCheckBox>
 #include <QComboBox>

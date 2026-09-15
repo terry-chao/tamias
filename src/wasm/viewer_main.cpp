@@ -8,7 +8,7 @@
 // ============================================================================
 
 #include "command/core/command_system.h"
-#include "engine/core/log.h"
+#include "engine/base/log.h"
 #include "engine/modeling/linked_kernels.h"
 
 #include <algorithm>

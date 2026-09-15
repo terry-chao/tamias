@@ -1,6 +1,6 @@
 #include "app/shell/toast.h"
 
-#include "app/core/theme.h"
+#include "app/base/theme.h"
 
 #include <QEvent>
 #include <QFontMetrics>

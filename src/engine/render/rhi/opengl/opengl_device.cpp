@@ -1,6 +1,6 @@
 #include "opengl_backend.h"
 
-#include "engine/core/log.h"
+#include "engine/base/log.h"
 #include "gl_loader.h"
 #include "engine/graphics/mesh.h"
 #include "engine/render/gpu_instance.h"

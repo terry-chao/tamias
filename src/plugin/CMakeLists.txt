@@ -7,7 +7,7 @@ add_library(tamias_plugin STATIC
 )
 add_library(tamias::plugin ALIAS tamias_plugin)
 target_include_directories(tamias_plugin PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(tamias_plugin PUBLIC tamias::host tamias::command tamias::document tamias::core)
+target_link_libraries(tamias_plugin PUBLIC tamias::host tamias::command tamias::document tamias::base)
 
 if(TAMIAS_NETHOST_FOUND)
   target_compile_definitions(tamias_plugin PRIVATE TAMIAS_HAS_NETHOST=1)

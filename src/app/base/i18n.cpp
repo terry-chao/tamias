@@ -1,4 +1,4 @@
-#include "app/core/i18n.h"
+#include "app/base/i18n.h"
 
 #include <QCoreApplication>
 #include <QLibraryInfo>

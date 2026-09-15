@@ -1,4 +1,4 @@
-#include "app/bim/entity_kind_catalog.h"
+#include "app/bim/visibility/entity_kind_catalog.h"
 
 #include <QCoreApplication>
 

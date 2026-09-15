@@ -1,6 +1,6 @@
 #include "viewer_host.h"
 
-#include "engine/core/log.h"
+#include "engine/base/log.h"
 #include "engine/document/picking.h"
 #include "engine/document/document_io.h"
 #include "engine/io/mesh_io.h"

@@ -1,6 +1,6 @@
 #include "engine/render/render_scene_golden.h"
 
-#include "engine/core/fs_utf8.h"
+#include "engine/base/fs_utf8.h"
 
 #include <algorithm>
 #include <cctype>

@@ -1,4 +1,4 @@
-#include "app/core/theme.h"
+#include "app/base/theme.h"
 
 #include <QApplication>
 #include <QGuiApplication>

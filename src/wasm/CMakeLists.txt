@@ -5,7 +5,7 @@ add_executable(tamias_viewer
 target_include_directories(tamias_viewer PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tamias_viewer
   PRIVATE
-    tamias::core
+    tamias::base
     tamias::math
     tamias::graphics
     tamias::rhi

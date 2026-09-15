@@ -11,7 +11,7 @@ endif()
 target_link_libraries(tamias_kernel_occt
   PUBLIC
     tamias::kernel
-    tamias::core
+    tamias::base
     tamias::graphics
 )
 if(TAMIAS_OCCT_LIBRARIES)

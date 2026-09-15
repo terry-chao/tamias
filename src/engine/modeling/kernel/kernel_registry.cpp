@@ -1,6 +1,6 @@
 #include "engine/modeling/kernel/kernel.h"
 
-#include "engine/core/log.h"
+#include "engine/base/log.h"
 
 #include <mutex>
 #include <unordered_map>

@@ -1,8 +1,8 @@
-#include "app/bim/floor_panel.h"
+#include "app/bim/floors/floor_panel.h"
 
 #include "app/viewport/document_viewport.h"
-#include "app/bim/floor_settings_dialog.h"
-#include "app/core/theme.h"
+#include "app/bim/floors/floor_settings_dialog.h"
+#include "app/base/theme.h"
 
 #include <QComboBox>
 #include <QFont>

@@ -1,6 +1,6 @@
 #include "app/debug/golden_test_runner.h"
 
-#include "app/core/qt_path.h"
+#include "app/base/qt_path.h"
 
 #include <QCoreApplication>
 #include <QDir>

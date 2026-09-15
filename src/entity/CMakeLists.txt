@@ -35,7 +35,7 @@ add_library(tamias::entity ALIAS tamias_entity)
 target_include_directories(tamias_entity PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tamias_entity
   PUBLIC
-    tamias::core
+    tamias::base
     tamias::math
     tamias::graphics
     tamias::modeling

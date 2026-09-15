@@ -1,6 +1,6 @@
 #include "engine/drawing/dxf_reader.h"
 
-#include "engine/core/fs_utf8.h"
+#include "engine/base/fs_utf8.h"
 
 #include <gtest/gtest.h>
 

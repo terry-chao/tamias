@@ -1,6 +1,6 @@
-#include "app/core/app_settings.h"
+#include "app/base/app_settings.h"
 
-#include "app/core/i18n.h"
+#include "app/base/i18n.h"
 
 #include <QGuiApplication>
 #include <QSettings>

@@ -1,8 +1,8 @@
 #include "app/drawing/drawing_import_dialog.h"
 
-#include "engine/core/log.h"
+#include "engine/base/log.h"
 #include "engine/drawing/dxf_reader.h"
-#include "app/core/qt_path.h"
+#include "app/base/qt_path.h"
 
 #include <QCheckBox>
 #include <QComboBox>

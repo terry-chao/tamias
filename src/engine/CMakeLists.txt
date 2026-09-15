@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-add_subdirectory(core)
+add_subdirectory(base)
 add_subdirectory(math)
 add_subdirectory(graphics)
 add_subdirectory(io)

@@ -3,7 +3,7 @@
 #include <QIcon>
 #include <QWidget>
 
-#include "app/core/theme.h"
+#include "app/base/theme.h"
 
 class QStackedWidget;
 class QToolButton;

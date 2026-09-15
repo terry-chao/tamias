@@ -53,7 +53,7 @@ target_include_directories(tamias_kernel_truck PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tamias_kernel_truck
   PUBLIC
     tamias::kernel
-    tamias::core
+    tamias::base
     tamias::graphics
     "${_truck_bridge_lib}"
 )

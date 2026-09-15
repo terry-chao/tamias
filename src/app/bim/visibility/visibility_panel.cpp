@@ -1,8 +1,8 @@
-#include "app/bim/visibility_panel.h"
+#include "app/bim/visibility/visibility_panel.h"
 
 #include "app/viewport/document_viewport.h"
-#include "app/bim/entity_kind_catalog.h"
-#include "app/core/theme.h"
+#include "app/bim/visibility/entity_kind_catalog.h"
+#include "app/base/theme.h"
 
 #include <QFont>
 #include <QHBoxLayout>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/core/result.h"
+#include "engine/base/result.h"
 #include "engine/graphics/mesh.h"
 #include "engine/render/lod_request.h"
 #include "engine/render/mesh_lod.h"

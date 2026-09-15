@@ -1,7 +1,7 @@
 #pragma once
 
-#include "engine/core/native_window_handle.h"
-#include "engine/core/result.h"
+#include "engine/base/native_window_handle.h"
+#include "engine/base/result.h"
 #include "engine/graphics/graphics_backend.h"
 #include "engine/math/math.h"
 

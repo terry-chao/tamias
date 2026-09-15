@@ -1,6 +1,6 @@
 #include "plugin/csharp_runtime.h"
 
-#include "engine/core/log.h"
+#include "engine/base/log.h"
 
 #include <filesystem>
 #include <string>

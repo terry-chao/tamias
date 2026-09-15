@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/core/result.h"
+#include "engine/base/result.h"
 #include "engine/render/material.h"
 #include "engine/render/texture_asset.h"
 

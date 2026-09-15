@@ -1,7 +1,7 @@
 #pragma once
 
 #include "bim/relation.h"
-#include "engine/core/result.h"
+#include "engine/base/result.h"
 #include "engine/math/math.h"
 #include "engine/modeling/feature.h"
 #include "entity/core/entity.h"

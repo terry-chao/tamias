@@ -2,8 +2,8 @@
 
 #include "entity/core/entity.h"
 #include "host/tool_mode.h"
-#include "app/bim/param_spec.h"
-#include "app/bim/section_preview_spec.h"
+#include "app/bim/components/param_spec.h"
+#include "app/bim/components/section_preview_spec.h"
 
 #include <QString>
 #include <unordered_map>

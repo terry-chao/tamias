@@ -1,7 +1,7 @@
-#include "app/bim/floor_manager_panel.h"
+#include "app/bim/floors/floor_manager_panel.h"
 
 #include "app/viewport/document_viewport.h"
-#include "app/core/theme.h"
+#include "app/base/theme.h"
 
 #include <QFont>
 #include <QHeaderView>

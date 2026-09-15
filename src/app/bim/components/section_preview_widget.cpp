@@ -1,4 +1,4 @@
-#include "app/bim/section_preview_widget.h"
+#include "app/bim/components/section_preview_widget.h"
 
 #include <QAbstractSpinBox>
 #include <QDoubleSpinBox>

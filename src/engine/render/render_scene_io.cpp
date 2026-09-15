@@ -1,6 +1,6 @@
 #include "engine/render/render_scene.h"
 
-#include "engine/core/fs_utf8.h"
+#include "engine/base/fs_utf8.h"
 #include "engine/io/binary_archive.h"
 #include "engine/io/mesh_binary.h"
 

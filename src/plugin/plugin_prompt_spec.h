@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/core/result.h"
+#include "engine/base/result.h"
 #include "plugin/plugin_prompt_field.h"
 
 #include <string>

@@ -1,6 +1,6 @@
 #include "bim/ifc_spatial_tree.h"
 
-#include "engine/core/fs_utf8.h"
+#include "engine/base/fs_utf8.h"
 #include "ifcparse/IfcException.h"
 #include "ifcparse/IfcFile.h"
 

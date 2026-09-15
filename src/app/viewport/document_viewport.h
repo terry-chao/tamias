@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/core/native_window_handle.h"
+#include "engine/base/native_window_handle.h"
 #include "bim/drawing_import.h"
 #include "bim/grid.h"
 #include "engine/document/document.h"

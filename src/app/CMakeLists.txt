@@ -4,12 +4,12 @@ set(CMAKE_AUTOUIC ON)
 
 add_executable(tamias
   main.cpp
-  # 应用级服务：设置、主题、翻译、最近文件、渲染后端登记
-  core/app_settings.cpp
-  core/theme.cpp
-  core/i18n.cpp
-  core/recent_files.cpp
-  core/rhi_backends.cpp
+  # 应用基础设施：设置、主题、翻译、最近文件、渲染后端登记
+  base/app_settings.cpp
+  base/theme.cpp
+  base/i18n.cpp
+  base/recent_files.cpp
+  base/rhi_backends.cpp
   # 窗口骨架：主窗口、欢迎页、Ribbon、通用对话框、提示条
   shell/main_window.cpp
   shell/home_page.cpp
@@ -29,17 +29,17 @@ add_executable(tamias
   viewport/view_cube_widget.cpp
   viewport/box_select_overlay.cpp
   viewport/replay_viewport.cpp
-  # 构件 / 楼层 / 轴网界面
-  bim/property_panel.cpp
-  bim/draw_panel.cpp
-  bim/section_preview_widget.cpp
-  bim/component_specs.cpp
-  bim/entity_kind_catalog.cpp
-  bim/visibility_panel.cpp
-  bim/floor_panel.cpp
-  bim/floor_manager_panel.cpp
-  bim/floor_settings_dialog.cpp
-  bim/grid_settings_dialog.cpp
+  # 构件界面：属性面板 / 绘制规格 / 构件显隐 / 楼层 / 轴网
+  bim/properties/property_panel.cpp
+  bim/components/draw_panel.cpp
+  bim/components/section_preview_widget.cpp
+  bim/components/component_specs.cpp
+  bim/visibility/visibility_panel.cpp
+  bim/visibility/entity_kind_catalog.cpp
+  bim/floors/floor_panel.cpp
+  bim/floors/floor_manager_panel.cpp
+  bim/floors/floor_settings_dialog.cpp
+  bim/grid/grid_settings_dialog.cpp
   # 二维图纸
   drawing/drawing_document.cpp
   drawing/drawing_view.cpp
@@ -115,7 +115,7 @@ target_compile_definitions(tamias PRIVATE
 
 target_link_libraries(tamias
   PRIVATE
-    tamias::core
+    tamias::base
     tamias::math
     tamias::graphics
     tamias::rhi

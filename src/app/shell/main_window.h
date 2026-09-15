@@ -7,7 +7,7 @@
 #include "engine/document/document_io.h"
 #include "plugin/plugin_host.h"
 #include "plugin/plugin_manager.h"
-#include "app/core/recent_files.h"
+#include "app/base/recent_files.h"
 
 #include <QMainWindow>
 #include <QString>

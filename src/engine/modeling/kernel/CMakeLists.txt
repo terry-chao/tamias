@@ -2,4 +2,4 @@
 add_library(tamias_kernel STATIC kernel_registry.cpp shape_ops.cpp)
 add_library(tamias::kernel ALIAS tamias_kernel)
 target_include_directories(tamias_kernel PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(tamias_kernel PUBLIC tamias::core tamias::graphics tamias::math)
+target_link_libraries(tamias_kernel PUBLIC tamias::base tamias::graphics tamias::math)

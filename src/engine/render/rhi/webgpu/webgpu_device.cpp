@@ -1,6 +1,6 @@
 #include "webgpu_backend.h"
 
-#include "engine/core/log.h"
+#include "engine/base/log.h"
 #include "engine/graphics/mesh.h"
 #include "engine/render/gpu_instance.h"
 #include "engine/render/render_types.h"

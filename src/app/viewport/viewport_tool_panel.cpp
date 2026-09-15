@@ -1,9 +1,9 @@
 #include "app/viewport/viewport_tool_panel.h"
 
 #include "app/drawing/drawing_manager_panel.h"
-#include "app/bim/floor_manager_panel.h"
-#include "app/bim/floor_panel.h"
-#include "app/bim/visibility_panel.h"
+#include "app/bim/floors/floor_manager_panel.h"
+#include "app/bim/floors/floor_panel.h"
+#include "app/bim/visibility/visibility_panel.h"
 
 #include <QFrame>
 #include <QHBoxLayout>

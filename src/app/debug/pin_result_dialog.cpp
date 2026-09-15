@@ -3,7 +3,7 @@
 #include "engine/document/document.h"
 #include "engine/render/render_scene_golden.h"
 #include "app/debug/golden_test_case.h"
-#include "app/core/qt_path.h"
+#include "app/base/qt_path.h"
 
 #include <QAbstractItemView>
 #include <QColor>

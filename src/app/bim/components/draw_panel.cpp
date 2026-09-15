@@ -1,6 +1,6 @@
-#include "app/bim/draw_panel.h"
+#include "app/bim/components/draw_panel.h"
 
-#include "app/bim/section_preview_widget.h"
+#include "app/bim/components/section_preview_widget.h"
 
 #include <QAbstractSpinBox>
 #include <QButtonGroup>

@@ -7,7 +7,7 @@
 #include "bim/point_location.h"
 #include "bim/surface_location.h"
 #include "bim/wall_join.h"
-#include "engine/core/fs_utf8.h"
+#include "engine/base/fs_utf8.h"
 #include "engine/graphics/mesh.h"
 #include "engine/io/binary_archive.h"
 #include "engine/io/mesh_binary.h"
