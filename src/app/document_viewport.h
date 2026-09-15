@@ -80,7 +80,8 @@ class DocumentViewport final : public QWidget {
   [[nodiscard]] std::unordered_set<EntityKind> isolated_kinds() const;
   [[nodiscard]] bool has_active_filter() const;
   // ==== 按楼层显隐（楼层面板用；勾选 = 显示）====
-  // 楼层带（标高 / 层高 / 夹层）按文档里的楼层重算，没有楼层记录的模型按几何标高临时分层。
+  // 楼层带（标高 / 层高 / 夹层）只按**文档楼层表**重算：表里没有就没有楼层，
+  // 不从几何猜（画个东西冒出一层是错的）。加层 / 删层走「楼层设置」。
   [[nodiscard]] std::vector<ViewportFloor> floors();
   [[nodiscard]] bool floor_hidden(std::size_t index) const;
   void set_floor_hidden(std::size_t index, bool hidden);

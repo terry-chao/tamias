@@ -63,10 +63,9 @@ QString manager_stylesheet(bool dark) {
 }
 
 QString floor_row_signature(const ViewportFloor& floor) {
-  return QStringLiteral("%1|%2|%3")
+  return QStringLiteral("%1|%2")
       .arg(static_cast<qulonglong>(floor.storey_id))
-      .arg(QString::fromStdString(floor.label))
-      .arg(floor.derived ? 1 : 0);
+      .arg(QString::fromStdString(floor.label));
 }
 
 }  // namespace
@@ -229,9 +228,7 @@ void FloorManagerPanel::sync_rows() {
     item->setText(0, label);
     item->setText(1, QStringLiteral("%1 m").arg(static_cast<double>(floor.y_min), 0, 'f', 3));
     item->setIcon(0, floor_icon);
-    item->setToolTip(0, floor.derived
-                            ? tr("Inferred from geometry: this model has no floor records yet.")
-                            : tr("Double-click to open this floor's view"));
+    item->setToolTip(0, tr("Double-click to open this floor's view"));
   }
 
   for (int row = 0; row < tree_->topLevelItemCount(); ++row) {

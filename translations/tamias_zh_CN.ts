@@ -3582,10 +3582,6 @@ Export the drawing to DXF, SVG or an image, or rebuild with Qt6::Pdf available.<
         <translation>[夹层] %1</translation>
     </message>
     <message>
-        <source>Inferred from geometry: this model has no floor records yet.</source>
-        <translation>按几何标高推出：当前模型还没有楼层记录。</translation>
-    </message>
-    <message>
         <source>Click to make this the current floor; untick to hide it.</source>
         <translation>单击设为当前楼层；取消勾选即隐藏该层。</translation>
     </message>
@@ -4075,10 +4071,6 @@ Export the drawing to DXF, SVG or an image, or rebuild with Qt6::Pdf available.<
     <message>
         <source>[Mezzanine] %1</source>
         <translation>[夹层] %1</translation>
-    </message>
-    <message>
-        <source>Inferred from geometry: this model has no floor records yet.</source>
-        <translation>按几何标高推出：当前模型还没有楼层记录。</translation>
     </message>
     <message>
         <source>This model has no floors yet. Use Floor Settings to add them.</source>

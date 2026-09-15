@@ -26,7 +26,6 @@ namespace {
 
 constexpr int kFloorIndexRole = Qt::UserRole;
 constexpr int kStoreyIdRole = Qt::UserRole + 1;
-constexpr int kDerivedRole = Qt::UserRole + 2;
 constexpr int kLabelRole = Qt::UserRole + 3;
 
 QIcon tinted_mask_icon(const QString& resource, const QColor& color) {
@@ -278,7 +277,6 @@ void FloorPanel::sync_rows() {
     const QTreeWidgetItem* item = tree_->topLevelItem(i);
     const ViewportFloor& floor = floors[static_cast<std::size_t>(i)];
     rebuild = item->data(0, kStoreyIdRole).toULongLong() != floor.storey_id ||
-              item->data(0, kDerivedRole).toBool() != floor.derived ||
               item->data(0, kLabelRole).toString() != QString::fromStdString(floor.label);
   }
 
@@ -294,7 +292,6 @@ void FloorPanel::sync_rows() {
       item->setCheckState(0, Qt::Checked);
       item->setData(0, kFloorIndexRole, static_cast<int>(i));
       item->setData(0, kStoreyIdRole, static_cast<qulonglong>(floors[i].storey_id));
-      item->setData(0, kDerivedRole, floors[i].derived);
       item->setData(0, kLabelRole, QString::fromStdString(floors[i].label));
       item->setTextAlignment(1, Qt::AlignRight | Qt::AlignVCenter);
       item->setTextAlignment(2, Qt::AlignRight | Qt::AlignVCenter);
@@ -311,9 +308,7 @@ void FloorPanel::sync_rows() {
     item->setText(0, label);
     item->setText(1, QStringLiteral("%1 m").arg(static_cast<double>(floor.y_min), 0, 'f', 3));
     item->setText(2, QStringLiteral("%1 m").arg(static_cast<double>(floor.height), 0, 'f', 3));
-    item->setToolTip(0, floor.derived
-                            ? tr("Inferred from geometry: this model has no floor records yet.")
-                            : tr("Click to make this the current floor; untick to hide it."));
+    item->setToolTip(0, tr("Click to make this the current floor; untick to hide it."));
     const bool hidden = viewport_->floor_hidden(i);
     item->setCheckState(0, hidden ? Qt::Unchecked : Qt::Checked);
     item->setForeground(0, hidden ? muted : active);

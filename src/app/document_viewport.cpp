@@ -2170,7 +2170,7 @@ std::vector<std::uint64_t> DocumentViewport::imported_node_ids() const {
 }
 
 void DocumentViewport::refresh_floors() {
-  floors_ = infer_viewport_floors(*document_);
+  floors_ = viewport_floors(*document_);
   // 楼层表变了（增 / 删 / 重排）以后，按下标记的隐藏集合会错位：丢掉够不到的项。
   for (auto it = hidden_floors_.begin(); it != hidden_floors_.end();) {
     if (*it < 0 || *it >= static_cast<int>(floors_.size())) {
@@ -2246,7 +2246,7 @@ bool DocumentViewport::node_visible_in_view(std::uint64_t id) const {
     const SceneNode* node = document_->scene().find(id);
     if (node != nullptr) {
       // 归属优先看 Location 的楼层（在 1 楼画的顶板就是 1 楼的），没有归属的
-      // （导入网格、未归属构件、按几何临时分层的模型）才按几何楼层带算。
+      // （导入网格、未归属构件）才按几何楼层带兜底。
       const Entity* entity = document_->entity(id);
       const std::uint64_t storey_id =
           entity != nullptr && entity->location != nullptr ? entity->location->storey_id() : 0;

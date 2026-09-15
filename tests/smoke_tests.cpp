@@ -621,15 +621,33 @@ TEST(Picking, OrthoPlanLooksDownYWithDrawingYUp) {
   EXPECT_LT(zy, oy);  // world +Z is drawing Y (screen up)
 }
 
-TEST(ViewportFloor, ClustersSeparateElevations) {
+// 楼层只认楼层表：几何摆在哪都不该"猜"出一个楼层来——画个东西冒出个 2F、
+// 删掉又没了，那是错的。加层 / 删层只走「楼层设置」。
+TEST(ViewportFloor, GeometryNeverInventsFloors) {
   Document doc("floors");
   doc.add_import_mesh("low", make_demo_cube(), Mat4::identity(), {1.f, 1.f, 1.f});
   doc.add_import_mesh("high", make_demo_cube(), translate({0.f, 3.f, 0.f}), {1.f, 1.f, 1.f});
-  const std::vector<ViewportFloor> floors = infer_viewport_floors(doc);
+  EXPECT_TRUE(viewport_floors(doc).empty());  // 楼层表是空的：就是没有楼层
+
+  doc.add_storey("1F", 0.0);
+  const std::vector<ViewportFloor> floors = viewport_floors(doc);
+  ASSERT_EQ(floors.size(), 1u);
+  EXPECT_EQ(floors[0].label, "1F");
+  EXPECT_FLOAT_EQ(floors[0].y_min, 0.f);
+  EXPECT_FLOAT_EQ(floors[0].y_max, 3.f);  // 没写层高 → 默认 3 m
+}
+
+// 楼层表里加了几层就是几层，按标高排序。
+TEST(ViewportFloor, ReadsStoreyTable) {
+  Document doc("storeys");
+  doc.add_storey("2F", 3.0);
+  doc.add_storey("1F", 0.0);
+  const std::vector<ViewportFloor> floors = viewport_floors(doc);
   ASSERT_EQ(floors.size(), 2u);
   EXPECT_EQ(floors[0].label, "1F");
   EXPECT_EQ(floors[1].label, "2F");
   EXPECT_LT(floors[0].y_min, floors[1].y_min);
+  EXPECT_FLOAT_EQ(floors[0].y_max, 3.f);
 }
 
 // 在 1 楼画的板默认是**本层顶板**（落在层高上），但归属仍是 1 楼：
@@ -650,7 +668,7 @@ TEST(ViewportFloor, StoreyTopSlabBelongsToTheStoreyItWasDrawnOn) {
   ASSERT_TRUE(done) << done.error();
   ASSERT_TRUE(*done);
 
-  const std::vector<ViewportFloor> floors = infer_viewport_floors(doc);
+  const std::vector<ViewportFloor> floors = viewport_floors(doc);
   ASSERT_EQ(floors.size(), 2u);
   const Entity* slab = doc.entities().begin()->second.get();
   ASSERT_NE(slab, nullptr);
@@ -1009,7 +1027,8 @@ TEST(CommandSystem, DispatchCreateSlabTwoCorners) {
   Document doc("cmd-slab");
   ASSERT_TRUE(system.dispatch(doc, "create_slab", {{"thickness", 0.2}}));
   EXPECT_EQ(doc.entities().size(), 0u);
-  EXPECT_FLOAT_EQ(system.work_plane_y(), static_cast<float>(kDefaultWallHeight));
+  // 没有楼层表 = 没有"本层顶"：板落在地面 0 上，不会自己抬一层（那样会凭空多出个 2F）。
+  EXPECT_FLOAT_EQ(system.work_plane_y(), 0.f);
 
   auto p1 = system.feed_point({0.f, 0.f, 0.f});
   ASSERT_TRUE(p1) << p1.error();
@@ -1019,7 +1038,7 @@ TEST(CommandSystem, DispatchCreateSlabTwoCorners) {
   const Vec3 cursor{4.f, 0.f, 3.f};
   const auto preview = system.preview_polyline(cursor);
   EXPECT_GE(preview.size(), 4u);
-  EXPECT_FLOAT_EQ(preview.front().y, static_cast<float>(kDefaultWallHeight));
+  EXPECT_FLOAT_EQ(preview.front().y, 0.f);
 
   auto p2 = system.feed_point(cursor);
   ASSERT_TRUE(p2) << p2.error();
@@ -1028,7 +1047,7 @@ TEST(CommandSystem, DispatchCreateSlabTwoCorners) {
   const Entity* slab = doc.entities().begin()->second.get();
   ASSERT_NE(slab, nullptr);
   EXPECT_EQ(slab->kind(), EntityKind::Slab);
-  EXPECT_FLOAT_EQ(slab->local_transform(1, 3), static_cast<float>(kDefaultWallHeight));
+  EXPECT_FLOAT_EQ(slab->local_transform(1, 3), 0.f);
 
   ASSERT_TRUE(system.can_undo());
   system.undo();
