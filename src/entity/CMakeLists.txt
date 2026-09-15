@@ -5,10 +5,10 @@ add_library(tamias_entity STATIC
   # 核心：实体基类、夹点、识别色
   core/entity.cpp
   core/entity_grip.cpp
-  # 族实体：BIM 构件的族基类 + 扣减（开洞）实体，后者附属在墙 / 板等宿主上；
-  # 下按专业分目录
-  family/door_entity.cpp
-  family/window_entity.cpp
+  # 族实体：BIM 构件的族基类（family_entity.h）+ 按类别分的子目录，
+  # 开洞实体（门、窗）附属在墙 / 板等宿主上
+  family/opening/door_entity.cpp
+  family/opening/window_entity.cpp
   # 建筑族：墙、幕墙（宿主构件）
   family/architectural/wall_entity.cpp
   family/architectural/curtain_wall_entity.cpp

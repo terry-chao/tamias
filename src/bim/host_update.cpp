@@ -2,8 +2,8 @@
 
 #include "bim/host_geometry.h"
 #include "bim/wall_join.h"
-#include "entity/family/door_entity.h"
-#include "entity/family/opening_entity.h"
+#include "entity/family/opening/door_entity.h"
+#include "entity/family/opening/opening_entity.h"
 #include "engine/base/log.h"
 #include "engine/document/document.h"
 #include "engine/modeling/feature/feature.h"

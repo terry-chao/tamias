@@ -2,9 +2,9 @@
 
 #include "bim/host_update.h"
 #include "entity/family/structural/column_entity.h"
-#include "entity/family/door_entity.h"
+#include "entity/family/opening/door_entity.h"
 #include "entity/family/architectural/wall_entity.h"
-#include "entity/family/window_entity.h"
+#include "entity/family/opening/window_entity.h"
 
 #include <utility>
 

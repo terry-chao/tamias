@@ -8,7 +8,7 @@
 #include "engine/modeling/feature/feature.h"
 #include "engine/modeling/evaluate/evaluator.h"
 #include "entity/family/architectural/wall_entity.h"
-#include "entity/family/window_entity.h"
+#include "entity/family/opening/window_entity.h"
 
 #include <gtest/gtest.h>
 

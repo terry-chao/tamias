@@ -3,9 +3,9 @@
 #include "bim/host_geometry.h"
 #include "bim/host_update.h"
 #include "entity/family/structural/column_entity.h"
-#include "entity/family/door_entity.h"
+#include "entity/family/opening/door_entity.h"
 #include "entity/core/entity.h"
-#include "entity/family/window_entity.h"
+#include "entity/family/opening/window_entity.h"
 
 namespace tamias {
 namespace {

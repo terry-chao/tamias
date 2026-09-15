@@ -1,6 +1,6 @@
 #pragma once
 
-#include "entity/family/opening_entity.h"
+#include "entity/family/opening/opening_entity.h"
 
 namespace tamias {
 
