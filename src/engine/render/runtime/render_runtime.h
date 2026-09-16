@@ -115,26 +115,26 @@ class RenderThread {
 
   private:
     struct ChannelState {
-    std::unique_ptr<SwapChain> swap_chain;
-    std::unique_ptr<CommandList> command_list;
-    std::optional<FrameSubmission> latest;
-    NativeWindowHandle window{};
-    std::uint32_t width = 0;
-    std::uint32_t height = 0;
-    bool needs_recreate = true;
-    // 留存渲染场景图（draw-oriented 投影）：由 FrameSubmission 的代次 + 脏列表
-    // 增量同步，不再每帧整树重建。
-    std::unique_ptr<RenderNode> scene_root;
-    std::uint64_t scene_generation = 0;
-    std::unordered_map<std::uint64_t, TransformNode*> scene_nodes;
-    std::unordered_map<std::uint64_t, MeshLod> lod_by_node;
-    // 每通道独立实例缓冲。文档视口和场景调试器共享 RenderThread 时，
-    // 若共用一块 host-visible buffer，后画的通道会盖掉先画通道仍在 GPU
-    // 上的 AABB / 网格 instance 数据，黄线就会隔帧闪。
-    std::unique_ptr<Buffer> instance_buffer;
-    std::uint64_t instance_write_offset = 0;
-    std::uint32_t instance_slot = 0;  // 与 Vulkan frames-in-flight 对齐的 ping-pong
-  };
+      std::unique_ptr<SwapChain> swap_chain;
+      std::unique_ptr<CommandList> command_list;
+      std::optional<FrameSubmission> latest;
+      NativeWindowHandle window{};
+      std::uint32_t width = 0;
+      std::uint32_t height = 0;
+      bool needs_recreate = true;
+      // 留存渲染场景图（draw-oriented 投影）：由 FrameSubmission 的代次 + 脏列表
+      // 增量同步，不再每帧整树重建。
+      std::unique_ptr<RenderNode> scene_root;
+      std::uint64_t scene_generation = 0;
+      std::unordered_map<std::uint64_t, TransformNode*> scene_nodes;
+      std::unordered_map<std::uint64_t, MeshLod> lod_by_node;
+      // 每通道独立实例缓冲。文档视口和场景调试器共享 RenderThread 时，
+      // 若共用一块 host-visible buffer，后画的通道会盖掉先画通道仍在 GPU
+      // 上的 AABB / 网格 instance 数据，黄线就会隔帧闪。
+      std::unique_ptr<Buffer> instance_buffer;
+      std::uint64_t instance_write_offset = 0;
+      std::uint32_t instance_slot = 0;  // 与 Vulkan frames-in-flight 对齐的 ping-pong
+    };
 
   void thread_main();
   void post(std::function<void()> task);
