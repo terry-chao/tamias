@@ -210,7 +210,10 @@ float4 main(VsOutput input) : SV_Target0 {
   if (input.mode > 1.5) {
     lit = shaded_realistic(n, l, v, base, rough, metal, opacity, ao);
   } else {
-    lit = float4(shaded_simple(n, l, base), 1.0);
+    // 混合因子是 ONE / ONE_MINUS_SRC_ALPHA（premultiplied，见 PipelineDesc::blend），
+    // 所以 rgb 必须先乘 alpha。普通着色下 opacity == 1，结果和以前逐位一致；
+    // 透视（X-Ray）下 opacity 来自视图覆盖，这一支负责把着色模式也画成半透明。
+    lit = float4(shaded_simple(n, l, base) * opacity, opacity);
   }
 
   if (input.selected > 0.5) {

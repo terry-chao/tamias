@@ -36,6 +36,9 @@ struct FrameSubmission {
   Vec3 eye_position{};
   float view_distance = 5.f;
   RenderMode mode = RenderMode::Shaded;
+  // X 光（X-Ray）：>0 时所有有面的构件都按这个 alpha 画成半透明，0 = 关。
+  // 与 mode 正交（可叠在着色 / 真实感上），见 docs/RENDERING.md §8。
+  float xray = 0.f;
   std::vector<SceneDrawItem> items;
   // 语义侧增量同步：scene_generation 变化时，渲染线程按 scene_dirty_ids
   // 增量更新留存场景图（空列表 = 整树重建兜底）。

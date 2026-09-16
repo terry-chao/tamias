@@ -2,7 +2,7 @@
 
 > 大 BIM 的下一道性能命门。语义树 / 展平见 [SCENE-GRAPH.md](SCENE-GRAPH.md)；视锥一期见 [视锥剔除](FRUSTUM-CULLING.md)；几十亿三角的总图见 [超大规模三角](MASSIVE-GEOMETRY.md)（本文是其中 **G1** 的企业级方案）。
 
-**状态：** G1a（几何 intern）+ G1b（实例顶点缓冲 + shader 读实例）+ G1c（`RecordCommands` 按 `BatchKey` 分桶，`instance_count = N`）已落地。半透明仍一物一 draw。G1 完成前不要开阴影 pass、不要做 Nanite。
+**状态：** G1a（几何 intern）+ G1b（实例顶点缓冲 + shader 读实例）+ G1c（`RecordCommands` 按 `BatchKey` 分桶，`instance_count = N`）已落地。半透明走单独一遍：先按节点深度从远到近排序，再合并**排完序后相邻**的同键批次（见 [FAQ §8](FAQ.md)），所以不会把不同深度的玻璃塞进同一个 instance。G1 完成前不要开阴影 pass、不要做 Nanite。
 
 ---
 
@@ -135,7 +135,7 @@ Scene 实例（node → geometry_id + world）
 | **G1a intern** | `Document` 按指纹复用；改参数 COW | 1 万同型号柱：CPU 网格份数 = 1；画面不变 |
 | **G1b 常量拆分** | 实例顶点缓冲 + `mesh.vert` 读 world/颜色；`pc.mvp` = view_proj | 现有场景观感不变；N=1 走实例路径 |
 | **G1c 分桶** | `RecordCommands` 先 `BatchKey` 分桶再提交 | 同 mesh 多实例：draw 次数 = 批次数 |
-| **G1d 锁测试** | Mock RHI：同 mesh 多实例的 `instance_count`；半透明不合批 | 回归不靠肉眼 |
+| **G1d 锁测试** | Mock RHI：同 mesh 多实例的 `instance_count`；半透明只合并在深度序列里相邻的同键批次 | 回归不靠肉眼 |
 
 **G1 明确不做：** 语义树剪枝、BVH 视锥、自适应 deflection、阴影、剖切、透明合批、Nanite、LevelDB、把 `Scene` 搬进 GPU。
 

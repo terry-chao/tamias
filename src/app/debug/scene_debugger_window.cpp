@@ -186,6 +186,10 @@ SceneDebuggerWindow::SceneDebuggerWindow(std::shared_ptr<RenderThread> render_th
   connect(shaded_action_, &QAction::triggered, this, [this] { set_mode(RenderMode::Shaded); });
   connect(realistic_action_, &QAction::triggered, this,
           [this] { set_mode(RenderMode::Realistic); });
+  xray_action_ = toolbar->addAction(toolbar_icon(QStringLiteral(":/icons/xray.svg")), tr("X-Ray"));
+  xray_action_->setCheckable(true);
+  xray_action_->setToolTip(tr("See through everything — all components semi-transparent"));
+  connect(xray_action_, &QAction::toggled, this, [this](bool on) { replay_->set_xray(on); });
   toolbar->addSeparator();
   axes_action_ = toolbar->addAction(toolbar_icon(QStringLiteral(":/icons/view_3d.svg")), tr("Axes"));
   axes_action_->setCheckable(true);
@@ -319,6 +323,10 @@ void SceneDebuggerWindow::open_scene(RenderScene scene, std::filesystem::path pa
     case RenderMode::Realistic:
       realistic_action_->setChecked(true);
       break;
+  }
+  if (xray_action_ != nullptr) {
+    const QSignalBlocker block(xray_action_);
+    xray_action_->setChecked(replay_->xray());
   }
   axes_action_->setChecked(replay_->player().show_axes());
   apply_hidden_action_->setChecked(replay_->player().apply_captured_hidden());

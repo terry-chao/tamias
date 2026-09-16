@@ -56,6 +56,8 @@ struct RenderScene {
     float znear = 0.05f;
     float zfar = 500.f;
     RenderMode mode = RenderMode::Shaded;
+    // X 光（X-Ray）：0 = 关；>0 是视图级 alpha 覆盖（见 docs/RENDERING.md §8）。
+    float xray = 0.f;
     std::uint32_t width = 1;
     std::uint32_t height = 1;
     bool orthographic = false;

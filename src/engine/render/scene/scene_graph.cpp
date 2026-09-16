@@ -5,10 +5,12 @@
 #include "engine/render/runtime/gpu_instance.h"
 #include "engine/render/resource/mesh_lod.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <optional>
 #include <span>
 #include <string>
+#include <vector>
 
 namespace tamias {
 
@@ -232,8 +234,18 @@ void RecordCommands::apply(DrawableNode& node) {
   }
 
   const bool as_lines = ctx_.lines || mesh->line_list;
-  const bool use_material = !as_lines && ctx_.mode_value > 1.5f;
-  const bool transmissive = use_material && ctx_.material_opacity < 0.999f;
+  // 着色（1）/ 真实感（2）才有面可谈半透明；线框（0）与线条图元走各自管线。
+  const bool surface = !as_lines && ctx_.mode_value > 0.5f;
+  const bool use_material = surface && ctx_.mode_value > 1.5f;
+  // X 光（X-Ray）是视图级覆盖，正交于显示模式：开了以后所有有面的构件都按
+  // 这个 alpha 走半透明 pass。材质本身更透明时取更小的那个 —— 透视下的玻璃
+  // 仍然比墙更透，不会被「拉平」成一个统一灰片。
+  const float xray_alpha = ctx_.xray > 0.f ? std::min(ctx_.xray, 1.f) : 1.f;
+  // 透视只作用于有面的构件：线框与线条图元走的是不混合的管线，alpha 保持 1。
+  const float opacity =
+      !surface ? 1.f
+               : (use_material ? std::min(ctx_.material_opacity, xray_alpha) : xray_alpha);
+  const bool transmissive = surface && opacity < 0.999f;
   if (ctx_.transparent_pass) {
     if (!transmissive) {
       return;
@@ -308,8 +320,7 @@ void RecordCommands::apply(DrawableNode& node) {
 
   const Vec3 color = use_material ? ctx_.material_color : ctx_.category_color;
   GpuInstance instance =
-      make_gpu_instance(world, color, use_material ? ctx_.material_opacity : 1.f,
-                        use_material ? ctx_.material_roughness : 0.6f,
+      make_gpu_instance(world, color, opacity, use_material ? ctx_.material_roughness : 0.6f,
                         use_material ? ctx_.material_metallic : 0.f, ctx_.selected);
   if (use_material) {
     apply_texture_transform(instance, ctx_.material_tex);
@@ -334,8 +345,12 @@ void RecordCommands::apply(DrawableNode& node) {
   batch.as_lines = as_lines;
 
   if (transmissive) {
-    batch.instances.push_back(instance);
-    flush_batch(batch);
+    // 半透明必须从后往前画（见 docs/FAQ.md §8）：这里不收进合批表，先带着
+    // 深度收下，等这一遍走完再排序统一发。node.bounds 是世界空间包围盒。
+    const Vec3 center =
+        node.bounds.valid() ? node.bounds.center() : Vec3{world(0, 3), world(1, 3), world(2, 3)};
+    const Vec3 d = center - ctx_.eye_position;
+    enqueue_transparent(std::move(batch), instance, dot(d, d));
     return;
   }
   enqueue(std::move(batch), instance);
@@ -350,6 +365,41 @@ void RecordCommands::enqueue(PendingBatch batch, GpuInstance instance) {
   batch.instances.push_back(instance);
   batch_index_.emplace(batch.key, batches_.size());
   batches_.push_back(std::move(batch));
+}
+
+void RecordCommands::enqueue_transparent(PendingBatch batch, GpuInstance instance, float depth) {
+  batch.depth = depth;
+  batch.instances.push_back(instance);
+  transparent_.push_back(std::move(batch));
+}
+
+void RecordCommands::flush_transparent() {
+  if (transparent_.empty()) {
+    return;
+  }
+  // 远的先画（depth 大 = 远）。stable_sort 让等距的保持遍历顺序，结果可复现。
+  std::stable_sort(transparent_.begin(), transparent_.end(),
+                   [](const PendingBatch& a, const PendingBatch& b) {
+                     return a.depth > b.depth;
+                   });
+  // 排完以后相邻的同键批次可以直接合：它们的深度本来就几乎一样，合并只是把
+  // 「深度相同的一串同型号柱子」重新变成一次 instance draw，不会改变前后关系
+  // （同一 draw 内 instance 仍按提交顺序混合）。远处的一万根柱子在透视下不至于
+  // 变成一万次 draw。
+  std::vector<PendingBatch> merged;
+  merged.reserve(transparent_.size());
+  for (PendingBatch& batch : transparent_) {
+    if (!merged.empty() && merged.back().key == batch.key) {
+      merged.back().instances.insert(merged.back().instances.end(), batch.instances.begin(),
+                                     batch.instances.end());
+      continue;
+    }
+    merged.push_back(std::move(batch));
+  }
+  for (PendingBatch& batch : merged) {
+    flush_batch(batch);
+  }
+  transparent_.clear();
 }
 
 void RecordCommands::flush_batch(PendingBatch& batch) {
@@ -437,6 +487,7 @@ void RecordCommands::flush_all() {
   }
   batches_.clear();
   batch_index_.clear();
+  flush_transparent();
 }
 
 // ---------------------------------------------------------------------------

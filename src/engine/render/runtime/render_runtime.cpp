@@ -1197,6 +1197,7 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     ctx.fovy = frame.fovy;
     ctx.framebuffer_height = static_cast<float>(std::max(frame.height, 1u));
     ctx.mode_value = mode_value;
+    ctx.xray = frame.xray;
     ctx.shaded_pipeline = shaded_pipeline_.get();
     ctx.wire_pipeline = wire_pipeline_.get();
     ctx.entity_line_pipeline = entity_line_pipeline_.get();
@@ -1242,7 +1243,10 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     ctx.stats = &stats;
     RecordCommands visitor(ctx);
     channel.scene_root->accept(visitor);
-    if (mode_value > 1.5f && blend_pipeline_) {
+    // 第二遍：真实感里材质自己带 opacity 的玻璃，以及开了 X 光（X-Ray）时的
+    // 全部有面构件。着色模式没有材质透明度，只有透视才需要这一遍。
+    const bool xray_on = frame.xray > 0.f && frame.xray < 0.999f;
+    if ((mode_value > 1.5f || xray_on) && blend_pipeline_) {
       ctx.transparent_pass = true;
       channel.command_list->set_pipeline(*blend_pipeline_);
       bind_mesh_sets();

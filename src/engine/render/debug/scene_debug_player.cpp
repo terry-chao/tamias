@@ -127,7 +127,7 @@ Aabb SceneDebugPlayer::bounds() const {
 
 FrameSubmission SceneDebugPlayer::make_frame(NativeWindowHandle window, std::uint32_t width,
                                              std::uint32_t height, const TurntableCamera& camera,
-                                             RenderMode mode) const {
+                                             RenderMode mode, float xray) const {
   FrameSubmission frame{};
   frame.window = window;
   frame.width = std::max(1u, width);
@@ -140,6 +140,7 @@ FrameSubmission SceneDebugPlayer::make_frame(NativeWindowHandle window, std::uin
   frame.view_distance = camera.distance();
   frame.fovy = camera.fovy();
   frame.mode = mode;
+  frame.xray = xray;
   frame.items = filtered_items();
   frame.hidden_node_ids = hidden_node_ids();
   frame.scene_generation = generation_;

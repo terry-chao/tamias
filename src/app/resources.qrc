@@ -43,6 +43,7 @@
     <file alias="wireframe.svg">../../assets/icons/wireframe.svg</file>
     <file alias="shaded.svg">../../assets/icons/shaded.svg</file>
     <file alias="realistic.svg">../../assets/icons/realistic.svg</file>
+    <file alias="xray.svg">../../assets/icons/xray.svg</file>
     <file alias="home.svg">../../assets/icons/home.svg</file>
     <file alias="properties.svg">../../assets/icons/properties.svg</file>
     <file alias="draw_panel.svg">../../assets/icons/draw_panel.svg</file>

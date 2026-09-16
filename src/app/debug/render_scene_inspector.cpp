@@ -565,11 +565,11 @@ void RenderSceneInspector::rebuild() {
   body_->show();
 
   const QString digest = QString::fromStdString(render_scene_digest(scene_));
+  const QString mode_text = scene_.view.xray > 0.f
+                                ? tr("%1 + X-Ray").arg(mode_name(*this, scene_.view.mode))
+                                : mode_name(*this, scene_.view.mode);
   summary_mode_->setText(
-      tr("%1  ·  %2×%3")
-          .arg(mode_name(*this, scene_.view.mode))
-          .arg(scene_.view.width)
-          .arg(scene_.view.height));
+      tr("%1  ·  %2×%3").arg(mode_text).arg(scene_.view.width).arg(scene_.view.height));
   const std::size_t node_count = scene_.debug_graph.nodes.empty()
                                      ? scene_.items.size()
                                      : scene_.debug_graph.nodes.size();

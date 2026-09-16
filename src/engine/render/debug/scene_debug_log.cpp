@@ -153,6 +153,7 @@ SceneDebugLog capture_scene_debug_log(const SceneDebugPlayer& player, const Frus
   ctx.mode_value = scene.view.mode == RenderMode::Wireframe    ? 0.f
                    : scene.view.mode == RenderMode::Realistic ? 2.f
                                                               : 1.f;
+  ctx.xray = scene.view.xray;
   ctx.shaded_pipeline = &shaded;
   ctx.wire_pipeline = &wire;
   ctx.entity_line_pipeline = &entity_line;
@@ -174,7 +175,7 @@ SceneDebugLog capture_scene_debug_log(const SceneDebugPlayer& player, const Frus
       root->accept(visitor);
     }
     const std::size_t opaque_end = cmds.draws.size();
-    if (ctx.mode_value > 1.5f) {
+    if (ctx.mode_value > 1.5f || (ctx.xray > 0.f && ctx.xray < 0.999f)) {
       ctx.transparent_pass = true;
       RecordCommands trans(ctx);
       root->accept(trans);

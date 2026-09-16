@@ -35,6 +35,8 @@ class SceneDebugPlayer {
   void set_debug_triangle(std::optional<std::array<Vec3, 3>> triangle);
   void set_show_axes(bool enabled) { show_axes_ = enabled; }
   [[nodiscard]] bool show_axes() const { return show_axes_; }
+  // 视图级覆盖：X 光开关改的是「看到的画面」，存快照时要跟着一起带上。
+  void set_view_xray(float xray) { scene_.view.xray = xray; }
 
   [[nodiscard]] std::vector<SceneDrawItem> filtered_items() const;
   [[nodiscard]] std::vector<std::uint64_t> hidden_node_ids() const;
@@ -43,7 +45,7 @@ class SceneDebugPlayer {
 
   [[nodiscard]] FrameSubmission make_frame(NativeWindowHandle window, std::uint32_t width,
                                            std::uint32_t height, const TurntableCamera& camera,
-                                           RenderMode mode) const;
+                                           RenderMode mode, float xray = 0.f) const;
 
  private:
   void bump_generation();

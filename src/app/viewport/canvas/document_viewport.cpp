@@ -195,6 +195,14 @@ void DocumentViewport::set_render_mode(RenderMode mode) {
   request_redraw();
 }
 
+void DocumentViewport::set_xray(bool on) {
+  if (xray_ == on) {
+    return;
+  }
+  xray_ = on;
+  request_redraw();
+}
+
 ViewportState DocumentViewport::capture_viewport_state() const {
   ViewportState state;
   state.target = camera_.target();
@@ -205,6 +213,7 @@ ViewportState DocumentViewport::capture_viewport_state() const {
   state.znear = camera_.znear();
   state.zfar = camera_.zfar();
   state.render_mode = static_cast<ViewRenderMode>(mode_);
+  state.xray = xray_ ? kXrayOpacity : 0.f;
   return state;
 }
 
@@ -228,6 +237,7 @@ RenderScene::View DocumentViewport::capture_render_scene_view() const {
   view.znear = camera_.znear();
   view.zfar = camera_.zfar();
   view.mode = mode_;
+  view.xray = xray_ ? kXrayOpacity : 0.f;
   view.orthographic = camera_.orthographic();
   return view;
 }
@@ -260,6 +270,7 @@ void DocumentViewport::apply_viewport_state(const ViewportState& state) {
   camera_.set_yaw_pitch(state.yaw, state.pitch);
   camera_.set_fovy(state.fovy);
   mode_ = static_cast<RenderMode>(state.render_mode);
+  xray_ = state.xray > 0.f;
   sync_view_cube();
   // Do not submit here if the widget is not yet laid out — an early present at the
   // wrong size can leave the swapchain stuck drawing into a corner of the window.
@@ -649,6 +660,7 @@ void DocumentViewport::submit_current_frame() {
   frame.view_distance = camera_.distance();
   frame.fovy = camera_.fovy();
   frame.mode = mode_;
+  frame.xray = xray_ ? kXrayOpacity : 0.f;
   refresh_floors();
   // 留存场景图的同步源必须是全量清单（无视锥剔除）；剔除/可见性过滤移到渲染
   // 线程录制时按节点判断，树本身保持完整。

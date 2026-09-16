@@ -214,6 +214,43 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 
 选中：`selected` 把颜色朝橙色 lerp，不是轮廓描边。
 
+### 8.1 X 光（X-Ray）：叠在显示模式上的半透明
+
+`RenderMode` 是**三选一**。X 光是另一个维度上的**开关**（`FrameSubmission::xray`，
+0 = 关，否则是视图级 alpha），因为它要和每一种视觉样式组合：「X 光 + 着色」、
+「X 光 + 真实感」都要能用——Revit 把它放在视口控制栏上和 Visual Style 并列，
+SketchUp 叫 X-Ray，Rhino 叫 Ghosted，3ds Max 叫 See-Through。塞进 `RenderMode`
+当第四个值，第一天就会有人问「X 光 + 线框怎么没有了」。
+
+行为（判定在 `RecordCommands::apply(DrawableNode&)`）：
+
+| 输入 | 结果 |
+|---|---|
+| 着色（1）+ X 光 | 类别色，alpha = `xray` |
+| 真实感（2）+ X 光 | 材质色 + PBR，alpha = `min(材质 opacity, xray)` |
+| 真实感（2）无 X 光 | 原本的玻璃路径，alpha = 材质 opacity |
+| 线框（0）、线条图元 | 不受影响：走的是不混合的管线，alpha 恒为 1 |
+
+取 `min` 而不是直接覆盖，是为了不把玻璃「拉平」成和墙一样透——X 光底下的幕墙
+仍然比楼板透，那点信息不该丢。
+
+默认 `kXrayOpacity = 0.35`：够透（后面几层构件都看得见）又够实（认得出这是哪个
+构件，不至于糊成一片背景）。它是一个视图覆盖，不写进 `Material`——材质 opacity
+是玻璃的物理属性，X 光是看图方式，混在一起以后没法区分「这块本来就是玻璃」和
+「我现在开着 X 光」。
+
+**像素上要配合的一点：** 混合因子是 `ONE / ONE_MINUS_SRC_ALPHA`（premultiplied，
+见 [device.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/device.h)
+的 `PipelineDesc::blend`），所以 fragment shader 输出的 rgb 必须先乘 alpha。
+真实感的半透明分支一直是这么做的；着色分支原本硬返回 `alpha = 1`，现在也走
+`shaded_simple(...) * opacity` + `opacity`。opacity == 1 时和不透明路径逐位一致。
+
+`xray` 随 `.tdoc` 的 `ViewportState` 一起存（格式版本 19），也进 `.trscn` 的
+VIEW 块和场景调试器，所以「打开时看到的画面」和「存下来再打开」是同一个。
+
+代价与取舍见 [FAQ §8](FAQ.md)：开了 X 光以后整个场景都走半透明 pass，per-instance
+合批的收益会掉到「同一深度带上相邻的同型号构件」那部分。
+
 ---
 
 ## 9. 材质从文档走到像素
@@ -298,10 +335,10 @@ IBL 是 split-sum：CPU 烘焙工作室环境立方体 → irradiance / GGX pref
 
 这些在 [路线图](ROADMAP.md) 里，**不是漏画**，是还没做：
 
-- 合批 / instancing（G1a intern 已落地；G1b/c 见 [合批 / Instancing](INSTANCING.md)；视锥二期/三期见 [视锥剔除](FRUSTUM-CULLING.md)）
 - 截面剖切、Hidden Line
 - 阴影、AO、自定义 HDRI（工作室 split-sum IBL 已有）
-- 渲染侧场景图（VSG 式节点 + 命令图）——现在每帧展平
+- 深度剥离 / OIT（现在的半透明是「按节点深度排序 + 相邻同键合批」，见 [FAQ §8](FAQ.md)）
+- 视锥二期/三期（一期叶子 AABB 已落地，见 [视锥剔除](FRUSTUM-CULLING.md)）
 - 多选轮廓、按类型分类着色
 - 粗糙度 / 金属度贴图（现在是每材质一个标量）
 

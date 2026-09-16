@@ -11,6 +11,10 @@ namespace tamias {
 
 enum class RenderMode { Wireframe, Shaded, Realistic };
 
+// X 光（X-Ray）的默认 alpha：够透（后面几层构件都看得见、认得出来）又够实
+// （还认得出这是哪个构件，不至于糊成一片背景色）。视图级覆盖，与材质无关。
+inline constexpr float kXrayOpacity = 0.35f;
+
 // 语义侧 → 渲染侧的 draw item。语义层（Document）产出它，渲染侧消费它；
 // app 从 Document::render_items() 拿，不再直接碰 SceneNode。
 struct SceneDrawItem {

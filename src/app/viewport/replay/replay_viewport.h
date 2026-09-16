@@ -30,9 +30,12 @@ class ReplayViewport final : public QWidget {
   [[nodiscard]] const SceneDebugPlayer& player() const { return player_; }
   [[nodiscard]] CameraController& camera() { return camera_; }
   [[nodiscard]] RenderMode render_mode() const { return mode_; }
+  [[nodiscard]] bool xray() const { return xray_; }
 
   void set_scene(RenderScene scene);
   void set_render_mode(RenderMode mode);
+  // X 光（X-Ray）：半透明看穿，正交于显示模式。捕获的场景自带该状态。
+  void set_xray(bool on);
   void frame_scene();
   void request_redraw();
   void sync_from_player();
@@ -70,6 +73,7 @@ class ReplayViewport final : public QWidget {
   std::shared_ptr<RenderThread> render_thread_;
   std::unique_ptr<RenderChannel> channel_;
   RenderMode mode_ = RenderMode::Shaded;
+  bool xray_ = false;
   NativeSurface* surface_ = nullptr;
   void* gl_hwnd_ = nullptr;
   ViewCubeWidget* view_cube_ = nullptr;

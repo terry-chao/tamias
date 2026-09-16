@@ -844,6 +844,18 @@ Overwrite scene.trscn and sidecar files?</source>
         <translation>带高光的光照显示</translation>
     </message>
     <message>
+        <source>X-Ray</source>
+        <translation>X 光</translation>
+    </message>
+    <message>
+        <source>Ctrl+4</source>
+        <translation>Ctrl+4</translation>
+    </message>
+    <message>
+        <source>See through everything — all components semi-transparent</source>
+        <translation>看穿全部构件 —— 所有构件半透明显示</translation>
+    </message>
+    <message>
         <location filename="../src/app/shell/main_window.cpp" line="595"/>
         <source>All Supported (*.tdoc *.gltf *.glb *.obj);;Tamias (*.tdoc);;Meshes (*.gltf *.glb *.obj);;glTF (*.gltf *.glb);;OBJ (*.obj)</source>
         <translation>全部支持 (*.tdoc *.gltf *.glb *.obj);;Tamias (*.tdoc);;网格 (*.gltf *.glb *.obj);;glTF (*.gltf *.glb);;OBJ (*.obj)</translation>
@@ -1339,6 +1351,14 @@ Meshes / textures: %2
         <translation>真实感</translation>
     </message>
     <message>
+        <source>X-Ray</source>
+        <translation>X 光</translation>
+    </message>
+    <message>
+        <source>See through everything — all components semi-transparent</source>
+        <translation>看穿全部构件 —— 所有构件半透明显示</translation>
+    </message>
+    <message>
         <source>Axes</source>
         <translation>坐标轴</translation>
     </message>
@@ -1625,6 +1645,10 @@ Meshes / textures: %2
 </context>
 <context>
     <name>tamias::RenderSceneInspector</name>
+    <message>
+        <source>%1 + X-Ray</source>
+        <translation>%1 + X 光</translation>
+    </message>
     <message>
         <source>Write debug files…</source>
         <translation>写出调试文件…</translation>

@@ -96,6 +96,7 @@ ReplayViewport::~ReplayViewport() {
 void ReplayViewport::set_scene(RenderScene scene) {
   const RenderScene::View view = scene.view;
   mode_ = view.mode;
+  xray_ = view.xray > 0.f;
   player_.set_scene(std::move(scene));
   apply_render_scene_view(camera_.camera(), view);
   uploaded_meshes_.clear();
@@ -106,6 +107,12 @@ void ReplayViewport::set_scene(RenderScene scene) {
 
 void ReplayViewport::set_render_mode(RenderMode mode) {
   mode_ = mode;
+  request_redraw();
+}
+
+void ReplayViewport::set_xray(bool on) {
+  xray_ = on;
+  player_.set_view_xray(on ? kXrayOpacity : 0.f);
   request_redraw();
 }
 
@@ -258,7 +265,8 @@ void ReplayViewport::submit_current_frame() {
   channel_->resize(native_handle(), w, h);
   upload_resources();
   FrameSubmission frame =
-      player_.make_frame(native_handle(), w, h, camera_.camera(), mode_);
+      player_.make_frame(native_handle(), w, h, camera_.camera(), mode_,
+                         xray_ ? kXrayOpacity : 0.f);
   channel_->submit(std::move(frame));
 }
 

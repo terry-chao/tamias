@@ -149,7 +149,10 @@ Result<void> write_view(BinaryWriter& w, const RenderScene::View& view) {
   if (auto r = w.write_u32(view.height); !r) {
     return r;
   }
-  return w.write_bool(view.orthographic);
+  if (auto r = w.write_bool(view.orthographic); !r) {
+    return r;
+  }
+  return w.write_f32(view.xray);
 }
 
 Result<void> read_view(BinaryReader& r, RenderScene::View& view) {
@@ -215,6 +218,17 @@ Result<void> read_view(BinaryReader& r, RenderScene::View& view) {
     return Err(ortho.error());
   }
   view.orthographic = *ortho;
+  // X 光（X-Ray）是在 v3 之后追加进 VIEW 块的字段，靠「块里还有没有字节」判断，
+  // 不提版本号：render_scene_digest 会把 scene.version 一起哈希，提版本会让每一份
+  // 已入库的 golden digest 全部失效（写盘后重读的校验也会立刻自相矛盾）。
+  // VIEW 块是长度前缀的，旧文件读到块尾就停，xray 保持默认 0。
+  if (r.remaining() >= sizeof(float)) {
+    auto xray = r.read_f32();
+    if (!xray) {
+      return Err(xray.error());
+    }
+    view.xray = *xray;
+  }
   return {};
 }
 

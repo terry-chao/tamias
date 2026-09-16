@@ -261,7 +261,7 @@ UWorld                       一局游戏 / 一个关卡的总容器
 | `AActor` | `Entity` + `SceneNode` | 已落地（BIM 语义在 [BIM.md](BIM.md)） |
 | `UPrimitiveComponent` | 有 `mesh_asset_id` 的 `SceneNode` | 已落地 |
 | 渲染线程代理（SceneProxy） | 留存 `RenderNode` 树 + 每帧 `SceneDrawItem` 清单 | 已落地（[SCENE-GRAPH.md](SCENE-GRAPH.md)） |
-| ISM / HISM | `GpuInstance` + `BatchKey` 分桶 | 已落地，半透明不合批 |
+| ISM / HISM | `GpuInstance` + `BatchKey` 分桶 | 已落地；半透明另走按深度排序的第二遍（[§8](#8-透明--半透明的绘制顺序)） |
 | 每实例 LOD | `MeshLod` + `select_mesh_lod` 滞回 | 已落地 |
 | Streaming cell | 无（楼层 / 类别隐藏集是前身） | 未做 |
 | HLOD | 无（BRep 在，可按误差重离散，不必先合并） | 不上 |
@@ -370,32 +370,47 @@ OSG 分了「不透明 bin（按状态排序）」和「透明 bin（`DepthSorte
 第二遍  ctx.transparent_pass = true      ← 只画 opacity < 1 的，blend pipeline
 ```
 
+第一遍画不透明；第二遍只在「真实感」或「开了 X 光（X-Ray）」时跑（[渲染 §8.1](RENDERING.md)）。
+
 判定在 `RecordCommands::apply(DrawableNode&)` 里：
 
 ```cpp
-const bool transmissive = use_material && ctx_.material_opacity < 0.999f;
+const bool surface = !as_lines && ctx_.mode_value > 0.5f;
+const float opacity = !surface  ? 1.f
+                    : use_material ? std::min(ctx_.material_opacity, xray_alpha)
+                                   : xray_alpha;      // xray_alpha = 1 时就是原样
+const bool transmissive = surface && opacity < 0.999f;
 if (ctx_.transparent_pass) { if (!transmissive) return; }
 else if (transmissive) return;
 ```
 
-半透明批次**不合批**：直接 `flush_batch(batch)` 单发一份（`batch.key.transparent = true`），就是为了不把不同深度的玻璃塞进同一个 instance 批次。混合管线 `depth_write = false`，深度测试仍然开着（这样玻璃后面的实体还能挡住它）。
+线框（mode 0）与线条图元不算「有面」，永不进第二遍 —— 它们本来就能看穿。
+
+半透明批次**不进合批表**：先带着深度收进透明表，等这一遍走完统一排序再发。混合管线 `depth_write = false`，深度测试仍然开着。
 
 | 类别 | 归属 | 原因 |
 |---|---|---|
 | 不透明实体 | 第一遍，`BatchKey` 自由 instance | 顺序无关，收益最大 |
 | Alpha test（cutout） | 并入不透明 | `discard` 不破坏合批 |
-| 半透明（玻璃 / 幕墙面板） | 第二遍，一物一 draw | instance 会打乱 back-to-front |
+| 半透明（玻璃 / 幕墙面板） | 第二遍，按深度排完再合批 | instance 会打乱 back-to-front；只有排完序相邻的同键批次才合并 |
 | 选中填充 | 实例 flags 里带 `selected` | 不能按 `selected` 拆桶，否则框选一千个 = 一千批 |
 | 轮廓 / 夹点 / 网格 / 轴 / 坐标轴 | 独立 overlay，永不进模型桶 | 状态完全不同（`depth_test = false`） |
 
-### 现状缺口（诚实说）
+### 排序：第二遍是按深度发出去的
 
-第二遍**没有做深度排序**：它按渲染树遍历顺序一路 `flush_batch`。所以：
+第二遍收集完所有半透明批次后，按「节点包围盒中心到眼睛的距离」**从远到近**排序，再依次
+`flush_batch`（`RecordCommands::flush_transparent`）。排序是稳定排序，等距的保持遍历顺序，
+所以同一份场景每帧发出去的 draw 序列可复现（golden / 调试录像都对得上）。
 
-- 场景里只有一两块玻璃时看不出问题；
-- 同屏有多块互相重叠的玻璃时，顺序可能是错的（近的比远的先画）。
+排完序之后，**相邻**的同键批次会合并成一次 instance draw。这是安全的：相邻意味着深度
+几乎一样，而同一个 draw 内部 instance 仍按提交顺序混合，前后关系不变。收益是「同一层上
+一万根同型号柱子」在开 X 光时不至于变成一万次 draw。
 
-补法三条，代价递增：① 按节点中心到相机的距离排序后再遍历；② depth peeling（每层一遍，N 层 N 遍）；③ OIT（per-pixel linked list 或 weighted blended）。**做 ①② 之前先确认真的需要** —— 建筑场景里大多数「透明」是幕墙，排序错误通常看不出来，而 ①② 会打破现在的合批收益。
+还没做的：
+
+- 排序键是**节点级**的，一物一深度。互相穿插的两个大构件（比如斜撑穿过楼板）仍可能排错；
+- 没有 depth peeling / OIT。真要严格正确，代价是每层一遍或 per-pixel linked list。
+- 不透明那一遍仍然不排序（本来就不需要，深度测试 + 深度写让顺序无关）。
 
 ---
 

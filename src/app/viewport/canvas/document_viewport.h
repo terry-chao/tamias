@@ -54,6 +54,10 @@ class DocumentViewport final : public QWidget {
   [[nodiscard]] Document& document() { return *document_; }
   void set_render_mode(RenderMode mode);
   [[nodiscard]] RenderMode render_mode() const { return mode_; }
+  // X 光（X-Ray）：所有有面的构件画成半透明，能一眼看穿整栋楼。
+  // 与显示模式（线框/着色/真实感）正交，可叠加；线框模式与线条图元不受影响。
+  void set_xray(bool on);
+  [[nodiscard]] bool xray() const { return xray_; }
   void frame_scene();
   // 框显指定句柄的构件（找不到或无有效包围盒则不动）。
   void frame_node(std::uint64_t node_id);
@@ -264,6 +268,7 @@ class DocumentViewport final : public QWidget {
   std::unique_ptr<RenderChannel> channel_;
   Bvh bvh_;
   RenderMode mode_ = RenderMode::Shaded;
+  bool xray_ = false;
   class NativeSurface;
   NativeSurface* surface_ = nullptr;
   void* gl_hwnd_ = nullptr;  // Win32 OpenGL child HWND (UI-thread owned)

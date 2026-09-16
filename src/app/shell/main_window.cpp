@@ -553,6 +553,20 @@ MainWindow::MainWindow(QWidget* parent)
   });
   addAction(realistic_action_);
 
+  // X 光（X-Ray）：不是第四种显示模式，而是叠在显示模式上的开关——工业软件里
+  // 也放在显示模式旁边而不是塞进那个列表，因为「透视 + 着色」「透视 + 真实感」
+  // 都要能用。全场景半透明，用来一眼看穿整栋楼。
+  xray_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/xray.svg")), tr("X-Ray"), this);
+  xray_action_->setCheckable(true);
+  xray_action_->setShortcut(QKeySequence(tr("Ctrl+4")));
+  xray_action_->setToolTip(tr("See through everything — all components semi-transparent"));
+  connect(xray_action_, &QAction::toggled, this, [this](bool on) {
+    if (auto* vp = current_viewport()) {
+      vp->set_xray(on);
+    }
+  });
+  addAction(xray_action_);
+
   // 轴网：显示开关 + 设置。轴网是定位参考（不是构件），只在视口画线、不进实体表。
   grid_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/grid.svg")), tr("Grid"), this);
   grid_action_->setCheckable(true);
@@ -806,6 +820,7 @@ MainWindow::MainWindow(QWidget* parent)
   display_ribbon->add_action(wireframe_action_);
   display_ribbon->add_action(shaded_action_);
   display_ribbon->add_action(realistic_action_);
+  display_ribbon->add_action(xray_action_);
   display_ribbon->add_action(grid_action_);
   display_ribbon->add_action(grid_settings_action_);
 
@@ -2203,8 +2218,11 @@ void MainWindow::sync_render_mode_actions() {
     return;
   }
   RenderMode mode = RenderMode::Shaded;
-  if (auto* vp = current_viewport()) {
+  bool xray = false;
+  auto* vp = current_viewport();
+  if (vp != nullptr) {
     mode = vp->render_mode();
+    xray = vp->xray();
   }
   const QSignalBlocker b0(wireframe_action_);
   const QSignalBlocker b1(shaded_action_);
@@ -2212,6 +2230,13 @@ void MainWindow::sync_render_mode_actions() {
   wireframe_action_->setChecked(mode == RenderMode::Wireframe);
   shaded_action_->setChecked(mode == RenderMode::Shaded);
   realistic_action_->setChecked(mode == RenderMode::Realistic);
+  if (xray_action_ != nullptr) {
+    // xray 是独立开关（不在互斥的 display_group 里）：切文档时要反映那个文档
+    // 自己的状态，而不是上一个文档留下的。
+    const QSignalBlocker b3(xray_action_);
+    xray_action_->setEnabled(vp != nullptr);
+    xray_action_->setChecked(xray);
+  }
 }
 
 // 轴网与翻模的勾选/可用状态跟着活跃文档走（和渲染模式一个道理）：切标签页时按钮要

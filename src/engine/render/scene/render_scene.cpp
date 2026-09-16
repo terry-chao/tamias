@@ -258,6 +258,9 @@ std::string inspect_render_scene(const RenderScene& scene) {
       << ")  size=" << scene.view.width << 'x' << scene.view.height
       << "  distance=" << scene.view.view_distance
       << "  hidden=" << scene.hidden_node_ids.size() << '\n';
+  if (scene.view.xray > 0.f) {
+    out << "view xray=" << scene.view.xray << '\n';
+  }
   if (!scene.hidden_node_ids.empty()) {
     out << "hidden_node_ids=";
     std::vector<std::uint64_t> hidden = scene.hidden_node_ids;

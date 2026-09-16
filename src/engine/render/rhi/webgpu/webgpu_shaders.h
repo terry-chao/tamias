@@ -255,7 +255,9 @@ fn main(input: FsIn) -> @location(0) vec4<f32> {
     lit_rgb = pbr.rgb;
     lit_a = pbr.a;
   } else {
-    lit_rgb = shaded_simple(n, l, base);
+    // premultiplied alpha（src = One / dst = OneMinusSrcAlpha）：rgb 先乘 alpha。
+    lit_a = clamp(input.opacity, 0.0, 1.0);
+    lit_rgb = shaded_simple(n, l, base) * lit_a;
   }
   if (input.selected > 0.5) {
     lit_rgb = mix(lit_rgb, vec3<f32>(0.28, 0.62, 1.0), 0.22);

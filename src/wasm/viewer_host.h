@@ -46,6 +46,9 @@ class ViewerHost {
   // 视图模式：0 线框 / 1 着色 / 2 真实感（与 RenderMode 同序，桌面端是同一套）。
   void set_render_mode(int mode);
   [[nodiscard]] int render_mode() const { return static_cast<int>(mode_); }
+  // X 光（X-Ray）：半透明看穿，正交于显示模式。桌面端由用户开关；web 上先只跟着
+  // 快照走（打开带 X-Ray 的 .trscn 要还原成同一个画面）。UI 开关见 docs/WEB.md。
+  [[nodiscard]] bool xray() const { return xray_; }
   // 相机朝向，与桌面 ViewCube 同一套约定（Front=+Z, Right=+X, Top=+Y）：
   // eye_dir = (cos(pitch)·sin(yaw), sin(pitch), cos(pitch)·cos(yaw))。
   void set_view_angles(double yaw, double pitch);
@@ -98,6 +101,7 @@ class ViewerHost {
   bool panning_ = false;
   bool loaded_ = false;
   RenderMode mode_ = RenderMode::Shaded;
+  bool xray_ = false;
   std::uint64_t last_submitted_scene_generation_ = 0;  // 脏标记游标（见 Scene::dirty_since）
 };
 

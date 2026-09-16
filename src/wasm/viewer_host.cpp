@@ -247,6 +247,7 @@ Result<void> ViewerHost::load_bytes(std::string_view name, std::span<const std::
     cam.set_zfar(view.zfar);
     cam.set_orthographic(view.orthographic);
     mode_ = view.mode;
+    xray_ = view.xray > 0.f;
   } else if (ext == ".obj") {
     auto mesh = load_obj_bytes(std::as_bytes(bytes));
     if (!mesh) {
@@ -409,6 +410,7 @@ void ViewerHost::render() {
   frame.view_distance = cam.distance();
   frame.fovy = cam.fovy();
   frame.mode = mode_;
+  frame.xray = xray_ ? kXrayOpacity : 0.f;
   frame.items = session_->document().render_items();
   frame.lod_sets = session_->document().tess_cache().snapshot();
   frame.scene_generation = session_->document().scene().generation();

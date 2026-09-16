@@ -141,6 +141,15 @@ std::unique_ptr<DrawableNode> make_drawable(std::uint64_t node_id, std::uint64_t
   return drawable;
 }
 
+// 带世界包围盒的 drawable：半透明排序按 node.bounds 中心算深度。
+std::unique_ptr<DrawableNode> make_drawable_at(std::uint64_t node_id, std::uint64_t mesh_asset_id,
+                                               Vec3 center, float half = 0.5f) {
+  auto drawable = make_drawable(node_id, mesh_asset_id);
+  drawable->bounds.min = {center.x - half, center.y - half, center.z - half};
+  drawable->bounds.max = {center.x + half, center.y + half, center.z + half};
+  return drawable;
+}
+
 void expect_mat4_eq(const Mat4& a, const Mat4& b) {
   for (int i = 0; i < 16; ++i) {
     EXPECT_FLOAT_EQ(a.m[i], b.m[i]) << "matrix element m[" << i << "]";
@@ -335,6 +344,161 @@ TEST(SceneGraph, RealisticGlassDrawnOnlyInTransparentPass) {
   ASSERT_EQ(f.recorded.size(), 1u);
   EXPECT_EQ(f.cmds.draws[0].instance_count, 1u);
   EXPECT_FLOAT_EQ(f.recorded[0].color[3], 0.16f);
+}
+
+// ---------------------------------------------------------------------------
+// X 光（X-Ray）：视图级 alpha 覆盖，正交于显示模式
+// ---------------------------------------------------------------------------
+
+// 一棵只有一个构件的树：材质 opacity 默认 1，材质色红、类别色紫，便于分辨
+// 「着色模式读类别色 / 真实感读材质色」。
+std::unique_ptr<GroupNode> single_surface_tree(std::unique_ptr<DrawableNode> drawable,
+                                               float opacity = 1.f) {
+  auto root = std::make_unique<GroupNode>();
+  auto transform = std::make_unique<TransformNode>();
+  auto state = std::make_unique<StateGroupNode>();
+  auto material = std::make_unique<BindMaterialCommand>();
+  material->color = {1.f, 0.f, 0.f};
+  material->category_color = {0.62f, 0.45f, 0.72f};
+  material->opacity = opacity;
+  state->commands.push_back(std::move(material));
+  state->add_child(std::move(drawable));
+  transform->add_child(std::move(state));
+  root->add_child(std::move(transform));
+  return root;
+}
+
+TEST(SceneGraph, XrayMakesShadedSurfacesTransparent) {
+  Fixture f;
+  f.ctx.mode_value = 1.f;  // 着色：本来没有透明 pass
+  f.ctx.blend_pipeline = &f.shaded;
+  f.ctx.xray = kXrayOpacity;
+  f.add_mesh(42, 6);
+  auto root = single_surface_tree(make_drawable(7, 42));
+
+  // 第一遍：开了透视就没有「不透明」的构件了，一个都不画。
+  f.visit(*root);
+  EXPECT_TRUE(f.cmds.draws.empty());
+
+  // 第二遍：画，alpha 来自视图覆盖；着色模式仍读类别色，不是材质色。
+  f.ctx.transparent_pass = true;
+  f.visit(*root);
+  ASSERT_EQ(f.cmds.draws.size(), 1u);
+  ASSERT_EQ(f.recorded.size(), 1u);
+  EXPECT_FLOAT_EQ(f.recorded[0].color[3], kXrayOpacity);
+  EXPECT_FLOAT_EQ(f.recorded[0].color[0], 0.62f);
+  EXPECT_FLOAT_EQ(f.recorded[0].color[1], 0.45f);
+  EXPECT_FLOAT_EQ(f.recorded[0].color[2], 0.72f);
+}
+
+TEST(SceneGraph, XrayWithoutFlagKeepsShadedOpaque) {
+  Fixture f;
+  f.ctx.mode_value = 1.f;
+  f.ctx.blend_pipeline = &f.shaded;
+  f.add_mesh(42, 6);
+  auto root = single_surface_tree(make_drawable(7, 42));
+
+  f.visit(*root);
+  ASSERT_EQ(f.recorded.size(), 1u);
+  EXPECT_FLOAT_EQ(f.recorded[0].color[3], 1.f);
+}
+
+TEST(SceneGraph, XrayTakesTheLowerOfViewAndMaterialOpacity) {
+  Fixture f;
+  f.ctx.mode_value = 2.f;  // 真实感：材质 opacity 生效
+  f.ctx.blend_pipeline = &f.shaded;
+  f.ctx.xray = 0.5f;
+  f.ctx.transparent_pass = true;
+  f.add_mesh(42, 6);
+
+  // 玻璃本来就比透视更透 —— 取更小的那个，别被「拉平」成 0.5。
+  auto glass = single_surface_tree(make_drawable(7, 42), 0.16f);
+  f.visit(*glass);
+  ASSERT_EQ(f.recorded.size(), 1u);
+  EXPECT_FLOAT_EQ(f.recorded[0].color[3], 0.16f);
+
+  // 不透明构件则被压到透视 alpha。
+  auto wall = single_surface_tree(make_drawable(8, 42), 1.f);
+  f.visit(*wall);
+  ASSERT_EQ(f.recorded.size(), 1u);
+  EXPECT_FLOAT_EQ(f.recorded[0].color[3], 0.5f);
+}
+
+TEST(SceneGraph, XrayLeavesWireframeAndLineItemsAlone) {
+  Fixture f;
+  f.ctx.mode_value = 0.f;  // 线框：本来就能看穿
+  f.ctx.blend_pipeline = &f.shaded;
+  f.ctx.xray = kXrayOpacity;
+  f.add_mesh(42, 6);
+  auto root = single_surface_tree(make_drawable(7, 42));
+
+  f.visit(*root);
+  ASSERT_EQ(f.cmds.draws.size(), 1u);
+  EXPECT_FLOAT_EQ(f.recorded[0].color[3], 1.f);
+
+  f.ctx.transparent_pass = true;
+  const std::size_t before = f.cmds.draws.size();
+  f.visit(*root);
+  EXPECT_EQ(f.cmds.draws.size(), before);
+}
+
+TEST(SceneGraph, XrayTransparentPassSortsBackToFront) {
+  Fixture f;
+  f.ctx.mode_value = 1.f;
+  f.ctx.blend_pipeline = &f.shaded;
+  f.ctx.xray = kXrayOpacity;
+  f.ctx.transparent_pass = true;
+  f.ctx.eye_position = {0.f, 0.f, 0.f};
+  f.add_mesh(1, 3);
+  f.add_mesh(2, 3);
+  f.add_mesh(3, 3);
+
+  // 遍历顺序故意写成「远 → 近 → 中」，三种不同网格（键不同，不会合并）。
+  // 深度按 node.bounds 中心算，所以包围盒和变换要摆在同一个 z 上。
+  const auto placed = [](std::uint64_t node_id, std::uint64_t mesh, float z) {
+    auto root = single_surface_tree(make_drawable_at(node_id, mesh, {0.f, 0.f, z}));
+    static_cast<TransformNode*>(root->children[0].get())->matrix = translate({0.f, 0.f, z});
+    return root;
+  };
+  auto root = std::make_unique<GroupNode>();
+  root->add_child(placed(1, 1, 9.f));
+  root->add_child(placed(2, 2, 1.f));
+  root->add_child(placed(3, 3, 4.f));
+
+  f.visit(*root);
+  ASSERT_EQ(f.recorded.size(), 3u);
+  EXPECT_FLOAT_EQ(gpu_instance_world(f.recorded[0])(2, 3), 9.f);  // 远
+  EXPECT_FLOAT_EQ(gpu_instance_world(f.recorded[1])(2, 3), 4.f);  // 中
+  EXPECT_FLOAT_EQ(gpu_instance_world(f.recorded[2])(2, 3), 1.f);  // 近
+}
+
+TEST(SceneGraph, TransparentPassMergesOnlyAdjacentSameKey) {
+  Fixture f;
+  f.ctx.mode_value = 1.f;
+  f.ctx.blend_pipeline = &f.shaded;
+  f.ctx.xray = kXrayOpacity;
+  f.ctx.transparent_pass = true;
+  f.ctx.eye_position = {0.f, 0.f, 0.f};
+  f.add_mesh(1, 3);
+  f.add_mesh(2, 3);
+
+  // 同网格同深度（同型号柱子同一层）→ 排序后相邻 → 合成一次 instance draw。
+  auto same = std::make_unique<GroupNode>();
+  same->add_child(single_surface_tree(make_drawable_at(1, 1, {0.f, 0.f, 5.f})));
+  same->add_child(single_surface_tree(make_drawable_at(2, 1, {0.f, 0.f, 5.f})));
+  f.visit(*same);
+  ASSERT_EQ(f.cmds.draws.size(), 1u);
+  EXPECT_EQ(f.cmds.draws[0].instance_count, 2u);
+
+  // 同网格但深度不同 → 中间隔着别的深度，不能合批，否则前后关系会错。
+  f.cmds.draws.clear();
+  auto spread = std::make_unique<GroupNode>();
+  spread->add_child(single_surface_tree(make_drawable_at(1, 1, {0.f, 0.f, 6.f})));
+  spread->add_child(single_surface_tree(make_drawable_at(2, 1, {0.f, 0.f, 5.f})));
+  spread->add_child(single_surface_tree(make_drawable_at(3, 2, {0.f, 0.f, 5.5f})));
+  f.visit(*spread);
+  ASSERT_EQ(f.cmds.draws.size(), 3u);
+  EXPECT_EQ(f.cmds.draws[0].instance_count, 1u);
 }
 
 TEST(SceneGraph, NestedTransformsMultiplyInTraversalOrder) {

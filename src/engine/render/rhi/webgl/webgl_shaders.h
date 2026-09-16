@@ -238,7 +238,10 @@ void main() {
     lit_rgb = pbr.rgb;
     lit_a = pbr.a;
   } else {
-    lit_rgb = shaded_simple(n, l, base);
+    // premultiplied alpha（glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA)）：
+    // rgb 先乘 alpha。opacity == 1 时与不透明路径逐位一致。
+    lit_a = clamp(v_opacity, 0.0, 1.0);
+    lit_rgb = shaded_simple(n, l, base) * lit_a;
   }
   if (v_selected > 0.5) {
     lit_rgb = mix(lit_rgb, vec3(0.28, 0.62, 1.0), 0.22);

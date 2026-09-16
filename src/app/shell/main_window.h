@@ -118,6 +118,7 @@ class MainWindow final : public QMainWindow {
   QAction* wireframe_action_ = nullptr;
   QAction* shaded_action_ = nullptr;
   QAction* realistic_action_ = nullptr;
+  QAction* xray_action_ = nullptr;
   QAction* grid_action_ = nullptr;
   QAction* grid_settings_action_ = nullptr;
   QAction* trace_drawing_action_ = nullptr;

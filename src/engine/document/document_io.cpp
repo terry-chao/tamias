@@ -26,7 +26,7 @@ namespace tamias {
 namespace {
 
 constexpr char kMagic[4] = {'T', 'M', 'A', 'S'};
-constexpr std::uint32_t kFormatVersion = 18;
+constexpr std::uint32_t kFormatVersion = 19;
 constexpr std::uint32_t kMinFormatVersion = 5;
 constexpr std::uint32_t kGripsFormatVersion = 7;
 constexpr std::uint32_t kLocationFormatVersion = 8;
@@ -38,6 +38,7 @@ constexpr std::uint32_t kBuiltinOrmFormatVersion = 13;
 constexpr std::uint32_t kDoorHandleSideFormatVersion = 14;
 constexpr std::uint32_t kStoreyHeightFormatVersion = 16;
 constexpr std::uint32_t kGridFormatVersion = 17;
+constexpr std::uint32_t kXrayFormatVersion = 19;
 
 constexpr std::uint32_t fourcc(char a, char b, char c, char d) {
   return static_cast<std::uint32_t>(static_cast<std::uint8_t>(a)) |
@@ -999,10 +1000,13 @@ Result<void> write_viewport(BinaryWriter& w, const ViewportState& vp) {
   if (auto r = w.write_f32(vp.zfar); !r) {
     return r;
   }
-  return w.write_u32(static_cast<std::uint32_t>(vp.render_mode));
+  if (auto r = w.write_u32(static_cast<std::uint32_t>(vp.render_mode)); !r) {
+    return r;
+  }
+  return w.write_f32(vp.xray);
 }
 
-Result<void> read_viewport(BinaryReader& r, ViewportState& vp) {
+Result<void> read_viewport(BinaryReader& r, ViewportState& vp, std::uint32_t version) {
   if (auto res = read_vec3(r, vp.target); !res) {
     return res;
   }
@@ -1041,6 +1045,13 @@ Result<void> read_viewport(BinaryReader& r, ViewportState& vp) {
     return Err(mode.error());
   }
   vp.render_mode = static_cast<ViewRenderMode>(*mode);
+  if (version >= kXrayFormatVersion) {
+    auto xray = r.read_f32();
+    if (!xray) {
+      return Err(xray.error());
+    }
+    vp.xray = *xray;
+  }
   return {};
 }
 
@@ -1841,7 +1852,7 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes,
         grid_axes.push_back(std::move(axis));
       }
     } else if (*id == kChunkView) {
-      if (auto res = read_viewport(chunk_r, viewport); !res) {
+      if (auto res = read_viewport(chunk_r, viewport, *version); !res) {
         return Err(res.error());
       }
       has_view = true;

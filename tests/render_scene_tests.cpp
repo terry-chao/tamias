@@ -186,6 +186,7 @@ RenderScene handmade_scene() {
   RenderScene scene;
   scene.source = "handmade";
   scene.view.mode = RenderMode::Realistic;
+  scene.view.xray = kXrayOpacity;
   scene.view.width = 800;
   scene.view.height = 600;
   scene.view.view_distance = 12.f;
@@ -230,6 +231,7 @@ TEST(RenderSceneIo, HandmadeRoundTrip) {
   ASSERT_TRUE(loaded) << loaded.error();
   EXPECT_EQ(loaded->source, "handmade");
   EXPECT_EQ(loaded->view.mode, RenderMode::Realistic);
+  EXPECT_FLOAT_EQ(loaded->view.xray, kXrayOpacity);
   EXPECT_EQ(loaded->view.width, 800u);
   EXPECT_EQ(loaded->view.height, 600u);
   EXPECT_FLOAT_EQ(loaded->view.view_distance, 12.f);

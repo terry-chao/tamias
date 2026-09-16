@@ -98,6 +98,10 @@ struct SceneGraphDrawContext {
   float fovy = 0.8f;
   float framebuffer_height = 1.f;
   float mode_value = 1.f; // 0=wire / 1=shaded / 2=realistic（同 RenderMode 映射）
+  // X 光（X-Ray）：>0 时所有「有面」的构件都用这个 alpha 走半透明 pass，
+  // 实际 alpha 取它与材质自身 opacity 的较小值。0 = 关。
+  // 正交于显示模式（可叠在着色 / 真实感上）；线框（mode 0）与线条图元不受影响。
+  float xray = 0.f;
 
   PipelineState* shaded_pipeline = nullptr;
   PipelineState* wire_pipeline = nullptr;
@@ -236,10 +240,16 @@ class RecordCommands final : public RenderVisitor {
     bool has_normal = false;
     bool has_orm = false;
     bool as_lines = false;
+    // 半透明批次：节点包围盒中心到眼睛的距离，back-to-front 排序用。
+    float depth = 0.f;
     std::vector<GpuInstance> instances;
   };
 
   void enqueue(PendingBatch batch, GpuInstance instance);
+  // 半透明不进合批表：先收进透明表，flush 时按 depth 从远到近排序再发。
+  void enqueue_transparent(PendingBatch batch, GpuInstance instance, float depth);
+  // 把透明表按深度从远到近排序后发出（相邻同键批次合并成一次 instance draw）。
+  void flush_transparent();
   void flush_batch(PendingBatch& batch);
   void flush_all();
 
@@ -247,6 +257,7 @@ class RecordCommands final : public RenderVisitor {
   std::vector<Mat4> matrix_stack_{Mat4::identity()};
   std::vector<PendingBatch> batches_;
   std::unordered_map<BatchKey, std::size_t, BatchKeyHash> batch_index_;
+  std::vector<PendingBatch> transparent_;
 };
 
 // 由展平结果（SceneDrawItem 列表）每帧全量构建场景图。

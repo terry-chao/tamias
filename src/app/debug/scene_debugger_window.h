@@ -59,6 +59,7 @@ class SceneDebuggerWindow final : public QMainWindow {
   QAction* wireframe_action_ = nullptr;
   QAction* shaded_action_ = nullptr;
   QAction* realistic_action_ = nullptr;
+  QAction* xray_action_ = nullptr;
   QAction* axes_action_ = nullptr;
   QAction* apply_hidden_action_ = nullptr;
   std::filesystem::path path_;

@@ -28,6 +28,9 @@ struct ViewportState {
   float znear = 0.05f;
   float zfar = 500.f;
   ViewRenderMode render_mode = ViewRenderMode::Shaded;
+  // X 光（X-Ray）：0 = 关；>0 是所有有面构件的视图级 alpha 覆盖。
+  // 与 render_mode 正交（可叠在着色 / 真实感上），随 .tdoc 一起存。
+  float xray = 0.f;
 };
 
 struct LoadedDocument {

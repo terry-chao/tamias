@@ -255,6 +255,7 @@ TEST(DocumentIo, FileRoundTrip) {
   viewport.yaw = 0.5f;
   viewport.pitch = 0.25f;
   viewport.render_mode = ViewRenderMode::Wireframe;
+  viewport.xray = kXrayOpacity;
 
   const auto path = std::filesystem::temp_directory_path() / "tamias_roundtrip.tdoc";
   ASSERT_TRUE(save_document(path, doc, viewport)) << "save failed";
@@ -268,6 +269,7 @@ TEST(DocumentIo, FileRoundTrip) {
   EXPECT_FLOAT_EQ(loaded->viewport.distance, 12.f);
   EXPECT_FLOAT_EQ(loaded->viewport.yaw, 0.5f);
   EXPECT_EQ(loaded->viewport.render_mode, ViewRenderMode::Wireframe);
+  EXPECT_FLOAT_EQ(loaded->viewport.xray, kXrayOpacity);
 
   const auto& loaded_node = loaded->document.scene().nodes().front();
   EXPECT_EQ(loaded_node.name, "cube-node");
@@ -2019,4 +2021,3 @@ TEST(DocumentIo, MigratesHostedLegacyDoorHandleDepthOnLoad) {
   std::error_code ec;
   std::filesystem::remove(path, ec);
 }
-

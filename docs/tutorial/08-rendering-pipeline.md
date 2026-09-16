@@ -86,11 +86,16 @@ src/engine/render/rhi/
 | 着色 Shaded | Lambert：构件色 × 光线点积，不读贴图 |
 | 真实 Realistic | PBR（GGX + 方向光 + split-sum IBL） |
 
+**X 光（X-Ray）不是第四种模式**，是叠在模式上的一个开关：打开后所有有面的构件都走半透明
+pass，能一眼看穿整栋楼。它和显示模式正交（「X 光 + 着色」「X 光 + 真实感」都能用），
+所以是 `FrameSubmission::xray` 而不是 `RenderMode` 的第四个值。见 [管线与 RHI · §8.1](../RENDERING.md)。
+
 材质从文档走到像素：`Material`（颜色/粗糙度/金属度/albedo/法线贴图）→ `render_items()` 写进 item → 视口上传纹理 → draw 时绑 slot 0/1 + push constants → fragment 先扰动法线再 PBR。BRep 用 triplanar（世界坐标投影采样）；导入网格带 UV 则走网格 UV。法线贴图怎么生成、绑定、采样见 [管线与 RHI · 法线贴图](../RENDERING.md#91-法线贴图怎么实现)。
 
 ## 8.8 现在刻意没做的
 
-合批 / instancing、透明排序、阴影、AO、渲染侧场景图——这些是路线图的性能命门，不是漏画。
+阴影、AO、深度剥离 / OIT——这些是路线图的性能命门，不是漏画。（合批 / instancing、
+透明排序、渲染侧场景图已经落地。）
 
 ## 8.9 动手练习
 
