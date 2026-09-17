@@ -243,7 +243,8 @@ MainWindow::MainWindow(QWidget* parent)
                   tr("Open Drawing"), this);
   open_drawing_action->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+O")));
   open_drawing_action->setToolTip(
-      tr("Open a reference drawing (PDF / DXF / SVG / image) in a 2D page"));
+      tr("Attach a reference drawing (PDF / DXF / SVG / image) to the open document — it is "
+         "drawn under the model in the viewport"));
   connect(open_drawing_action, &QAction::triggered, this, &MainWindow::open_drawing_file);
   addAction(open_drawing_action);
 
@@ -605,6 +606,23 @@ MainWindow::MainWindow(QWidget* parent)
   });
   addAction(grid_settings_action_);
 
+  // 参考图纸底图总开关：图纸挂在文档下（「图纸管理」面板），画在视口里模型之下。
+  drawing_visible_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/drawing.svg")),
+                                        tr("Reference Drawings"), this);
+  drawing_visible_action_->setCheckable(true);
+  drawing_visible_action_->setChecked(true);
+  drawing_visible_action_->setToolTip(
+      tr("Show or hide the reference drawings attached to this document; the Drawings panel "
+         "manages them"));
+  connect(drawing_visible_action_, &QAction::triggered, this, [this](bool on) {
+    auto* vp = current_viewport();
+    if (vp == nullptr) {
+      return;
+    }
+    vp->set_drawings_visible(on);
+  });
+  addAction(drawing_visible_action_);
+
   // 翻模：从 DXF 平面图生成墙 / 柱 / 门窗。识别结果先给用户复核，再落地。
   trace_drawing_action_ =
       new QAction(ribbon_icon(QStringLiteral(":/icons/tracing.svg")), tr("Trace Drawing"), this);
@@ -616,12 +634,21 @@ MainWindow::MainWindow(QWidget* parent)
       statusBar()->showMessage(tr("Open or create a model first."), 6000);
       return;
     }
-    // 停在图纸页时就默认用那张图（只有 DXF 能翻模）。
+    // 先看停在的二维图纸页（只有 DXF 能翻模），否则用文档里挂着的第一张 DXF。
     QString path;
     if (DrawingView* drawing = current_drawing_view()) {
       const QString candidate = drawing->document().path();
       if (QFileInfo(candidate).suffix().compare(QStringLiteral("dxf"), Qt::CaseInsensitive) == 0) {
         path = candidate;
+      }
+    }
+    if (path.isEmpty()) {
+      for (const DrawingRef& ref : vp->document().drawings()) {
+        const QString candidate = QString::fromStdString(ref.path);
+        if (QFileInfo(candidate).suffix().compare(QStringLiteral("dxf"), Qt::CaseInsensitive) == 0) {
+          path = candidate;
+          break;
+        }
       }
     }
     DrawingImportDialog dialog(path, &vp->document().bim().grid(), this);
@@ -823,6 +850,7 @@ MainWindow::MainWindow(QWidget* parent)
   display_ribbon->add_action(xray_action_);
   display_ribbon->add_action(grid_action_);
   display_ribbon->add_action(grid_settings_action_);
+  display_ribbon->add_action(drawing_visible_action_);
 
   RibbonGroup* panels_group = view_page->add_group(QStringLiteral("panels"), tr("Panels"));
   // 构件显隐面板住在视口右上角的工具面板里（不在停靠区），这里只给入口与快捷键。
@@ -865,7 +893,8 @@ MainWindow::MainWindow(QWidget* parent)
   auto* drawings_action =
       new QAction(ribbon_icon(QStringLiteral(":/icons/drawing.svg")), tr("Drawings"), this);
   drawings_action->setToolTip(
-      tr("Manage reference drawings (DWF / DWFx / DXF / PDF…): add, delete, double-click to view"));
+      tr("Manage reference drawings (DWF / DWFx / DXF / PDF…): add, show/hide, place, "
+         "or open in a 2D page"));
   connect(drawings_action, &QAction::triggered, this, [this] {
     if (auto* vp = current_viewport()) {
       vp->toggle_drawing_panel();
@@ -1467,8 +1496,14 @@ bool MainWindow::open_path(const QString& path) {
 
   if (DrawingDocument::is_drawing_path(path)) {
     progress.busy(tr("Reading drawing %1…").arg(info.fileName()));
-    open_drawing_tab(info.absoluteFilePath());
-    progress.stage(100, tr("Drawing opened."));
+    // 有打开的模型就挂到它下面、在视口里当底图看（图纸管理面板负责显隐与摆放）；
+    // 没有模型（例如从开始页打开）时退回只读的二维页签。
+    if (!open_drawing_in_viewport(info.absoluteFilePath())) {
+      open_drawing_tab(info.absoluteFilePath());
+      progress.stage(100, tr("Drawing opened."));
+      return true;
+    }
+    progress.stage(100, tr("Drawing attached."));
     return true;
   }
 
@@ -1704,7 +1739,54 @@ void MainWindow::open_drawing_file() {
   if (path.isEmpty()) {
     return;
   }
-  open_drawing_tab(QFileInfo(path).absoluteFilePath());
+  const QString absolute = QFileInfo(path).absoluteFilePath();
+  if (!open_drawing_in_viewport(absolute)) {
+    open_drawing_tab(absolute);
+  }
+}
+
+DocumentViewport* MainWindow::drawing_target_viewport() const {
+  if (DocumentViewport* current = current_viewport()) {
+    return current;
+  }
+  for (int i = 0; i < tabs_->count(); ++i) {
+    if (auto* viewport = qobject_cast<DocumentViewport*>(tabs_->widget(i))) {
+      return viewport;
+    }
+  }
+  return nullptr;
+}
+
+// 打开图纸的新方式：挂到文档下、画在文档视口里（模型之下），而不是另开一个二维视口。
+// 没有打开的文档才退回二维页签。已经挂过的图纸不再重复挂，直接把它框出来。
+bool MainWindow::open_drawing_in_viewport(const QString& path) {
+  DocumentViewport* viewport = drawing_target_viewport();
+  if (viewport == nullptr) {
+    return false;
+  }
+  const std::string key = QFileInfo(path).absoluteFilePath().toStdString();
+  tabs_->setCurrentWidget(viewport);
+  if (viewport->document().drawing(key) != nullptr) {
+    viewport->set_drawings_visible(true);
+    viewport->frame_drawing(key);
+    statusBar()->showMessage(
+        tr("%1 is already attached — framed it in the viewport.").arg(QFileInfo(path).fileName()),
+        6000);
+    return true;
+  }
+  viewport->add_document_drawings({key});
+  viewport->set_drawings_visible(true);
+  viewport->set_drawing_panel_open(true);
+  if (drawing_visible_action_ != nullptr) {
+    const QSignalBlocker block(drawing_visible_action_);
+    drawing_visible_action_->setChecked(true);
+  }
+  statusBar()->showMessage(
+      tr("Attached %1 — it is drawn under the model (Drawings panel: show/hide, scale, "
+         "position, 2D page)")
+          .arg(QFileInfo(path).fileName()),
+      9000);
+  return true;
 }
 
 void MainWindow::open_drawing_tab(const QString& path) {
@@ -2251,6 +2333,12 @@ void MainWindow::sync_bim_actions() {
   }
   if (trace_drawing_action_ != nullptr) {
     trace_drawing_action_->setEnabled(vp != nullptr);
+  }
+  if (drawing_visible_action_ != nullptr) {
+    // 底图总开关跟着活跃文档走（和轴网一个道理）：切页签要反映那个文档的状态。
+    const QSignalBlocker block(drawing_visible_action_);
+    drawing_visible_action_->setEnabled(vp != nullptr);
+    drawing_visible_action_->setChecked(vp == nullptr || vp->drawings_visible());
   }
 }
 

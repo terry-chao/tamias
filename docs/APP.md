@@ -21,7 +21,8 @@ src/app/
 │   ├── visibility/ 构件显隐页 + 类别目录（visibility_panel、entity_kind_catalog）
 │   ├── floors/     楼层面板 / 楼层管理页 / 楼层设置（floor_*）
 │   └── grid/       轴网设置（grid_settings_dialog）
-├── drawing/   二维图纸：drawing_document、drawing_view、drawing_manager_panel、drawing_import_dialog
+├── drawing/   参考图纸：drawing_document、drawing_view、drawing_manager_panel、
+│              drawing_settings_dialog、drawing_import_dialog
 ├── texture/   贴图：texture_image、texture_library_panel、texture_inspector_dialog
 └── debug/     调试诊断：handle_inspector、render_scene_inspector、scene_debugger_window、timing_panel、timing_timeline_widget、golden_test_runner、pin_result_dialog
 ```
@@ -43,7 +44,8 @@ BIM 业务层的分组只影响「谁在管哪个面板」，不放宽上面那�
 | 视口工具列（视口右侧通高，左列按钮 + 右侧功能页） | `viewport_tool_panel` |
 | 构件显隐页（按类别显隐，Ctrl+L） | `visibility_panel` / `entity_kind_catalog` |
 | 楼层面板（按楼层显隐 + 当前楼层，Ctrl+Shift+L） | `floor_panel` / `viewport_floor.h` |
-| 图纸管理页（视口右列；把 DWF/DXF/PDF 等图纸挂在文档下，双击打开） | `drawing_manager_panel` / `drawing_document` |
+| 图纸管理页（视口右列；把 DWF/DXF/PDF 等图纸挂在文档下，显隐 / 摆放 / 定位） | `drawing_manager_panel` / `drawing_settings_dialog` |
+| 图纸底图（贴进三维视口的贴图平面 + 测试深度不写深度） | `document_viewport`（`sync_drawing_underlays`） / `render_runtime`（`overlay_pipeline_`） |
 | 楼层设置对话框（标高 / 层高 / 夹层） | `floor_settings_dialog` / `update_storeys_command` |
 | 楼层管理页（楼层视图清单：全局三维 + 每层，双击打开） | `floor_manager_panel` |
 | 设置（选 Vulkan / OpenGL，选建模内核 OCCT / Truck） | `app_settings` / `settings_dialog` |

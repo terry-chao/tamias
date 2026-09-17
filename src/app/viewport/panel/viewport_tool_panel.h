@@ -36,6 +36,8 @@ class ViewportToolPanel final : public QWidget {
   void toggle_floor_page();
   void toggle_floor_manager_page();
   void toggle_drawing_page();
+  // 直接开/关「图纸管理」页（挂上新图纸时主窗口把它翻出来）。
+  void set_drawing_page_open(bool open);
 
  signals:
   void plan_view_toggled(bool plan);

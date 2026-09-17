@@ -18,7 +18,8 @@ DXF 文件
             → Document（参数化构件 + 门窗宿主关联）
 ```
 
-入口：**开始 → 翻模**（`Trace Drawing`）。停在图纸页时会自动带出那张 DXF。
+入口：**开始 → 翻模**（`Trace Drawing`）。停在二维图纸页时会自动带出那张 DXF；否则用文档里
+挂着的第一张 DXF（图纸管理页挂进来的那些，同时也画在视口里当底图）。
 
 ---
 
@@ -26,6 +27,7 @@ DXF 文件
 
 **平面坐标 → 世界坐标。** 图纸 (x, y) 映射到世界 (x, elevation, y)：Y 是高度，地面是 XZ 平面。
 这与相机一致（`TurntableCamera` 注释：*Plan: screen X = world +X, screen up = world +Z (drawing Y)*）；
+三维视口里的图纸底图（`DrawingPlacement`）用的是同一套映射。
 反过来映射会让平面图镜像。注意多边形轮廓喂给 OCCT 时要取负 y——OCCT 是 Z-up，装配时按
 `(x,y,z)→(x,z,-y)` 翻转，两处约定必须成对看。
 

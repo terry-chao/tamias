@@ -44,6 +44,7 @@ add_executable(tamias
   drawing/drawing_document.cpp
   drawing/drawing_view.cpp
   drawing/drawing_manager_panel.cpp
+  drawing/drawing_settings_dialog.cpp
   drawing/drawing_import_dialog.cpp
   # 贴图
   texture/texture_image.cpp
@@ -159,6 +160,8 @@ tamias_compile_hlsl(tamias sky.vert.hlsl vs_6_0 sky.vert)
 tamias_compile_hlsl(tamias sky.frag.hlsl ps_6_0 sky.frag)
 tamias_compile_hlsl(tamias grid.vert.hlsl vs_6_0 grid.vert)
 tamias_compile_hlsl(tamias grid.frag.hlsl ps_6_0 grid.frag)
+tamias_compile_hlsl(tamias overlay.vert.hlsl vs_6_0 overlay.vert)
+tamias_compile_hlsl(tamias overlay.frag.hlsl ps_6_0 overlay.frag)
 
 add_custom_command(TARGET tamias POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E rm -rf $<TARGET_FILE_DIR:tamias>/shaders

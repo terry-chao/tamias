@@ -138,6 +138,25 @@ MeshCpu make_preview_line_mesh() {
   return mesh;
 }
 
+// 图纸底图的单位四边形：局部 (u,v) ∈ [0,1]² 摊在 XZ 平面上，UV 与之一一对应
+//（u 向右、v 向下，和光栅化出来的图纸图片行方向一致）。
+MeshCpu make_overlay_quad() {
+  MeshCpu mesh;
+  const Vec3 corners[4] = {{0.f, 0.f, 0.f}, {1.f, 0.f, 0.f}, {1.f, 0.f, 1.f}, {0.f, 0.f, 1.f}};
+  const Vec2 uvs[4] = {{0.f, 0.f}, {1.f, 0.f}, {1.f, 1.f}, {0.f, 1.f}};
+  for (int i = 0; i < 4; ++i) {
+    Vertex v{};
+    v.position = corners[i];
+    v.normal = {0.f, 1.f, 0.f};
+    v.uv = uvs[i];
+    mesh.vertices.push_back(v);
+  }
+  mesh.indices = {0, 1, 2, 0, 2, 3};
+  mesh.has_texcoord = true;
+  recompute_bounds(mesh);
+  return mesh;
+}
+
 // 把 CPU 网格上传成 GPU 网格（顶点 + 索引 buffer）。
 Result<GpuMesh> create_gpu_mesh(RHIDevice& device, MeshCpu mesh) {
   BufferDesc vb{};
@@ -291,9 +310,11 @@ void RenderThread::stop() {
   blend_pipeline_.reset();
   sky_pipeline_.reset();
   grid_pipeline_.reset();
+  overlay_pipeline_.reset();
   axes_mesh_ = GpuMesh{};
   sky_mesh_ = GpuMesh{};
   grid_mesh_ = GpuMesh{};
+  overlay_quad_mesh_ = GpuMesh{};
   preview_line_mesh_ = GpuMesh{};
   vs_.reset();
   fs_.reset();
@@ -301,6 +322,8 @@ void RenderThread::stop() {
   sky_fs_.reset();
   grid_vs_.reset();
   grid_fs_.reset();
+  overlay_vs_.reset();
+  overlay_fs_.reset();
   if (device_) {
     device_.reset();
   }
@@ -806,6 +829,58 @@ Result<void> RenderThread::ensure_pipelines() {
   }
   grid_pipeline_ = std::move(*pgrid);
 
+  // 图纸底图管线：无光照 + 透明底贴图（references docs/DRAWING.md）。
+  // 只有桌面后端有这对 shader：WebGL / WebGPU 的 GLSL / WGSL 版本还没写，
+  // 那两个后端不建这条管线，底图不画（图纸管理面板和二维页照常可用）。
+  if (!webgl && !webgpu) {
+    const char* overlay_vs_name = opengl ? "overlay.vert.gl.spv" : "overlay.vert.spv";
+    const char* overlay_fs_name = opengl ? "overlay.frag.gl.spv" : "overlay.frag.spv";
+    auto overlay_vs_words = load_spirv_file(resolve_shader_path(overlay_vs_name).string());
+    auto overlay_fs_words = load_spirv_file(resolve_shader_path(overlay_fs_name).string());
+    // 底图缺 shader 不该把整个视口拖垮：报一声，少画底图，别的照常。
+    if (!overlay_vs_words || !overlay_fs_words) {
+      log_error("drawing overlay shaders unavailable: " +
+                (overlay_vs_words ? overlay_fs_words.error() : overlay_vs_words.error()));
+    } else {
+      std::vector<std::uint32_t> overlay_vs_spirv = std::move(*overlay_vs_words);
+      std::vector<std::uint32_t> overlay_fs_spirv = std::move(*overlay_fs_words);
+      ShaderModuleDesc overlay_vs_desc{};
+      overlay_vs_desc.stage = ShaderStage::Vertex;
+      overlay_vs_desc.entry = "main";
+      overlay_vs_desc.language = ShaderLanguage::Spirv;
+      overlay_vs_desc.spirv = overlay_vs_spirv;
+      ShaderModuleDesc overlay_fs_desc{};
+      overlay_fs_desc.stage = ShaderStage::Fragment;
+      overlay_fs_desc.entry = "main";
+      overlay_fs_desc.language = ShaderLanguage::Spirv;
+      overlay_fs_desc.spirv = overlay_fs_spirv;
+      auto overlay_vs = device_->create_shader_module(overlay_vs_desc);
+      auto overlay_fs = device_->create_shader_module(overlay_fs_desc);
+      if (!overlay_vs || !overlay_fs) {
+        log_error("drawing overlay shader modules rejected: " +
+                  (overlay_vs ? overlay_fs.error() : overlay_vs.error()));
+      } else {
+        overlay_vs_ = std::move(*overlay_vs);
+        overlay_fs_ = std::move(*overlay_fs);
+
+        PipelineDesc overlay{};
+        overlay.vertex_shader = overlay_vs_.get();
+        overlay.fragment_shader = overlay_fs_.get();
+        // 测深度但不写深度：底图被模型挡住，自己不去遮挡任何东西，也不会和
+        // 正好落在同一标高的楼板打架。混合走预乘 alpha（和玻璃同一条通路）。
+        overlay.depth_test = true;
+        overlay.depth_write = false;
+        overlay.blend = true;
+        auto poverlay = device_->create_pipeline(overlay);
+        if (!poverlay) {
+          log_error("drawing overlay pipeline failed: " + poverlay.error());
+        } else {
+          overlay_pipeline_ = std::move(*poverlay);
+        }
+      }
+    }
+  }
+
   // 坐标轴线管线：LineList + 关深度测试，让轴始终可见。
   PipelineDesc line = shaded;
   line.topology = PrimitiveTopology::LineList;
@@ -839,6 +914,12 @@ Result<void> RenderThread::ensure_pipelines() {
     return Err(grid_mesh.error());
   }
   grid_mesh_ = std::move(*grid_mesh);
+
+  auto overlay_quad = create_gpu_mesh(*device_, make_overlay_quad());
+  if (!overlay_quad) {
+    return Err(overlay_quad.error());
+  }
+  overlay_quad_mesh_ = std::move(*overlay_quad);
 
   auto axes_mesh = create_gpu_mesh(*device_, make_axes_mesh());
   if (!axes_mesh) {
@@ -1261,6 +1342,38 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
       last_lod_by_node_ = channel.lod_by_node;
       pending_lod_requests_.insert(pending_lod_requests_.end(), lod_requests.begin(),
                                    lod_requests.end());
+    }
+  }
+
+  // 参考图纸底图：贴着标高平铺的贴图四边形。画在模型之后、测深度但不写深度——
+  // 挡在它前面的构件（墙、柱、上层楼板）会遮住图纸，图纸自己不遮挡任何东西，
+  // 也不参与和楼板的深度竞争；画在坐标轴之前，参考线始终压在最上面。
+  // 每一张图纸一次 draw（底图就是几张图纸，够便宜）。
+  if (overlay_pipeline_ && overlay_quad_mesh_.index_buffer && !frame.drawing_overlays.empty()) {
+    TAMIAS_GPU_ZONE(*channel.command_list, "gpu.drawing_overlay");
+    channel.command_list->set_pipeline(*overlay_pipeline_);
+    channel.command_list->set_vertex_buffer(*overlay_quad_mesh_.vertex_buffer);
+    channel.command_list->set_index_buffer(*overlay_quad_mesh_.index_buffer);
+    for (const DrawingOverlay& overlay : frame.drawing_overlays) {
+      if (overlay.texture_id == 0) {
+        continue;
+      }
+      // 贴图被 LRU 逐出后这一张就跳过：视口下一次提交前会重新上传。
+      const auto tex = textures_.find(overlay.texture_id);
+      if (tex == textures_.end() || !tex->second.texture) {
+        continue;
+      }
+      PushConstants pc{};
+      pc.mvp = view_proj * overlay.model;
+      pc.model = overlay.model;
+      pc.color[0] = pc.color[1] = pc.color[2] = 1.f;
+      pc.color[3] = std::clamp(overlay.opacity, 0.f, 1.f);
+      // 底图 shader 只吃 mvp / model / color.a：不光照、不挑显示模式。
+      channel.command_list->set_texture(*tex->second.texture, kTextureSlotAlbedo);
+      channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
+      DrawIndexedDesc d{};
+      d.index_count = overlay_quad_mesh_.index_count;
+      channel.command_list->draw_indexed(d);
     }
   }
 

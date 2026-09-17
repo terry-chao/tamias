@@ -287,23 +287,45 @@ TEST(DocumentIo, FileRoundTrip) {
   std::filesystem::remove(path, ec);
 }
 
-// 图纸管理：挂在文档下的参考图纸清单要跟着 .tdoc 走（DRWG chunk），
+// 图纸管理：挂在文档下的参考图纸（路径 + 显隐 + 摆放）要跟着 .tdoc 走（DRWG chunk），
 // 内存里那份（撤销快照用）也要带上。
 TEST(DocumentIo, DrawingListRoundTrip) {
   Document doc("drawings");
-  EXPECT_TRUE(doc.add_drawing_path("C:/ref/plan.dxf"));
-  EXPECT_FALSE(doc.add_drawing_path("C:/ref/plan.dxf"));  // 同一张只挂一份
-  EXPECT_TRUE(doc.add_drawing_path("C:/ref/sheet.dwfx"));
-  EXPECT_TRUE(doc.remove_drawing_path("C:/ref/plan.dxf"));
-  ASSERT_EQ(doc.drawing_paths().size(), 1u);
+  DrawingRef plan;
+  plan.path = "C:/ref/plan.dxf";
+  EXPECT_TRUE(doc.add_drawing(plan));
+  EXPECT_FALSE(doc.add_drawing(plan));  // 同一张只挂一份
+  DrawingRef sheet;
+  sheet.path = "C:/ref/sheet.dwfx";
+  sheet.visible = false;
+  sheet.page = 2;
+  sheet.placement.scale = 0.001;
+  sheet.placement.rotation_deg = 90.0;
+  sheet.placement.offset_x = -12.5;
+  sheet.placement.offset_z = 3.25;
+  sheet.placement.elevation = 3.6;
+  EXPECT_TRUE(doc.add_drawing(sheet));
+  EXPECT_TRUE(doc.remove_drawing("C:/ref/plan.dxf"));
+  ASSERT_EQ(doc.drawings().size(), 1u);
+
+  const auto check_sheet = [](const std::vector<DrawingRef>& drawings) {
+    ASSERT_EQ(drawings.size(), 1u);
+    EXPECT_EQ(drawings[0].path, "C:/ref/sheet.dwfx");
+    EXPECT_FALSE(drawings[0].visible);
+    EXPECT_EQ(drawings[0].page, 2);
+    EXPECT_DOUBLE_EQ(drawings[0].placement.scale, 0.001);
+    EXPECT_DOUBLE_EQ(drawings[0].placement.rotation_deg, 90.0);
+    EXPECT_DOUBLE_EQ(drawings[0].placement.offset_x, -12.5);
+    EXPECT_DOUBLE_EQ(drawings[0].placement.offset_z, 3.25);
+    EXPECT_DOUBLE_EQ(drawings[0].placement.elevation, 3.6);
+  };
 
   ViewportState viewport{};
   const auto path = std::filesystem::temp_directory_path() / "tamias_drawings.tdoc";
   ASSERT_TRUE(save_document(path, doc, viewport)) << "save failed";
   auto loaded = load_document(path);
   ASSERT_TRUE(loaded) << loaded.error();
-  ASSERT_EQ(loaded->document.drawing_paths().size(), 1u);
-  EXPECT_EQ(loaded->document.drawing_paths()[0], "C:/ref/sheet.dwfx");
+  check_sheet(loaded->document.drawings());
   std::error_code ec;
   std::filesystem::remove(path, ec);
 
@@ -311,8 +333,7 @@ TEST(DocumentIo, DrawingListRoundTrip) {
   ASSERT_TRUE(bytes) << bytes.error();
   auto restored = deserialize_document(*bytes);
   ASSERT_TRUE(restored) << restored.error();
-  ASSERT_EQ(restored->drawing_paths().size(), 1u);
-  EXPECT_EQ(restored->drawing_paths()[0], "C:/ref/sheet.dwfx");
+  check_sheet(restored->drawings());
 }
 
 TEST(DocumentIo, EntityRoundTrip) {

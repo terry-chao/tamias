@@ -53,12 +53,22 @@ class DrawingDocument {
   [[nodiscard]] QColor layer_color(int index) const;
   [[nodiscard]] bool layer_visible(int index) const;
   void set_layer_visible(int index, bool visible);
+  // 图纸自己声明的单位换算（DXF 的 $INSUNITS，图纸单位 → 米）；没写单位返回 0，
+  // 调用方（三维底图摆放）按模型范围适配，不要瞎猜毫米。
+  [[nodiscard]] double declared_unit_scale() const {
+    return drawing_.insunits() > 0 ? drawing_.unit_scale_to_meter() : 0.0;
+  }
   // 深色底（默认，和 CAD 一致）还是浅色底；影响近白线的对比处理。
   void set_dark_background(bool dark) { dark_background_ = dark; }
   [[nodiscard]] bool dark_background() const { return dark_background_; }
 
   // painter 已设好世界→设备变换；device_scale = 每世界单位多少设备像素（PDF 光栅化用）。
   void paint_page(QPainter& painter, int page, double device_scale) const;
+
+  // 三维底图用：把某一页光栅化成 RGBA8（**背景透明**），线条按背景取色
+  //（深色视口 → 浅色线）。max_edge 限制最长边的像素数（还会按总像素数再收一次，
+  // 免得一张超长图纸把显存吃光）。这一页没有可画内容时返回空图。
+  [[nodiscard]] QImage render_page_rgba(int page, int max_edge, bool dark_background) const;
 
   [[nodiscard]] QImage render_thumbnail(QSize size) const;
 
@@ -83,9 +93,11 @@ class DrawingDocument {
   bool load_pdf(const QString& path, QString& error);
 
   void build_vector_batches();
-  void paint_vector(QPainter& painter, int page) const;
+  void paint_vector(QPainter& painter, int page, bool dark_background) const;
+  void paint_page_with_theme(QPainter& painter, int page, double device_scale,
+                             bool dark_background) const;
   void paint_page_content(QPainter& painter, int page, double device_scale,
-                          const QRectF& target) const;
+                          const QRectF& target, bool dark_background) const;
   // SVG 按目标像素尺寸光栅化后缓存：QSvgRenderer 直接在镜像（Y 翻转）的 painter
   // 上渲染会挂住，所以先在它自己的坐标系里画成图，再当位图翻转贴上去。
   [[nodiscard]] const QImage& svg_raster(const QSize& size) const;

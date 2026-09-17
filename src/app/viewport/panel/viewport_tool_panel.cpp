@@ -105,7 +105,7 @@ ViewportToolPanel::ViewportToolPanel(QWidget* parent) : QWidget(parent) {
   // 图纸管理：把参考图纸挂在文档下（添加 / 删除 / 双击打开查看）。
   drawing_button_ =
       add_rail_button(rail_layout, load_icon(QStringLiteral(":/icons/drawing.svg")),
-                      tr("Attach reference drawings (DWF / DXF / PDF…); double-click one to view"));
+                      tr("Reference drawings (DWF / DXF / PDF…): attach, show/hide, place"));
   drawing_button_->setCheckable(true);
   connect(drawing_button_, &QToolButton::toggled, this, [this](bool open) {
     set_active_page(open ? kDrawingPage : -1);
@@ -191,6 +191,14 @@ void ViewportToolPanel::toggle_floor_manager_page() {
 
 void ViewportToolPanel::toggle_drawing_page() {
   set_active_page(panel_open() ? -1 : kDrawingPage);
+}
+
+void ViewportToolPanel::set_drawing_page_open(bool open) {
+  if (open) {
+    set_active_page(kDrawingPage);
+  } else if (active_page_ == kDrawingPage) {
+    set_active_page(-1);
+  }
 }
 
 void ViewportToolPanel::set_active_page(int page) {

@@ -4,6 +4,10 @@
 <context>
     <name>tamias::DocumentViewport</name>
     <message>
+        <source>Cannot read this drawing.</source>
+        <translation>这张图纸读不进来。</translation>
+    </message>
+    <message>
         <source>Tracing done: %1 walls, %2 columns, %3 doors/windows</source>
         <translation>翻模完成：墙 %1、柱 %2、门窗 %3</translation>
     </message>
@@ -140,8 +144,8 @@
         <translation>按楼层打开视图（默认是全局三维）</translation>
     </message>
     <message>
-        <source>Attach reference drawings (DWF / DXF / PDF…); double-click one to view</source>
-        <translation>挂参考图纸（DWF / DXF / PDF…），双击一张即可打开查看</translation>
+        <source>Reference drawings (DWF / DXF / PDF…): attach, show/hide, place</source>
+        <translation>参考图纸（DWF / DXF / PDF…）：挂图、显隐、摆放</translation>
     </message>
     <message>
         <source>Switch between 2D top view (Y up) and 3D perspective</source>
@@ -362,8 +366,8 @@
     </message>
     <message>
         <location filename="../src/app/shell/main_window.cpp" line="191"/>
-        <source>Open a reference drawing (PDF / DXF / SVG / image) in a 2D page</source>
-        <translation>打开参考图纸（PDF / DXF / SVG / 图片），以二维图纸页显示</translation>
+        <source>Attach a reference drawing (PDF / DXF / SVG / image) to the open document — it is drawn under the model in the viewport</source>
+        <translation>把参考图纸（PDF / DXF / SVG / 图片）挂到当前文档——它画在视口里模型的下面</translation>
     </message>
     <message>
         <location filename="../src/app/shell/main_window.cpp" line="1368"/>
@@ -1297,7 +1301,102 @@ Meshes / textures: %2
     </message>
     <message>
         <source>Manage reference drawings (DWF / DWFx / DXF / PDF…): add, delete, double-click to view</source>
-        <translation>管理参考图纸（DWF / DWFx / DXF / PDF…）：添加、删除、双击打开查看</translation>
+        <translation>管理参考图纸（DWF / DWFx / DXF / PDF…）：添加、显隐、摆放，或开成二维页</translation>
+    </message>
+    <message>
+        <source>Reference Drawings</source>
+        <translation>参考图纸</translation>
+    </message>
+    <message>
+        <source>Show or hide the reference drawings attached to this document; the Drawings panel manages them</source>
+        <translation>显示或隐藏当前文档挂着的参考图纸（挂图、摆放、单张显隐见「图纸管理」面板）</translation>
+    </message>
+    <message>
+        <source>Drawing attached.</source>
+        <translation>图纸已挂上。</translation>
+    </message>
+    <message>
+        <source>%1 is already attached — framed it in the viewport.</source>
+        <translation>%1 已经挂在这个文档下了——已把相机框到它上面。</translation>
+    </message>
+    <message>
+        <source>Attached %1 — it is drawn under the model (Drawings panel: show/hide, scale, position, 2D page)</source>
+        <translation>已挂上 %1——它画在模型下面（「图纸管理」面板：显隐、比例、位置、二维页）</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::DrawingSettingsDialog</name>
+    <message>
+        <source>Drawing Settings</source>
+        <translation>图纸设置</translation>
+    </message>
+    <message>
+        <source>The file is gone — the drawing cannot be shown.</source>
+        <translation>文件不在了——这张图纸显示不出来。</translation>
+    </message>
+    <message>
+        <source>Viewport</source>
+        <translation>视口</translation>
+    </message>
+    <message>
+        <source>Show this drawing in the viewport</source>
+        <translation>在视口中显示这张图纸</translation>
+    </message>
+    <message>
+        <source>Page</source>
+        <translation>页</translation>
+    </message>
+    <message>
+        <source>Placement in the model</source>
+        <translation>在模型中的摆放</translation>
+    </message>
+    <message>
+        <source>Scale</source>
+        <translation>比例</translation>
+    </message>
+    <message>
+        <source> m / drawing unit</source>
+        <translation> 米 / 图纸单位</translation>
+    </message>
+    <message>
+        <source>Rotation</source>
+        <translation>旋转</translation>
+    </message>
+    <message>
+        <source>Elevation (Y)</source>
+        <translation>标高（Y）</translation>
+    </message>
+    <message>
+        <source>Offset X</source>
+        <translation>偏移 X</translation>
+    </message>
+    <message>
+        <source>Offset Z</source>
+        <translation>偏移 Z</translation>
+    </message>
+    <message>
+        <source>Fit to Model</source>
+        <translation>按模型适配</translation>
+    </message>
+    <message>
+        <source>Scale the drawing by its declared units (or to the model extent) and centre it on the model / grid</source>
+        <translation>按图纸自带单位（没写单位就按模型范围）缩放，并把图纸中心对到模型 / 轴网中心</translation>
+    </message>
+    <message>
+        <source>Use Drawing Units</source>
+        <translation>用图纸单位</translation>
+    </message>
+    <message>
+        <source>1 drawing unit → metres, taken from the DXF $INSUNITS header</source>
+        <translation>1 个图纸单位 = 多少米，取自 DXF 的 $INSUNITS</translation>
+    </message>
+    <message>
+        <source>The drawing plane is horizontal: the drawing origin lands at (Offset X, Elevation, Offset Z), the drawing's right side runs along +X and its top runs towards +Z (the same mapping the tracer uses). Rotation is anticlockwise seen from above. Scale is metres per drawing unit — 0.001 for a millimetre drawing. "Fit to Model" is the quickest way to get it approximately right.</source>
+        <translation>底图是一张水平的面：图纸原点落在（偏移 X、标高、偏移 Z），图纸的右侧沿世界 +X、图纸上方朝世界 +Z（和翻模用的是同一套映射，否则会和照图建的模型镜像）。旋转以俯视为准，逆时针为正。比例 = 1 个图纸单位对应多少米（毫米图是 0.001）。拿不准就先点「按模型适配」再微调。</translation>
+    </message>
+    <message>
+        <source>Cannot compute a placement — the drawing could not be read.</source>
+        <translation>算不出摆放位置——这张图纸读不进来。</translation>
     </message>
 </context>
 <context>
@@ -4006,16 +4105,8 @@ Export the drawing to DXF, SVG or an image, or rebuild with Qt6::Pdf available.<
         <translation>添加…</translation>
     </message>
     <message>
-        <source>Attach DWF / DWFx / DXF / PDF / SVG / image drawings to this document; the files stay where they are</source>
-        <translation>把 DWF / DWFx / DXF / PDF / SVG / 图片挂到当前文档（文件留在原处，不搬不复制）</translation>
-    </message>
-    <message>
-        <source>Open</source>
-        <translation>打开</translation>
-    </message>
-    <message>
-        <source>Open the selected drawing in a 2D page</source>
-        <translation>把选中的图纸开成二维页签查看</translation>
+        <source>Attach DWF / DWFx / DXF / PDF / SVG / image drawings to this document; they are shown in the viewport and the files stay where they are</source>
+        <translation>把 DWF / DWFx / DXF / PDF / SVG / 图片挂到当前文档，直接画在视口里（文件留在原处，不搬不复制）</translation>
     </message>
     <message>
         <source>Delete</source>
@@ -4034,8 +4125,48 @@ Export the drawing to DXF, SVG or an image, or rebuild with Qt6::Pdf available.<
         <translation>状态</translation>
     </message>
     <message>
-        <source>Double-click a drawing to open it</source>
-        <translation>双击一张图纸即可打开</translation>
+        <source>Attached to this document and drawn under the model</source>
+        <translation>挂在当前文档下，画在模型下面当底图</translation>
+    </message>
+    <message>
+        <source>Show drawings in the viewport</source>
+        <translation>在视口中显示图纸</translation>
+    </message>
+    <message>
+        <source>Master switch — turn it off to hide every reference drawing at once</source>
+        <translation>总开关：关掉即可一次收起全部参考图纸</translation>
+    </message>
+    <message>
+        <source>Tick a row to show or hide that drawing in the viewport</source>
+        <translation>勾选一行 = 在视口里显示这张图纸，取消勾选 = 收起</translation>
+    </message>
+    <message>
+        <source>Locate</source>
+        <translation>定位</translation>
+    </message>
+    <message>
+        <source>Frame this drawing in the viewport</source>
+        <translation>把相机框到这张图纸上</translation>
+    </message>
+    <message>
+        <source>Settings…</source>
+        <translation>设置…</translation>
+    </message>
+    <message>
+        <source>Scale, rotation, offset, elevation and page</source>
+        <translation>比例、旋转、偏移、标高与页码</translation>
+    </message>
+    <message>
+        <source>2D page</source>
+        <translation>二维页</translation>
+    </message>
+    <message>
+        <source>Open the selected drawing in a read-only 2D page</source>
+        <translation>把选中的图纸开成只读的二维页签（看细节用）</translation>
+    </message>
+    <message>
+        <source>Unreadable</source>
+        <translation>读不了</translation>
     </message>
     <message>
         <source>Missing</source>
@@ -4054,8 +4185,8 @@ Export the drawing to DXF, SVG or an image, or rebuild with Qt6::Pdf available.<
         <translation>打开模型文档后，可在这里管理它的参考图纸。</translation>
     </message>
     <message>
-        <source>No drawings yet. Use “Add…” to attach DWF / DXF / PDF sheets to this document.</source>
-        <translation>还没有图纸。点「添加…」把 DWF / DXF / PDF 图纸挂到当前文档。</translation>
+        <source>No drawings yet. Use “Add…” to attach DWF / DXF / PDF sheets to this document — they show up under the model in the viewport.</source>
+        <translation>还没有图纸。点「添加…」把 DWF / DXF / PDF 图纸挂到当前文档——它们会画在视口里模型的下面。</translation>
     </message>
     <message>
         <source>Add Drawings</source>

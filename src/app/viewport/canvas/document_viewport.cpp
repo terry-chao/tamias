@@ -26,6 +26,7 @@
 #include <QAction>
 #include <QCoreApplication>
 #include <QCursor>
+#include <QFileInfo>
 #include <QIcon>
 #include <QKeyEvent>
 #include <QKeySequence>
@@ -60,6 +61,23 @@ namespace {
 
 // 轴线点选的屏幕容差：轴是细线，得给点手抖的余量；比这个远就不算点中。
 constexpr float kGridPickPixels = 8.f;
+// 底图光栅化最长边（像素）：4096 够看清平面图上的墙线，又不会把显存吃满
+//（DrawingDocument::render_page_rgba 里还会按总像素数再收一次）。
+constexpr int kDrawingRasterEdge = 4096;
+// 底图整体不透明度：透明底上的线稿压一点亮度，和模型分得开。
+constexpr float kDrawingOverlayOpacity = 0.85f;
+
+// 图纸页范围（图纸坐标，Y 向上）→ Aabb2。位图 / SVG / PDF 也走这里：它们的
+// 页坐标是 Y 向下的像素/点，但只用宽高，方向由摆放矩阵统一处理。
+Aabb2 page_bounds_of(const DrawingDocument& document, int page) {
+  const QRectF rect = document.page_rect(page);
+  Aabb2 box{};
+  if (rect.width() > 0.0 && rect.height() > 0.0) {
+    box.expand(static_cast<float>(rect.left()), static_cast<float>(rect.top()));
+    box.expand(static_cast<float>(rect.right()), static_cast<float>(rect.bottom()));
+  }
+  return box;
+}
 
 }  // namespace
 
@@ -769,6 +787,8 @@ void DocumentViewport::submit_current_frame() {
     // 锚点（生成行里的原点）画个方块：落位后它正好压在鼠标下。
     frame.preview_points.push_back(Vec3{drop.x, grid_y, drop.z});
   }
+  // 参考图纸底图：贴在标高上的线稿，挡在它前面的构件会遮住它。
+  submit_drawing_overlays(frame);
   fill_grip_overlay(frame);
   fill_debug_overlay(frame);
   channel_->submit(std::move(frame));
@@ -1678,6 +1698,17 @@ void DocumentViewport::resync_textures() {
   }
   auto forget_evicted = [this]() {
     for (const std::uint64_t id : render_thread_->take_evicted_texture_ids()) {
+      // 底图贴图也走同一条 LRU：被逐出就下次提交前重新光栅化 + 上传。
+      if (id >= kDrawingTextureAssetIdBase) {
+        for (auto& [unused, underlay] : drawing_underlays_) {
+          (void)unused;
+          if (underlay.texture_asset_id == id) {
+            underlay.texture_id = 0;
+            underlay.needs_upload = true;
+          }
+        }
+        continue;
+      }
       uploaded_textures_.erase(id);
     }
   };
@@ -1694,6 +1725,7 @@ void DocumentViewport::resync_textures() {
     }
   }
   forget_evicted();
+  sync_drawing_underlays();
 }
 
 void DocumentViewport::undo() {
@@ -2150,25 +2182,292 @@ void DocumentViewport::toggle_drawing_panel() {
   }
 }
 
+void DocumentViewport::set_drawing_panel_open(bool open) {
+  if (tool_panel_ != nullptr) {
+    tool_panel_->set_drawing_page_open(open);
+  }
+}
+
 // 图纸清单是文档的一部分（随 .tdoc 存），但增删都由视口落笔：标脏 + 通知面板刷新。
 void DocumentViewport::add_document_drawings(const std::vector<std::string>& paths) {
   bool changed = false;
   for (const std::string& path : paths) {
-    changed = document_->add_drawing_path(path) || changed;
+    DrawingRef ref;
+    ref.path = path;
+    // 新挂上的图纸按图纸自带的单位（没写单元就按模型范围适配）摆一次，
+    // 挂上就能看见；之后由「图纸设置」调准。
+    ref.placement = default_drawing_placement_for(path);
+    changed = document_->add_drawing(std::move(ref)) || changed;
   }
   if (!changed) {
     return;
   }
   document_->mark_dirty();
+  request_redraw();
   emit document_changed();
+  emit drawings_changed();
 }
 
 void DocumentViewport::remove_document_drawing(const std::string& path) {
-  if (!document_->remove_drawing_path(path)) {
+  if (!document_->remove_drawing(path)) {
     return;
   }
   document_->mark_dirty();
+  request_redraw();
   emit document_changed();
+  emit drawings_changed();
+}
+
+// 摆放参考范围：有模型就用模型的俯视范围，模型还空着就用轴网（翻模最常用的
+// 定位基准），都没有就返回空盒（默认摆放退回"图纸中心压世界原点"）。
+Aabb2 DocumentViewport::drawing_footprint() const {
+  Aabb2 box{};
+  const Aabb bounds = document_->bounds();
+  if (bounds.valid()) {
+    box.expand(bounds.min.x, bounds.min.z);
+    box.expand(bounds.max.x, bounds.max.z);
+  }
+  const Aabb grid = document_->bim().grid().bounds();
+  if (grid.valid()) {
+    box.expand(grid.min.x, grid.min.z);
+    box.expand(grid.max.x, grid.max.z);
+  }
+  return box;
+}
+
+DrawingPlacement DocumentViewport::default_drawing_placement_for(const std::string& path) {
+  DrawingPlacement placement;
+  placement.elevation = static_cast<double>(grid_plane_y());
+  QString error;
+  std::unique_ptr<DrawingDocument> document =
+      DrawingDocument::open(QString::fromStdString(path), error);
+  if (!document) {
+    placement.scale = 1.0;
+    return placement;
+  }
+  const Aabb2 page = page_bounds_of(*document, 0);
+  if (!page.valid()) {
+    return placement;
+  }
+  return default_drawing_placement(page, drawing_footprint(), placement.elevation,
+                                   document->declared_unit_scale());
+}
+
+void DocumentViewport::set_drawings_visible(bool visible) {
+  if (drawings_visible_ == visible) {
+    return;
+  }
+  drawings_visible_ = visible;
+  request_redraw();
+  emit drawings_changed();
+}
+
+void DocumentViewport::set_drawing_visible(const std::string& path, bool visible) {
+  DrawingRef* ref = document_->drawing(path);
+  if (ref == nullptr || ref->visible == visible) {
+    return;
+  }
+  ref->visible = visible;
+  document_->mark_dirty();
+  request_redraw();
+  emit document_changed();
+  emit drawings_changed();
+}
+
+void DocumentViewport::set_drawing_placement(const std::string& path,
+                                             const DrawingPlacement& placement, int page) {
+  DrawingRef* ref = document_->drawing(path);
+  if (ref == nullptr) {
+    return;
+  }
+  ref->placement = placement;
+  ref->page = std::max(0, page);
+  document_->mark_dirty();
+  request_redraw();
+  emit document_changed();
+  emit drawings_changed();
+}
+
+void DocumentViewport::fit_drawing_to_model(const std::string& path) {
+  DrawingRef* ref = document_->drawing(path);
+  if (ref == nullptr) {
+    return;
+  }
+  const auto it = drawing_underlays_.find(path);
+  if (it == drawing_underlays_.end() || !it->second.document) {
+    return;
+  }
+  const Aabb2 page = page_bounds_of(*it->second.document, ref->page);
+  if (!page.valid()) {
+    return;
+  }
+  ref->placement = default_drawing_placement(page, drawing_footprint(), grid_plane_y(),
+                                             it->second.document->declared_unit_scale());
+  document_->mark_dirty();
+  request_redraw();
+  emit document_changed();
+  emit drawings_changed();
+}
+
+void DocumentViewport::frame_drawing(const std::string& path) {
+  const DrawingRef* ref = document_->drawing(path);
+  if (ref == nullptr) {
+    return;
+  }
+  const auto it = drawing_underlays_.find(path);
+  if (it == drawing_underlays_.end() || !it->second.document) {
+    return;
+  }
+  const Aabb2 page = page_bounds_of(*it->second.document, ref->page);
+  if (!page.valid()) {
+    return;
+  }
+  const Aabb2 footprint = drawing_plane_footprint(page, ref->placement);
+  Aabb box{};
+  const float elevation = static_cast<float>(ref->placement.elevation);
+  box.expand({footprint.min_x, elevation, footprint.min_y});
+  box.expand({footprint.max_x, elevation, footprint.max_y});
+  stop_view_animation();
+  camera_.frame_aabb(box);
+  request_redraw();
+}
+
+QString DocumentViewport::drawing_status(const std::string& path) const {
+  const auto it = drawing_underlays_.find(path);
+  return it == drawing_underlays_.end() ? QString() : it->second.error;
+}
+
+std::optional<DocumentViewport::DrawingInfo> DocumentViewport::drawing_info(
+    const std::string& path) {
+  sync_drawing_underlays();  // 还没加载过的图纸先读进来，否则页数/单位是空的
+  const auto it = drawing_underlays_.find(path);
+  if (it == drawing_underlays_.end()) {
+    return std::nullopt;
+  }
+  DrawingInfo info;
+  info.error = it->second.error;
+  if (!it->second.document) {
+    return info;
+  }
+  info.page_count = std::max(1, it->second.document->page_count());
+  info.declared_unit_scale = it->second.document->declared_unit_scale();
+  return info;
+}
+
+std::optional<DrawingPlacement> DocumentViewport::suggested_drawing_placement(
+    const std::string& path, int page) {
+  sync_drawing_underlays();
+  const auto it = drawing_underlays_.find(path);
+  if (it == drawing_underlays_.end() || !it->second.document) {
+    return std::nullopt;
+  }
+  const Aabb2 bounds = page_bounds_of(*it->second.document, page);
+  if (!bounds.valid()) {
+    return std::nullopt;
+  }
+  return default_drawing_placement(bounds, drawing_footprint(), grid_plane_y(),
+                                   it->second.document->declared_unit_scale());
+}
+
+// 加载图纸 → 光栅化成透明底线稿 → 上传成贴图。加载失败（文件被挪走 / 格式读不了）
+// 只记错误，不影响别的图纸，也不影响模型。
+void DocumentViewport::sync_drawing_underlays() {
+  if (render_thread_ == nullptr) {
+    return;
+  }
+  const std::vector<DrawingRef>& refs = document_->drawings();
+  // 1) 从清单上去掉的图纸，运行时状态一并丢掉。
+  for (auto it = drawing_underlays_.begin(); it != drawing_underlays_.end();) {
+    if (document_->drawing(it->first) == nullptr) {
+      it = drawing_underlays_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  // 2) 新挂上的图纸现读（图纸内容不并进文档）。
+  for (const DrawingRef& ref : refs) {
+    DrawingUnderlay& underlay = drawing_underlays_[ref.path];
+    if (underlay.texture_asset_id == 0) {
+      underlay.texture_asset_id = next_drawing_texture_asset_id_++;
+    }
+    if (underlay.document || !underlay.error.isEmpty()) {
+      continue;
+    }
+    QString error;
+    underlay.document = DrawingDocument::open(QString::fromStdString(ref.path), error);
+    if (!underlay.document) {
+      underlay.error = error.isEmpty() ? tr("Cannot read this drawing.") : error;
+      continue;
+    }
+    underlay.needs_upload = true;
+  }
+  // 3) 页号变了要重新光栅化（多页 DWFx / PDF 换页）。
+  for (const DrawingRef& ref : refs) {
+    DrawingUnderlay& underlay = drawing_underlays_[ref.path];
+    if (underlay.document && underlay.raster_page != ref.page) {
+      underlay.needs_upload = true;
+    }
+  }
+  // 4) 光栅化 + 上传（只在换页 / 首次 / 贴图被逐出时做）。
+  for (const DrawingRef& ref : refs) {
+    DrawingUnderlay& underlay = drawing_underlays_[ref.path];
+    // 关掉的图纸先不光栅化：勾上时（raster_page 还是 -1）自然会在下一帧补上，
+    // 免得挂一堆看不见的底图白占显存。
+    if (!ref.visible || !underlay.document || !underlay.needs_upload) {
+      continue;
+    }
+    const QImage image =
+        underlay.document->render_page_rgba(ref.page, kDrawingRasterEdge, true);
+    underlay.needs_upload = false;
+    underlay.texture_id = 0;
+    underlay.raster_page = ref.page;
+    if (image.isNull()) {
+      continue;
+    }
+    TextureAsset asset;
+    asset.id = underlay.texture_asset_id;
+    asset.name = QFileInfo(QString::fromStdString(ref.path)).fileName().toStdString();
+    asset.source_path = ref.path;
+    asset.width = static_cast<std::uint32_t>(image.width());
+    asset.height = static_cast<std::uint32_t>(image.height());
+    const auto* bits = image.constBits();
+    asset.rgba.assign(bits, bits + static_cast<std::size_t>(image.sizeInBytes()));
+    asset.srgb = true;
+    asset.generation = underlay.texture_generation + 1;
+    if (auto gpu = render_thread_->upload_texture(underlay.texture_asset_id, std::move(asset));
+        !gpu) {
+      log_error(gpu.error());
+      underlay.needs_upload = true;
+    } else {
+      underlay.texture_id = *gpu;
+      ++underlay.texture_generation;
+    }
+  }
+}
+
+// 把要画的图纸塞进这一帧：挡在它前面的构件遮住它，正好当"底图"用。
+void DocumentViewport::submit_drawing_overlays(FrameSubmission& frame) {
+  if (!drawings_visible_) {
+    return;
+  }
+  for (const DrawingRef& ref : document_->drawings()) {
+    if (!ref.visible) {
+      continue;
+    }
+    const auto it = drawing_underlays_.find(ref.path);
+    if (it == drawing_underlays_.end() || !it->second.document || it->second.texture_id == 0) {
+      continue;
+    }
+    const Aabb2 page = page_bounds_of(*it->second.document, ref.page);
+    if (!page.valid()) {
+      continue;
+    }
+    DrawingOverlay overlay;
+    overlay.model = drawing_plane_transform(page, ref.placement);
+    overlay.texture_id = it->second.texture_id;
+    overlay.opacity = kDrawingOverlayOpacity;
+    frame.drawing_overlays.push_back(overlay);
+  }
 }
 
 std::vector<std::uint64_t> DocumentViewport::imported_node_ids() const {

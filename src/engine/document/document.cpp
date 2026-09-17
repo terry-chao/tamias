@@ -203,24 +203,38 @@ void Document::resync_storey_children(std::uint64_t storey_id) {
   }
 }
 
-bool Document::add_drawing_path(std::string path) {
-  if (path.empty()) {
+bool Document::add_drawing(DrawingRef drawing) {
+  if (drawing.path.empty()) {
     return false;
   }
-  if (std::find(drawing_paths_.begin(), drawing_paths_.end(), path) != drawing_paths_.end()) {
+  const auto same_path = [&](const DrawingRef& existing) { return existing.path == drawing.path; };
+  if (std::find_if(drawings_.begin(), drawings_.end(), same_path) != drawings_.end()) {
     return false;  // 同一张图纸只挂一份
   }
-  drawing_paths_.push_back(std::move(path));
+  drawings_.push_back(std::move(drawing));
   return true;
 }
 
-bool Document::remove_drawing_path(std::string_view path) {
-  const auto it = std::find(drawing_paths_.begin(), drawing_paths_.end(), path);
-  if (it == drawing_paths_.end()) {
+bool Document::remove_drawing(std::string_view path) {
+  const auto it = std::find_if(drawings_.begin(), drawings_.end(),
+                               [&](const DrawingRef& ref) { return ref.path == path; });
+  if (it == drawings_.end()) {
     return false;
   }
-  drawing_paths_.erase(it);
+  drawings_.erase(it);
   return true;
+}
+
+const DrawingRef* Document::drawing(std::string_view path) const {
+  const auto it = std::find_if(drawings_.begin(), drawings_.end(),
+                               [&](const DrawingRef& ref) { return ref.path == path; });
+  return it == drawings_.end() ? nullptr : &*it;
+}
+
+DrawingRef* Document::drawing(std::string_view path) {
+  const auto it = std::find_if(drawings_.begin(), drawings_.end(),
+                               [&](const DrawingRef& ref) { return ref.path == path; });
+  return it == drawings_.end() ? nullptr : &*it;
 }
 
 void Document::assign_active_storey(Entity& entity) {

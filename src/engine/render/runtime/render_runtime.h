@@ -27,6 +27,17 @@
 
 namespace tamias {
 
+// 参考图纸底图：把一张图纸（光栅化成贴图）贴在模型里的一个平面上。
+// 平面是单位四边形（局部 (u,v) ∈ [0,1]²，y = 0，u 沿图纸向右、v 沿图纸向下），
+// model 由 DrawingPlacement 算出（见 engine/drawing/drawing_placement.h）。
+struct DrawingOverlay {
+  Mat4 model = Mat4::identity();
+  // RenderThread::upload_texture() 返回的 GPU 贴图 id；贴图被 LRU 逐出后这一帧
+  // 就画不出来（视口会按 take_evicted_texture_ids() 重新上传）。
+  std::uint64_t texture_id = 0;
+  float opacity = 1.f;
+};
+
 struct FrameSubmission {
   NativeWindowHandle window{};
   std::uint32_t width = 1;
@@ -59,6 +70,9 @@ struct FrameSubmission {
   std::vector<Vec3> grid_preview_segments;
   // 选中的轴线：成对线段，压在普通轴线上面画，用高亮色标出选中的那几根。
   std::vector<Vec3> grid_selected_segments;
+  // 参考图纸底图：画在模型之后，测深度但不写深度——挡在它前面的构件会遮住图纸，
+  // 图纸自己既不遮挡任何东西，也不和楼板抢深度。
+  std::vector<DrawingOverlay> drawing_overlays;
   std::optional<DebugVertexOverlay> debug_vertex;  // 检查器点选的网格顶点
   float fovy = 0.8f;
   std::unordered_map<std::uint64_t, LodMeshSet> lod_sets;
@@ -163,6 +177,11 @@ class RenderThread {
   std::unique_ptr<ShaderModule> grid_vs_;
   std::unique_ptr<ShaderModule> grid_fs_;
   std::unique_ptr<PipelineState> grid_pipeline_;
+  // 图纸底图：无光照贴图管线（桌面后端；WebGL / WebGPU 暂不画底图）。
+  std::unique_ptr<ShaderModule> overlay_vs_;
+  std::unique_ptr<ShaderModule> overlay_fs_;
+  std::unique_ptr<PipelineState> overlay_pipeline_;
+  GpuMesh overlay_quad_mesh_;
   GpuMesh sky_mesh_;
   GpuMesh grid_mesh_;
   GpuMesh preview_line_mesh_;

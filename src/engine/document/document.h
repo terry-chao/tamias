@@ -1,6 +1,7 @@
 #pragma once
 
 #include "bim/bim_model.h"
+#include "engine/drawing/drawing_placement.h"
 #include "engine/document/mesh_asset.h"
 #include "engine/document/scene.h"
 #include "entity/core/entity.h"
@@ -24,6 +25,15 @@
 
 namespace tamias {
 
+// 挂在文档下的一张参考图纸：**只存路径 + 摆放/显隐**，图纸内容不并进 .tdoc，
+// 打开文档时现读（见 docs/DRAWING.md）。
+struct DrawingRef {
+  std::string path;
+  bool visible = true;  // 视口里画不画这张底图（面板上的勾）
+  int page = 0;         // 多页图纸（DWFx / PDF）画哪一页
+  DrawingPlacement placement{};
+};
+
 class Document {
  public:
   explicit Document(std::string name = "Untitled") : name_(std::move(name)) {
@@ -38,12 +48,14 @@ class Document {
   [[nodiscard]] const std::string& name() const { return name_; }
   void set_name(std::string name) { name_ = std::move(name); }
   [[nodiscard]] const std::filesystem::path& path() const { return path_; }
-  // 图纸管理：挂在这个文档下的参考图纸（只存路径，看图时现读；不把图纸内容并进 .tdoc）。
-  [[nodiscard]] const std::vector<std::string>& drawing_paths() const { return drawing_paths_; }
-  [[nodiscard]] std::vector<std::string>& drawing_paths() { return drawing_paths_; }
+  // 图纸管理：挂在这个文档下的参考图纸（只存路径 + 摆放，看图时现读）。
+  [[nodiscard]] const std::vector<DrawingRef>& drawings() const { return drawings_; }
+  [[nodiscard]] std::vector<DrawingRef>& drawings() { return drawings_; }
   // 加一张图纸；同一个路径只留一份（重复添加返回 false）。
-  bool add_drawing_path(std::string path);
-  bool remove_drawing_path(std::string_view path);
+  bool add_drawing(DrawingRef drawing);
+  bool remove_drawing(std::string_view path);
+  [[nodiscard]] const DrawingRef* drawing(std::string_view path) const;
+  [[nodiscard]] DrawingRef* drawing(std::string_view path);
   void set_path(std::filesystem::path path) { path_ = std::move(path); }
 
   [[nodiscard]] bool dirty() const { return dirty_; }
@@ -367,7 +379,7 @@ class Document {
                                                              MeshLod lod) const;
 
   std::string name_;
-  std::vector<std::string> drawing_paths_;
+  std::vector<DrawingRef> drawings_;
   std::filesystem::path path_;
   Scene scene_;
   BimModel bim_;

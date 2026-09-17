@@ -3,6 +3,7 @@
 #include "engine/base/native_window_handle.h"
 #include "bim/drawing_import.h"
 #include "bim/grid.h"
+#include "app/drawing/drawing_document.h"
 #include "engine/document/document.h"
 #include "command/core/command_system.h"
 #include "engine/render/resource/material.h"
@@ -36,6 +37,10 @@
 #include <vector>
 
 namespace tamias {
+
+// 底图贴图用的资产 id 起点：文档贴图 id 从 1 开始，这边用高位段隔开，
+// 同一个渲染线程上两边的 id 不会撞（见 RenderThread::upload_texture）。
+inline constexpr std::uint64_t kDrawingTextureAssetIdBase = 1ull << 56;
 
 // 当前文档里各类构件的数量，供可见性面板显示 "墙 12" 这样的计数。
 struct VisibilityCounts {
@@ -99,9 +104,35 @@ class DocumentViewport final : public QWidget {
   void toggle_floor_manager_panel();
   // 开合同一列的"图纸管理"页（参考图纸清单）。
   void toggle_drawing_panel();
+  // 直接开/关"图纸管理"页（刚挂上图纸时把它翻出来）。
+  void set_drawing_panel_open(bool open);
   // 图纸管理页用：把图纸挂到当前文档 / 从清单里去掉（清单随 .tdoc 存）。
   void add_document_drawings(const std::vector<std::string>& paths);
   void remove_document_drawing(const std::string& path);
+  // ==== 参考图纸底图（直接画在三维视口里）====
+  // 底图总开关（Ribbon「图纸」）：关掉以后所有图纸都不画，单张的勾选状态照旧。
+  void set_drawings_visible(bool visible);
+  [[nodiscard]] bool drawings_visible() const { return drawings_visible_; }
+  // 单张图纸的显隐（面板上那一列的勾）；写回文档并标脏。
+  void set_drawing_visible(const std::string& path, bool visible);
+  // 单张图纸的摆放 / 页号（「图纸设置」对话框的落点）；写回文档并标脏。
+  void set_drawing_placement(const std::string& path, const DrawingPlacement& placement, int page);
+  // 按模型范围重新摆一次（面板「对齐到模型」）。
+  void fit_drawing_to_model(const std::string& path);
+  // 相机框到某张图纸的平面上（面板「定位」）。
+  void frame_drawing(const std::string& path);
+  // 面板显示"读不出来 / 文件缺失"用；空 = 这张图纸读进来了。
+  [[nodiscard]] QString drawing_status(const std::string& path) const;
+  // 「图纸设置」对话框用：页数、图纸自带单位、按单位（有的话）/ 模型范围算出的摆放。
+  struct DrawingInfo {
+    int page_count = 1;
+    double declared_unit_scale = 0.0;  // 0 = 图纸没写单位
+    QString error;
+  };
+  // 没加载过的图纸会顺手加载一次（打开设置对话框时不该看到空页数）。
+  [[nodiscard]] std::optional<DrawingInfo> drawing_info(const std::string& path);
+  [[nodiscard]] std::optional<DrawingPlacement> suggested_drawing_placement(
+      const std::string& path, int page);
   // ==== 楼层视图（楼层管理页用；默认打开的是全局三维）====
   // 当前打开的是不是"某一层的视图"；没打开时就是全局三维。
   [[nodiscard]] bool floor_view_open() const { return floor_view_.has_value(); }
@@ -175,6 +206,7 @@ class DocumentViewport final : public QWidget {
   void view_changed();  // 打开的视图变了（全局三维 ↔ 某楼层），楼层管理页据此换高亮
   // 图纸管理页要求把某张图纸开成二维页签（主窗口接）。
   void drawing_open_requested(const QString& path);
+  void drawings_changed();  // 底图显隐 / 摆放变了，图纸管理页据此刷新
 
  protected:
   void showEvent(QShowEvent* event) override;
@@ -198,6 +230,12 @@ class DocumentViewport final : public QWidget {
   void destroy_gl_surface();
   void submit_current_frame();
   void rebuild_bvh();
+  // 底图：按文档里的图纸清单加载 / 光栅化 / 上传贴图，并往帧里塞平面。
+  void sync_drawing_underlays();
+  void submit_drawing_overlays(FrameSubmission& frame);
+  [[nodiscard]] Aabb2 drawing_footprint() const;
+  // 新挂上的图纸摆在哪：图纸写了单位就按单位换算，否则按模型 / 轴网范围适配。
+  [[nodiscard]] DrawingPlacement default_drawing_placement_for(const std::string& path);
   void layout_overlays();
   void sync_view_cube();
   void sync_coord_readout();
@@ -306,6 +344,20 @@ class DocumentViewport final : public QWidget {
   bool alive_ = true;
   bool has_cursor_ = false;
   std::unordered_map<std::uint64_t, std::uint64_t> uploaded_textures_;  // asset id -> generation
+  // 参考图纸底图：文档里只有路径 + 摆放，加载出来的图纸与 GPU 贴图缓存在这。
+  struct DrawingUnderlay {
+    std::unique_ptr<DrawingDocument> document;
+    QString error;                        // 非空 = 这张图纸读不出来
+    std::uint64_t texture_asset_id = 0;   // upload_texture 用的保留 id
+    std::uint64_t texture_id = 0;         // 上传成功后的 GPU 贴图 id
+    std::uint64_t texture_generation = 0;
+    int raster_page = -1;
+    int raster_edge = 0;
+    bool needs_upload = false;
+  };
+  std::unordered_map<std::string, DrawingUnderlay> drawing_underlays_;
+  std::uint64_t next_drawing_texture_asset_id_ = kDrawingTextureAssetIdBase;
+  bool drawings_visible_ = true;
   std::unordered_set<std::uint64_t> hidden_ids_;
   std::unordered_set<std::uint64_t> isolated_ids_;
   std::unordered_set<EntityKind> hidden_kinds_;

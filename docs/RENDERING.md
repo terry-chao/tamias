@@ -166,6 +166,7 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 | `shaded_pipeline_` | 实心三角 |
 | `wire_pipeline_` | 同一套 mesh shader，只把光栅变成线框 |
 | `line_pipeline_` | 线段，不测深度（轴和预览线永远在最前） |
+| `overlay_pipeline_` | 参考图纸底图：无光照 + 贴图 + 预乘 alpha，测深度、不写深度（挡在前面的构件遮住它） |
 
 **Push constants**：每画一次物体塞给 shader 的一小包数——MVP 矩阵、模型矩阵、颜色、粗糙度/金属度、有没有 albedo/法线贴图、光线方向、是否选中、眼睛位置、显示模式、IBL mip。没有大块材质 UBO。
 
@@ -180,9 +181,10 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 2. 天空      全屏大三角，上蓝下亮，不写深度
 3. 地面网格  一块跟着相机 XZ 平移的大四边形，线是 shader 算的，不是真建了几千条线
 4. 模型      清单里每一项一次 draw_indexed（没有合批；屏外叶子已在展平时丢掉，见 [视锥剔除](FRUSTUM-CULLING.md)）
-5. 世界坐标轴  X 红 Y 绿 Z 蓝，不测深度
-6. 预览线    拖墙时起点→光标
-7. 把这张图画到窗口（swap / present）
+5. 图纸底图  每张参考图纸一次 draw_indexed（无光照 + 贴图平面，挡在它前面的构件遮住它，见 [参考图纸](DRAWING.md)）
+6. 世界坐标轴  X 红 Y 绿 Z 蓝，不测深度
+7. 预览线    拖墙时起点→光标
+8. 把这张图画到窗口（swap / present）
 ```
 
 模型那一圈对每个 `SceneDrawItem`：

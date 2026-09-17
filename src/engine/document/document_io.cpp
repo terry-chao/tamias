@@ -26,7 +26,7 @@ namespace tamias {
 namespace {
 
 constexpr char kMagic[4] = {'T', 'M', 'A', 'S'};
-constexpr std::uint32_t kFormatVersion = 19;
+constexpr std::uint32_t kFormatVersion = 20;
 constexpr std::uint32_t kMinFormatVersion = 5;
 constexpr std::uint32_t kGripsFormatVersion = 7;
 constexpr std::uint32_t kLocationFormatVersion = 8;
@@ -39,6 +39,8 @@ constexpr std::uint32_t kDoorHandleSideFormatVersion = 14;
 constexpr std::uint32_t kStoreyHeightFormatVersion = 16;
 constexpr std::uint32_t kGridFormatVersion = 17;
 constexpr std::uint32_t kXrayFormatVersion = 19;
+// 20：图纸清单从「只存路径」变成「路径 + 显隐 + 摆放」（底图画进视口）。
+constexpr std::uint32_t kDrawingPlacementFormatVersion = 20;
 
 constexpr std::uint32_t fourcc(char a, char b, char c, char d) {
   return static_cast<std::uint32_t>(static_cast<std::uint8_t>(a)) |
@@ -1055,6 +1057,77 @@ Result<void> read_viewport(BinaryReader& r, ViewportState& vp, std::uint32_t ver
   return {};
 }
 
+// 一张参考图纸：路径 + 显隐 + 页号 + 摆放。20 版之前只有路径（单独看二维图）。
+Result<void> write_drawing_ref(BinaryWriter& w, const DrawingRef& drawing) {
+  if (auto r = w.write_string(drawing.path); !r) {
+    return r;
+  }
+  if (auto r = w.write_bool(drawing.visible); !r) {
+    return r;
+  }
+  if (auto r = w.write_u32(static_cast<std::uint32_t>(std::max(0, drawing.page))); !r) {
+    return r;
+  }
+  if (auto r = w.write_f64(drawing.placement.scale); !r) {
+    return r;
+  }
+  if (auto r = w.write_f64(drawing.placement.rotation_deg); !r) {
+    return r;
+  }
+  if (auto r = w.write_f64(drawing.placement.offset_x); !r) {
+    return r;
+  }
+  if (auto r = w.write_f64(drawing.placement.offset_z); !r) {
+    return r;
+  }
+  return w.write_f64(drawing.placement.elevation);
+}
+
+Result<DrawingRef> read_drawing_ref(BinaryReader& r) {
+  DrawingRef drawing;
+  auto path = r.read_string();
+  if (!path) {
+    return Err(path.error());
+  }
+  drawing.path = std::move(*path);
+  auto visible = r.read_bool();
+  if (!visible) {
+    return Err(visible.error());
+  }
+  drawing.visible = *visible;
+  auto page = r.read_u32();
+  if (!page) {
+    return Err(page.error());
+  }
+  drawing.page = static_cast<int>(*page);
+  auto scale = r.read_f64();
+  if (!scale) {
+    return Err(scale.error());
+  }
+  drawing.placement.scale = *scale;
+  auto rotation = r.read_f64();
+  if (!rotation) {
+    return Err(rotation.error());
+  }
+  drawing.placement.rotation_deg = *rotation;
+  auto offset_x = r.read_f64();
+  if (!offset_x) {
+    return Err(offset_x.error());
+  }
+  drawing.placement.offset_x = *offset_x;
+  auto offset_z = r.read_f64();
+  if (!offset_z) {
+    return Err(offset_z.error());
+  }
+  drawing.placement.offset_z = *offset_z;
+  auto elevation = r.read_f64();
+  if (!elevation) {
+    return Err(elevation.error());
+  }
+  drawing.placement.elevation = *elevation;
+  return drawing;
+}
+
 Result<void> write_document_body(BinaryWriter& w, const Document& document) {
   if (auto r = w.write_string(document.name()); !r) {
     return r;
@@ -1188,11 +1261,11 @@ Result<void> write_document_body(BinaryWriter& w, const Document& document) {
     }
   }
   // 图纸管理（同样追加在末尾：旧快照读到轴网就结束）。
-  if (auto r = w.write_u64(static_cast<std::uint64_t>(document.drawing_paths().size())); !r) {
+  if (auto r = w.write_u64(static_cast<std::uint64_t>(document.drawings().size())); !r) {
     return r;
   }
-  for (const std::string& drawing : document.drawing_paths()) {
-    if (auto r = w.write_string(drawing); !r) {
+  for (const DrawingRef& drawing : document.drawings()) {
+    if (auto r = write_drawing_ref(w, drawing); !r) {
       return r;
     }
   }
@@ -1345,16 +1418,16 @@ Result<Document> read_document_body(BinaryReader& r) {
     if (!drawing_count) {
       return Err(drawing_count.error());
     }
-    std::vector<std::string> drawings;
+    std::vector<DrawingRef> drawings;
     drawings.reserve(static_cast<std::size_t>(*drawing_count));
     for (std::uint64_t i = 0; i < *drawing_count; ++i) {
-      auto path = r.read_string();
-      if (!path) {
-        return Err(path.error());
+      auto drawing = read_drawing_ref(r);
+      if (!drawing) {
+        return Err(drawing.error());
       }
-      drawings.push_back(std::move(*path));
+      drawings.push_back(std::move(*drawing));
     }
-    document.drawing_paths() = std::move(drawings);
+    document.drawings() = std::move(drawings);
   }
 
   document.set_next_mesh_id(*next_mesh);
@@ -1595,14 +1668,14 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
   if (auto r = append_chunk(file, kChunkGrid, grid_w.data()); !r) {
     return r;
   }
-  // 图纸管理：只存参考图纸的路径（图纸内容不并进 .tdoc，看图时现读）。
+  // 图纸管理：只存参考图纸的路径 + 摆放（图纸内容不并进 .tdoc，看图时现读）。
   BinaryWriter drwg_w;
-  if (auto r = drwg_w.write_u64(static_cast<std::uint64_t>(document.drawing_paths().size()));
+  if (auto r = drwg_w.write_u64(static_cast<std::uint64_t>(document.drawings().size()));
       !r) {
     return r;
   }
-  for (const std::string& drawing : document.drawing_paths()) {
-    if (auto r = drwg_w.write_string(drawing); !r) {
+  for (const DrawingRef& drawing : document.drawings()) {
+    if (auto r = write_drawing_ref(drwg_w, drawing); !r) {
       return r;
     }
   }
@@ -1662,7 +1735,7 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes,
   std::vector<Relation> relations;
   std::vector<Storey> storeys;
   std::vector<GridAxis> grid_axes;
-  std::vector<std::string> drawing_paths;
+  std::vector<DrawingRef> drawings;
   std::uint64_t next_grid_id = 1;
   std::uint64_t next_relation_id = 1;
   std::uint64_t active_storey_id = 0;
@@ -1861,14 +1934,25 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes,
       if (!count) {
         return Err(count.error());
       }
-      drawing_paths.clear();
-      drawing_paths.reserve(static_cast<std::size_t>(*count));
+      drawings.clear();
+      drawings.reserve(static_cast<std::size_t>(*count));
       for (std::uint64_t n = 0; n < *count; ++n) {
+        if (*version >= kDrawingPlacementFormatVersion) {
+          auto drawing = read_drawing_ref(chunk_r);
+          if (!drawing) {
+            return Err(drawing.error());
+          }
+          drawings.push_back(std::move(*drawing));
+          continue;
+        }
+        // 19 版及更早：清单里只有路径，摆放按默认（原点 + 图纸自带单位）补。
+        DrawingRef drawing;
         auto path = chunk_r.read_string();
         if (!path) {
           return Err(path.error());
         }
-        drawing_paths.push_back(std::move(*path));
+        drawing.path = std::move(*path);
+        drawings.push_back(std::move(drawing));
       }
     } else {
       // Unknown chunk: already consumed via read_bytes into chunk; skip.
@@ -1909,7 +1993,7 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes,
   loaded.document.bim().set_active_storey_id(active_storey_id);
   loaded.document.bim().grid().replace(grid_axes);
   loaded.document.bim().grid().set_next_id(next_grid_id);
-  loaded.document.drawing_paths() = std::move(drawing_paths);
+  loaded.document.drawings() = std::move(drawings);
   loaded.document.bim().set_next_id(next_relation_id);
   loaded.document.set_next_mesh_id(next_mesh_id);
   loaded.document.scene().set_next_id(next_node_id);

@@ -61,9 +61,14 @@ QColor to_qcolor(Vec3 c) {
   return QColor(channel(c.x), channel(c.y), channel(c.z));
 }
 
-// 近白线在浅色底上看不见，浅底模式把它翻成黑。
+// 近白线在浅色底上看不见、近黑线在深色底上看不见：各按底色翻一次
+//（和 AutoCAD 的 ACI 7 一个道理：白底画黑、黑底画白）。三维视口恒为深色底，
+// 所以图纸底图里那些"为白纸画的"黑线也会亮起来。
 QColor adapt_to_background(QColor color, bool dark_background) {
   if (dark_background) {
+    if (color.red() < 40 && color.green() < 40 && color.blue() < 40) {
+      return QColor(232, 232, 236);
+    }
     return color;
   }
   if (color.red() > 230 && color.green() > 230 && color.blue() > 230) {
@@ -441,23 +446,28 @@ void DrawingDocument::set_layer_visible(int index, bool visible) {
 }
 
 void DrawingDocument::paint_page(QPainter& painter, int page, double device_scale) const {
+  paint_page_with_theme(painter, page, device_scale, dark_background_);
+}
+
+void DrawingDocument::paint_page_with_theme(QPainter& painter, int page, double device_scale,
+                                            bool dark_background) const {
   // DXF / DWFx 本来就是 Y 向上的图纸坐标，直接画；位图/SVG/PDF 是 Y 向下的，翻一次。
   if (kind_ == Kind::Dxf || kind_ == Kind::Dwf) {
-    paint_vector(painter, page);
+    paint_vector(painter, page, dark_background);
     return;
   }
   const QRectF rect = page_rect(page);
   paint_flipped(painter, rect, [&](QPainter& p, const QRectF& target) {
-    paint_page_content(p, page, device_scale, target);
+    paint_page_content(p, page, device_scale, target, dark_background);
   });
 }
 
 void DrawingDocument::paint_page_content(QPainter& painter, int page, double device_scale,
-                                         const QRectF& target) const {
+                                         const QRectF& target, bool dark_background) const {
   switch (kind_) {
     case Kind::Dxf:
     case Kind::Dwf:
-      paint_vector(painter, page);
+      paint_vector(painter, page, dark_background);
       return;
     case Kind::Svg:
       if (svg_) {
@@ -502,12 +512,12 @@ void DrawingDocument::paint_page_content(QPainter& painter, int page, double dev
   }
 }
 
-void DrawingDocument::paint_vector(QPainter& painter, int page) const {
+void DrawingDocument::paint_vector(QPainter& painter, int page, bool dark_background) const {
   for (const PathBatch& batch : dxf_batches_) {
     if (batch.page != page || !layer_visible(batch.layer)) {
       continue;
     }
-    QPen pen(adapt_to_background(batch.color, dark_background_));
+    QPen pen(adapt_to_background(batch.color, dark_background));
     // 发丝线：纸面/屏幕上恒为 1px，不随缩放变粗。
     pen.setCosmetic(true);
     pen.setWidthF(1.0);
@@ -515,6 +525,36 @@ void DrawingDocument::paint_vector(QPainter& painter, int page) const {
     painter.setBrush(Qt::NoBrush);
     painter.drawPath(batch.paths);
   }
+}
+
+QImage DrawingDocument::render_page_rgba(int page, int max_edge, bool dark_background) const {
+  const QRectF rect = page_rect(page);
+  if (rect.width() <= 0.0 || rect.height() <= 0.0) {
+    return {};
+  }
+  // 长边受 max_edge 限制，总像素再压到 8M（≈32 MB RGBA）以内：一张超大图纸
+  // 也不该把显存和上传时间打爆。
+  constexpr int kMaxRasterEdge = 8192;
+  constexpr double kMaxRasterPixels = 8.0 * 1024.0 * 1024.0;
+  const int edge = std::clamp(max_edge, 64, kMaxRasterEdge);
+  double scale = std::min(edge / rect.width(), edge / rect.height());
+  const double pixels = rect.width() * rect.height() * scale * scale;
+  if (pixels > kMaxRasterPixels) {
+    scale *= std::sqrt(kMaxRasterPixels / pixels);
+  }
+  const QSize size(std::max(1, static_cast<int>(std::lround(rect.width() * scale))),
+                   std::max(1, static_cast<int>(std::lround(rect.height() * scale))));
+
+  QImage image(size, QImage::Format_ARGB32_Premultiplied);
+  image.fill(Qt::transparent);
+  QPainter painter(&image);
+  painter.setRenderHint(QPainter::Antialiasing, true);
+  painter.translate(0.0, size.height());
+  painter.scale(scale, -scale);  // 图纸 Y 向上 → 图片 Y 向下
+  painter.translate(-rect.left(), -rect.top());
+  paint_page_with_theme(painter, page, scale, dark_background);
+  painter.end();
+  return image.convertToFormat(QImage::Format_RGBA8888);
 }
 
 QImage DrawingDocument::render_thumbnail(QSize size) const {

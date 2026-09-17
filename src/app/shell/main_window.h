@@ -83,6 +83,11 @@ class MainWindow final : public QMainWindow {
   void refresh_home();
   bool open_path(const QString& path);
   void open_drawing_tab(const QString& path);
+  // 把图纸挂到有文档的视口里（视口里当底图看）；没有打开的文档视口时返回 false，
+  // 调用方退回二维页签。已挂过的图纸直接定位过去。
+  bool open_drawing_in_viewport(const QString& path);
+  // 底下能挂图纸的文档视口：优先当前页，其次任意一个已打开的文档页。
+  DocumentViewport* drawing_target_viewport() const;
   void new_document();
   void set_create_tool(ToolMode mode);
   void sync_create_tool_actions(ToolMode mode);
@@ -121,6 +126,7 @@ class MainWindow final : public QMainWindow {
   QAction* xray_action_ = nullptr;
   QAction* grid_action_ = nullptr;
   QAction* grid_settings_action_ = nullptr;
+  QAction* drawing_visible_action_ = nullptr;
   QAction* trace_drawing_action_ = nullptr;
   QAction* wall_action_ = nullptr;
   QAction* beam_action_ = nullptr;
