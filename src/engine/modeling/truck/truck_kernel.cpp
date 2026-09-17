@@ -48,9 +48,13 @@ KernelCapabilities TruckKernel::capabilities() const {
                KernelVerb::Tessellate | KernelVerb::Bounds;
   caps.multi_edge_fillet = false;
   caps.variable_radius_fillet = false;
+  // 导入/导出都还没接（Truck 只做求值路径的动词）。
   caps.step_import = false;
   caps.step_export = false;
-  caps.native_brep_io = false;
+  caps.iges_import = false;
+  caps.iges_export = false;
+  caps.brep_import = false;
+  caps.brep_export = false;
   return caps;
 }
 

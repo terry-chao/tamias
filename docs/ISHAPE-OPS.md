@@ -22,7 +22,7 @@ app / document / 特征树（纯数据）
    OcctShapeOps / OcctGeometryBuilder  →  TopoDS_Shape → 三角网
 ```
 
-接口在 [`kernel/shape_ops.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/kernel/shape_ops.h)（导入路径）与 [`kernel/kernel.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/kernel/kernel.h)（参数化求值的动词）。OCCT 实现在 [`occt/`](https://github.com/terry-chao/tamias/tree/main/src/engine/modeling/occt)：`occt_shape_ops.cpp`（读 STEP/IGES/BREP）、`occt_kernel.cpp`（求值动词 + 边的测量）。分层见 [建模内核](MODELING-KERNEL.md)。
+接口在 [`kernel/shape_ops.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/kernel/shape_ops.h)（导入路径）与 [`kernel/kernel.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/kernel/kernel.h)（参数化求值的动词）。OCCT 实现在 [`occt/`](https://github.com/terry-chao/tamias/tree/main/src/engine/modeling/occt)：`occt_shape_ops.cpp`（读 STEP/IGES/BREP）、`occt_kernel.cpp`（求值动词 + 边的测量）、`occt_mesh.cpp`（BRep → 三角网，两条路径共用）。分层见 [建模内核](MODELING-KERNEL.md)。
 
 ---
 

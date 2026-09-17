@@ -32,7 +32,8 @@
 #include "engine/document/picking.h"
 #include "engine/math/camera.h"
 #include "engine/modeling/evaluate/evaluator.h"
-#include "engine/modeling/occt/occt_shape_ops.h"
+#include "engine/modeling/kernel/kernel.h"
+#include "engine/modeling/occt/occt_kernel.h"
 #include "engine/modeling/kernel/shape_ops.h"
 #include "engine/render/runtime/render_runtime.h"
 
@@ -779,10 +780,53 @@ TEST(RenderConfig, OpenGlDoesNotShare) {
 }
 
 TEST(Occt, TessellateBox) {
-  auto mesh = tessellate_occt_box_for_tests();
-  ASSERT_TRUE(mesh.has_value()) << mesh.error();
+  // 走公开的内核动词造一个 10×10×10 的盒子（以前这里挂的产品代码测试后门已删除）。
+  const OcctKernel kernel;
+  auto face = kernel.make_rect_face(10.0, 10.0);
+  ASSERT_TRUE(face) << face.error();
+  auto solid = kernel.extrude(**face, 10.0);
+  ASSERT_TRUE(solid) << solid.error();
+  auto mesh = kernel.tessellate(**solid, 0.5);
+  ASSERT_TRUE(mesh) << mesh.error();
   EXPECT_FALSE(mesh->indices.empty());
   EXPECT_TRUE(mesh->bounds.valid());
+}
+
+// OCCT 的构造器/圆角会抛 Standard_Failure，内核边界必须转成 Err：调用方（求值器、
+// open_file）都不接异常。
+TEST(Occt, RejectsDegenerateInputWithoutThrowing) {
+  const OcctKernel kernel;
+  EXPECT_FALSE(kernel.make_rect_face(0.0, 1.0));
+  EXPECT_FALSE(kernel.make_rect_face(1.0, -2.0));
+  EXPECT_FALSE(kernel.make_circle_face(0.0));
+
+  auto face = kernel.make_rect_face(2.0, 2.0);
+  ASSERT_TRUE(face) << face.error();
+  auto solid = kernel.extrude(**face, 2.0);
+  ASSERT_TRUE(solid) << solid.error();
+  const EdgeId edge0 = 0;
+  const std::span<const EdgeId> one_edge(&edge0, 1);
+  EXPECT_FALSE(kernel.fillet(**solid, one_edge, 0.0));
+  EXPECT_FALSE(kernel.chamfer(**solid, one_edge, -1.0));
+}
+
+// 弧长走 OCCT 积分而不是 24 段折线：半径 2 的圆边应该是 4π，折线估计会小 0.3%
+// （1e-6 的容差只有真值算得出）。
+TEST(Occt, MeasuresExactArcLength) {
+  const OcctKernel kernel;
+  auto face = kernel.make_circle_face(2.0);
+  ASSERT_TRUE(face) << face.error();
+  auto solid = kernel.extrude(**face, 1.0);
+  ASSERT_TRUE(solid) << solid.error();
+  auto measures = kernel.measure_edges(**solid);
+  ASSERT_TRUE(measures) << measures.error();
+  ASSERT_FALSE(measures->empty());
+
+  double longest = 0.0;
+  for (const EdgeMeasure& m : *measures) {
+    longest = std::max(longest, m.length);
+  }
+  EXPECT_NEAR(longest, 4.0 * 3.14159265358979323846, 1e-6);
 }
 
 TEST(FeatureModel, ChangeParamReevaluates) {

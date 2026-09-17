@@ -296,4 +296,4 @@ Tamias 渲染 (render_runtime)     OCCT 渲染 (V3d_Viewer + OpenGl 驱动)
 - [超大规模三角](MASSIVE-GEOMETRY.md) —— 亿级三角的虚拟离散流水线（合批 / LOD / 驻留）
 - [render_types.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_types.h) —— 展平结果 `SceneDrawItem`
 - [render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.h) —— 半留存渲染侧
-- [occt_shape_ops.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt_shape_ops.cpp) —— BRep → 三角网（渲染侧数据来源）
+- [occt_mesh.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt/occt_mesh.cpp) —— BRep → 三角网（渲染侧数据来源）

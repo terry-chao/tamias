@@ -136,7 +136,7 @@ TopoDS_Shape = TShape（共享的拓扑数据）+ TopLoc_Location（放在哪）
 
 - **几何是共享的。** 圆柱侧面是一个 `Geom_CylindricalSurface` 对象，不是「一堆三角」。一个面只是「这个曲面 + 一圈边界线」。
 - **pcurve 是 BRep 的关键。** 一条 3D 边在参数域里长什么样，决定了「这个面到底被裁到哪里」，也是判定点是否在面内的依据。没有 pcurve，拓扑信息就丢了。
-- **朝向 `TopAbs_REVERSED` 表示法线朝内。** 离散时要把三角形绕序反过来（[occt_shape_ops.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt/occt_shape_ops.cpp) 里就是这么处理的）。
+- **朝向 `TopAbs_REVERSED` 表示法线朝内。** 离散时要把三角形绕序反过来（[occt_mesh.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt/occt_mesh.cpp) 里就是这么处理的）。
 - **容差是拓扑的一部分。** 布尔 / 倒角的容差会写回边和顶点，直接决定后续能不能缝合。
 - **三角化是缓存在 Face 上的**（`BRep_TFace` 里的 `Poly_Triangulation`），不改变 BRep 本身。Tamias 的 `tessellate` 就是跑 `BRepMesh_IncrementalMesh`，再把这份三角抠出来。
 

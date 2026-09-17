@@ -66,9 +66,14 @@ struct KernelCapabilities {
   KernelVerb verbs = KernelVerb::None;
   bool multi_edge_fillet = false;  // 一次倒多条棱
   bool variable_radius_fillet = false;
+  // IO 能力描述整个后端（含它的导入实现，OCCT 是 occt_shape_ops.cpp）。目前只有
+  // 导入位被置起：导出还没做，别据此放出导出按钮。
   bool step_import = false;
   bool step_export = false;
-  bool native_brep_io = false;  // BRep / IGES 之类原生读写
+  bool iges_import = false;
+  bool iges_export = false;
+  bool brep_import = false;  // BRep 原生格式（OCCT 的 .brep）
+  bool brep_export = false;
 
   [[nodiscard]] bool supports(KernelVerb verb) const { return any(verbs, verb); }
 };
@@ -90,10 +95,14 @@ using EdgeId = std::uint32_t;
 // 一条边量出来的几何（拓扑命名 / 拾取用）。坐标一律在 Tamias Y-up 局部空间，
 // 这样不同后端的指纹可以互相比较。
 struct EdgeMeasure {
-  // 同一个体里「同一条几何边」的标识：后端给（OCCT 用 TShape+Location 的哈希）。
+  // 同一个体里「同一条几何边」的标识：后端给（OCCT 用 TopExp 去重表的下标，
+  // 等价于 IsSame：TShape + Location，忽略朝向）。不能用哈希代替——碰撞会把
+  // 两条不同的边判成一条。
   // TopExp 会把同一条边按每个面的出现各枚举一次，这些重复项的 key 相同、EdgeId 不同。
   std::uint64_t key = 0;
-  Vec3 mid{};  // 边上一点；闭合边（圆）取质心
+  // 边上一点：开边取参数中点，闭合边（圆/椭圆）取采样质心——闭合边没有稳定的参数
+  // 起点，质心是唯一参数化无关的点（代价是圆心不在曲线上）。
+  Vec3 mid{};
   Vec3 dir{};  // 单位方向；闭合边没有稳定方向
   bool has_dir = false;
   double length = 0.0;

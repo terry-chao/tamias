@@ -4,6 +4,8 @@
 #include "engine/math/math.h"
 #include "engine/modeling/occt/occt_shape_ops.h"
 #include "engine/modeling/kernel/shape_ops.h"
+#include "engine/modeling/kernel/kernel.h"
+#include "engine/modeling/linked_kernels.h"
 
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <BRepTools.hxx>
@@ -168,6 +170,28 @@ TEST(OcctImport, SupportsCadExtensionsOnly) {
   EXPECT_FALSE(occt_supports_extension("a.glb"));
 }
 
+// 能力位不许跟实现对不上：导入位必须跟 occt_supports_extension 一致，导出位在
+// 导出实现落地前必须一直是 false（UI 会据此灰按钮）。
+TEST(OcctImport, KernelCapabilitiesMatchShapeOps) {
+  register_linked_kernels();
+  auto kernel = ModelKernel::create(KernelCreateInfo{KernelBackend::Occt});
+  ASSERT_TRUE(kernel) << kernel.error();
+  const KernelCapabilities caps = (*kernel)->capabilities();
+
+  EXPECT_EQ(caps.step_import, occt_supports_extension("a.step"));
+  EXPECT_EQ(caps.step_import, occt_supports_extension("a.stp"));
+  EXPECT_EQ(caps.iges_import, occt_supports_extension("a.iges"));
+  EXPECT_EQ(caps.iges_import, occt_supports_extension("a.igs"));
+  EXPECT_EQ(caps.brep_import, occt_supports_extension("a.brep"));
+
+  EXPECT_TRUE(caps.step_import);
+  EXPECT_TRUE(caps.iges_import);
+  EXPECT_TRUE(caps.brep_import);
+  // 导出还没实现（occt_shape_ops.cpp 只有 reader，没有 writer）。
+  EXPECT_FALSE(caps.step_export);
+  EXPECT_FALSE(caps.iges_export);
+  EXPECT_FALSE(caps.brep_export);
+}
 TEST(OcctImport, ReadsWrittenBrepStepIgesBox) {
   auto* ops = occt();
   ASSERT_NE(ops, nullptr);

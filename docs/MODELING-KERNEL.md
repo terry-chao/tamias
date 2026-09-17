@@ -107,6 +107,8 @@ src/engine/modeling/
   occt/                                       后端 1：唯一 include BRep* 的地方
     occt_kernel.h/.cpp   动词实现 + 边的测量
     occt_shape_ops.h/.cpp 导入路径（STEP / IGES / BREP + XCAF 颜色）
+    occt_mesh.h/.cpp     BRep → 三角网（两条路径共用）
+    occt_error.h         OCCT 异常 → Result 的边界
 ```
 
 CMake 也是同一形状：`tamias::kernel`（接口）← `tamias::modeling`（中间层）← `tamias::kernel_occt`（后端），

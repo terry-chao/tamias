@@ -193,7 +193,7 @@ struct Feature {
 
 ## 5. 从 BRep 到三角网（tessellate）
 
-OCCT 算出来的 `TopoDS_Shape` 是**精确的 BRep**（参数化曲面 + 拓扑边/面），但渲染器要的是**三角网**。转换在 `tessellate_shape`：
+OCCT 算出来的 `TopoDS_Shape` 是**精确的 BRep**（参数化曲面 + 拓扑边/面），但渲染器要的是**三角网**。转换在 [`occt/occt_mesh.cpp`](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt/occt_mesh.cpp) 的 `tessellate_brep`（求值路径和导入路径共用这一份）：
 
 1. `BRepMesh_IncrementalMesh` 把整个 shape 离散成三角网格。
 2. 用 `TopExp_Explorer` 遍历每个面，`BRep_Tool::Triangulation` 取该面的三角数据。

@@ -2,6 +2,7 @@
 add_library(tamias_kernel_occt STATIC
   occt_kernel.cpp
   occt_shape_ops.cpp
+  occt_mesh.cpp
 )
 add_library(tamias::kernel_occt ALIAS tamias_kernel_occt)
 target_include_directories(tamias_kernel_occt PUBLIC ${CMAKE_SOURCE_DIR}/src)
