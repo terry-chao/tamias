@@ -768,6 +768,8 @@ const float oy = ndc_y / proj(1, 1);
 
 ### 二级加速：物体级 BVH，不是三角级
 
+**选型说明**：为什么是 BVH 而不是 R-tree、框选（范围查询）下两者的对比、十万构件以上怎么分层，单独写在 [空间索引：点选与框选](SPATIAL-INDEX.md)。
+
 `Bvh::build`（[picking.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/picking.cpp)）只用**节点级世界包围盒**：
 
 1. 收集所有 `mesh_asset_id != 0` 且 `world_bounds.valid()` 的节点 id；

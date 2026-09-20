@@ -125,6 +125,8 @@ render_items：
 
 BVH **不是**场景图。它依赖的是「一堆带世界包围盒的可画物体」，不是 `parent / children`。数据从 `SceneNode` 读，算法是空间索引。
 
+为什么是 BVH 而不是 R-tree、框选用哪棵树、十万构件以上该怎么分层，见 [空间索引：点选与框选](SPATIAL-INDEX.md)。
+
 ### 构建与遍历
 
 不是语义树里每一个节点。现成 [picking.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/picking.cpp) 的 `Bvh::build` 只收「有网格、且 `world_bounds` 有效」的叶子。纯分组不进 BVH。

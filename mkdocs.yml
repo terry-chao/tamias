@@ -68,6 +68,7 @@ nav:
   - 场景图:
       - scene/index.md
       - 语义树: SCENE-GRAPH.md
+      - 空间索引（点选 / 框选）: SPATIAL-INDEX.md
   - 造型:
       - modeling/index.md
       - 建模内核（Kernel）: MODELING-KERNEL.md
