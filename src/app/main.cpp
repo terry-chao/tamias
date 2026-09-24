@@ -1,6 +1,7 @@
 #include "app/shell/main_window.h"
 
 #include "app/base/app_settings.h"
+#include "app/base/qt_path.h"
 #include "app/base/rhi_startup.h"
 #include "app/base/startup_guard.h"
 #include "tamias_version.h"
@@ -8,6 +9,8 @@
 #include "engine/base/log.h"
 #include "engine/render/rhi/rhi_probe.h"
 #include "engine/render/rhi/rhi_startup_decision.h"
+#include "engine/document/scene_capture.h"
+#include "engine/io/mesh_io.h"
 #include "engine/render/runtime/render_runtime.h"
 #include "engine/graphics/graphics_backend.h"
 #include "app/base/i18n.h"
@@ -134,6 +137,82 @@ int main(int argc, char* argv[]) {
   }
   settings.save();
   startup_guard.begin();  // 从这里到首帧之间崩了，下次就是安全模式
+
+  // ===== 离屏出图：把文档渲成 PNG 后退出（不建窗口）=====
+  if (cli.render_view_path.has_value()) {
+    QStringList positional;
+    // 注意：arguments() 返回的是**临时** QStringList，必须先落到具名变量再取元素引用。
+    const QStringList arguments = QCoreApplication::arguments();
+    for (int i = 1; i < arguments.size(); ++i) {
+      const QString& argument = arguments[i];
+      if (!argument.startsWith(QLatin1Char('-'))) {
+        positional.push_back(argument);
+      }
+    }
+    if (positional.isEmpty()) {
+      tamias::log_error("--render-view 需要给一个文档路径（.tdoc / .obj）");
+      return 4;
+    }
+    const std::filesystem::path source = tamias::qstring_to_path(positional.front());
+    tamias::SceneCaptureRequest request{};
+    request.width = cli.render_width;
+    request.height = cli.render_height;
+    tamias::Document document("render-view");
+    if (tamias::is_tdoc_document_path(source)) {
+      auto loaded = tamias::load_document(source);
+      if (!loaded) {
+        tamias::log_error(loaded.error());
+        return 4;
+      }
+      document = std::move(loaded->document);
+      if (loaded->has_viewport) {
+        // 用文档里存的相机，导出的角度和上次在屏幕上看到的一致。
+        request.target = loaded->viewport.target;
+        request.distance = loaded->viewport.distance;
+        request.yaw = loaded->viewport.yaw;
+        request.pitch = loaded->viewport.pitch;
+        request.fovy = loaded->viewport.fovy;
+        request.mode = static_cast<tamias::RenderMode>(loaded->viewport.render_mode);
+        request.xray = loaded->viewport.xray;
+      }
+    } else {
+      auto mesh = tamias::load_mesh_file(source);
+      if (!mesh) {
+        tamias::log_error(mesh.error());
+        return 4;
+      }
+      document.add_import_mesh(source.stem().string(), std::move(*mesh), tamias::Mat4::identity(),
+                               tamias::Vec3{0.75f, 0.78f, 0.82f});
+      // 没有存过的相机：按模型包围盒大致框一下。
+      const tamias::Aabb bounds = document.bounds();
+      if (bounds.valid()) {
+        request.target = bounds.center();
+        request.distance = std::max(tamias::length(bounds.extent()) * 1.6f, 2.f);
+      }
+    }
+
+    const auto thread = tamias::RenderThreadPool::instance().acquire(settings.render_device_config());
+    if (!thread) {
+      tamias::log_error("--render-view: 取不到渲染线程");
+      return 4;
+    }
+    auto pixels = tamias::capture_document_rgba(*thread, document, request);
+    if (!pixels) {
+      tamias::log_error("--render-view: " + pixels.error());
+      return 4;
+    }
+    const QImage image(pixels->data(), static_cast<int>(request.width),
+                       static_cast<int>(request.height), QImage::Format_RGBA8888);
+    const QString output = *cli.render_view_path;
+    if (!image.save(output)) {
+      tamias::log_error("--render-view: 写 PNG 失败: " + output.toStdString());
+      return 4;
+    }
+    tamias::log_info("--render-view: 写出 " + output.toStdString() + " (" +
+                     std::to_string(request.width) + "x" + std::to_string(request.height) + ")");
+    tamias::RenderThreadPool::instance().shutdown();
+    return 0;
+  }
 
   int code = 0;
   {

@@ -48,6 +48,24 @@ RhiCliOptions parse_rhi_cli(const QStringList& arguments) {
       backend.has_value() && !backend->isEmpty()) {
     options.backend = try_backend_from_name(backend->toStdString());
   }
+  if (const auto view = argument_value(arguments, QStringLiteral("--render-view"));
+      view.has_value() && !view->isEmpty()) {
+    options.render_view_path = *view;
+  }
+  if (const auto size = argument_value(arguments, QStringLiteral("--render-size"));
+      size.has_value() && !size->isEmpty()) {
+    const QStringList parts = size->split(QLatin1Char('x'), Qt::SkipEmptyParts);
+    if (parts.size() == 2) {
+      bool ok_width = false;
+      bool ok_height = false;
+      const uint width = parts[0].toUInt(&ok_width);
+      const uint height = parts[1].toUInt(&ok_height);
+      if (ok_width && ok_height && width > 0 && height > 0) {
+        options.render_width = width;
+        options.render_height = height;
+      }
+    }
+  }
   return options;
 }
 

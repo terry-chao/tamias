@@ -145,7 +145,13 @@ src/engine/render/rhi/
 
 **离屏渲染**：`RHIDevice::create_offscreen_swap_chain(w, h)` 造一个不依赖窗口的目标，画完用
 `SwapChain::read_back_rgba()` 把像素读回 CPU（RGBA8、左上原点，两个桌面后端都实现了）。
-它让「渲染」不再依赖窗口——RHI 探测的 C 档、缩略图 / 截图、将来的像素级金样都走它。
+它让「渲染」不再依赖窗口——RHI 探测的 C 档、导出图片、将来的缩略图 / 像素级金样都走它。
+
+**第一个消费者**：`tamias --render-view=out.png [--render-size=WxH] <doc.tdoc | *.obj>` ——
+无窗口把文档渲成一张 PNG（`.tdoc` 用文档里存的视图状态，所以角度和上次在屏幕上看到的一致；
+OBJ 之类按包围盒自动取景）。引擎侧的公共入口是
+`capture_document_rgba(thread, document, request)`（`src/engine/document/scene_capture.*`），
+内部走的就是上面那条离屏通路，因此**和屏幕上是同一套绘制代码**。
 
 绘制代码（`draw_channel`）**没有** `#ifdef VULKAN`。差别被藏在：
 

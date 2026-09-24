@@ -19,6 +19,11 @@ struct RhiCliOptions {
   bool json = false;
   bool safe_mode = false;
   std::optional<GraphicsBackend> backend;
+  // --render-view=<out.png>：把位置参数给的文档（.tdoc / .obj）离屏渲成一张 PNG 后退出。
+  // 这是离屏渲染的第一个真实消费者，也是 IT / 脚本出图的入口。
+  std::optional<QString> render_view_path;
+  std::uint32_t render_width = 1600;   // --render-size=WxH
+  std::uint32_t render_height = 1000;
 };
 
 [[nodiscard]] RhiCliOptions parse_rhi_cli(const QStringList& arguments);

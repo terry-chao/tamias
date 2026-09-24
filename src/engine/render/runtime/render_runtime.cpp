@@ -566,6 +566,57 @@ void RenderThread::submit_frame(std::uint64_t channel_id, FrameSubmission frame)
   cv_.notify_one();
 }
 
+void RenderThread::resize_offscreen_surface(std::uint64_t channel_id, std::uint32_t w,
+                                            std::uint32_t h) {
+  auto promise = std::make_shared<std::promise<void>>();
+  auto future = promise->get_future();
+  post([this, channel_id, w, h, promise]() {
+    const auto it = channels_.find(channel_id);
+    if (it != channels_.end() && device_) {
+      ChannelState& channel = it->second;
+      const std::uint32_t width = std::max(1u, w);
+      const std::uint32_t height = std::max(1u, h);
+      channel.window = NativeWindowHandle{};
+      channel.width = width;
+      channel.height = height;
+      if (auto target = device_->create_offscreen_swap_chain(width, height); !target) {
+        log_error("offscreen surface: " + target.error());
+        channel.swap_chain.reset();
+      } else {
+        channel.swap_chain = std::move(*target);
+        // 故意**不**清 needs_recreate：留给 draw_channel 走一遍「建命令列表」那段，
+        // 否则通道建好了目标却没有 command_list，第一帧就在 draw_channel 里空指针崩。
+      }
+    }
+    promise->set_value();
+  });
+  future.wait();
+}
+
+Result<void> RenderThread::read_channel_pixels(std::uint64_t channel_id,
+                                               std::vector<std::uint8_t>& out) {
+  auto promise = std::make_shared<std::promise<Result<void>>>();
+  auto future = promise->get_future();
+  post([this, channel_id, &out, promise]() {
+    const auto it = channels_.find(channel_id);
+    if (it == channels_.end() || !it->second.swap_chain) {
+      promise->set_value(Err("read_channel_pixels: no such channel or no offscreen surface"));
+      return;
+    }
+    ChannelState& channel = it->second;
+    // 任务在「脏通道绘制」之前执行，所以这里必须先把这一帧画出来再读——
+    // 否则读到的是还没画过的空缓冲（全零）。
+    if (channel.latest.has_value()) {
+      if (auto drawn = draw_channel(channel_id, channel, *channel.latest); !drawn) {
+        promise->set_value(Err("read_channel_pixels: draw failed: " + drawn.error()));
+        return;
+      }
+    }
+    promise->set_value(channel.swap_chain->read_back_rgba(out));
+  });
+  return future.get();
+}
+
 void RenderThread::resize_surface(std::uint64_t channel_id, NativeWindowHandle window,
                                   std::uint32_t w, std::uint32_t h) {
   std::scoped_lock lock(mutex_);
@@ -1139,7 +1190,9 @@ Result<void> RenderThread::ensure_pipelines() {
 Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
                                        const FrameSubmission& frame) {
   TAMIAS_TIMING_SCOPE("draw_channel", TimingCategory::Render);
-  if (channel.width == 0 || channel.height == 0 || !channel.window.valid()) {
+  // 离屏通道没有窗口句柄，但照样要画（这正是它存在的意义）。
+  const bool offscreen = channel.swap_chain != nullptr && channel.swap_chain->offscreen();
+  if (channel.width == 0 || channel.height == 0 || (!offscreen && !channel.window.valid())) {
     return {};
   }
   if (auto r = ensure_pipelines(); !r) {
@@ -1147,25 +1200,33 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
   }
 
   if (channel.needs_recreate || !channel.swap_chain) {
-    SwapChainDesc desc{};
-    desc.window = channel.window;
-    desc.width = channel.width;
-    desc.height = channel.height;
-    if (channel.swap_chain) {
-      if (auto r = channel.swap_chain->resize(desc.width, desc.height); !r) {
-        channel.swap_chain.reset();
+    if (offscreen) {
+      // 离屏重建只能走目标自己的 resize：没有窗口可拿来造 swapchain。
+      if (auto resized = channel.swap_chain->resize(channel.width, channel.height); !resized) {
+        channel.needs_recreate = true;
+        return resized;
+      }
+    } else {
+      SwapChainDesc desc{};
+      desc.window = channel.window;
+      desc.width = channel.width;
+      desc.height = channel.height;
+      if (channel.swap_chain) {
+        if (auto r = channel.swap_chain->resize(desc.width, desc.height); !r) {
+          channel.swap_chain.reset();
+          auto sc = device_->create_swap_chain(desc);
+          if (!sc) {
+            return Err(sc.error());
+          }
+          channel.swap_chain = std::move(*sc);
+        }
+      } else {
         auto sc = device_->create_swap_chain(desc);
         if (!sc) {
           return Err(sc.error());
         }
         channel.swap_chain = std::move(*sc);
       }
-    } else {
-      auto sc = device_->create_swap_chain(desc);
-      if (!sc) {
-        return Err(sc.error());
-      }
-      channel.swap_chain = std::move(*sc);
     }
     if (!channel.command_list) {
       auto cmd = device_->create_command_list();

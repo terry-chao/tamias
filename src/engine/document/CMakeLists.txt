@@ -12,6 +12,7 @@ add_library(tamias_document STATIC
   ${CMAKE_SOURCE_DIR}/src/bim/wall_join.cpp
   ${CMAKE_SOURCE_DIR}/src/bim/length_text.cpp
   ${CMAKE_SOURCE_DIR}/src/bim/grid_dimensions.cpp
+  scene_capture.cpp
 )
 add_library(tamias::document ALIAS tamias_document)
 target_include_directories(tamias_document PUBLIC ${CMAKE_SOURCE_DIR}/src)

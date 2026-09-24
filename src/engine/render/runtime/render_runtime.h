@@ -129,6 +129,11 @@ class RenderThread {
   void submit_frame(std::uint64_t channel_id, FrameSubmission frame);
   void resize_surface(std::uint64_t channel_id, NativeWindowHandle window, std::uint32_t w,
                       std::uint32_t h);
+  // 离屏通道：不依赖窗口，画完可以把像素读回来（见 docs/RENDERING.md §5）。
+  // 给「导出图片 / 缩略图 / 像素级金样」用；后端不支持离屏时是空操作（读回会报错）。
+  void resize_offscreen_surface(std::uint64_t channel_id, std::uint32_t w, std::uint32_t h);
+  // 把该通道最近一帧的颜色读回 CPU（RGBA8、左上原点）。阻塞到 GPU 拷完为止。
+  Result<void> read_channel_pixels(std::uint64_t channel_id, std::vector<std::uint8_t>& out);
   std::uint64_t create_channel();
   void destroy_channel(std::uint64_t channel_id);
 
