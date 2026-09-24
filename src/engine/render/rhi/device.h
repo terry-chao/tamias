@@ -4,6 +4,7 @@
 #include "engine/base/result.h"
 #include "engine/graphics/graphics_backend.h"
 #include "engine/math/math.h"
+#include "engine/render/rhi/rhi_gpu_identity.h"
 
 #include <cstdint>
 #include <functional>
@@ -258,6 +259,15 @@ class RHIDevice {
 
   [[nodiscard]] virtual GraphicsBackend backend() const = 0;
   [[nodiscard]] virtual Mat4 clip_space_correction_matrix() const = 0;
+  // 这台设备背后的 GPU 身份（厂商 / 设备号 / 驱动版本）。块名单靠它匹配；后端拿不到
+  // 就返回默认值（valid() == false），调用方别拿空身份去匹配。
+  [[nodiscard]] virtual RhiGpuIdentity gpu_identity() const { return {}; }
+  // 提交一次空命令并等它完成：验证「队列 / 提交路径」真的能用。
+  // 建得出设备 ≠ 能提交——坏驱动、TDR 之后的设备、远程会话下的提交路径都栽在这一步。
+  // 默认不支持；Vulkan / OpenGL 实现了它（启动探测的 B 档用；见 rhi_probe.h）。
+  [[nodiscard]] virtual Result<void> submit_noop() {
+    return Err(std::string("submit_noop: not supported by ") + to_string(backend()));
+  }
 
   virtual Result<std::unique_ptr<Buffer>> create_buffer(const BufferDesc& desc) = 0;
   virtual Result<std::unique_ptr<Texture>> create_texture(const TextureDesc& desc) = 0;

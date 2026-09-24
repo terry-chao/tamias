@@ -6,6 +6,7 @@
 #include "engine/render/runtime/gpu_instance.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <cstring>
 #include <string>
@@ -191,6 +192,49 @@ class OpenGLDevice final : public RHIDevice {
     m(2, 2) = 2.f;
     m(2, 3) = -1.f;
     return m;
+  }
+
+  [[nodiscard]] RhiGpuIdentity gpu_identity() const override {
+    RhiGpuIdentity identity{};
+    // 读 GL 字符串需要当前上下文；探测阶段没有窗口，借用 dummy context。
+    auto* self = const_cast<OpenGLDevice*>(this);
+    if (!self->make_current_dummy()) {
+      return identity;
+    }
+    const auto read_string = [](GLenum name) -> std::string {
+      const GLubyte* text = gl::GetString(name);
+      return text == nullptr ? std::string() : std::string(reinterpret_cast<const char*>(text));
+    };
+    identity.os = rhi_current_os();
+    identity.driver_name = read_string(GL_VENDOR);
+    identity.adapter_name = read_string(GL_RENDERER);
+    identity.vendor_id = rhi_vendor_id_from_name(identity.driver_name);
+    // 渲染器名字里带这些字样的就是软件渲染（没有真 GPU 时唯一能跑的东西）。
+    std::string lowered = identity.adapter_name;
+    std::transform(lowered.begin(), lowered.end(), lowered.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    identity.software_renderer =
+        lowered.find("llvmpipe") != std::string::npos ||
+        lowered.find("softpipe") != std::string::npos ||
+        lowered.find("software") != std::string::npos ||
+        lowered.find("basic render") != std::string::npos ||
+        lowered.find("swiftshader") != std::string::npos;
+    self->release_current();
+    return identity;
+  }
+
+  // 空提交：GL 的提交是隐式的，glFinish 逼驱动把已排队的命令真的跑完并报错。
+  Result<void> submit_noop() override {
+    if (auto r = make_current_dummy(); !r) {
+      return Err(r.error());
+    }
+    gl::Finish();
+    const GLenum error = gl::GetError();
+    release_current();
+    if (error != GL_NO_ERROR) {
+      return Err("submit_noop: glFinish reported GL error " + std::to_string(error));
+    }
+    return {};
   }
 
   Result<std::unique_ptr<Buffer>> create_buffer(const BufferDesc& desc) override;

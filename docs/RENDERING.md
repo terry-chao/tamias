@@ -141,6 +141,9 @@ src/engine/render/rhi/
 - 代价与约束：volk 的函数表是**进程全局**的（`volkLoadDevice` 会覆盖），所以一个进程只允许一台 Vulkan 设备（`VulkanDevice::initialize()` 里有守卫，真出现第二台就明确报错，而不是两台设备悄悄抢同一张表）。要支持多设备得换成 `volkLoadDeviceTable` 做每设备表。
 - VMA 相应改成动态函数指针（`VMA_DYNAMIC_VULKAN_FUNCTIONS`），Tracy 的 Vulkan 上下文走符号表模式（`TRACY_VK_USE_SYMBOL_TABLE`）。
 
+启动时选哪个后端、坏了怎么降级、企业怎么管控，见 [RHI 启动：探测、降级、块名单与安全模式](RHI-STARTUP.md)。
+
+
 绘制代码（`draw_channel`）**没有** `#ifdef VULKAN`。差别被藏在：
 
 - `clip_space_correction_matrix()`：Vulkan 的 NDC 是 Y 向下、Z 从 0 到 1；数学仍按 OpenGL 习惯算，最后乘这个校正矩阵。

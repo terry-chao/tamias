@@ -89,6 +89,57 @@ struct QueueFamilyIndices {
   [[nodiscard]] bool complete() const { return graphics && present; }
 };
 
+// vendorID → 厂商名。块名单按厂商匹配时，日志里要有一列人看得懂的名字。
+const char* vulkan_vendor_name(std::uint32_t vendor_id) {
+  switch (vendor_id) {
+    case 0x10DE:
+      return "NVIDIA";
+    case 0x1002:
+      return "AMD";
+    case 0x8086:
+      return "Intel";
+    case 0x106B:
+      return "Apple";
+    case 0x5143:
+      return "Qualcomm";
+    case 0x13B5:
+      return "ARM";
+    default:
+      return "";
+  }
+}
+
+// Vulkan 的 driverVersion 打包方式各家不同，没有统一规范。这里按厂商拆成四段数字。
+// 块名单里请用**同样的四段写法**（例如 NVIDIA 566.03 记作 566.0.3.0），
+// compare_versions 按数值分段比较，所以 driver_min 写 "566.0.0.0" 这种区间也成立。
+std::string format_vulkan_driver_version(std::uint32_t version, std::uint32_t vendor_id) {
+  std::uint32_t parts[4] = {0, 0, 0, 0};
+  switch (vendor_id) {
+    case 0x10DE:  // NVIDIA：10 / 8 / 8 / 6 位
+      parts[0] = (version >> 22) & 0x3FFu;
+      parts[1] = (version >> 14) & 0xFFu;
+      parts[2] = (version >> 6) & 0xFFu;
+      parts[3] = version & 0x3Fu;
+      break;
+    case 0x1002:  // AMD：10 / 10 / 12 位
+      parts[0] = (version >> 22) & 0x3FFu;
+      parts[1] = (version >> 12) & 0x3FFu;
+      parts[2] = version & 0xFFFu;
+      break;
+    case 0x8086:  // Intel：14 / 14 位
+      parts[0] = (version >> 14) & 0x3FFFFu;
+      parts[1] = version & 0x3FFFu;
+      break;
+    default:  // 其余按通用的两段 16 位拆
+      parts[0] = (version >> 16) & 0xFFFFu;
+      parts[1] = version & 0xFFFFu;
+      break;
+  }
+  char buffer[48];
+  std::snprintf(buffer, sizeof(buffer), "%u.%u.%u.%u", parts[0], parts[1], parts[2], parts[3]);
+  return buffer;
+}
+
 VkFormat vulkan_texture_format(TextureDesc::Format format) {
   switch (format) {
     case TextureDesc::Format::R8G8B8A8_UNORM:
@@ -424,6 +475,80 @@ class VulkanDevice final : public RHIDevice {
     m(2, 2) = 0.5f;
     m(2, 3) = 0.5f;
     return m;
+  }
+
+  [[nodiscard]] RhiGpuIdentity gpu_identity() const override {
+    RhiGpuIdentity identity{};
+    if (physical_ == VK_NULL_HANDLE) {
+      return identity;
+    }
+    VkPhysicalDeviceProperties props{};
+    vkGetPhysicalDeviceProperties(physical_, &props);
+    identity.os = rhi_current_os();
+    identity.adapter_name = props.deviceName;
+    identity.driver_name = vulkan_vendor_name(props.vendorID);
+    identity.vendor_id = props.vendorID;
+    identity.device_id = props.deviceID;
+    identity.api_version = props.apiVersion;
+    identity.driver_version = format_vulkan_driver_version(props.driverVersion, props.vendorID);
+    identity.software_renderer = props.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU;
+    return identity;
+  }
+
+  // 空提交：建一次性 command pool / buffer，空录制，提交到图形队列并等 fence。
+  // 等 5 秒就放弃——驱动挂住时不该把启动也拖住（宁可判定这个后端不可用、换下一个）。
+  Result<void> submit_noop() override {
+    if (device_ == VK_NULL_HANDLE || graphics_queue_ == VK_NULL_HANDLE) {
+      return Err("submit_noop: device or queue not ready");
+    }
+    VkCommandPool pool = VK_NULL_HANDLE;
+    VkCommandPoolCreateInfo pool_ci{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+    pool_ci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+    pool_ci.queueFamilyIndex = graphics_family_;
+    if (vkCreateCommandPool(device_, &pool_ci, nullptr, &pool) != VK_SUCCESS) {
+      return Err("submit_noop: vkCreateCommandPool failed");
+    }
+    VkCommandBuffer cmd = VK_NULL_HANDLE;
+    VkCommandBufferAllocateInfo cmd_ai{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+    cmd_ai.commandPool = pool;
+    cmd_ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    cmd_ai.commandBufferCount = 1;
+    if (vkAllocateCommandBuffers(device_, &cmd_ai, &cmd) != VK_SUCCESS) {
+      vkDestroyCommandPool(device_, pool, nullptr);
+      return Err("submit_noop: vkAllocateCommandBuffers failed");
+    }
+    Result<void> result{};
+    VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    if (vkBeginCommandBuffer(cmd, &begin) != VK_SUCCESS ||
+        vkEndCommandBuffer(cmd) != VK_SUCCESS) {
+      result = Err("submit_noop: recording an empty command buffer failed");
+    } else {
+      VkFence fence = VK_NULL_HANDLE;
+      VkFenceCreateInfo fence_ci{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+      if (vkCreateFence(device_, &fence_ci, nullptr, &fence) != VK_SUCCESS) {
+        result = Err("submit_noop: vkCreateFence failed");
+      } else {
+        VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+        submit.commandBufferCount = 1;
+        submit.pCommandBuffers = &cmd;
+        const VkResult submitted = vkQueueSubmit(graphics_queue_, 1, &submit, fence);
+        if (submitted != VK_SUCCESS) {
+          result = Err("submit_noop: vkQueueSubmit failed (" + std::to_string(submitted) + ")");
+        } else {
+          constexpr std::uint64_t kTimeoutNs = 5ull * 1000ull * 1000ull * 1000ull;
+          const VkResult waited = vkWaitForFences(device_, 1, &fence, VK_TRUE, kTimeoutNs);
+          if (waited == VK_TIMEOUT) {
+            result = Err("submit_noop: queue submit timed out (driver hang?)");
+          } else if (waited != VK_SUCCESS) {
+            result = Err("submit_noop: vkWaitForFences failed (" + std::to_string(waited) + ")");
+          }
+        }
+        vkDestroyFence(device_, fence, nullptr);
+      }
+    }
+    vkDestroyCommandPool(device_, pool, nullptr);
+    return result;
   }
 
   Result<std::unique_ptr<Buffer>> create_buffer(const BufferDesc& desc) override;

@@ -96,6 +96,12 @@ void AppSettings::load() {
           : settings.value(QStringLiteral("plugins/hidden_ids")).toStringList();
   ribbon_command_order_ =
       settings.value(QStringLiteral("plugins/ribbon_command_order")).toStringList();
+  // 上次跑通的后端（含 GPU 指纹）：没有就是空——首次运行 / 换了机器。
+  const QString last_good = settings.value(QStringLiteral("render/last_good_backend")).toString();
+  last_good_backend_ = last_good.isEmpty() ? std::nullopt
+                                           : std::optional<GraphicsBackend>(backend_from_key(last_good));
+  last_good_gpu_fingerprint_ =
+      settings.value(QStringLiteral("render/last_good_gpu")).toString();
 }
 
 void AppSettings::save() const {
@@ -108,6 +114,11 @@ void AppSettings::save() const {
   settings.setValue(QStringLiteral("plugins/disabled_ids"), disabled_plugin_ids_);
   settings.setValue(QStringLiteral("plugins/ribbon_command_order"),
                     ribbon_command_order_);
+  if (last_good_backend_.has_value()) {
+    settings.setValue(QStringLiteral("render/last_good_backend"),
+                      backend_to_key(*last_good_backend_));
+    settings.setValue(QStringLiteral("render/last_good_gpu"), last_good_gpu_fingerprint_);
+  }
   settings.remove(QStringLiteral("plugins/hidden_ids"));
 }
 
@@ -141,9 +152,19 @@ void AppSettings::set_ribbon_command_order(const QStringList& ids) {
 
 RenderDeviceConfig AppSettings::render_device_config() const {
   RenderDeviceConfig config{};
-  config.backend = graphics_backend_;
-  config.enable_validation = true;
+  config.backend = resolved_backend();
+  // 安全模式关掉校验层：校验层自己也要加载驱动代码，少一层少一份风险。
+  config.enable_validation = !safe_mode_;
   return config;
+}
+
+GraphicsBackend AppSettings::resolved_backend() const {
+  return resolved_backend_.value_or(graphics_backend_);
+}
+
+void AppSettings::set_last_good_backend(GraphicsBackend backend, const QString& fingerprint) {
+  last_good_backend_ = backend;
+  last_good_gpu_fingerprint_ = fingerprint;
 }
 
 void apply_ui_color_scheme(UiColorScheme scheme) {

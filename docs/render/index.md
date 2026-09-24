@@ -3,6 +3,7 @@
 一帧怎么画、RHI 后端、屏外不发 draw。
 
 - [管线与 RHI](../RENDERING.md) —— 从三角网到像素；RHI 抽象
+- [RHI 启动](../RHI-STARTUP.md) —— 探测 / 降级 / 块名单 / 安全模式（`--probe-rhi`）
 - [视锥、NDC 与屏幕](../NDC.md) —— MVP 之后是立方体，不是一张纸
 - [OpenGL 后端](../OPENGL.md) —— 窗口、VBO/IBO、draw、贴图绑定
 - [浏览器 WebGPU](../WGPU.md) —— WASM 查看器的 RHI（桌面不做 wgpu-native）

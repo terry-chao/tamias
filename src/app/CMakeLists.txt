@@ -10,6 +10,8 @@ add_executable(tamias
   base/i18n.cpp
   base/recent_files.cpp
   base/rhi_backends.cpp
+  base/rhi_startup.cpp
+  base/startup_guard.cpp
   # 窗口骨架：主窗口、欢迎页、Ribbon、通用对话框、提示条
   shell/main_window.cpp
   shell/home_page.cpp

@@ -50,6 +50,23 @@ class AppSettings {
 
   [[nodiscard]] RenderDeviceConfig render_device_config() const;
 
+  // ==== 启动探测的结果（见 docs/RHI-STARTUP.md）====
+  // 用户偏好（graphics_backend_）是「想用哪个」；这里是「本次实际用哪个」。
+  // 探测降级只覆盖后者，不写回用户偏好——否则驱动修好了也回不到 Vulkan。
+  [[nodiscard]] GraphicsBackend resolved_backend() const;
+  void set_resolved_backend(GraphicsBackend backend) { resolved_backend_ = backend; }
+  [[nodiscard]] bool resolved_backend_set() const { return resolved_backend_.has_value(); }
+  [[nodiscard]] bool safe_mode() const { return safe_mode_; }
+  void set_safe_mode(bool on) { safe_mode_ = on; }
+  [[nodiscard]] bool backend_locked() const { return backend_locked_; }
+  void set_backend_locked(bool locked) { backend_locked_ = locked; }
+  // 上次跑通的后端 + 当时的 GPU 指纹（换显卡 / 升驱动后指纹变，就不再直接信任它）。
+  [[nodiscard]] std::optional<GraphicsBackend> last_good_backend() const {
+    return last_good_backend_;
+  }
+  [[nodiscard]] QString last_good_gpu_fingerprint() const { return last_good_gpu_fingerprint_; }
+  void set_last_good_backend(GraphicsBackend backend, const QString& fingerprint);
+
  private:
   AppSettings() = default;
 
@@ -60,6 +77,11 @@ class AppSettings {
   bool zoom_to_mouse_position_ = true;
   QStringList disabled_plugin_ids_;
   QStringList ribbon_command_order_;
+  std::optional<GraphicsBackend> resolved_backend_;
+  std::optional<GraphicsBackend> last_good_backend_;
+  QString last_good_gpu_fingerprint_;
+  bool safe_mode_ = false;
+  bool backend_locked_ = false;
 };
 
 void apply_ui_color_scheme(UiColorScheme scheme);

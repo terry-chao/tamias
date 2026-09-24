@@ -1,0 +1,6 @@
+{
+  "_readme": "已知问题名单（块名单）。命中即按动作处理：skip=别用这个后端，force=改走另一个后端。匹配项：os / vendor / device / driver_min / driver_max / driver_exact / remote / software / adapter_contains；不填的项表示不限。driver_version 用四段数字（如 NVIDIA 566.03 写作 566.0.3.0），见 docs/RHI-STARTUP.md。",
+  "version": 1,
+  "entries": [
+  ]
+}
