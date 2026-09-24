@@ -85,4 +85,5 @@ nav:
       - Web 查看器: WEB.md
       - 视锥剔除: FRUSTUM-CULLING.md
       - 合批 / Instancing: INSTANCING.md
+      - 场景文字: TEXT.md
       - 渲染场景快照: RENDER-SCENE.md
