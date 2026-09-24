@@ -254,7 +254,67 @@ class VulkanFence final : public Fence {
 
 class VulkanDevice;
 
+// 离屏渲染目标：一张自有 image + 深度 + framebuffer，复用设备的**同一个 render pass**，
+// 所以场景的绘制代码一行不改也能往这儿画。没有 surface、不 present；读回时把 image
+// 手动转到 TRANSFER_SRC 再拷到 host buffer（`read_back_rgba`）。
+class VulkanOffscreenTarget final : public SwapChain {
+ public:
+  VulkanOffscreenTarget(VulkanDevice* device, std::uint32_t width, std::uint32_t height)
+      : device_(device), width_(std::max(1u, width)), height_(std::max(1u, height)) {}
+  ~VulkanOffscreenTarget() override { destroy(); }
+
+  VulkanOffscreenTarget(const VulkanOffscreenTarget&) = delete;
+  VulkanOffscreenTarget& operator=(const VulkanOffscreenTarget&) = delete;
+
+  Result<void> resize(std::uint32_t width, std::uint32_t height) override {
+    if (width == width_ && height == height_ && image_ != VK_NULL_HANDLE) {
+      return {};
+    }
+    destroy();
+    width_ = std::max(1u, width);
+    height_ = std::max(1u, height);
+    return create();
+  }
+  [[nodiscard]] std::uint32_t width() const override { return width_; }
+  [[nodiscard]] std::uint32_t height() const override { return height_; }
+  [[nodiscard]] TextureDesc::Format color_format() const override {
+    return TextureDesc::Format::B8G8R8A8_SRGB;
+  }
+  [[nodiscard]] bool offscreen() const override { return true; }
+
+  [[nodiscard]] VkFramebuffer framebuffer() const { return framebuffer_; }
+  [[nodiscard]] VkImage image() const { return image_; }
+  [[nodiscard]] std::uint32_t& image_index() { return image_index_; }
+  [[nodiscard]] std::uint32_t frame_index() const { return frame_index_; }
+  void advance_frame() { frame_index_ = (frame_index_ + 1) % kFramesInFlight; }
+  // 画过一帧之后读回才有意义（layout 也从 UNDEFINED 变成 PRESENT_SRC）。
+  void mark_rendered() { rendered_ = true; }
+  VkFence& fence() { return fence_; }
+
+  Result<void> read_back_rgba(std::vector<std::uint8_t>& out) override;
+
+ private:
+  Result<void> create();
+  void destroy();
+
+  VulkanDevice* device_ = nullptr;
+  std::uint32_t width_ = 1;
+  std::uint32_t height_ = 1;
+  std::uint32_t image_index_ = 0;
+  std::uint32_t frame_index_ = 0;
+  VkImage image_ = VK_NULL_HANDLE;
+  VmaAllocation image_alloc_ = nullptr;
+  VkImageView view_ = VK_NULL_HANDLE;
+  VkImage depth_image_ = VK_NULL_HANDLE;
+  VmaAllocation depth_alloc_ = nullptr;
+  VkImageView depth_view_ = VK_NULL_HANDLE;
+  VkFramebuffer framebuffer_ = VK_NULL_HANDLE;
+  VkFence fence_ = VK_NULL_HANDLE;
+  bool rendered_ = false;
+};
+
 class VulkanSwapChain final : public SwapChain {
+
  public:
   VulkanSwapChain(VulkanDevice* device, SwapChainDesc desc);
   ~VulkanSwapChain() override;
@@ -341,7 +401,10 @@ class VulkanTexture final : public Texture {
 
 class VulkanCommandList final : public CommandList {
  public:
-  VulkanCommandList(VkDevice device, VkCommandPool pool) : device_(device) {
+  // render_pass：离屏目标复用设备的共享 render pass，但 command list 只拿得到 VkDevice，
+  // 所以渲染通道句柄在建列表时一并传进来。
+  VulkanCommandList(VkDevice device, VkCommandPool pool, VkRenderPass render_pass)
+      : device_(device), shared_render_pass_(render_pass) {
     VkCommandBufferAllocateInfo alloc{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
     alloc.commandPool = pool;
     alloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -379,14 +442,35 @@ class VulkanCommandList final : public CommandList {
 
   void begin_render_pass(SwapChain& swap_chain, const float clear_color[4],
                          float clear_depth) override {
-    auto& sc = static_cast<VulkanSwapChain&>(swap_chain);
+    // 两种目标：窗口 swapchain 或离屏目标。各自的 image / framebuffer / 尺寸来源不同，
+    // 所以先取公共信息再拼 render pass 描述（离屏复用设备的共享 render pass）。
+    VkRenderPass pass = VK_NULL_HANDLE;
+    VkFramebuffer framebuffer = VK_NULL_HANDLE;
+    VkExtent2D extent{1, 1};
+    if (swap_chain.offscreen()) {
+      auto& target = static_cast<VulkanOffscreenTarget&>(swap_chain);
+      pass = shared_render_pass_;
+      framebuffer = target.framebuffer();
+      extent = {target.width(), target.height()};
+      // 视口 / 裁剪显式设成目标尺寸：Vulkan 这边是动态状态，不设就是未定义。
+      VkViewport viewport{0.f, 0.f, static_cast<float>(extent.width),
+                          static_cast<float>(extent.height), 0.f, 1.f};
+      VkRect2D scissor{{0, 0}, extent};
+      vkCmdSetViewport(cmds_[active_frame_], 0, 1, &viewport);
+      vkCmdSetScissor(cmds_[active_frame_], 0, 1, &scissor);
+    } else {
+      auto& sc = static_cast<VulkanSwapChain&>(swap_chain);
+      pass = sc.render_pass();
+      framebuffer = sc.framebuffer(sc.image_index());
+      extent = {sc.width(), sc.height()};
+    }
     std::array<VkClearValue, 2> clears{};
     clears[0].color = {{clear_color[0], clear_color[1], clear_color[2], clear_color[3]}};
     clears[1].depthStencil = {clear_depth, 0};
     VkRenderPassBeginInfo info{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-    info.renderPass = sc.render_pass();
-    info.framebuffer = sc.framebuffer(sc.image_index());
-    info.renderArea.extent = {sc.width(), sc.height()};
+    info.renderPass = pass;
+    info.framebuffer = framebuffer;
+    info.renderArea.extent = extent;
     info.clearValueCount = static_cast<std::uint32_t>(clears.size());
     info.pClearValues = clears.data();
     vkCmdBeginRenderPass(cmds_[active_frame_], &info, VK_SUBPASS_CONTENTS_INLINE);
@@ -453,6 +537,7 @@ class VulkanCommandList final : public CommandList {
 
  private:
   VkDevice device_ = VK_NULL_HANDLE;
+  VkRenderPass shared_render_pass_ = VK_NULL_HANDLE;  // 离屏渲染用（见构造函数注释）
   std::array<VkCommandBuffer, kFramesInFlight> cmds_{};
   std::uint32_t active_frame_ = 0;
   VkPipelineLayout active_layout_ = VK_NULL_HANDLE;
@@ -574,6 +659,15 @@ class VulkanDevice final : public RHIDevice {
   [[nodiscard]] VkQueue present_queue() const { return present_queue_; }
   [[nodiscard]] std::uint32_t recording_frame() const { return recording_frame_; }
   [[nodiscard]] VkRenderPass shared_render_pass() const { return shared_render_pass_; }
+  // 离屏渲染目标（不依赖窗口；探测的 C 档、缩略图 / 截图、像素级金样都用它）。
+  Result<std::unique_ptr<SwapChain>> create_offscreen_swap_chain(std::uint32_t width,
+                                                                std::uint32_t height) override {
+    auto target = std::make_unique<VulkanOffscreenTarget>(this, width, height);
+    if (auto created = target->resize(width, height); !created) {
+      return Err(created.error());
+    }
+    return std::unique_ptr<SwapChain>(std::move(target));
+  }
 
   Result<VkSurfaceKHR> create_surface(const NativeWindowHandle& window);
   void destroy_surface(VkSurfaceKHR surface) { vkDestroySurfaceKHR(instance_, surface, nullptr); }
@@ -611,7 +705,7 @@ class VulkanDevice final : public RHIDevice {
   VkSampler clamp_sampler_ = VK_NULL_HANDLE;
   std::uint32_t recording_frame_ = 0;
   VulkanCommandList* pending_cmd_ = nullptr;
-  VulkanSwapChain* pending_swapchain_ = nullptr;
+  SwapChain* pending_swapchain_ = nullptr;  // 窗口 swapchain 或离屏目标
   // GPU 计时（Tracy GPU zone）：队列族支持 timestamp 才有意义，扩展决定是否校准。
   bool has_calibrated_timestamps_ = false;
   PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT calibrateable_time_domains_fn_ = nullptr;
@@ -629,6 +723,181 @@ VulkanSwapChain::~VulkanSwapChain() {
     device_->destroy_surface(surface_);
     surface_ = VK_NULL_HANDLE;
   }
+}
+
+Result<void> VulkanOffscreenTarget::create() {
+  if (device_ == nullptr || device_->device() == VK_NULL_HANDLE) {
+    return Err("offscreen target: device not ready");
+  }
+  VkImageCreateInfo ci{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+  ci.imageType = VK_IMAGE_TYPE_2D;
+  ci.format = VK_FORMAT_B8G8R8A8_SRGB;  // 与设备的共享 render pass 一致
+  ci.extent = {width_, height_, 1};
+  ci.mipLevels = 1;
+  ci.arrayLayers = 1;
+  ci.samples = VK_SAMPLE_COUNT_1_BIT;
+  ci.tiling = VK_IMAGE_TILING_OPTIMAL;
+  // TRANSFER_SRC 是读回（vkCmdCopyImageToBuffer）必须的。
+  ci.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+  VmaAllocationCreateInfo ac{};
+  ac.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+  if (vmaCreateImage(device_->allocator(), &ci, &ac, &image_, &image_alloc_, nullptr) !=
+      VK_SUCCESS) {
+    return Err("offscreen color image create failed");
+  }
+  VkImageViewCreateInfo vi{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+  vi.image = image_;
+  vi.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  vi.format = ci.format;
+  vi.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  vi.subresourceRange.levelCount = 1;
+  vi.subresourceRange.layerCount = 1;
+  if (vkCreateImageView(device_->device(), &vi, nullptr, &view_) != VK_SUCCESS) {
+    return Err("offscreen color view create failed");
+  }
+
+  VkImageCreateInfo di{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+  di.imageType = VK_IMAGE_TYPE_2D;
+  di.format = VK_FORMAT_D32_SFLOAT;
+  di.extent = {width_, height_, 1};
+  di.mipLevels = 1;
+  di.arrayLayers = 1;
+  di.samples = VK_SAMPLE_COUNT_1_BIT;
+  di.tiling = VK_IMAGE_TILING_OPTIMAL;
+  di.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+  VmaAllocationCreateInfo dac{};
+  dac.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+  if (vmaCreateImage(device_->allocator(), &di, &dac, &depth_image_, &depth_alloc_, nullptr) !=
+      VK_SUCCESS) {
+    return Err("offscreen depth image create failed");
+  }
+  VkImageViewCreateInfo dvi{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+  dvi.image = depth_image_;
+  dvi.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  dvi.format = VK_FORMAT_D32_SFLOAT;
+  dvi.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+  dvi.subresourceRange.levelCount = 1;
+  dvi.subresourceRange.layerCount = 1;
+  if (vkCreateImageView(device_->device(), &dvi, nullptr, &depth_view_) != VK_SUCCESS) {
+    return Err("offscreen depth view create failed");
+  }
+
+  const VkImageView attachments[] = {view_, depth_view_};
+  VkFramebufferCreateInfo fi{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+  fi.renderPass = device_->shared_render_pass();
+  fi.attachmentCount = 2;
+  fi.pAttachments = attachments;
+  fi.width = width_;
+  fi.height = height_;
+  fi.layers = 1;
+  if (vkCreateFramebuffer(device_->device(), &fi, nullptr, &framebuffer_) != VK_SUCCESS) {
+    return Err("offscreen framebuffer create failed");
+  }
+
+  VkFenceCreateInfo fence_ci{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+  fence_ci.flags = VK_FENCE_CREATE_SIGNALED_BIT;  // 第一帧 begin 时不阻塞
+  if (vkCreateFence(device_->device(), &fence_ci, nullptr, &fence_) != VK_SUCCESS) {
+    return Err("offscreen fence create failed");
+  }
+  return {};
+}
+
+void VulkanOffscreenTarget::destroy() {
+  if (device_ == nullptr || device_->device() == VK_NULL_HANDLE) {
+    return;
+  }
+  vkDeviceWaitIdle(device_->device());
+  if (fence_ != VK_NULL_HANDLE) {
+    vkDestroyFence(device_->device(), fence_, nullptr);
+    fence_ = VK_NULL_HANDLE;
+  }
+  if (framebuffer_ != VK_NULL_HANDLE) {
+    vkDestroyFramebuffer(device_->device(), framebuffer_, nullptr);
+    framebuffer_ = VK_NULL_HANDLE;
+  }
+  if (depth_view_ != VK_NULL_HANDLE) {
+    vkDestroyImageView(device_->device(), depth_view_, nullptr);
+    depth_view_ = VK_NULL_HANDLE;
+  }
+  if (depth_image_ != VK_NULL_HANDLE) {
+    vmaDestroyImage(device_->allocator(), depth_image_, depth_alloc_);
+    depth_image_ = VK_NULL_HANDLE;
+    depth_alloc_ = nullptr;
+  }
+  if (view_ != VK_NULL_HANDLE) {
+    vkDestroyImageView(device_->device(), view_, nullptr);
+    view_ = VK_NULL_HANDLE;
+  }
+  if (image_ != VK_NULL_HANDLE) {
+    vmaDestroyImage(device_->allocator(), image_, image_alloc_);
+    image_ = VK_NULL_HANDLE;
+    image_alloc_ = nullptr;
+  }
+}
+
+// 读回：把颜色 image 转到 TRANSFER_SRC，拷进 host-visible buffer，再转成 RGBA8。
+// 和绘制用同一个队列，「提交顺序」本身就保证了先画完再拷贝。
+Result<void> VulkanOffscreenTarget::read_back_rgba(std::vector<std::uint8_t>& out) {
+  if (image_ == VK_NULL_HANDLE || device_ == nullptr) {
+    return Err("read_back_rgba: offscreen target not created");
+  }
+  const VkDeviceSize bytes =
+      static_cast<VkDeviceSize>(width_) * static_cast<VkDeviceSize>(height_) * 4ull;
+
+  VkBuffer buffer = VK_NULL_HANDLE;
+  VmaAllocation allocation = nullptr;
+  VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+  bci.size = bytes;
+  bci.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+  VmaAllocationCreateInfo bac{};
+  bac.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+  bac.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+  VmaAllocationInfo alloc_info{};
+  if (vmaCreateBuffer(device_->allocator(), &bci, &bac, &buffer, &allocation, &alloc_info) !=
+      VK_SUCCESS) {
+    return Err("read_back_rgba: staging buffer create failed");
+  }
+  const auto release = [&] { vmaDestroyBuffer(device_->allocator(), buffer, allocation); };
+
+  VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+  // 画过一帧之后，共享 render pass 的 finalLayout 就是 PRESENT_SRC_KHR；没画过就是 UNDEFINED。
+  barrier.oldLayout = rendered_ ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : VK_IMAGE_LAYOUT_UNDEFINED;
+  barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.image = image_;
+  barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+  const Result<void> copied = device_->submit_oneshot([&](VkCommandBuffer cmd) {
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+    VkBufferImageCopy region{};
+    region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    region.imageExtent = {width_, height_, 1};
+    vkCmdCopyImageToBuffer(cmd, image_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer, 1, &region);
+  });
+  if (!copied) {
+    release();
+    return Err(copied.error());
+  }
+
+  const auto* source = static_cast<const std::uint8_t*>(alloc_info.pMappedData);
+  if (source == nullptr) {
+    release();
+    return Err("read_back_rgba: staging buffer was not mapped");
+  }
+  out.resize(static_cast<std::size_t>(bytes));
+  // 设备格式是 BGRA8（与共享 render pass 一致）：转成 RGBA8 再交出去，接口承诺的是 RGBA。
+  for (std::size_t i = 0; i + 3 < out.size(); i += 4) {
+    out[i + 0] = source[i + 2];
+    out[i + 1] = source[i + 1];
+    out[i + 2] = source[i + 0];
+    out[i + 3] = source[i + 3];
+  }
+  release();
+  return {};
 }
 
 Result<void> VulkanSwapChain::create_swapchain() {
@@ -1662,7 +1931,7 @@ Result<std::unique_ptr<PipelineState>> VulkanDevice::create_pipeline(const Pipel
 }
 
 Result<std::unique_ptr<CommandList>> VulkanDevice::create_command_list() {
-  auto list = std::make_unique<VulkanCommandList>(device_, command_pool_);
+  auto list = std::make_unique<VulkanCommandList>(device_, command_pool_, shared_render_pass_);
   list->enable_gpu_timing(instance_, physical_, graphics_queue_);
   return std::unique_ptr<CommandList>(std::move(list));
 }
@@ -1676,6 +1945,17 @@ Result<std::unique_ptr<SwapChain>> VulkanDevice::create_swap_chain(const SwapCha
 }
 
 Result<void> VulkanDevice::begin_frame(SwapChain& swap_chain) {
+  if (swap_chain.offscreen()) {
+    // 离屏：没有 surface 可 acquire，固定用第 0 张；等上一帧的 fence 复用同一张 image。
+    auto& target = static_cast<VulkanOffscreenTarget&>(swap_chain);
+    vkWaitForFences(device_, 1, &target.fence(), VK_TRUE, UINT64_MAX);
+    vkResetFences(device_, 1, &target.fence());
+    target.image_index() = 0;
+    recording_frame_ = target.frame_index();
+    tls_recording_frame = target.frame_index();
+    pending_swapchain_ = &swap_chain;
+    return {};
+  }
   auto& sc = static_cast<VulkanSwapChain&>(swap_chain);
   const std::uint32_t frame = sc.frame_index();
   vkWaitForFences(device_, 1, &sc.in_flight(frame), VK_TRUE, UINT64_MAX);
@@ -1709,6 +1989,25 @@ Result<void> VulkanDevice::execute(CommandList& command_list) {
 }
 
 Result<void> VulkanDevice::end_frame(SwapChain& swap_chain) {
+  if (swap_chain.offscreen()) {
+    auto& target = static_cast<VulkanOffscreenTarget&>(swap_chain);
+    if (!pending_cmd_ || pending_swapchain_ != &swap_chain) {
+      return Err("end_frame without matching begin/execute");
+    }
+    VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+    VkCommandBuffer cmd = pending_cmd_->handle();
+    submit.commandBufferCount = 1;
+    submit.pCommandBuffers = &cmd;
+    // 离屏没有呈现：用 fence 收尾，不给信号量（也不 vkQueuePresentKHR）。
+    if (vkQueueSubmit(graphics_queue_, 1, &submit, target.fence()) != VK_SUCCESS) {
+      return Err("vkQueueSubmit failed (offscreen)");
+    }
+    target.mark_rendered();
+    pending_cmd_ = nullptr;
+    pending_swapchain_ = nullptr;
+    target.advance_frame();
+    return {};
+  }
   auto& sc = static_cast<VulkanSwapChain&>(swap_chain);
   if (!pending_cmd_ || pending_swapchain_ != &sc) {
     return Err("end_frame without matching begin/execute");

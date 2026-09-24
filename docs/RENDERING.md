@@ -143,6 +143,9 @@ src/engine/render/rhi/
 
 启动时选哪个后端、坏了怎么降级、企业怎么管控，见 [RHI 启动：探测、降级、块名单与安全模式](RHI-STARTUP.md)。
 
+**离屏渲染**：`RHIDevice::create_offscreen_swap_chain(w, h)` 造一个不依赖窗口的目标，画完用
+`SwapChain::read_back_rgba()` 把像素读回 CPU（RGBA8、左上原点，两个桌面后端都实现了）。
+它让「渲染」不再依赖窗口——RHI 探测的 C 档、缩略图 / 截图、将来的像素级金样都走它。
 
 绘制代码（`draw_channel`）**没有** `#ifdef VULKAN`。差别被藏在：
 

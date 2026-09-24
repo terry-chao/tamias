@@ -26,6 +26,28 @@
 #ifndef GL_ELEMENT_ARRAY_BUFFER
 #define GL_ELEMENT_ARRAY_BUFFER 0x8893
 #endif
+// 离屏渲染（FBO）用到的 token：GL 1.1 头里没有，按需补。
+#ifndef GL_FRAMEBUFFER
+#define GL_FRAMEBUFFER 0x8D40
+#endif
+#ifndef GL_RENDERBUFFER
+#define GL_RENDERBUFFER 0x8D41
+#endif
+#ifndef GL_COLOR_ATTACHMENT0
+#define GL_COLOR_ATTACHMENT0 0x8CE0
+#endif
+#ifndef GL_DEPTH_ATTACHMENT
+#define GL_DEPTH_ATTACHMENT 0x8D00
+#endif
+#ifndef GL_FRAMEBUFFER_COMPLETE
+#define GL_FRAMEBUFFER_COMPLETE 0x8CD5
+#endif
+#ifndef GL_RGBA8
+#define GL_RGBA8 0x8058
+#endif
+#ifndef GL_DEPTH_COMPONENT24
+#define GL_DEPTH_COMPONENT24 0x81A6
+#endif
 #ifndef GL_UNIFORM_BUFFER
 #define GL_UNIFORM_BUFFER 0x8A11
 #endif
@@ -250,6 +272,23 @@ extern void (*DrawElementsInstanced)(GLenum mode, GLsizei count, GLenum type, co
 extern void (*Finish)();
 extern GLenum (*GetError)();
 extern const GLubyte* (*GetString)(GLenum name);
+
+// 离屏渲染目标（FBO）：把一帧画进自己的颜色 / 深度附件，再 glReadPixels 读回。
+extern void (*GenFramebuffers)(GLsizei n, GLuint* framebuffers);
+extern void (*DeleteFramebuffers)(GLsizei n, const GLuint* framebuffers);
+extern void (*BindFramebuffer)(GLenum target, GLuint framebuffer);
+extern void (*FramebufferTexture2D)(GLenum target, GLenum attachment, GLenum textarget,
+                                    GLuint texture, GLint level);
+extern void (*FramebufferRenderbuffer)(GLenum target, GLenum attachment,
+                                       GLenum renderbuffertarget, GLuint renderbuffer);
+extern GLenum (*CheckFramebufferStatus)(GLenum target);
+extern void (*GenRenderbuffers)(GLsizei n, GLuint* renderbuffers);
+extern void (*DeleteRenderbuffers)(GLsizei n, const GLuint* renderbuffers);
+extern void (*BindRenderbuffer)(GLenum target, GLuint renderbuffer);
+extern void (*RenderbufferStorage)(GLenum target, GLenum internalformat, GLsizei width,
+                                   GLsizei height);
+extern void (*ReadPixels)(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format,
+                          GLenum type, void* pixels);
 
 #if defined(_WIN32)
 using PFN_wglCreateContextAttribsARB = HGLRC(WINAPI*)(HDC, HGLRC, const int*);

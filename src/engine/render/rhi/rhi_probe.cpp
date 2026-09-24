@@ -31,6 +31,43 @@ void complete_identity(RhiGpuIdentity& identity) {
 
 }  // namespace
 
+// C 档：离屏画 1×1、读回、核对颜色。返回空字符串 = 通过，否则是失败原因。
+std::string pixel_check(RHIDevice& device) {
+  auto target = device.create_offscreen_swap_chain(1, 1);
+  if (!target.has_value()) {
+    return "offscreen target: " + target.error();
+  }
+  auto commands = device.create_command_list();
+  if (!commands.has_value()) {
+    return "offscreen command list: " + commands.error();
+  }
+  const float reference[4] = {0.f, 1.f, 0.f, 1.f};  // 纯绿：读回来最好判
+  if (auto began = device.begin_frame(**target); !began) {
+    return "offscreen begin_frame: " + began.error();
+  }
+  (*commands)->begin();
+  (*commands)->begin_render_pass(**target, reference, 1.f);
+  (*commands)->end_render_pass();
+  (*commands)->end();
+  if (auto executed = device.execute(**commands); !executed) {
+    return "offscreen execute: " + executed.error();
+  }
+  if (auto ended = device.end_frame(**target); !ended) {
+    return "offscreen end_frame: " + ended.error();
+  }
+  std::vector<std::uint8_t> pixels;
+  if (auto read = (*target)->read_back_rgba(pixels); !read) {
+    return "offscreen read back: " + read.error();
+  }
+  if (pixels.size() != 4) {
+    return "offscreen read back returned " + std::to_string(pixels.size()) + " bytes";
+  }
+  if (pixels[0] > 40 || pixels[1] < 200 || pixels[2] > 40) {
+    return "offscreen pixel check got unexpected color";
+  }
+  return {};
+}
+
 std::string RhiProbeReport::to_json() const {
   std::ostringstream out;
   out << "{\n";
@@ -117,6 +154,14 @@ RhiProbeReport probe_rhi(const RhiProbeOptions& options, const RhiDeviceFactory&
     if (options.depth == RhiProbeDepth::Submit) {
       if (auto submitted = (*device)->submit_noop(); !submitted) {
         attempt.reason = submitted.error();
+        (*device)->wait_idle();
+        report.attempts.push_back(std::move(attempt));
+        continue;
+      }
+    }
+    if (options.depth == RhiProbeDepth::Pixel) {
+      if (std::string failure = pixel_check(**device); !failure.empty()) {
+        attempt.reason = std::move(failure);
         (*device)->wait_idle();
         report.attempts.push_back(std::move(attempt));
         continue;

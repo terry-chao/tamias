@@ -6,10 +6,10 @@
 #include "engine/render/runtime/gpu_instance.h"
 
 #include <algorithm>
-#include <cctype>
 #include <cstddef>
 #include <cstring>
 #include <string>
+#include <utility>
 #include <vector>
 
 #if defined(_WIN32)
@@ -117,6 +117,51 @@ class OpenGLFence final : public Fence {
   void reset() override {}
 };
 
+// 离屏渲染目标：自己的 FBO（颜色纹理 + 深度 renderbuffer），画完 glReadPixels 读回。
+// 不需要窗口，借用设备的 dummy context。
+class OpenGLOffscreenTarget final : public SwapChain {
+ public:
+  OpenGLOffscreenTarget(OpenGLDevice* device, std::uint32_t width, std::uint32_t height)
+      : device_(device), width_(std::max(1u, width)), height_(std::max(1u, height)) {}
+  ~OpenGLOffscreenTarget() override { destroy(); }
+
+  OpenGLOffscreenTarget(const OpenGLOffscreenTarget&) = delete;
+  OpenGLOffscreenTarget& operator=(const OpenGLOffscreenTarget&) = delete;
+
+  Result<void> resize(std::uint32_t width, std::uint32_t height) override {
+    if (width == width_ && height == height_ && framebuffer_ != 0) {
+      return {};
+    }
+    destroy();
+    width_ = std::max(1u, width);
+    height_ = std::max(1u, height);
+    return create();
+  }
+  [[nodiscard]] std::uint32_t width() const override { return width_; }
+  [[nodiscard]] std::uint32_t height() const override { return height_; }
+  [[nodiscard]] TextureDesc::Format color_format() const override {
+    return TextureDesc::Format::B8G8R8A8_SRGB;
+  }
+  [[nodiscard]] bool offscreen() const override { return true; }
+
+  // 切到 dummy context 并绑定这块 FBO（离屏没有窗口可切）。
+  Result<void> make_current_and_bind();
+  [[nodiscard]] GLuint framebuffer() const { return framebuffer_; }
+
+  Result<void> read_back_rgba(std::vector<std::uint8_t>& out) override;
+
+ private:
+  Result<void> create();
+  void destroy();
+
+  OpenGLDevice* device_ = nullptr;
+  std::uint32_t width_ = 1;
+  std::uint32_t height_ = 1;
+  GLuint framebuffer_ = 0;
+  GLuint color_ = 0;
+  GLuint depth_ = 0;
+};
+
 class OpenGLSwapChain final : public SwapChain {
  public:
   OpenGLSwapChain(OpenGLDevice* device, SwapChainDesc desc);
@@ -210,15 +255,19 @@ class OpenGLDevice final : public RHIDevice {
     identity.adapter_name = read_string(GL_RENDERER);
     identity.vendor_id = rhi_vendor_id_from_name(identity.driver_name);
     // 渲染器名字里带这些字样的就是软件渲染（没有真 GPU 时唯一能跑的东西）。
-    std::string lowered = identity.adapter_name;
-    std::transform(lowered.begin(), lowered.end(), lowered.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    const std::string lowered_renderer = [&] {
+      std::string text = identity.adapter_name;
+      std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+      });
+      return text;
+    }();
     identity.software_renderer =
-        lowered.find("llvmpipe") != std::string::npos ||
-        lowered.find("softpipe") != std::string::npos ||
-        lowered.find("software") != std::string::npos ||
-        lowered.find("basic render") != std::string::npos ||
-        lowered.find("swiftshader") != std::string::npos;
+        lowered_renderer.find("llvmpipe") != std::string::npos ||
+        lowered_renderer.find("softpipe") != std::string::npos ||
+        lowered_renderer.find("software") != std::string::npos ||
+        lowered_renderer.find("basic render") != std::string::npos ||
+        lowered_renderer.find("swiftshader") != std::string::npos;
     self->release_current();
     return identity;
   }
@@ -256,6 +305,9 @@ class OpenGLDevice final : public RHIDevice {
     return std::make_unique<OpenGLCommandList>(this);
   }
   Result<std::unique_ptr<SwapChain>> create_swap_chain(const SwapChainDesc& desc) override;
+  // 离屏渲染目标（不依赖窗口）：探测的 C 档、缩略图 / 截图、像素级金样都用它。
+  Result<std::unique_ptr<SwapChain>> create_offscreen_swap_chain(std::uint32_t width,
+                                                                std::uint32_t height) override;
   Result<std::unique_ptr<Fence>> create_fence() override { return std::make_unique<OpenGLFence>(); }
 
   Result<void> begin_frame(SwapChain& swap_chain) override;
@@ -886,6 +938,107 @@ OpenGLSwapChain::~OpenGLSwapChain() {
 #endif
 }
 
+Result<void> OpenGLOffscreenTarget::make_current_and_bind() {
+  if (auto r = device_->make_current_dummy(); !r) {
+    return Err(r.error());
+  }
+  gl::BindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
+  return {};
+}
+
+Result<void> OpenGLOffscreenTarget::create() {
+  // FBO 那一组入口要是没解析出来（老上下文 / 驱动不给），宁可如实报「不支持」，
+  // 也不能去调空函数指针。
+  const bool entries_ready = gl::GenFramebuffers != nullptr && gl::DeleteFramebuffers != nullptr &&
+                             gl::BindFramebuffer != nullptr &&
+                             gl::FramebufferTexture2D != nullptr &&
+                             gl::FramebufferRenderbuffer != nullptr &&
+                             gl::CheckFramebufferStatus != nullptr &&
+                             gl::GenRenderbuffers != nullptr &&
+                             gl::DeleteRenderbuffers != nullptr &&
+                             gl::BindRenderbuffer != nullptr &&
+                             gl::RenderbufferStorage != nullptr && gl::ReadPixels != nullptr;
+  if (device_ == nullptr || !entries_ready) {
+    return Err("offscreen target: OpenGL framebuffer entry points unavailable");
+  }
+  if (auto r = device_->make_current_dummy(); !r) {
+    return Err(r.error());
+  }
+  gl::GenFramebuffers(1, &framebuffer_);
+  gl::BindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
+
+  gl::GenTextures(1, &color_);
+  gl::BindTexture(GL_TEXTURE_2D, color_);
+  gl::TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, static_cast<GLsizei>(width_),
+                 static_cast<GLsizei>(height_), 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+  gl::TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  gl::TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  gl::FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color_, 0);
+
+  gl::GenRenderbuffers(1, &depth_);
+  gl::BindRenderbuffer(GL_RENDERBUFFER, depth_);
+  gl::RenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, static_cast<GLsizei>(width_),
+                          static_cast<GLsizei>(height_));
+  gl::FramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth_);
+
+  const GLenum status = gl::CheckFramebufferStatus(GL_FRAMEBUFFER);
+  gl::BindFramebuffer(GL_FRAMEBUFFER, 0);
+  device_->release_current();
+  if (status != GL_FRAMEBUFFER_COMPLETE) {
+    destroy();
+    return Err("offscreen framebuffer incomplete");
+  }
+  return {};
+}
+
+void OpenGLOffscreenTarget::destroy() {
+  if (device_ == nullptr) {
+    return;
+  }
+  if (framebuffer_ == 0 && color_ == 0 && depth_ == 0) {
+    return;
+  }
+  if (!device_->make_current_dummy()) {
+    return;  // 没有上下文就删不掉 GL 对象，只能留给驱动回收
+  }
+  if (depth_ != 0) {
+    gl::DeleteRenderbuffers(1, &depth_);
+    depth_ = 0;
+  }
+  if (color_ != 0) {
+    gl::DeleteTextures(1, &color_);
+    color_ = 0;
+  }
+  if (framebuffer_ != 0) {
+    gl::DeleteFramebuffers(1, &framebuffer_);
+    framebuffer_ = 0;
+  }
+  device_->release_current();
+}
+
+Result<void> OpenGLOffscreenTarget::read_back_rgba(std::vector<std::uint8_t>& out) {
+  if (framebuffer_ == 0) {
+    return Err("read_back_rgba: offscreen target not created");
+  }
+  if (auto r = make_current_and_bind(); !r) {
+    return Err(r.error());
+  }
+  out.resize(static_cast<std::size_t>(width_) * height_ * 4);
+  gl::ReadPixels(0, 0, static_cast<GLsizei>(width_), static_cast<GLsizei>(height_), GL_RGBA,
+                 GL_UNSIGNED_BYTE, out.data());
+  device_->release_current();
+  // GL 的原点在左下：翻成左上原点，和 Vulkan 那边保持同一套约定。
+  const std::size_t row = static_cast<std::size_t>(width_) * 4;
+  for (std::uint32_t y = 0; y < height_ / 2; ++y) {
+    std::uint8_t* top = out.data() + static_cast<std::size_t>(y) * row;
+    std::uint8_t* bottom = out.data() + static_cast<std::size_t>(height_ - 1 - y) * row;
+    for (std::size_t i = 0; i < row; ++i) {
+      std::swap(top[i], bottom[i]);
+    }
+  }
+  return {};
+}
+
 Result<void> OpenGLSwapChain::resize(std::uint32_t width, std::uint32_t height) {
   width_ = std::max(1u, width);
   height_ = std::max(1u, height);
@@ -933,20 +1086,49 @@ Result<std::unique_ptr<SwapChain>> OpenGLDevice::create_swap_chain(const SwapCha
   return std::make_unique<OpenGLSwapChain>(this, desc);
 }
 
+Result<std::unique_ptr<SwapChain>> OpenGLDevice::create_offscreen_swap_chain(std::uint32_t width,
+                                                                            std::uint32_t height) {
+  auto target = std::make_unique<OpenGLOffscreenTarget>(this, width, height);
+  if (auto created = target->resize(width, height); !created) {
+    return Err(created.error());
+  }
+  return std::unique_ptr<SwapChain>(std::move(target));
+}
+
 Result<void> OpenGLDevice::begin_frame(SwapChain& swap_chain) {
+  if (swap_chain.offscreen()) {
+    return static_cast<OpenGLOffscreenTarget&>(swap_chain).make_current_and_bind();
+  }
   auto& sc = static_cast<OpenGLSwapChain&>(swap_chain);
   return sc.make_current();
 }
 
 Result<void> OpenGLDevice::end_frame(SwapChain& swap_chain) {
+  if (swap_chain.offscreen()) {
+    // 离屏没有 SwapBuffers：等驱动把命令跑完，读回时才有内容可读。
+    gl::Finish();
+    release_current();
+    return {};
+  }
   auto& sc = static_cast<OpenGLSwapChain&>(swap_chain);
   auto r = sc.present();
   release_current();
   return r;
 }
 
-void OpenGLCommandList::begin_render_pass(SwapChain&, const float clear_color[4],
+void OpenGLCommandList::begin_render_pass(SwapChain& swap_chain, const float clear_color[4],
                                           float clear_depth) {
+  if (swap_chain.offscreen()) {
+    // 离屏：先把 FBO 绑上（begin_frame 已经绑过一次，这里再绑一次保证录制期也是它）。
+    auto& target = static_cast<OpenGLOffscreenTarget&>(swap_chain);
+    gl::BindFramebuffer(GL_FRAMEBUFFER, target.framebuffer());
+    // 视口 / 裁剪也跟着目标尺寸走：GL 的状态是上下文级的，不设就会沿用窗口那一套
+    //（dummy 窗口往往只有 1×1，clear 会被裁掉，读回来全是黑的）。
+    gl::Viewport(0, 0, static_cast<GLsizei>(target.width()),
+                 static_cast<GLsizei>(target.height()));
+    gl::Scissor(0, 0, static_cast<GLsizei>(target.width()),
+                static_cast<GLsizei>(target.height()));
+  }
   gl::Enable(GL_DEPTH_TEST);
   gl::Enable(GL_SCISSOR_TEST);
   gl::DepthFunc(GL_LESS);

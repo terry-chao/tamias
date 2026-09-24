@@ -339,6 +339,23 @@ TEST(RhiProbe, PolicyOverrideIgnoresBlocklist) {
   EXPECT_EQ(*report.chosen, GraphicsBackend::Vulkan);
 }
 
+// C 档（离屏画一个像素）在后端不支持离屏时，要如实报原因并继续降级，而不是崩。
+TEST(RhiProbe, PixelDepthReportsMissingOffscreenSupport) {
+  const RhiDeviceFactory factory = [](const DeviceCreateInfo& info)
+      -> Result<std::unique_ptr<RHIDevice>> {
+    return std::unique_ptr<RHIDevice>(
+        new FakeDevice(info.backend, make_identity(0x10DE, 0x1234, "566.0.3.0"), true));
+  };
+  RhiProbeOptions options{};
+  options.depth = RhiProbeDepth::Pixel;
+  options.candidates = {GraphicsBackend::Vulkan, GraphicsBackend::OpenGL};
+  const RhiProbeReport report = probe_rhi(options, factory);
+  EXPECT_FALSE(report.chosen.has_value());  // 假设备不支持离屏 → 两条都失败
+  ASSERT_EQ(report.attempts.size(), 2u);
+  EXPECT_NE(report.attempts[0].reason.find("offscreen target"), std::string::npos);
+  EXPECT_NE(report.summary.find("no usable"), std::string::npos);
+}
+
 TEST(RhiProbe, JsonReportMentionsChosenBackendAndAdapter) {
   const RhiDeviceFactory factory = [](const DeviceCreateInfo& info)
       -> Result<std::unique_ptr<RHIDevice>> {

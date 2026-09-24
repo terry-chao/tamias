@@ -69,9 +69,9 @@ int main(int argc, char* argv[]) {
   }
 
   if (cli.probe) {
-    // 体检档：连「提交一次空命令」一起验（正常启动只到建设备）。
+    // 体检档：离屏画一个像素再读回来（最接近「真的能出图」；正常启动只到建设备）。
     tamias::RhiProbeOptions options{};
-    options.depth = tamias::RhiProbeDepth::Submit;
+    options.depth = tamias::RhiProbeDepth::Pixel;
     options.blocklist = &blocklist;
     // 体检也可以指定范围：--probe-rhi --gpu-backend=opengl 就只查那一条路。
     if (cli.backend.has_value()) {

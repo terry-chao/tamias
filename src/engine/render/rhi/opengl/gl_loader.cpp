@@ -72,6 +72,18 @@ void (*Finish)() = nullptr;
 GLenum (*GetError)() = nullptr;
 const GLubyte* (*GetString)(GLenum) = nullptr;
 
+void (*GenFramebuffers)(GLsizei, GLuint*) = nullptr;
+void (*DeleteFramebuffers)(GLsizei, const GLuint*) = nullptr;
+void (*BindFramebuffer)(GLenum, GLuint) = nullptr;
+void (*FramebufferTexture2D)(GLenum, GLenum, GLenum, GLuint, GLint) = nullptr;
+void (*FramebufferRenderbuffer)(GLenum, GLenum, GLenum, GLuint) = nullptr;
+GLenum (*CheckFramebufferStatus)(GLenum) = nullptr;
+void (*GenRenderbuffers)(GLsizei, GLuint*) = nullptr;
+void (*DeleteRenderbuffers)(GLsizei, const GLuint*) = nullptr;
+void (*BindRenderbuffer)(GLenum, GLuint) = nullptr;
+void (*RenderbufferStorage)(GLenum, GLenum, GLsizei, GLsizei) = nullptr;
+void (*ReadPixels)(GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, void*) = nullptr;
+
 #if defined(_WIN32)
 PFN_wglCreateContextAttribsARB CreateContextAttribsARB = nullptr;
 PFN_wglChoosePixelFormatARB ChoosePixelFormatARB = nullptr;
@@ -148,6 +160,17 @@ bool load_procs() {
   ok = load(Finish, "glFinish") && ok;
   ok = load(GetError, "glGetError") && ok;
   ok = load(GetString, "glGetString") && ok;
+  ok = load(GenFramebuffers, "glGenFramebuffers") && ok;
+  ok = load(DeleteFramebuffers, "glDeleteFramebuffers") && ok;
+  ok = load(BindFramebuffer, "glBindFramebuffer") && ok;
+  ok = load(FramebufferTexture2D, "glFramebufferTexture2D") && ok;
+  ok = load(FramebufferRenderbuffer, "glFramebufferRenderbuffer") && ok;
+  ok = load(CheckFramebufferStatus, "glCheckFramebufferStatus") && ok;
+  ok = load(GenRenderbuffers, "glGenRenderbuffers") && ok;
+  ok = load(DeleteRenderbuffers, "glDeleteRenderbuffers") && ok;
+  ok = load(BindRenderbuffer, "glBindRenderbuffer") && ok;
+  ok = load(RenderbufferStorage, "glRenderbufferStorage") && ok;
+  ok = load(ReadPixels, "glReadPixels") && ok;
 #if defined(_WIN32)
   CreateContextAttribsARB =
       reinterpret_cast<PFN_wglCreateContextAttribsARB>(get_proc("wglCreateContextAttribsARB"));

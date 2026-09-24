@@ -36,15 +36,18 @@
 | 档 | 做什么 | 用在哪 | 代价 |
 |---|---|---|---|
 | **A：只建设备** | 建 instance / 选物理设备 / 建 device / VMA 分配一小块显存 | **正常启动** | 几十毫秒 |
-| **B：再空提交** | 建一次性 command buffer、空录制、`vkQueueSubmit` + fence（GL 侧 `glFinish`） | `--probe-rhi` | +几毫秒 |
+| **B：再空提交** | 建一次性 command buffer、空录制、`vkQueueSubmit` + fence（GL 侧 `glFinish`） | 需要 B 档时（自检脚本） | +几毫秒 |
+| **C：离屏画一个像素** | 建离屏目标 → 画 1×1 纯色 → 读回比对 | **`--probe-rhi`** ✅ | +几毫秒（含一次真实提交） |
 
 「建得出 ≠ 能提交」是最阴的一类故障（坏驱动、TDR 之后的设备、远程会话下的提交路径），
-所以体检档跑 B。为此外加了两个 RHI 口子（都有默认实现，后端按需覆盖）：
+所以体检档一路验到「真的能出图」——C 档天然包含 B 档（读回之前必须提交一次完整帧）。
+为此在 RHI 上加了三个口子（都有默认实现，后端按需覆盖）：
 
 | 口子 | 干什么 |
 |---|---|
 | `RHIDevice::gpu_identity()` | 厂商 / 设备号 / 驱动版本 / API 版本 —— 块名单的输入 |
 | `RHIDevice::submit_noop()` | 提交一次空命令并等完成（Vulkan 5 秒超时，挂住就换下一个后端） |
+| `RHIDevice::create_offscreen_swap_chain(w,h)` + `SwapChain::read_back_rgba()` | 无窗口渲染 + 像素读回（RGBA8、左上原点） |
 
 ## 3. 块名单（blocklist）
 
@@ -162,6 +165,8 @@
 - **图形诊断面板**（把报告显示出来、一键复制给 IT）：报告已经结构化，接 UI 是下一步。
 - **OpenGL 的驱动版本**：Windows 上要读注册表才拿得到（Qt 也这么干），未做。
 - **多设备**：volk 的函数表是进程全局的，当前只允许一台 Vulkan 设备（见 [RENDERING.md](RENDERING.md) §5）。
+- **离屏渲染的消费者**：RHI 层已经能离屏出图（缩略图 / 截图 / 像素级金样都够用了），但还没接具体
+  功能——下一步是「当前视图导出 PNG」和 `RenderSceneGolden` 的像素比对。
 
 ## 9. 测试
 

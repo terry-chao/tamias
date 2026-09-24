@@ -19,9 +19,12 @@ namespace tamias {
 //   Device：只建设备（几十毫秒，覆盖「缺 runtime / 没设备 / 建不出 / 分配不了显存」）。
 //   Submit：再提交一次空命令并等它完成，多抓「建得出但提交就坏」——坏驱动、TDR 之后的
 //           设备、远程会话下的提交路径。建得出 ≠ 能提交，这是最阴的一类。
+//   Pixel：离屏画一个像素再读回来比对（最接近「真的能出图」；它天然包含 Submit 那一步，
+//          也能顺带验证离屏通路本身）。需要后端支持离屏目标。
 enum class RhiProbeDepth : std::uint8_t {
   Device = 0,
   Submit = 1,
+  Pixel = 2,
 };
 
 struct RhiProbeOptions {

@@ -194,6 +194,14 @@ class SwapChain {
   [[nodiscard]] virtual std::uint32_t width() const = 0;
   [[nodiscard]] virtual std::uint32_t height() const = 0;
   [[nodiscard]] virtual TextureDesc::Format color_format() const = 0;
+  // 离屏目标：不依赖窗口、也不 present，画完可以把像素读回 CPU。
+  [[nodiscard]] virtual bool offscreen() const { return false; }
+  // 把最近一帧的颜色读回 CPU：**RGBA8、行优先、左上原点**（行序统一，免得每个调用方
+  // 各转一遍）。窗口 swapchain 不支持（内容该从平台层取），返回错误。
+  virtual Result<void> read_back_rgba(std::vector<std::uint8_t>& out) {
+    (void)out;
+    return Err("read_back_rgba: only offscreen targets can be read back");
+  }
 };
 
 class CommandList {
@@ -276,6 +284,14 @@ class RHIDevice {
   virtual Result<std::unique_ptr<PipelineState>> create_pipeline(const PipelineDesc& desc) = 0;
   virtual Result<std::unique_ptr<CommandList>> create_command_list() = 0;
   virtual Result<std::unique_ptr<SwapChain>> create_swap_chain(const SwapChainDesc& desc) = 0;
+  // 造一个离屏渲染目标（不依赖窗口）。用于：探测的「画一个像素」档、缩略图 / 截图、
+  // 像素级金样。后端不支持就返回错误（Web 后端目前是默认实现）。
+  virtual Result<std::unique_ptr<SwapChain>> create_offscreen_swap_chain(std::uint32_t width,
+                                                                        std::uint32_t height) {
+    (void)width;
+    (void)height;
+    return Err(std::string("offscreen rendering not supported by ") + to_string(backend()));
+  }
   virtual Result<std::unique_ptr<Fence>> create_fence() = 0;
 
   virtual Result<void> begin_frame(SwapChain& swap_chain) = 0;
