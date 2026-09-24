@@ -237,6 +237,51 @@ DrawingRef* Document::drawing(std::string_view path) {
   return it == drawings_.end() ? nullptr : &*it;
 }
 
+TextAnnotation& Document::add_text_annotation(TextAnnotation annotation) {
+  annotation.id = next_text_annotation_id_++;
+  annotation.selected = false;  // 选中是编辑器状态，新建时一律是「未选中」
+  text_annotations_.push_back(std::move(annotation));
+  return text_annotations_.back();
+}
+
+TextAnnotation& Document::insert_text_annotation(TextAnnotation annotation) {
+  if (annotation.id == 0) {
+    annotation.id = next_text_annotation_id_++;
+  } else {
+    next_text_annotation_id_ = std::max(next_text_annotation_id_, annotation.id + 1);
+  }
+  text_annotations_.push_back(std::move(annotation));
+  return text_annotations_.back();
+}
+
+TextAnnotation* Document::text_annotation(std::uint64_t id) {
+  for (TextAnnotation& annotation : text_annotations_) {
+    if (annotation.id == id) {
+      return &annotation;
+    }
+  }
+  return nullptr;
+}
+
+const TextAnnotation* Document::text_annotation(std::uint64_t id) const {
+  for (const TextAnnotation& annotation : text_annotations_) {
+    if (annotation.id == id) {
+      return &annotation;
+    }
+  }
+  return nullptr;
+}
+
+bool Document::remove_text_annotation(std::uint64_t id) {
+  for (auto it = text_annotations_.begin(); it != text_annotations_.end(); ++it) {
+    if (it->id == id) {
+      text_annotations_.erase(it);
+      return true;
+    }
+  }
+  return false;
+}
+
 void Document::assign_active_storey(Entity& entity) {
   if (!entity.location) {
     return;

@@ -10,6 +10,8 @@ add_library(tamias_document STATIC
   ${CMAKE_SOURCE_DIR}/src/bim/host_geometry.cpp
   ${CMAKE_SOURCE_DIR}/src/bim/host_update.cpp
   ${CMAKE_SOURCE_DIR}/src/bim/wall_join.cpp
+  ${CMAKE_SOURCE_DIR}/src/bim/length_text.cpp
+  ${CMAKE_SOURCE_DIR}/src/bim/grid_dimensions.cpp
 )
 add_library(tamias::document ALIAS tamias_document)
 target_include_directories(tamias_document PUBLIC ${CMAKE_SOURCE_DIR}/src)

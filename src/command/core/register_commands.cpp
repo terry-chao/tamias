@@ -11,14 +11,17 @@
 #include "command/create/create_sketch_command.h"
 #include "command/create/create_slab_command.h"
 #include "command/create/create_storey_command.h"
+#include "command/create/create_text_command.h"
 #include "command/create/create_structural_wall_command.h"
 #include "command/create/create_wall_command.h"
 #include "command/delete/delete_entity_command.h"
 #include "command/delete/delete_grid_axis_command.h"
+#include "command/delete/delete_text_command.h"
 #include "command/edit/set_feature_param_command.h"
 #include "command/edit/set_location_command.h"
 #include "command/edit/set_material_command.h"
 #include "command/edit/update_grid_command.h"
+#include "command/edit/update_text_command.h"
 #include "bim/wall_size.h"
 #include "entity/family/host/structural/column_entity.h"
 
@@ -381,6 +384,56 @@ void register_commands(CommandRegistry& registry) {
   registry.register_command("delete_grid_axis", [](Document& doc, const CommandArgs& args) {
     return std::make_unique<DeleteGridAxisCommand>(
         doc, static_cast<std::uint64_t>(arg_int(args, "axis_id", 0)));
+  });
+
+  // ---- 文字注记（世界锚点 + 屏幕朝向；见 docs/TEXT.md §5）----
+  registry.register_command("create_text", [](Document& doc, const CommandArgs& args) {
+    TextAnnotation annotation;
+    annotation.kind = text_kind_from_name(arg_string(args, "kind", "annotation"));
+    annotation.text = arg_string(args, "text", "");
+    if (auto position = arg_vec3(args, "position")) {
+      annotation.anchor = *position;
+    }
+    annotation.size_px = static_cast<float>(arg_double(args, "size_px", 14.0));
+    if (auto color = arg_vec3(args, "color")) {
+      annotation.color = *color;
+    }
+    annotation.opacity = static_cast<float>(arg_double(args, "opacity", 1.0));
+    annotation.align = text_align_from_name(arg_string(args, "align", "left"));
+    return std::make_unique<CreateTextCommand>(doc, std::move(annotation));
+  });
+
+  // 只改传进来的字段：没给的保持原值（对齐属性面板 / 就地编辑的用法）。
+  registry.register_command("update_text", [](Document& doc, const CommandArgs& args) {
+    const auto text_id = static_cast<std::uint64_t>(arg_int(args, "text_id", 0));
+    TextAnnotation updated;
+    if (const TextAnnotation* current = doc.text_annotation(text_id)) {
+      updated = *current;
+    }
+    if (args.find("text") != args.end()) {
+      updated.text = arg_string(args, "text", updated.text);
+    }
+    if (auto position = arg_vec3(args, "position")) {
+      updated.anchor = *position;
+    }
+    if (args.find("size_px") != args.end()) {
+      updated.size_px = static_cast<float>(arg_double(args, "size_px", updated.size_px));
+    }
+    if (auto color = arg_vec3(args, "color")) {
+      updated.color = *color;
+    }
+    if (args.find("opacity") != args.end()) {
+      updated.opacity = static_cast<float>(arg_double(args, "opacity", updated.opacity));
+    }
+    if (args.find("align") != args.end()) {
+      updated.align = text_align_from_name(arg_string(args, "align", "left"));
+    }
+    return std::make_unique<UpdateTextCommand>(doc, text_id, std::move(updated));
+  });
+
+  registry.register_command("delete_text", [](Document& doc, const CommandArgs& args) {
+    return std::make_unique<DeleteTextCommand>(
+        doc, static_cast<std::uint64_t>(arg_int(args, "text_id", 0)));
   });
 }
 

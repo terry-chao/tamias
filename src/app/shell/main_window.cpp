@@ -606,6 +606,43 @@ MainWindow::MainWindow(QWidget* parent)
   });
   addAction(grid_settings_action_);
 
+  // 注释 → 文字：点一下落位，弹框输入。一步撤销（create_text 命令）。
+  text_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/text_label.svg")), tr("Text"),
+                             this);
+  text_action_->setShortcut(QKeySequence(tr("Ctrl+Shift+T")));
+  text_action_->setToolTip(tr("Place a text annotation: click a point, then type"));
+  connect(text_action_, &QAction::triggered, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->begin_text_placement();
+    }
+  });
+  addAction(text_action_);
+
+  // 文字标注：轴号 / 标高 / 尺寸链。都是派生标注（不落盘），只控制这一帧画不画。
+  const auto make_label_action = [this](const char* icon, const QString& text,
+                                        const QString& tip, TextKind kind) {
+    auto* action = new QAction(ribbon_icon(QString::fromLatin1(icon)), text, this);
+    action->setCheckable(true);
+    action->setChecked(true);
+    action->setToolTip(tip);
+    connect(action, &QAction::triggered, this, [this, kind](bool on) {
+      if (auto* vp = current_viewport()) {
+        vp->set_label_kind_visible(kind, on);
+      }
+    });
+    addAction(action);
+    return action;
+  };
+  label_axis_action_ = make_label_action(":/icons/text_label.svg", tr("Axis Tags"),
+                                         tr("Show grid axis tags (A, B, 1, 2 …)"),
+                                         TextKind::AxisLabel);
+  label_level_action_ = make_label_action(":/icons/level.svg", tr("Levels"),
+                                          tr("Show storey names and elevations"),
+                                          TextKind::StoreyLabel);
+  label_dimension_action_ =
+      make_label_action(":/icons/dimension.svg", tr("Dimensions"),
+                        tr("Show grid spacing dimensions (plan view)"), TextKind::Dimension);
+
   // 参考图纸底图总开关：图纸挂在文档下（「图纸管理」面板），画在视口里模型之下。
   drawing_visible_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/drawing.svg")),
                                         tr("Reference Drawings"), this);
@@ -826,6 +863,11 @@ MainWindow::MainWindow(QWidget* parent)
   modify_group->add_action(fillet_action_);
   modify_group->add_action(chamfer_action_);
 
+  // 注释：放文字（派生标注的显示开关在「视图 → Annotations」那一组）。
+  RibbonGroup* annotate_group =
+      home_page->add_group(QStringLiteral("annotate"), tr("Annotate"));
+  annotate_group->add_action(text_action_);
+
   RibbonGroup* navigation_group =
       home_page->add_group(QStringLiteral("navigation"), tr("Navigation"));
   navigation_group->add_action(frame_all_action);
@@ -851,6 +893,13 @@ MainWindow::MainWindow(QWidget* parent)
   display_ribbon->add_action(grid_action_);
   display_ribbon->add_action(grid_settings_action_);
   display_ribbon->add_action(drawing_visible_action_);
+
+  // 标注归一组：都是「派生文字」，关掉只是这一帧不画，不改文档。
+  RibbonGroup* labels_ribbon =
+      view_page->add_group(QStringLiteral("labels"), tr("Annotations"));
+  labels_ribbon->add_action(label_axis_action_);
+  labels_ribbon->add_action(label_level_action_);
+  labels_ribbon->add_action(label_dimension_action_);
 
   RibbonGroup* panels_group = view_page->add_group(QStringLiteral("panels"), tr("Panels"));
   // 构件显隐面板住在视口右上角的工具面板里（不在停靠区），这里只给入口与快捷键。
@@ -2340,6 +2389,18 @@ void MainWindow::sync_bim_actions() {
     drawing_visible_action_->setEnabled(vp != nullptr);
     drawing_visible_action_->setChecked(vp == nullptr || vp->drawings_visible());
   }
+  // 标注开关同样跟着活跃文档走。
+  const auto sync_label_action = [vp](QAction* action, TextKind kind) {
+    if (action == nullptr) {
+      return;
+    }
+    const QSignalBlocker block(action);
+    action->setEnabled(vp != nullptr);
+    action->setChecked(vp == nullptr || vp->label_kind_visible(kind));
+  };
+  sync_label_action(label_axis_action_, TextKind::AxisLabel);
+  sync_label_action(label_level_action_, TextKind::StoreyLabel);
+  sync_label_action(label_dimension_action_, TextKind::Dimension);
 }
 
 void MainWindow::bind_plugin_session() {

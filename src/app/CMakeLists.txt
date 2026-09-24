@@ -162,6 +162,8 @@ tamias_compile_hlsl(tamias grid.vert.hlsl vs_6_0 grid.vert)
 tamias_compile_hlsl(tamias grid.frag.hlsl ps_6_0 grid.frag)
 tamias_compile_hlsl(tamias overlay.vert.hlsl vs_6_0 overlay.vert)
 tamias_compile_hlsl(tamias overlay.frag.hlsl ps_6_0 overlay.frag)
+tamias_compile_hlsl(tamias text.vert.hlsl vs_6_0 text.vert)
+tamias_compile_hlsl(tamias text.frag.hlsl ps_6_0 text.frag)
 
 add_custom_command(TARGET tamias POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E rm -rf $<TARGET_FILE_DIR:tamias>/shaders

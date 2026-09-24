@@ -125,6 +125,12 @@ class MainWindow final : public QMainWindow {
   QAction* realistic_action_ = nullptr;
   QAction* xray_action_ = nullptr;
   QAction* grid_action_ = nullptr;
+  // 注释：放一段文字注记（世界锚点 + 屏幕朝向，见 docs/TEXT.md §5）。
+  QAction* text_action_ = nullptr;
+  // 标注（文字）显示开关：轴号 / 标高 / 尺寸链，见 docs/TEXT.md §4.4。
+  QAction* label_axis_action_ = nullptr;
+  QAction* label_level_action_ = nullptr;
+  QAction* label_dimension_action_ = nullptr;
   QAction* grid_settings_action_ = nullptr;
   QAction* drawing_visible_action_ = nullptr;
   QAction* trace_drawing_action_ = nullptr;

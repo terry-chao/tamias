@@ -158,6 +158,25 @@ MeshCpu make_overlay_quad() {
 }
 
 // 把 CPU 网格上传成 GPU 网格（顶点 + 索引 buffer）。
+// 屏幕空间文字的单位四边形：局部 (0..1)² 在 XY 平面上，UV 与之一一对应。
+// 和底图四边形不同——那个摊在 XZ 平面（y 恒为 0），文字要的是像素空间的正方形。
+MeshCpu make_text_unit_quad() {
+  MeshCpu mesh;
+  const Vec3 corners[4] = {{0.f, 0.f, 0.f}, {1.f, 0.f, 0.f}, {1.f, 1.f, 0.f}, {0.f, 1.f, 0.f}};
+  const Vec2 uvs[4] = {{0.f, 0.f}, {1.f, 0.f}, {1.f, 1.f}, {0.f, 1.f}};
+  for (int i = 0; i < 4; ++i) {
+    Vertex v{};
+    v.position = corners[i];
+    v.normal = {0.f, 0.f, 1.f};
+    v.uv = uvs[i];
+    mesh.vertices.push_back(v);
+  }
+  mesh.indices = {0, 1, 2, 0, 2, 3};
+  mesh.has_texcoord = true;
+  recompute_bounds(mesh);
+  return mesh;
+}
+
 Result<GpuMesh> create_gpu_mesh(RHIDevice& device, MeshCpu mesh) {
   BufferDesc vb{};
   vb.size = mesh.vertices.size() * sizeof(Vertex);
@@ -311,10 +330,12 @@ void RenderThread::stop() {
   sky_pipeline_.reset();
   grid_pipeline_.reset();
   overlay_pipeline_.reset();
+  text_pipeline_.reset();
   axes_mesh_ = GpuMesh{};
   sky_mesh_ = GpuMesh{};
   grid_mesh_ = GpuMesh{};
   overlay_quad_mesh_ = GpuMesh{};
+  text_unit_quad_mesh_ = GpuMesh{};
   preview_line_mesh_ = GpuMesh{};
   vs_.reset();
   fs_.reset();
@@ -324,6 +345,8 @@ void RenderThread::stop() {
   grid_fs_.reset();
   overlay_vs_.reset();
   overlay_fs_.reset();
+  text_vs_.reset();
+  text_fs_.reset();
   if (device_) {
     device_.reset();
   }
@@ -829,6 +852,55 @@ Result<void> RenderThread::ensure_pipelines() {
   }
   grid_pipeline_ = std::move(*pgrid);
 
+  // 屏幕空间文字管线：无光照、不测深度（标注永远看得见）、预乘混合。
+  // 和底图一样，WebGL / WebGPU 还没写这两条 shader，那两个后端不建管线、不画文字。
+  if (!webgl && !webgpu) {
+    const char* text_vs_name = opengl ? "text.vert.gl.spv" : "text.vert.spv";
+    const char* text_fs_name = opengl ? "text.frag.gl.spv" : "text.frag.spv";
+    auto text_vs_words = load_spirv_file(resolve_shader_path(text_vs_name).string());
+    auto text_fs_words = load_spirv_file(resolve_shader_path(text_fs_name).string());
+    // 缺 shader 不该把视口拖垮：报一声，这一版就没文字。
+    if (!text_vs_words || !text_fs_words) {
+      log_error("text shaders unavailable: " +
+                (text_vs_words ? text_fs_words.error() : text_vs_words.error()));
+    } else {
+      std::vector<std::uint32_t> text_vs_spirv = std::move(*text_vs_words);
+      std::vector<std::uint32_t> text_fs_spirv = std::move(*text_fs_words);
+      ShaderModuleDesc text_vs_desc{};
+      text_vs_desc.stage = ShaderStage::Vertex;
+      text_vs_desc.entry = "main";
+      text_vs_desc.language = ShaderLanguage::Spirv;
+      text_vs_desc.spirv = text_vs_spirv;
+      ShaderModuleDesc text_fs_desc{};
+      text_fs_desc.stage = ShaderStage::Fragment;
+      text_fs_desc.entry = "main";
+      text_fs_desc.language = ShaderLanguage::Spirv;
+      text_fs_desc.spirv = text_fs_spirv;
+      auto text_vs = device_->create_shader_module(text_vs_desc);
+      auto text_fs = device_->create_shader_module(text_fs_desc);
+      if (!text_vs || !text_fs) {
+        log_error("text shader modules rejected: " +
+                  (text_vs ? text_fs.error() : text_vs.error()));
+      } else {
+        text_vs_ = std::move(*text_vs);
+        text_fs_ = std::move(*text_fs);
+        PipelineDesc text{};
+        text.vertex_shader = text_vs_.get();
+        text.fragment_shader = text_fs_.get();
+        text.instanced = true;    // 每字形一个实例，复用 GpuInstance 布局
+        text.depth_test = false;  // 标注压在几何之上，和坐标轴 / 预览线同一档
+        text.depth_write = false;
+        text.blend = true;
+        auto ptext = device_->create_pipeline(text);
+        if (!ptext) {
+          log_error("text pipeline failed: " + ptext.error());
+        } else {
+          text_pipeline_ = std::move(*ptext);
+        }
+      }
+    }
+  }
+
   // 图纸底图管线：无光照 + 透明底贴图（references docs/DRAWING.md）。
   // 只有桌面后端有这对 shader：WebGL / WebGPU 的 GLSL / WGSL 版本还没写，
   // 那两个后端不建这条管线，底图不画（图纸管理面板和二维页照常可用）。
@@ -920,6 +992,12 @@ Result<void> RenderThread::ensure_pipelines() {
     return Err(overlay_quad.error());
   }
   overlay_quad_mesh_ = std::move(*overlay_quad);
+
+  auto text_unit_quad = create_gpu_mesh(*device_, make_text_unit_quad());
+  if (!text_unit_quad) {
+    return Err(text_unit_quad.error());
+  }
+  text_unit_quad_mesh_ = std::move(*text_unit_quad);
 
   auto axes_mesh = create_gpu_mesh(*device_, make_axes_mesh());
   if (!axes_mesh) {
@@ -1374,6 +1452,38 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
       DrawIndexedDesc d{};
       d.index_count = overlay_quad_mesh_.index_count;
       channel.command_list->draw_indexed(d);
+    }
+  }
+
+  // 屏幕空间文字：所有字形合并成一次实例化 draw（图集只有一张贴图）。
+  // 画在模型与底图之后、坐标轴之前——标注压在几何之上，参考线仍压在最上面。
+  if (text_pipeline_ && text_unit_quad_mesh_.index_buffer && !frame.text_quads.empty() &&
+      frame.text_atlas_texture_id != 0) {
+    const auto atlas = textures_.find(frame.text_atlas_texture_id);
+    if (atlas != textures_.end() && atlas->second.texture) {
+      TAMIAS_GPU_ZONE(*channel.command_list, "gpu.text");
+      std::vector<GpuInstance> instances;
+      instances.reserve(frame.text_quads.size());
+      for (const TextQuad& quad : frame.text_quads) {
+        instances.push_back(make_text_instance(quad));
+      }
+      if (upload_instances(instances)) {
+        channel.command_list->set_pipeline(*text_pipeline_);
+        bind_mesh_sets();
+        channel.command_list->set_texture(*atlas->second.texture, kTextureSlotAlbedo);
+        channel.command_list->set_vertex_buffer(*text_unit_quad_mesh_.vertex_buffer);
+        channel.command_list->set_index_buffer(*text_unit_quad_mesh_.index_buffer);
+        PushConstants pc{};
+        pc.color[0] = pc.color[1] = pc.color[2] = pc.color[3] = 1.f;
+        // 文字 shader 自己把像素摆到裁剪空间，需要视口尺寸。
+        pc.eye_pos_mode[0] = static_cast<float>(frame.width);
+        pc.eye_pos_mode[1] = static_cast<float>(frame.height);
+        channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
+        DrawIndexedDesc d{};
+        d.index_count = text_unit_quad_mesh_.index_count;
+        d.instance_count = static_cast<std::uint32_t>(instances.size());
+        channel.command_list->draw_indexed(d);
+      }
     }
   }
 

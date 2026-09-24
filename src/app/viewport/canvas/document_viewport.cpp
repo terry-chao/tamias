@@ -1,6 +1,7 @@
 #include "app/viewport/canvas/document_viewport.h"
 
 #include "app/base/app_settings.h"
+#include "app/base/qt_path.h"
 #include "bim/host_geometry.h"
 #include "bim/wall_size.h"
 #include "command/edit/edit_entity_grip_command.h"
@@ -11,7 +12,13 @@
 #include "command/edit/update_grid_command.h"
 #include "command/edit/update_storeys_command.h"
 #include "app/bim/components/component_specs.h"
+#include "bim/grid_dimensions.h"
+#include "bim/length_text.h"
 #include "engine/base/log.h"
+#include "engine/document/picking.h"
+#include "engine/render/text/font_fallback.h"
+#include "engine/render/text/text_layout.h"
+#include "engine/render/text/text_quad_builder.h"
 #include "engine/math/grid.h"
 #include "engine/modeling/feature/curve_geom.h"
 #include "engine/modeling/feature/feature.h"
@@ -28,6 +35,8 @@
 #include <QCursor>
 #include <QFileInfo>
 #include <QIcon>
+#include <QInputDialog>
+#include <QLineEdit>
 #include <QKeyEvent>
 #include <QKeySequence>
 #include <QHBoxLayout>
@@ -58,6 +67,26 @@
 namespace tamias {
 
 namespace {
+
+// 字体从哪来：仓库里的 assets/fonts（开发）→ exe 旁边的 assets/fonts（部署）→ 系统字体。
+// 一个都没有时返回空，文字通路整体关掉——不崩、不画、在日志里说一声。
+std::vector<std::filesystem::path> app_font_dirs() {
+  std::vector<std::filesystem::path> dirs;
+  const auto add = [&dirs](const std::filesystem::path& dir) {
+    std::error_code ec;
+    if (!dir.empty() && std::filesystem::is_directory(dir, ec)) {
+      dirs.push_back(dir);
+    }
+  };
+#if defined(TAMIAS_SOURCE_DIR)
+  add(std::filesystem::path(TAMIAS_SOURCE_DIR) / "assets" / "fonts");
+#endif
+  add(qstring_to_path(QCoreApplication::applicationDirPath()) / "assets" / "fonts");
+  for (const std::filesystem::path& dir : default_font_dirs()) {
+    add(dir);
+  }
+  return dirs;
+}
 
 // 轴线点选的屏幕容差：轴是细线，得给点手抖的余量；比这个远就不算点中。
 constexpr float kGridPickPixels = 8.f;
@@ -778,6 +807,8 @@ void DocumentViewport::submit_current_frame() {
       point.y = grid_y;
     }
   }
+  // 派生标注（轴号 / 标高 / 尺寸链）：按类别开关逐条决定，见 docs/TEXT.md §4.4。
+  append_text_annotations(frame);
   if (pending_grid_ && has_cursor_) {
     const Vec3 drop = plan_position_at_storey(last_mouse_);
     append_axis_segments(ghost_grid_axes(last_mouse_), frame.grid_preview_segments);
@@ -823,6 +854,11 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
   has_cursor_ = true;
   press_hit_ = 0;
   if (event->button() == Qt::LeftButton) {
+    if (text_placement_) {
+      commit_text_placement(event->pos());
+      text_press_consumed_ = true;
+      return;
+    }
     if (pending_grid_) {
       commit_grid_placement(event->pos());
       grid_press_consumed_ = true;  // 抬起时别把这一下当成选择点击 / 清空选择
@@ -885,6 +921,14 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
       request_redraw();
       return;
     }
+    // 文字注记压在最上面：先看点到的是不是它。
+    if (const std::uint64_t text_id = pick_text_annotation_at(event->pos()); text_id != 0) {
+      select_text(text_id);
+      text_press_consumed_ = true;
+      return;
+    }
+    // 点到别处：放掉注记选择（和轴网选择一个道理）。
+    select_text(0);
     press_hit_ = pick_node_at(event->pos());
     EntityGrip grip{};
     if (pick_grip_at(event->pos(), grip)) {
@@ -1002,7 +1046,8 @@ void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
     // 框选优先：拖动可能正好从一根轴线上起手，按下那一下的"选中轴线"不该吃掉框选。
     if (box_selecting_) {
       finish_box_select(event->pos(), (event->modifiers() & Qt::ShiftModifier) != 0);
-    } else if (!grid_press_consumed_) {  // 已交给轴网（落位 / 选轴）的那一下，不再当选择点击
+    } else if (!grid_press_consumed_ && !text_press_consumed_) {
+      // 已交给轴网（落位 / 选轴）或文字注记（选中 / 放置）的那一下，不再当选择点击。
       if (plugin_input_press_) {
         plugin_input_press_ = false;
       } else if (gripping_) {
@@ -1018,6 +1063,7 @@ void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
       }
     }
     grid_press_consumed_ = false;
+    text_press_consumed_ = false;
     box_selecting_ = false;
     if (box_select_overlay_) {
       box_select_overlay_->hide_box();
@@ -1067,7 +1113,10 @@ void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
       // 右键的菜单跟着光标下的东西走：构件 > 轴线 > 当前选中（构件）。
       const std::uint64_t hit = pick_node_at(event->pos());
       const std::uint64_t axis_hit = pick_grid_axis_at(event->pos());
-      if (hit != 0 && document_->entity(hit) != nullptr) {
+      if (const std::uint64_t text_hit = pick_text_annotation_at(event->pos()); text_hit != 0) {
+        select_text(text_hit);
+        show_entity_context_menu(mapToGlobal(event->pos()));
+      } else if (hit != 0 && document_->entity(hit) != nullptr) {
         document_->bim().grid().clear_selection();
         session_->clear_selection();
         session_->select(hit);
@@ -1087,6 +1136,14 @@ void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
 }
 
 void DocumentViewport::mouseDoubleClickEvent(QMouseEvent* event) {
+  // 双击注记 = 就地改文字（先于命令确认，不然会被当成"完成当前命令"）。
+  if (event->button() == Qt::LeftButton) {
+    if (const std::uint64_t text_id = pick_text_annotation_at(event->pos()); text_id != 0) {
+      select_text(text_id);
+      edit_text_annotation(text_id);
+      return;
+    }
+  }
   if (event->button() == Qt::LeftButton && plugin_point_input_.active() &&
       plugin_point_input_.accepts_confirm()) {
     plugin_point_input_.confirm();
@@ -1136,6 +1193,10 @@ void DocumentViewport::keyPressEvent(QKeyEvent* event) {
   }
   switch (event->key()) {
     case Qt::Key_Escape:
+      if (text_placement_) {
+        cancel_text_placement();
+        break;
+      }
       cancel_tool();
       break;
     case Qt::Key_Delete:
@@ -1563,6 +1624,11 @@ void DocumentViewport::delete_selected() {
     }
     apply_grid_settings(std::move(keep));
   }
+  // 选中的文字注记（一步撤销，删完清掉选中）。
+  if (selected_text_id_ != 0) {
+    run_command("delete_text", {{"text_id", static_cast<std::int64_t>(selected_text_id_)}});
+    select_text(0);
+  }
   emit selection_changed();
 }
 
@@ -1660,6 +1726,20 @@ void DocumentViewport::update_opening_hover(const QPoint& pos) {
 }
 
 void DocumentViewport::show_entity_context_menu(const QPoint& global_pos) {
+  // 选中的是文字注记：给它的菜单（编辑 / 删除），和构件菜单不是一个。
+  if (selected_text_id_ != 0) {
+    QMenu text_menu(this);
+    QAction* edit_act = text_menu.addAction(tr("Edit Text…"));
+    QAction* delete_act = text_menu.addAction(tr("Delete"));
+    delete_act->setShortcut(QKeySequence::Delete);
+    QAction* chosen = text_menu.exec(global_pos);
+    if (chosen == edit_act) {
+      edit_text_annotation(selected_text_id_);
+    } else if (chosen == delete_act) {
+      delete_selected();
+    }
+    return;
+  }
   if (document_->selected_entity() == nullptr) {
     return;
   }
@@ -1698,6 +1778,12 @@ void DocumentViewport::resync_textures() {
   }
   auto forget_evicted = [this]() {
     for (const std::uint64_t id : render_thread_->take_evicted_texture_ids()) {
+      // 字形图集也走同一条 LRU：被逐出就下次提交前重新上传。
+      if (id == kTextAtlasTextureAssetId) {
+        text_atlas_texture_id_ = 0;
+        text_atlas_generation_ = 0;
+        continue;
+      }
       // 底图贴图也走同一条 LRU：被逐出就下次提交前重新光栅化 + 上传。
       if (id >= kDrawingTextureAssetIdBase) {
         for (auto& [unused, underlay] : drawing_underlays_) {
@@ -2467,6 +2553,376 @@ void DocumentViewport::submit_drawing_overlays(FrameSubmission& frame) {
     overlay.texture_id = it->second.texture_id;
     overlay.opacity = kDrawingOverlayOpacity;
     frame.drawing_overlays.push_back(overlay);
+  }
+}
+
+// 第一次要画标注时才找字体：主字体（拉丁）+ 中文回落字体。
+// 一个都找不到就关掉整条通路（日志说一句），不影响别的功能。
+void DocumentViewport::ensure_text_font() {
+  if (text_font_loaded_) {
+    return;
+  }
+  text_font_loaded_ = true;
+  const std::vector<std::filesystem::path> dirs = app_font_dirs();
+  const auto load = [](const std::optional<FontCandidate>& candidate) {
+    if (!candidate.has_value()) {
+      return std::shared_ptr<StbFont>{};
+    }
+    auto font = StbFont::load_file(candidate->path, candidate->face_index);
+    if (!font) {
+      log_error(font.error());
+      return std::shared_ptr<StbFont>{};
+    }
+    return std::shared_ptr<StbFont>(std::move(*font));
+  };
+
+  if (auto primary = load(pick_default_font(dirs)); primary != nullptr) {
+    label_fonts_.push_back(std::move(primary));
+    const std::string& family = label_fonts_.front()->family();
+    log_info("text: 标注主字体 " + (family.empty() ? std::string("(未命名)") : family));
+  }
+  // 中文回落：楼层叫「一层」时拉丁字体没这几个字，得换一套。
+  if (auto cjk = load(pick_cjk_font(dirs)); cjk != nullptr) {
+    if (label_fonts_.empty() || cjk->id() != label_fonts_.front()->id()) {
+      label_fonts_.push_back(std::move(cjk));
+    }
+  }
+  if (label_fonts_.empty()) {
+    log_warn("text: 找不到可用字体，文字标注不显示（放一份 TTF 到 assets/fonts 即可）");
+    return;
+  }
+  // 512² 起步、上限 2048²：标注用的字集很小，一张就够，装满自动扩容。
+  glyph_atlas_ = std::make_unique<GlyphAtlas>(512, 2048, 1);
+}
+
+void DocumentViewport::set_label_kind_visible(TextKind kind, bool visible) {
+  if (label_kinds_.visible(kind) == visible) {
+    return;
+  }
+  label_kinds_.set(kind, visible);
+  request_redraw();
+}
+
+void DocumentViewport::begin_text_placement() {
+  ensure_text_font();  // 先把字体备好：点完才发现画不出来最扫兴
+  text_placement_ = true;
+  emit status_message(tr("Click in the view to place the text (Esc to cancel)"));
+  request_redraw();
+}
+
+void DocumentViewport::cancel_text_placement() {
+  if (!text_placement_) {
+    return;
+  }
+  text_placement_ = false;
+  request_redraw();
+}
+
+void DocumentViewport::select_text(std::uint64_t text_id) {
+  if (selected_text_id_ == text_id) {
+    return;
+  }
+  if (TextAnnotation* previous = document_->text_annotation(selected_text_id_)) {
+    previous->selected = false;
+  }
+  selected_text_id_ = text_id;
+  if (TextAnnotation* current = document_->text_annotation(text_id)) {
+    current->selected = true;
+  }
+  request_redraw();
+  emit selection_changed();
+}
+
+void DocumentViewport::commit_text_placement(const QPoint& pos) {
+  text_placement_ = false;
+  const Vec3 anchor = cursor_world_position(pos);
+  bool accepted = false;
+  const QString text = QInputDialog::getText(this, tr("Text"), tr("Text:"), QLineEdit::Normal,
+                                             QString(), &accepted);
+  if (!accepted || text.trimmed().isEmpty()) {
+    request_redraw();
+    return;
+  }
+  run_command("create_text", {{"text", text.toStdString()},
+                              {"position", anchor},
+                              {"size_px", 14.0}});
+}
+
+bool DocumentViewport::text_annotation_rect(const TextAnnotation& annotation, QRectF& out) const {
+  if (annotation.text.empty() || label_fonts_.empty()) {
+    return false;
+  }
+  const QSize area = scene_area_size();
+  if (area.width() < 2 || area.height() < 2) {
+    return false;
+  }
+  const float dpr = static_cast<float>(devicePixelRatioF());
+  const float width = static_cast<float>(area.width()) * dpr;
+  const float height = static_cast<float>(area.height()) * dpr;
+  // 和提交帧用同一套投影（不含裁剪修正）；见 submit_current_frame()。
+  const Mat4 view_proj =
+      camera_.proj_matrix(width / height) * camera_.view_matrix();
+  float sx = 0.f;
+  float sy = 0.f;
+  if (!project_world_to_screen(view_proj, annotation.anchor, width, height, sx, sy)) {
+    return false;
+  }
+  const StbFont* font = pick_font_for_text(annotation.text, label_fonts_);
+  if (font == nullptr) {
+    font = label_fonts_.front().get();
+  }
+  TextStyle style{};
+  style.size = annotation.size_px * dpr;
+  style.opacity = annotation.opacity;
+  const TextLayout layout = layout_text(annotation.text, style, annotation.align, 0.f, *font);
+  if (layout.empty()) {
+    return false;
+  }
+  float x = sx;
+  if (annotation.align == TextAlign::Center) {
+    x -= layout.width * 0.5f;
+  } else if (annotation.align == TextAlign::Right) {
+    x -= layout.width;
+  }
+  // 锚点是**首行基线左端**（像文字插入点），所以矩形要往上抬一个基线高度。
+  const float y = sy - layout.first_baseline;
+  // 设备像素 → Qt 逻辑像素（鼠标事件坐标是逻辑像素）。
+  out = QRectF(x / dpr, y / dpr, layout.width / dpr, layout.height / dpr);
+  return true;
+}
+
+std::uint64_t DocumentViewport::pick_text_annotation_at(const QPoint& pos) const {
+  const std::vector<TextAnnotation>& annotations = document_->text_annotations();
+  // 后放的压在上面：从后往前找第一个命中的。
+  for (auto it = annotations.rbegin(); it != annotations.rend(); ++it) {
+    QRectF rect;
+    if (!text_annotation_rect(*it, rect)) {
+      continue;
+    }
+    if (rect.adjusted(-2.0, -2.0, 2.0, 2.0).contains(QPointF(pos))) {
+      return it->id;
+    }
+  }
+  return 0;
+}
+
+void DocumentViewport::edit_text_annotation(std::uint64_t text_id) {
+  const TextAnnotation* annotation = document_->text_annotation(text_id);
+  if (annotation == nullptr) {
+    return;
+  }
+  bool accepted = false;
+  const QString text = QInputDialog::getText(this, tr("Edit Text"), tr("Text:"),
+                                             QLineEdit::Normal,
+                                             QString::fromStdString(annotation->text), &accepted);
+  if (!accepted || text.trimmed().isEmpty()) {
+    return;
+  }
+  run_command("update_text",
+              {{"text_id", static_cast<std::int64_t>(text_id)}, {"text", text.toStdString()}});
+}
+
+// 一帧里的标注总入口：先清占用表，再按「谁更重要」的顺序摆，最后把图集推给渲染线程。
+// 派生标注不落盘、不进语义树（见 docs/TEXT.md §5）。
+void DocumentViewport::append_text_annotations(FrameSubmission& frame) {
+  ensure_text_font();
+  if (label_fonts_.empty() || glyph_atlas_ == nullptr || frame.width < 2 || frame.height < 2) {
+    return;
+  }
+  const Mat4 view_proj = frame.proj * frame.view;
+  label_occluder_.reset();
+  ++text_tick_;
+  // 顺序 = 优先级：轴号最要紧，标高次之，尺寸链最后（撞上就让位）。
+  if (label_kinds_.visible(TextKind::AxisLabel)) {
+    append_grid_axis_labels(frame, view_proj);
+  }
+  if (label_kinds_.visible(TextKind::StoreyLabel)) {
+    append_storey_labels(frame, view_proj);
+  }
+  // 尺寸链只在平面图里画：三维视角下满屏尺寸没有意义（见 docs/TEXT.md §4.4）。
+  if (label_kinds_.visible(TextKind::Dimension) && plan_view_) {
+    append_grid_dimensions(frame, view_proj);
+  }
+  // 用户放的注记最后画：它们是内容（不是派生标注），不进占用表，永远画出来。
+  append_user_text_annotations(frame, view_proj);
+
+  // 图集变了才重传（白 + 预乘 alpha 的 RGBA8）。
+  if (text_atlas_generation_ != glyph_atlas_->generation()) {
+    TextureAsset atlas_texture{};
+    atlas_texture.name = "text-atlas";
+    atlas_texture.srgb = false;
+    atlas_texture.width = static_cast<std::uint32_t>(glyph_atlas_->size());
+    atlas_texture.height = atlas_texture.width;
+    atlas_texture.rgba = glyph_atlas_->rgba();
+    atlas_texture.generation = glyph_atlas_->generation();
+    if (auto gpu = render_thread_->upload_texture(kTextAtlasTextureAssetId, std::move(atlas_texture));
+        !gpu) {
+      log_error(gpu.error());
+    } else {
+      text_atlas_texture_id_ = *gpu;
+      text_atlas_generation_ = glyph_atlas_->generation();
+    }
+  }
+  frame.text_atlas_texture_id = text_atlas_texture_id_;
+}
+
+// 一条标注的完整流程：投影锚点 → 挑字体 → 排版 → 去重叠 → 出四边形。
+// offset 是相对锚点的屏幕像素偏移；align 决定文字块相对锚点怎么摆。
+bool DocumentViewport::append_label(FrameSubmission& frame, const Mat4& view_proj,
+                                    Vec3 anchor_world, const std::string& text,
+                                    const TextStyle& style, TextAlign align, float offset_x,
+                                    float offset_y) {
+  if (text.empty()) {
+    return false;
+  }
+  const float width = static_cast<float>(frame.width);
+  const float height = static_cast<float>(frame.height);
+  float sx = 0.f;
+  float sy = 0.f;
+  if (!project_world_to_screen(view_proj, anchor_world, width, height, sx, sy)) {
+    return false;  // 锚点在相机后面
+  }
+  if (sx < -128.f || sy < -128.f || sx > width + 128.f || sy > height + 128.f) {
+    return false;  // 视口外，连排版都省了
+  }
+
+  // 挑一套认全这段文字的字体；都认不全就用主字体画豆腐块——不静默丢标注。
+  const StbFont* font = pick_font_for_text(text, label_fonts_);
+  if (font == nullptr) {
+    font = label_fonts_.front().get();
+  }
+  const TextLayout layout = layout_text(text, style, align, 0.f, *font);
+  if (layout.empty()) {
+    return false;
+  }
+
+  float origin_x = sx + offset_x;
+  if (align == TextAlign::Center) {
+    origin_x -= layout.width * 0.5f;
+  } else if (align == TextAlign::Right) {
+    origin_x -= layout.width;
+  }
+  const float origin_y = sy + offset_y;
+  // 先到的占住位置；撞上更重要的标注就不画这一条。
+  if (!label_occluder_.try_reserve(origin_x, origin_y, layout.width, layout.height)) {
+    return false;
+  }
+  append_text_quads(layout, font->id(), origin_x, origin_y, style.size, style.color, style.opacity,
+                    *font, *glyph_atlas_, text_tick_, frame.text_quads);
+  return true;
+}
+
+// 轴网编号：入口 1（数据派生）的第一口。轴号本来就在 GridAxis::name 里。
+void DocumentViewport::append_grid_axis_labels(FrameSubmission& frame, const Mat4& view_proj) {
+  TextStyle style{};
+  style.size = 12.f * static_cast<float>(devicePixelRatioF());
+  style.color = Vec3{0.86f, 0.90f, 0.96f};
+  const float grid_y = grid_plane_y();
+  for (const GridAxis& axis : document_->bim().grid().axes()) {
+    if (axis.name.empty() || axis.length() <= 0.0) {
+      continue;
+    }
+    Vec3 anchor = axis.start_point();
+    anchor.y = grid_y;
+    // 往上挪约一个 ascent，别压住轴线端头（ascent ≈ 0.8 em）。
+    append_label(frame, view_proj, anchor, axis.name, style, TextAlign::Center, 0.f,
+                 -style.size * 1.15f);
+  }
+}
+
+// 标高 / 楼层名：摆在模型平面范围左下角的外侧，每条楼层一行。
+void DocumentViewport::append_storey_labels(FrameSubmission& frame, const Mat4& view_proj) {
+  const std::vector<Storey>& storeys = document_->bim().storeys();
+  if (storeys.empty()) {
+    return;
+  }
+  const Aabb bounds = document_->bounds();
+  if (!bounds.valid()) {
+    return;  // 还没有几何：没有「模型边上」这个参照，不画
+  }
+  const float dpr = static_cast<float>(devicePixelRatioF());
+  TextStyle style{};
+  style.size = 12.f * dpr;
+  style.color = Vec3{0.78f, 0.88f, 1.00f};
+  for (const Storey& storey : storeys) {
+    const std::string elevation = format_elevation(storey.elevation);
+    const std::string text = storey.name.empty() ? elevation : storey.name + "  " + elevation;
+    const Vec3 anchor{bounds.min.x, static_cast<float>(storey.elevation), bounds.min.z};
+    // 右对齐：文字整个落在锚点左侧，不压住模型。
+    append_label(frame, view_proj, anchor, text, style, TextAlign::Right, -8.f,
+                 -style.size * 0.4f);
+  }
+}
+
+// 尺寸链：相邻轴线间距，摆在轴网外缘再往外一格。
+void DocumentViewport::append_grid_dimensions(FrameSubmission& frame, const Mat4& view_proj) {
+  const std::vector<GridAxis>& axes = document_->bim().grid().axes();
+  if (axes.size() < 2) {
+    return;
+  }
+  constexpr float kChainOffset = 1.5f;  // 米：往外挪出轴线端头
+  const float grid_y = grid_plane_y();
+  const float dpr = static_cast<float>(devicePixelRatioF());
+  TextStyle style{};
+  style.size = 11.f * dpr;
+  style.color = Vec3{0.74f, 0.82f, 0.92f};
+  for (GridAxisDirection direction : {GridAxisDirection::AlongZ, GridAxisDirection::AlongX}) {
+    for (const GridDimension& dimension : grid_dimension_chain(axes, direction)) {
+      Vec3 anchor = dimension.anchor;
+      // 沿哪一列轴量，就往那个方向再挪出去（链在建筑外侧）。
+      if (direction == GridAxisDirection::AlongZ) {
+        anchor.z += kChainOffset;
+      } else {
+        anchor.x += kChainOffset;
+      }
+      anchor.y = grid_y;
+      append_label(frame, view_proj, anchor, format_distance(dimension.distance), style,
+                   TextAlign::Center, 0.f, -style.size * 0.5f);
+    }
+  }
+}
+
+// 用户放的注记：世界锚点 + 屏幕朝向，大小是逻辑像素乘 DPR（不随缩放变）。
+// 它们**不进占用表**：用户自己放的东西必须画出来，不能被派生标注挤掉。
+void DocumentViewport::append_user_text_annotations(FrameSubmission& frame,
+                                                    const Mat4& view_proj) {
+  const float dpr = static_cast<float>(devicePixelRatioF());
+  const float width = static_cast<float>(frame.width);
+  const float height = static_cast<float>(frame.height);
+  for (const TextAnnotation& annotation : document_->text_annotations()) {
+    if (annotation.text.empty() || !label_kinds_.visible(annotation.kind)) {
+      continue;
+    }
+    float sx = 0.f;
+    float sy = 0.f;
+    if (!project_world_to_screen(view_proj, annotation.anchor, width, height, sx, sy)) {
+      continue;
+    }
+    if (sx < -256.f || sy < -256.f || sx > width + 256.f || sy > height + 256.f) {
+      continue;
+    }
+    const StbFont* font = pick_font_for_text(annotation.text, label_fonts_);
+    if (font == nullptr) {
+      font = label_fonts_.front().get();
+    }
+    TextStyle style{};
+    style.size = annotation.size_px * dpr;
+    style.opacity = annotation.opacity;
+    // 选中就换成高亮色——比画选框便宜，也一眼看得出来选的是哪一条。
+    style.color = annotation.selected ? Vec3{1.f, 0.78f, 0.25f} : annotation.color;
+    const TextLayout layout = layout_text(annotation.text, style, annotation.align, 0.f, *font);
+    if (layout.empty()) {
+      continue;
+    }
+    float origin_x = sx;
+    if (annotation.align == TextAlign::Center) {
+      origin_x -= layout.width * 0.5f;
+    } else if (annotation.align == TextAlign::Right) {
+      origin_x -= layout.width;
+    }
+    append_text_quads(layout, font->id(), origin_x, sy - layout.first_baseline, style.size,
+                      style.color, style.opacity, *font, *glyph_atlas_, text_tick_,
+                      frame.text_quads);
   }
 }
 

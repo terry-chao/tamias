@@ -60,6 +60,8 @@ constexpr std::uint32_t kChunkRela = fourcc('R', 'E', 'L', 'A');
 constexpr std::uint32_t kChunkStry = fourcc('S', 'T', 'R', 'Y');
 constexpr std::uint32_t kChunkGrid = fourcc('G', 'R', 'I', 'D');
 constexpr std::uint32_t kChunkDrwg = fourcc('D', 'R', 'W', 'G');
+// 文字注记（世界锚点 + 屏幕朝向）。注意别和贴图块的 'TEXT' 混了。
+constexpr std::uint32_t kChunkAnno = fourcc('A', 'N', 'N', 'O');
 
 void report_load_progress(const LoadProgressCallback& progress, float value) {
   if (progress) {
@@ -881,6 +883,77 @@ Result<void> write_grid_axis(BinaryWriter& w, const GridAxis& axis) {
   return w.write_f64(axis.end);
 }
 
+// 文字注记：id / 类别 / 文本 / 世界锚点 / 字高 / 颜色 / 不透明度 / 对齐。
+Result<void> write_text_annotation(BinaryWriter& w, const TextAnnotation& annotation) {
+  if (auto r = w.write_u64(annotation.id); !r) {
+    return r;
+  }
+  if (auto r = w.write_u8(static_cast<std::uint8_t>(annotation.kind)); !r) {
+    return r;
+  }
+  if (auto r = w.write_string(annotation.text); !r) {
+    return r;
+  }
+  if (auto r = write_vec3(w, annotation.anchor); !r) {
+    return r;
+  }
+  if (auto r = w.write_f32(annotation.size_px); !r) {
+    return r;
+  }
+  if (auto r = write_vec3(w, annotation.color); !r) {
+    return r;
+  }
+  if (auto r = w.write_f32(annotation.opacity); !r) {
+    return r;
+  }
+  return w.write_u8(static_cast<std::uint8_t>(annotation.align));
+}
+
+Result<void> read_text_annotation(BinaryReader& r, TextAnnotation& annotation) {
+  auto id = r.read_u64();
+  if (!id) {
+    return Err(id.error());
+  }
+  auto kind = r.read_u8();
+  if (!kind) {
+    return Err(kind.error());
+  }
+  auto text = r.read_string();
+  if (!text) {
+    return Err(text.error());
+  }
+  Vec3 anchor{};
+  if (auto res = read_vec3(r, anchor); !res) {
+    return res;
+  }
+  auto size_px = r.read_f32();
+  if (!size_px) {
+    return Err(size_px.error());
+  }
+  Vec3 color{};
+  if (auto res = read_vec3(r, color); !res) {
+    return res;
+  }
+  auto opacity = r.read_f32();
+  if (!opacity) {
+    return Err(opacity.error());
+  }
+  auto align = r.read_u8();
+  if (!align) {
+    return Err(align.error());
+  }
+  annotation.id = *id;
+  annotation.kind = static_cast<TextKind>(*kind);
+  annotation.text = std::move(*text);
+  annotation.anchor = anchor;
+  annotation.size_px = *size_px;
+  annotation.color = color;
+  annotation.opacity = *opacity;
+  annotation.align = static_cast<TextAlign>(*align);
+  annotation.selected = false;
+  return {};
+}
+
 Result<void> read_grid_axis(BinaryReader& r, GridAxis& axis) {
   auto id = r.read_u64();
   if (!id) {
@@ -1638,7 +1711,7 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
   if (auto r = file.write_u32(kFormatVersion); !r) {
     return r;
   }
-  if (auto r = file.write_u32(11); !r) {  // chunk_count
+  if (auto r = file.write_u32(12); !r) {  // chunk_count
     return r;
   }
   if (auto r = append_chunk(file, kChunkMeta, meta_w.data()); !r) {
@@ -1680,6 +1753,24 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
     }
   }
   if (auto r = append_chunk(file, kChunkDrwg, drwg_w.data()); !r) {
+    return r;
+  }
+  // 文字注记：世界锚点 + 屏幕朝向（见 docs/TEXT.md §5）。
+  BinaryWriter anno_w;
+  if (auto r = anno_w.write_u64(document.next_text_annotation_id()); !r) {
+    return r;
+  }
+  if (auto r = anno_w.write_u64(
+          static_cast<std::uint64_t>(document.text_annotations().size()));
+      !r) {
+    return r;
+  }
+  for (const TextAnnotation& annotation : document.text_annotations()) {
+    if (auto r = write_text_annotation(anno_w, annotation); !r) {
+      return r;
+    }
+  }
+  if (auto r = append_chunk(file, kChunkAnno, anno_w.data()); !r) {
     return r;
   }
   if (auto r = append_chunk(file, kChunkView, view_w.data()); !r) {
@@ -1736,6 +1827,8 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes,
   std::vector<Storey> storeys;
   std::vector<GridAxis> grid_axes;
   std::vector<DrawingRef> drawings;
+  std::vector<TextAnnotation> text_annotations;
+  std::uint64_t next_text_annotation_id = 1;
   std::uint64_t next_grid_id = 1;
   std::uint64_t next_relation_id = 1;
   std::uint64_t active_storey_id = 0;
@@ -1954,6 +2047,25 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes,
         drawing.path = std::move(*path);
         drawings.push_back(std::move(drawing));
       }
+    } else if (*id == kChunkAnno) {
+      auto next_anno = chunk_r.read_u64();
+      if (!next_anno) {
+        return Err(next_anno.error());
+      }
+      auto count = chunk_r.read_u64();
+      if (!count) {
+        return Err(count.error());
+      }
+      next_text_annotation_id = *next_anno;
+      text_annotations.clear();
+      text_annotations.reserve(static_cast<std::size_t>(*count));
+      for (std::uint64_t n = 0; n < *count; ++n) {
+        TextAnnotation annotation;
+        if (auto res = read_text_annotation(chunk_r, annotation); !res) {
+          return Err(res.error());
+        }
+        text_annotations.push_back(std::move(annotation));
+      }
     } else {
       // Unknown chunk: already consumed via read_bytes into chunk; skip.
     }
@@ -1994,6 +2106,10 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes,
   loaded.document.bim().grid().replace(grid_axes);
   loaded.document.bim().grid().set_next_id(next_grid_id);
   loaded.document.drawings() = std::move(drawings);
+  for (auto& annotation : text_annotations) {
+    loaded.document.insert_text_annotation(std::move(annotation));
+  }
+  loaded.document.set_next_text_annotation_id(next_text_annotation_id);
   loaded.document.bim().set_next_id(next_relation_id);
   loaded.document.set_next_mesh_id(next_mesh_id);
   loaded.document.scene().set_next_id(next_node_id);

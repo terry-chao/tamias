@@ -6,6 +6,7 @@
 #include "engine/document/scene.h"
 #include "entity/core/entity.h"
 #include "engine/document/texture_library.h"
+#include "engine/document/text_annotation.h"
 #include "engine/render/resource/material.h"
 #include "engine/render/scene/render_scene.h"
 #include "engine/document/tess_cache.h"
@@ -57,6 +58,26 @@ class Document {
   [[nodiscard]] const DrawingRef* drawing(std::string_view path) const;
   [[nodiscard]] DrawingRef* drawing(std::string_view path);
   void set_path(std::filesystem::path path) { path_ = std::move(path); }
+
+  // ===== 文字注记（世界锚点 + 屏幕朝向；见 docs/TEXT.md §5）=====
+  // 和图纸清单一样：是文档内容，随 .tdoc 存；不是构件，没有 Entity / SceneNode。
+  [[nodiscard]] const std::vector<TextAnnotation>& text_annotations() const {
+    return text_annotations_;
+  }
+  [[nodiscard]] std::vector<TextAnnotation>& text_annotations() { return text_annotations_; }
+  // 新建时分配 id；编辑走命令撤销（见 command/create/create_text_command.h）。
+  TextAnnotation& add_text_annotation(TextAnnotation annotation);
+  // 保留 id 插入（load / redo 用）。
+  TextAnnotation& insert_text_annotation(TextAnnotation annotation);
+  [[nodiscard]] TextAnnotation* text_annotation(std::uint64_t id);
+  [[nodiscard]] const TextAnnotation* text_annotation(std::uint64_t id) const;
+  bool remove_text_annotation(std::uint64_t id);
+  [[nodiscard]] std::uint64_t next_text_annotation_id() const {
+    return next_text_annotation_id_;
+  }
+  void set_next_text_annotation_id(std::uint64_t id) {
+    next_text_annotation_id_ = std::max<std::uint64_t>(1, id);
+  }
 
   [[nodiscard]] bool dirty() const { return dirty_; }
   void mark_dirty() { dirty_ = true; }
@@ -199,8 +220,10 @@ class Document {
     mesh_by_hash_.clear();
     entities_.clear();
     bim_.clear();
+    text_annotations_.clear();
     render_snapshot_.reset();
     next_mesh_id_ = 1;
+    next_text_annotation_id_ = 1;
   }
 
   // 删除指定网格资产（供命令撤销用）。
@@ -389,9 +412,11 @@ class Document {
   std::unordered_map<std::uint64_t, Material> materials_;
   TextureLibrary textures_;
   std::unordered_map<std::uint64_t, std::unique_ptr<Shape>> import_shapes_;
+  std::vector<TextAnnotation> text_annotations_;
   TessCache tess_cache_;
   std::optional<RenderScene> render_snapshot_;
   std::uint64_t next_mesh_id_ = 1;
+  std::uint64_t next_text_annotation_id_ = 1;
   std::uint64_t next_material_id_ = 1;
   bool dirty_ = false;
 };

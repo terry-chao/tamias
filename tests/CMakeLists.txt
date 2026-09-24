@@ -5,7 +5,10 @@ add_executable(tamias_tests smoke_tests.cpp location_tests.cpp ifc_spatial_tree_
   timing_session_tests.cpp mesh_intern_tests.cpp mesh_lod_tests.cpp texture_library_tests.cpp
   dxf_reader_tests.cpp wall_join_tests.cpp grid_tests.cpp drawing_import_tests.cpp
   drawing_placement_tests.cpp
-  edge_naming_tests.cpp kernel_conformance_tests.cpp dwf_reader_tests.cpp)
+  edge_naming_tests.cpp kernel_conformance_tests.cpp dwf_reader_tests.cpp
+  text_layout_tests.cpp glyph_atlas_tests.cpp stb_font_tests.cpp text_quad_builder_tests.cpp
+  length_text_tests.cpp grid_dimensions_tests.cpp annotation_layout_tests.cpp
+  text_annotation_tests.cpp)
 target_link_libraries(tamias_tests
   PRIVATE
     tamias::io

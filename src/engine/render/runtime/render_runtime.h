@@ -12,6 +12,7 @@
 #include "engine/render/runtime/render_frame_stats.h"
 #include "engine/render/runtime/render_types.h"
 #include "engine/render/runtime/resident_cache.h"
+#include "engine/render/runtime/text_quad.h"
 
 #include <atomic>
 #include <condition_variable>
@@ -73,6 +74,10 @@ struct FrameSubmission {
   // 参考图纸底图：画在模型之后，测深度但不写深度——挡在它前面的构件会遮住图纸，
   // 图纸自己既不遮挡任何东西，也不和楼板抢深度。
   std::vector<DrawingOverlay> drawing_overlays;
+  // 屏幕空间文字：字形四边形 + 图集贴图（RenderThread::upload_texture 返回的 id）。
+  // 坐标是设备像素、左上原点；见 docs/TEXT.md §4.1。
+  std::vector<TextQuad> text_quads;
+  std::uint64_t text_atlas_texture_id = 0;
   std::optional<DebugVertexOverlay> debug_vertex;  // 检查器点选的网格顶点
   float fovy = 0.8f;
   std::unordered_map<std::uint64_t, LodMeshSet> lod_sets;
@@ -182,6 +187,11 @@ class RenderThread {
   std::unique_ptr<ShaderModule> overlay_fs_;
   std::unique_ptr<PipelineState> overlay_pipeline_;
   GpuMesh overlay_quad_mesh_;
+  // 屏幕空间文字：单位四边形 + 字形图集，实例复用 GpuInstance 布局（后端不用改）。
+  std::unique_ptr<ShaderModule> text_vs_;
+  std::unique_ptr<ShaderModule> text_fs_;
+  std::unique_ptr<PipelineState> text_pipeline_;
+  GpuMesh text_unit_quad_mesh_;
   GpuMesh sky_mesh_;
   GpuMesh grid_mesh_;
   GpuMesh preview_line_mesh_;

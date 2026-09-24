@@ -13,12 +13,23 @@ add_library(tamias_render STATIC
   resource/ibl.cpp
   resource/texture_mips.cpp
   resource/builtin_textures.cpp
+  # 文字：UTF-8 解码 + 布局（渲染通路见 docs/TEXT.md）
+  text/text_utf8.cpp
+  text/text_layout.cpp
+  # 文字：字体解析（stb_truetype）+ 字体查找 + 字形图集
+  text/font_search.cpp
+  text/stb_font.cpp
+  text/glyph_atlas.cpp
+  text/text_quad_builder.cpp
+  text/label_occluder.cpp
+  text/font_fallback.cpp
   # 调试回放：录制日志与播放器
   debug/scene_debug_player.cpp
   debug/scene_debug_log.cpp
 )
 add_library(tamias::render ALIAS tamias_render)
 target_include_directories(tamias_render PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(tamias_render PRIVATE ${TAMIAS_THIRDPARTY_DIR})
 target_compile_definitions(tamias_render PRIVATE
   TAMIAS_SHADER_DIR="${TAMIAS_SHADER_OUTPUT_DIR}"
   TAMIAS_SHADER_SOURCE_DIR="${TAMIAS_SHADER_SOURCE_DIR}"

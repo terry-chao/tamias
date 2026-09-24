@@ -9,6 +9,13 @@
 #include "engine/render/resource/material.h"
 #include "engine/render/resource/texture_asset.h"
 #include "engine/render/runtime/render_runtime.h"
+#include "engine/render/text/font_search.h"
+#include "engine/render/text/glyph_atlas.h"
+#include "engine/render/text/label_occluder.h"
+#include "engine/render/text/stb_font.h"
+#include "engine/render/text/text_align.h"
+#include "engine/render/text/text_style.h"
+#include "engine/render/text/text_kind_set.h"
 #include "engine/document/document_io.h"
 #include "engine/math/camera.h"
 #include "engine/document/picking.h"
@@ -41,6 +48,8 @@ namespace tamias {
 // 底图贴图用的资产 id 起点：文档贴图 id 从 1 开始，这边用高位段隔开，
 // 同一个渲染线程上两边的 id 不会撞（见 RenderThread::upload_texture）。
 inline constexpr std::uint64_t kDrawingTextureAssetIdBase = 1ull << 56;
+// 字形图集贴图的资产 id（和图纸底图、文档贴图都错开）。
+inline constexpr std::uint64_t kTextAtlasTextureAssetId = 1ull << 57;
 
 // 当前文档里各类构件的数量，供可见性面板显示 "墙 12" 这样的计数。
 struct VisibilityCounts {
@@ -178,6 +187,20 @@ class DocumentViewport final : public QWidget {
   // 轴网显示开关（视图 → 轴网）；轴网是参考线，不进实体表。
   void set_grid_visible(bool visible);
   [[nodiscard]] bool grid_visible() const { return grid_visible_; }
+  // ==== 文字标注（见 docs/TEXT.md §4.4）====
+  // 按类别开关：轴号 / 标高 / 尺寸 / 房间名…。关掉的类别这一帧不排版、不画。
+  [[nodiscard]] bool label_kind_visible(TextKind kind) const { return label_kinds_.visible(kind); }
+  void set_label_kind_visible(TextKind kind, bool visible);
+  // ==== 用户放的文字注记（见 docs/TEXT.md §5）====
+  // 进入「点一下放文字」的一步放置（Esc / 右键取消）。
+  void begin_text_placement();
+  [[nodiscard]] bool text_placement_active() const { return text_placement_; }
+  void cancel_text_placement();
+  // 选中的注记（0 = 没选中）。属性面板 / 右键菜单据此显示。
+  [[nodiscard]] std::uint64_t selected_text_id() const { return selected_text_id_; }
+  void select_text(std::uint64_t text_id);
+  // 就地改文字（双击 / 右键菜单都走它，一步撤销）。
+  void edit_text_annotation(std::uint64_t text_id);
   void set_entity_location(std::uint64_t entity_id, std::uint64_t storey_id,
                            double elevation_offset);
   // 给选中实体追加倒圆角 / 倒斜角特征（走 fillet/chamfer 命令，可撤销）。
@@ -233,6 +256,24 @@ class DocumentViewport final : public QWidget {
   // 底图：按文档里的图纸清单加载 / 光栅化 / 上传贴图，并往帧里塞平面。
   void sync_drawing_underlays();
   void submit_drawing_overlays(FrameSubmission& frame);
+  // 文字标注：字体懒加载 + 图集上传 + 轴网编号四边形（见 docs/TEXT.md §4.1 / §6 入口 1）。
+  void ensure_text_font();
+  void append_text_annotations(FrameSubmission& frame);
+  void append_grid_axis_labels(FrameSubmission& frame, const Mat4& view_proj);
+  void append_storey_labels(FrameSubmission& frame, const Mat4& view_proj);
+  void append_grid_dimensions(FrameSubmission& frame, const Mat4& view_proj);
+  void append_user_text_annotations(FrameSubmission& frame, const Mat4& view_proj);
+  // 点一下放文字：问文本 → create_text 命令。
+  void commit_text_placement(const QPoint& pos);
+  // 屏幕命中的注记 id（0 = 没命中）。后放的压在上面，从后往前找。
+  [[nodiscard]] std::uint64_t pick_text_annotation_at(const QPoint& pos) const;
+  // 一条注记的屏幕矩形（Qt 逻辑像素，和鼠标事件坐标同一套）。
+  [[nodiscard]] bool text_annotation_rect(const TextAnnotation& annotation, QRectF& out) const;
+  // 一条标注的完整流程：投影锚点 → 挑字体 → 排版 → 去重叠 → 出四边形。
+  // 返回 false = 没画（视口外 / 位置被更重要的标注占住）。
+  bool append_label(FrameSubmission& frame, const Mat4& view_proj, Vec3 anchor_world,
+                    const std::string& text, const TextStyle& style, TextAlign align,
+                    float offset_x, float offset_y);
   [[nodiscard]] Aabb2 drawing_footprint() const;
   // 新挂上的图纸摆在哪：图纸写了单位就按单位换算，否则按模型 / 轴网范围适配。
   [[nodiscard]] DrawingPlacement default_drawing_placement_for(const std::string& path);
@@ -358,6 +399,21 @@ class DocumentViewport final : public QWidget {
   std::unordered_map<std::string, DrawingUnderlay> drawing_underlays_;
   std::uint64_t next_drawing_texture_asset_id_ = kDrawingTextureAssetIdBase;
   bool drawings_visible_ = true;
+  // 屏幕空间文字：字体（主字体 + 中文回落）+ 字形图集 + 图集贴图。
+  // 找不到字体就整条通路安静关掉。
+  std::vector<std::shared_ptr<StbFont>> label_fonts_;
+  bool text_font_loaded_ = false;
+  std::unique_ptr<GlyphAtlas> glyph_atlas_;
+  TextKindSet label_kinds_;
+  // 轴号 / 标高 / 尺寸共用一张占用表：标注之间不互相压住。
+  LabelOccluder label_occluder_{3.f};
+  std::uint64_t text_atlas_texture_id_ = 0;
+  std::uint64_t text_atlas_generation_ = 0;
+  std::uint64_t text_tick_ = 0;
+  bool text_placement_ = false;
+  std::uint64_t selected_text_id_ = 0;
+  // 这一下左键已经被文字注记消费掉（选中），抬起时别再当空白点击清选择。
+  bool text_press_consumed_ = false;
   std::unordered_set<std::uint64_t> hidden_ids_;
   std::unordered_set<std::uint64_t> isolated_ids_;
   std::unordered_set<EntityKind> hidden_kinds_;
