@@ -2,9 +2,12 @@
 
 #include <cstddef>
 
-#include <vulkan/vulkan.h>
+#include <volk.h>
 
 #if defined(TAMIAS_ENABLE_TRACY)
+// volk 会定义 VK_NO_PROTOTYPES，Tracy 在这种模式下必须走符号表：它自己用
+// vkGetInstanceProcAddr / vkGetDeviceProcAddr 取它要的那几个入口（见 create 的参数）。
+#define TRACY_VK_USE_SYMBOL_TABLE
 #include <tracy/TracyVulkan.hpp>
 #endif
 
@@ -24,11 +27,11 @@ class VulkanGpuTiming {
   VulkanGpuTiming& operator=(const VulkanGpuTiming&) = delete;
 
   // cmd 必须是没在录制状态的 command buffer：Tracy 会拿它做一次初始化提交并
-  // vkQueueWaitIdle（所以只在刚建好 command list 时调用）。两个扩展函数指针
-  // 可以为空 —— 为空时 Tracy 退回 DEVICE 时间域，区间长度仍然准，只是绝对位置会漂。
-  void create(VkPhysicalDevice physical, VkDevice device, VkQueue queue, VkCommandBuffer cmd,
-              PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT time_domains,
-              PFN_vkGetCalibratedTimestampsEXT calibrated);
+  // vkQueueWaitIdle（所以只在刚建好 command list 时调用）。
+  // instance 只用于让 Tracy 取入口：扩展缺失时它自己退回 DEVICE 时间域，
+  // 区间长度仍然准，只是绝对位置会漂。
+  void create(VkInstance instance, VkPhysicalDevice physical, VkDevice device, VkQueue queue,
+              VkCommandBuffer cmd);
   void destroy();
 
   [[nodiscard]] bool valid() const;

@@ -134,6 +134,13 @@ src/engine/render/rhi/
 
 启动时 `main()` 调用 `register_linked_rhi_backends()`，把编进来的后端登记进工厂。`RHIDevice::create()` 按设置里的 `GraphicsBackend` 选一个。
 
+**Vulkan 入口是运行时加载的（volk，MIT，vendored 在 `3rdparty/`）**，不链 `vulkan-1.lib`：
+
+- 没装 Vulkan runtime 的机器（Windows Server / RDP 会话 / 只有基础显示适配器的 VM / 没装 `libvulkan1` 的 Linux）**进程照样起得来**：`volkInitialize()` 失败 → 后端返回一条清晰的错误，上层可以回退到 OpenGL，而不是死在加载期。
+- 实例/设备建好后再 `volkLoadInstance()` / `volkLoadDevice()`：debug utils、calibrated timestamps 这类扩展入口由 volk 一次装好，不再手写 `GetProcAddr`。
+- 代价与约束：volk 的函数表是**进程全局**的（`volkLoadDevice` 会覆盖），所以一个进程只允许一台 Vulkan 设备（`VulkanDevice::initialize()` 里有守卫，真出现第二台就明确报错，而不是两台设备悄悄抢同一张表）。要支持多设备得换成 `volkLoadDeviceTable` 做每设备表。
+- VMA 相应改成动态函数指针（`VMA_DYNAMIC_VULKAN_FUNCTIONS`），Tracy 的 Vulkan 上下文走符号表模式（`TRACY_VK_USE_SYMBOL_TABLE`）。
+
 绘制代码（`draw_channel`）**没有** `#ifdef VULKAN`。差别被藏在：
 
 - `clip_space_correction_matrix()`：Vulkan 的 NDC 是 Y 向下、Z 从 0 到 1；数学仍按 OpenGL 习惯算，最后乘这个校正矩阵。

@@ -7,10 +7,8 @@
 
 namespace tamias {
 
-void VulkanGpuTiming::create(VkPhysicalDevice physical, VkDevice device, VkQueue queue,
-                             VkCommandBuffer cmd,
-                             PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT time_domains,
-                             PFN_vkGetCalibratedTimestampsEXT calibrated) {
+void VulkanGpuTiming::create(VkInstance instance, VkPhysicalDevice physical, VkDevice device,
+                             VkQueue queue, VkCommandBuffer cmd) {
   if (ctx_ != nullptr) {
     return;
   }
@@ -18,13 +16,10 @@ void VulkanGpuTiming::create(VkPhysicalDevice physical, VkDevice device, VkQueue
       cmd == VK_NULL_HANDLE) {
     return;
   }
-  // 有 VK_EXT_calibrated_timestamps 就把函数指针交给 Tracy，它会把 GPU 时钟对齐到
-  // CPU 时钟；没有就退回 DEVICE 时间域。
-  if (time_domains != nullptr && calibrated != nullptr) {
-    ctx_ = TracyVkContextCalibrated(physical, device, queue, cmd, time_domains, calibrated);
-  } else {
-    ctx_ = TracyVkContext(physical, device, queue, cmd);
-  }
+  // 符号表模式：把 volk 的解析入口交给 Tracy，它自己取所需的入口（含
+  // VK_EXT_calibrated_timestamps，拿到就把 GPU 时钟对齐到 CPU 时钟）。
+  ctx_ = TracyVkContextCalibrated(instance, physical, device, queue, cmd,
+                                  vkGetInstanceProcAddr, vkGetDeviceProcAddr);
 }
 
 void VulkanGpuTiming::destroy() {
@@ -76,9 +71,7 @@ void VulkanGpuTiming::end_zone() {
 
 namespace tamias {
 
-void VulkanGpuTiming::create(VkPhysicalDevice, VkDevice, VkQueue, VkCommandBuffer,
-                             PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT,
-                             PFN_vkGetCalibratedTimestampsEXT) {}
+void VulkanGpuTiming::create(VkInstance, VkPhysicalDevice, VkDevice, VkQueue, VkCommandBuffer) {}
 
 void VulkanGpuTiming::destroy() {}
 

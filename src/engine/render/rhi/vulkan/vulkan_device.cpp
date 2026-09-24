@@ -14,7 +14,25 @@
 #endif
 #endif
 
+// Vulkan 入口用 volk 在**运行时**取，不再链 vulkan-1.lib：
+// 没装 Vulkan runtime 的机器（Windows Server / RDP / 精简镜像 / 没装 libvulkan1 的 Linux）
+// 进程照样起得来，这里拿不到 loader 就返回错误、上层回退到 OpenGL，而不是加载期直接崩。
+// 扩展函数（debug utils、calibrated timestamps）由 volk 一次装好，不用再手写 GetProcAddr。
+// 注意：volk 的 method 表是**进程全局**的，一台设备一个进程（见 VulkanDevice::initialize 的守卫）。
+#define VOLK_IMPLEMENTATION
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4100 4189 4324 4505)
+#endif
+#include <volk.h>
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+
+// VMA 走动态函数指针：loader 由 volk 提供，VMA 自己解析它要用的入口（见 create_allocator）。
 #define VMA_IMPLEMENTATION
+#define VMA_STATIC_VULKAN_FUNCTIONS 0
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
 #if defined(_MSC_VER)
 #pragma warning(push)
 #pragma warning(disable : 4100 4189 4324 4505)
@@ -23,9 +41,9 @@
 #if defined(_MSC_VER)
 #pragma warning(pop)
 #endif
-#include <vulkan/vulkan.h>
 
 #include <algorithm>
+#include <atomic>
 #include <array>
 #include <cstddef>
 #include <cstring>
@@ -33,6 +51,7 @@
 #include <functional>
 #include <limits>
 #include <optional>
+#include <mutex>
 #include <vector>
 
 #if defined(_WIN32)
@@ -48,6 +67,11 @@ namespace {
 
 constexpr std::uint32_t kFramesInFlight = 2;
 thread_local std::uint32_t tls_recording_frame = 0;
+
+// 活着的 VulkanDevice 数量。volk 的设备级函数指针是进程全局的（volkLoadDevice 会覆盖），
+// 所以同一进程里不允许并存两台设备——真出现就明确报错，而不是两台设备悄悄抢同一张表。
+// （本工程实际只会有一次：AppSettings 里后端与校验开关都是全局的，RenderThread 因此共享。）
+std::atomic<int> g_live_vulkan_devices{0};
 
 VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
                                               VkDebugUtilsMessageTypeFlagsEXT,
@@ -278,10 +302,8 @@ class VulkanCommandList final : public CommandList {
 
   // Tracy 的 Vulkan ctx 需要一个不在录制中的 command buffer 做初始化提交
   // （内部会 vkQueueWaitIdle），所以建好 command list 后立刻调用。
-  void enable_gpu_timing(VkPhysicalDevice physical, VkQueue queue,
-                         PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT time_domains,
-                         PFN_vkGetCalibratedTimestampsEXT calibrated) {
-    gpu_timing_.create(physical, device_, queue, cmds_[0], time_domains, calibrated);
+  void enable_gpu_timing(VkInstance instance, VkPhysicalDevice physical, VkQueue queue) {
+    gpu_timing_.create(instance, physical, device_, queue, cmds_[0]);
   }
 
   void begin() override {
@@ -469,6 +491,8 @@ class VulkanDevice final : public RHIDevice {
   bool has_calibrated_timestamps_ = false;
   PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT calibrateable_time_domains_fn_ = nullptr;
   PFN_vkGetCalibratedTimestampsEXT calibrated_timestamps_fn_ = nullptr;
+  // 已计入 g_live_vulkan_devices（initialize 成功才置位，destroy 只减一次）。
+  bool registered_live_ = false;
 };
 
 VulkanSwapChain::VulkanSwapChain(VulkanDevice* device, SwapChainDesc desc)
@@ -716,11 +740,11 @@ Result<void> VulkanDevice::create_instance() {
     ci.enabledLayerCount = static_cast<std::uint32_t>(layers.size());
     ci.ppEnabledLayerNames = layers.empty() ? nullptr : layers.data();
     const VkResult result = vkCreateInstance(&ci, nullptr, &instance_);
-    if (result == VK_SUCCESS && with_validation) {
-      auto create = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
-          vkGetInstanceProcAddr(instance_, "vkCreateDebugUtilsMessengerEXT"));
-      if (create) {
-        create(instance_, &debug_ci, nullptr, &messenger_);
+    if (result == VK_SUCCESS) {
+      // 实例建好才谈得上 instance 级入口：这一句之后 debug utils 等函数才有值。
+      volkLoadInstance(instance_);
+      if (with_validation && vkCreateDebugUtilsMessengerEXT != nullptr) {
+        vkCreateDebugUtilsMessengerEXT(instance_, &debug_ci, nullptr, &messenger_);
       }
     }
     return result;
@@ -851,27 +875,35 @@ Result<void> VulkanDevice::create_logical_device() {
   if (vkCreateDevice(physical_, &ci, nullptr, &device_) != VK_SUCCESS) {
     return Err("vkCreateDevice failed");
   }
+  // 设备建好：把设备级入口从「instance 级的通用指针」换成这台设备的实现。
+  volkLoadDevice(device_);
   vkGetDeviceQueue(device_, graphics_family_, 0, &graphics_queue_);
   vkGetDeviceQueue(device_, present_family_, 0, &present_queue_);
   if (has_calibrated_timestamps_) {
-    calibrateable_time_domains_fn_ =
-        reinterpret_cast<PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT>(
-            vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceCalibrateableTimeDomainsEXT"));
-    calibrated_timestamps_fn_ = reinterpret_cast<PFN_vkGetCalibratedTimestampsEXT>(
-        vkGetDeviceProcAddr(device_, "vkGetCalibratedTimestampsEXT"));
+    // volk 已经装好这两个扩展入口；设备/驱动不支持时它们是 nullptr，所以还要再判一次。
+    calibrateable_time_domains_fn_ = vkGetPhysicalDeviceCalibrateableTimeDomainsEXT;
+    calibrated_timestamps_fn_ = vkGetCalibratedTimestampsEXT;
     if (calibrateable_time_domains_fn_ == nullptr || calibrated_timestamps_fn_ == nullptr) {
       has_calibrated_timestamps_ = false;  // 有扩展名但拿不到函数指针：退回未校准
+    } else {
+      log_info("Vulkan GPU timing: calibrated timestamps available");
     }
   }
   return {};
 }
 
 Result<void> VulkanDevice::create_allocator() {
+  // VMA 配的是动态函数指针（见文件头的 VMA_DYNAMIC_VULKAN_FUNCTIONS）：
+  // 把 volk 的两个解析入口交给它，其余入口 VMA 自己按需取。
+  VmaVulkanFunctions functions{};
+  functions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+  functions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
   VmaAllocatorCreateInfo ci{};
   ci.physicalDevice = physical_;
   ci.device = device_;
   ci.instance = instance_;
   ci.vulkanApiVersion = VK_API_VERSION_1_2;
+  ci.pVulkanFunctions = &functions;
   if (vmaCreateAllocator(&ci, &allocator_) != VK_SUCCESS) {
     return Err("vmaCreateAllocator failed");
   }
@@ -1007,6 +1039,18 @@ Result<void> VulkanDevice::create_descriptor_resources() {
 }
 
 Result<void> VulkanDevice::initialize() {
+  // volk 只初始化一次（进程级）：拿不到 loader 就是明确的能力缺失，不是崩溃。
+  static std::once_flag volk_once;
+  static VkResult volk_result = VK_SUCCESS;
+  std::call_once(volk_once, [] { volk_result = volkInitialize(); });
+  if (volk_result != VK_SUCCESS) {
+    return Err(
+        "Vulkan runtime not found (volkInitialize failed): "
+        "vulkan-1.dll / libvulkan.so.1 缺失或不可加载");
+  }
+  if (g_live_vulkan_devices.load() > 0) {
+    return Err("multiple Vulkan devices in one process are not supported (global volk table)");
+  }
   if (auto r = create_instance(); !r) {
     return r;
   }
@@ -1028,6 +1072,8 @@ Result<void> VulkanDevice::initialize() {
   if (auto r = create_shared_render_pass(); !r) {
     return r;
   }
+  g_live_vulkan_devices.fetch_add(1);
+  registered_live_ = true;
   log_info("Vulkan RHI device ready");
   return {};
 }
@@ -1069,16 +1115,18 @@ void VulkanDevice::destroy() {
     device_ = VK_NULL_HANDLE;
   }
   if (messenger_) {
-    auto destroy = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
-        vkGetInstanceProcAddr(instance_, "vkDestroyDebugUtilsMessengerEXT"));
-    if (destroy) {
-      destroy(instance_, messenger_, nullptr);
+    if (vkDestroyDebugUtilsMessengerEXT != nullptr) {
+      vkDestroyDebugUtilsMessengerEXT(instance_, messenger_, nullptr);
     }
     messenger_ = VK_NULL_HANDLE;
   }
   if (instance_) {
     vkDestroyInstance(instance_, nullptr);
     instance_ = VK_NULL_HANDLE;
+  }
+  if (registered_live_) {
+    registered_live_ = false;
+    g_live_vulkan_devices.fetch_sub(1);
   }
 }
 
@@ -1490,8 +1538,7 @@ Result<std::unique_ptr<PipelineState>> VulkanDevice::create_pipeline(const Pipel
 
 Result<std::unique_ptr<CommandList>> VulkanDevice::create_command_list() {
   auto list = std::make_unique<VulkanCommandList>(device_, command_pool_);
-  list->enable_gpu_timing(physical_, graphics_queue_, calibrateable_time_domains_fn_,
-                          calibrated_timestamps_fn_);
+  list->enable_gpu_timing(instance_, physical_, graphics_queue_);
   return std::unique_ptr<CommandList>(std::move(list));
 }
 

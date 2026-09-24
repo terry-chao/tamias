@@ -29,11 +29,15 @@ ctest --test-dir build -C RelWithDebInfo --output-on-failure
 
 First configure compiles OCCT from source (often 1–2 hours). Later configures reuse `vcpkg_installed/`. A [binary cache](https://learn.microsoft.com/en-us/vcpkg/users/binarycaching) avoids rebuilding on other machines.
 
+Vulkan SDK is a **build-time** dependency only (headers + `dxc` for shaders). The loader is
+resolved at **runtime** by volk (`3rdparty/volk.c`), so `tamias.exe` runs on machines without a
+Vulkan runtime — the Vulkan backend reports a clear error and OpenGL stays available.
+
 Dependencies resolved via:
 
 - System Qt / Vulkan SDK
 - vcpkg `opencascade` 7.9.3 (manifest)
-- Vendored headers in `3rdparty/` (VMA, rapidobj)
+- Vendored headers in `3rdparty/` (VMA, rapidobj, stb_truetype, volk)
 - FetchContent zip for GoogleTest (tests only)
 
 ## Linux
