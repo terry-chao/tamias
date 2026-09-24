@@ -68,6 +68,38 @@ std::string pixel_check(RHIDevice& device) {
   return {};
 }
 
+std::string RhiProbeReport::to_text() const {
+  std::ostringstream out;
+  out << "RHI probe\n";
+  out << "  chosen  : " << (chosen.has_value() ? to_string(*chosen) : "(none)") << "\n";
+  out << "  summary : " << summary << "\n";
+  for (const RhiProbeResult& attempt : attempts) {
+    out << "  - " << to_string(attempt.backend) << ": " << (attempt.ok ? "ok" : "failed") << "\n";
+    out << "      reason : " << (attempt.reason.empty() ? "-" : attempt.reason) << "\n";
+    if (!attempt.matched_entry.empty()) {
+      out << "      blocklist: " << attempt.matched_entry << "\n";
+    }
+    if (!attempt.identity.valid()) {
+      continue;
+    }
+    out << "      adapter: " << attempt.identity.adapter_name << "\n";
+    if (!attempt.identity.driver_name.empty() || !attempt.identity.driver_version.empty()) {
+      out << "      driver : " << attempt.identity.driver_name;
+      if (!attempt.identity.driver_version.empty()) {
+        out << " " << attempt.identity.driver_version;
+      }
+      out << "\n";
+    }
+    out << "      ids    : vendor=0x" << std::hex << attempt.identity.vendor_id << std::dec
+        << " device=0x" << std::hex << attempt.identity.device_id << std::dec
+        << " api=" << attempt.identity.api_version << "\n";
+    out << "      flags  : os=" << rhi_os_name(attempt.identity.os)
+        << " remote=" << (attempt.identity.remote_session ? "yes" : "no")
+        << " software=" << (attempt.identity.software_renderer ? "yes" : "no") << "\n";
+  }
+  return out.str();
+}
+
 std::string RhiProbeReport::to_json() const {
   std::ostringstream out;
   out << "{\n";

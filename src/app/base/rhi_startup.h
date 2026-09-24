@@ -24,6 +24,8 @@ struct RhiCliOptions {
   std::optional<QString> render_view_path;
   std::uint32_t render_width = 1600;   // --render-size=WxH
   std::uint32_t render_height = 1000;
+  // --diagnostics-report=<out.txt>：把图形诊断报告写成文件后退出（IT / 脚本收集现场用）。
+  std::optional<QString> diagnostics_report_path;
 };
 
 [[nodiscard]] RhiCliOptions parse_rhi_cli(const QStringList& arguments);

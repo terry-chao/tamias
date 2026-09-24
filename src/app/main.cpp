@@ -2,6 +2,8 @@
 
 #include "app/base/app_settings.h"
 #include "app/base/qt_path.h"
+#include "app/base/log_buffer.h"
+#include "app/base/rhi_diagnostics.h"
 #include "app/base/rhi_startup.h"
 #include "app/base/startup_guard.h"
 #include "tamias_version.h"
@@ -21,6 +23,7 @@
 #include <QApplication>
 #include <QIcon>
 #include <QMessageBox>
+#include <QSaveFile>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -42,6 +45,7 @@ int main(int argc, char* argv[]) {
   app.setWindowIcon(QIcon(QStringLiteral(":/branding/logo.png")));
 
   tamias::init_logging(tamias::LogLevel::Info);
+  tamias::install_log_buffer();  // 诊断面板要用的最近日志（不替换 stderr 输出）
   tamias::profiling::set_program_name("Tamias");
   tamias::profiling::set_thread_name("ui");
   tamias::register_linked_rhi_backends();
@@ -100,6 +104,8 @@ int main(int argc, char* argv[]) {
   startup_input.policy = policy;
   startup_input.last_good_backend = settings.last_good_backend();
   startup_input.last_good_trusted = !startup_guard.previous_startup_incomplete();
+  startup_input.previous_startup_incomplete = startup_guard.previous_startup_incomplete();
+  startup_input.preferred_backend = settings.graphics_backend();
   const tamias::RhiStartupDecision decision = tamias::decide_rhi_startup(startup_input);
   tamias::log_info("RHI startup: " + decision.why);
 
@@ -124,21 +130,61 @@ int main(int argc, char* argv[]) {
   settings.set_resolved_backend(*report.chosen);
   settings.set_safe_mode(decision.safe_mode);
   settings.set_backend_locked(decision.policy_locked);
-  for (const tamias::RhiProbeResult& attempt : report.attempts) {
-    if (attempt.ok) {
-      const std::string fingerprint = tamias::rhi_gpu_fingerprint(attempt.identity);
-      if (!settings.last_good_gpu_fingerprint().isEmpty() &&
-          settings.last_good_gpu_fingerprint() != QString::fromStdString(fingerprint)) {
-        tamias::log_info("GPU/驱动指纹变了（换卡或升驱动），已更新记忆");
+  if (decision.remember_result) {
+    // 只记「自然选中并跑通」的后端：安全模式 / 策略强制 / 命令行指定的会话不记，
+    // 否则一次崩溃循环（被迫走 OpenGL）就会把这台机器永久降级。
+    for (const tamias::RhiProbeResult& attempt : report.attempts) {
+      if (attempt.ok) {
+        const std::string fingerprint = tamias::rhi_gpu_fingerprint(attempt.identity);
+        if (!settings.last_good_gpu_fingerprint().isEmpty() &&
+            settings.last_good_gpu_fingerprint() != QString::fromStdString(fingerprint)) {
+          tamias::log_info("GPU/驱动指纹变了（换卡或升驱动），已更新记忆");
+        }
+        settings.set_last_good_backend(attempt.backend, QString::fromStdString(fingerprint));
+        break;
       }
-      settings.set_last_good_backend(attempt.backend, QString::fromStdString(fingerprint));
-      break;
     }
   }
   settings.save();
-  startup_guard.begin();  // 从这里到首帧之间崩了，下次就是安全模式
-
+  // 把这次探测的现场留给诊断面板（面板不重新探测：volk 单设备，见 rhi_diagnostics.h）。
+  {
+    tamias::RhiDiagnosticsSnapshot snapshot{};
+    snapshot.report = report;
+    snapshot.startup_reason = decision.why;
+    snapshot.preference = tamias::to_string(settings.graphics_backend());
+    snapshot.degraded = *report.chosen != settings.graphics_backend();
+    snapshot.safe_mode = decision.safe_mode;
+    snapshot.policy_locked = decision.policy_locked;
+    snapshot.has_policy = policy.force_backend.has_value() || policy.lock ||
+                          policy.override_blocklist;
+    snapshot.blocklist_version = blocklist.version;
+    snapshot.blocklist_entries = blocklist.entries.size();
+    tamias::RhiDiagnostics::instance().set_snapshot(std::move(snapshot));
+  }
   // ===== 离屏出图：把文档渲成 PNG 后退出（不建窗口）=====
+  if (cli.diagnostics_report_path.has_value()) {
+    // IT / 脚本收集现场用：和「图形诊断」面板显示的是同一份文本。
+    const QString path = *cli.diagnostics_report_path;
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+      tamias::log_error("--diagnostics-report: 打不开输出文件: " + path.toStdString());
+      return 5;
+    }
+    const std::string report_text = tamias::build_diagnostics_report();
+    file.write(report_text.data(), static_cast<qint64>(report_text.size()));
+    if (!file.commit()) {
+      tamias::log_error("--diagnostics-report: 写文件失败: " + path.toStdString());
+      return 5;
+    }
+    tamias::log_info("--diagnostics-report: 写出 " + path.toStdString());
+    tamias::RenderThreadPool::instance().shutdown();
+    return 0;
+  }
+
+  // 启动标记只保护**开窗口**的那条路：从这里到首帧之间崩了，下次就强制安全模式。
+  // 上面那些命令行模式不建窗口、跑完就退出，标记不该被它们碰（否则污染下次启动）。
+  startup_guard.begin();
+
   if (cli.render_view_path.has_value()) {
     QStringList positional;
     // 注意：arguments() 返回的是**临时** QStringList，必须先落到具名变量再取元素引用。

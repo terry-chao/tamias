@@ -22,6 +22,76 @@
 namespace tamias {
 namespace {
 
+#if defined(_WIN32)
+// GL 没有标准 API 暴露**驱动版本**（GL_VERSION 是 GL 版本，不是驱动版本）。Windows 上的
+// 通行做法是读注册表：HKLM\SYSTEM\CurrentControlSet\Control\Video\{适配器GUID}\0000\ 下的
+// DriverVersion / DriverDesc（Qt 的 Windows 插件也这么判驱动）。
+//
+// 注意：这是 **Windows 驱动版本号**，和厂商控制面板显示的版本号不一定一致 —— NVIDIA 尤其，
+// 这里形如 "32.0.15.6636"，公开版本是 566.36。块名单里按平台分别写条目。
+std::string gl_driver_version_from_registry(const std::string& renderer) {
+  HKEY video = nullptr;
+  if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SYSTEM\\CurrentControlSet\\Control\\Video", 0, KEY_READ,
+                    &video) != ERROR_SUCCESS) {
+    return {};
+  }
+  const auto read_value = [](HKEY key, const char* name) -> std::string {
+    char buffer[512] = {};
+    DWORD size = sizeof(buffer);
+    DWORD type = 0;
+    if (RegQueryValueExA(key, name, nullptr, &type, reinterpret_cast<LPBYTE>(buffer), &size) !=
+        ERROR_SUCCESS) {
+      return {};
+    }
+    if (type != REG_SZ && type != REG_EXPAND_SZ) {
+      return {};
+    }
+    buffer[sizeof(buffer) - 1] = '\0';
+    return std::string(buffer);
+  };
+
+  std::string fallback;
+  std::string matched;
+  for (DWORD index = 0;; ++index) {
+    char adapter[256] = {};
+    DWORD adapter_size = sizeof(adapter);
+    if (RegEnumKeyExA(video, index, adapter, &adapter_size, nullptr, nullptr, nullptr, nullptr) !=
+        ERROR_SUCCESS) {
+      break;
+    }
+    HKEY sub = nullptr;
+    const std::string path = std::string(adapter) + "\\0000";
+    if (RegOpenKeyExA(video, path.c_str(), 0, KEY_READ, &sub) != ERROR_SUCCESS) {
+      continue;
+    }
+    const std::string version = read_value(sub, "DriverVersion");
+    const std::string description = read_value(sub, "DriverDesc");
+    RegCloseKey(sub);
+    if (version.empty()) {
+      continue;
+    }
+    if (fallback.empty()) {
+      fallback = version;  // 没匹配上就用第一个带版本号的，总比空着强
+    }
+    // 适配器描述与 GL_RENDERER 同源（都来自驱动），拿开头几个字符做一次大小写无关的试探。
+    if (!description.empty() && !renderer.empty()) {
+      auto lower = [](std::string text) {
+        std::transform(text.begin(), text.end(), text.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return text;
+      };
+      const std::string head = lower(description).substr(0, std::min<std::size_t>(8, description.size()));
+      if (head.size() > 2 && lower(renderer).find(head) != std::string::npos) {
+        matched = version;
+        break;
+      }
+    }
+  }
+  RegCloseKey(video);
+  return matched.empty() ? fallback : matched;
+}
+#endif
+
 constexpr GLuint kPushConstantBinding = 0;
 
 class OpenGLDevice;
@@ -254,6 +324,10 @@ class OpenGLDevice final : public RHIDevice {
     identity.driver_name = read_string(GL_VENDOR);
     identity.adapter_name = read_string(GL_RENDERER);
     identity.vendor_id = rhi_vendor_id_from_name(identity.driver_name);
+#if defined(_WIN32)
+    // 驱动版本：GL 侧只能从注册表拿（见上面的说明与「两个版本号不一样」的警告）。
+    identity.driver_version = gl_driver_version_from_registry(identity.adapter_name);
+#endif
     // 渲染器名字里带这些字样的就是软件渲染（没有真 GPU 时唯一能跑的东西）。
     const std::string lowered_renderer = [&] {
       std::string text = identity.adapter_name;

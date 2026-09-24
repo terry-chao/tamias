@@ -1,6 +1,7 @@
 #include "app/shell/main_window.h"
 
 #include "app/shell/about_dialog.h"
+#include "app/shell/graphics_diagnostics_dialog.h"
 #include "app/base/app_settings.h"
 #include "bim/ifc_spatial_tree.h"
 #include "bim/wall_size.h"
@@ -480,6 +481,14 @@ MainWindow::MainWindow(QWidget* parent)
   connect(about_action, &QAction::triggered, this, &MainWindow::open_about);
   addAction(about_action);
 
+  // 图形诊断：把启动探测报告摊开给用户 / IT 看（一键复制）。比像素金样更贴近交付现场。
+  diagnostics_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/inspector.svg")),
+                                    tr("Graphics Diagnostics"), this);
+  diagnostics_action_->setToolTip(
+      tr("Show which graphics backend this machine uses and why (copy for support)"));
+  connect(diagnostics_action_, &QAction::triggered, this, &MainWindow::open_graphics_diagnostics);
+  addAction(diagnostics_action_);
+
   auto* manage_action = new QAction(ribbon_icon(QStringLiteral(":/icons/settings.svg")),
                                     tr("Plugin Manager"), this);
   manage_action->setToolTip(tr("Choose which loaded plugins appear on the ribbon"));
@@ -882,6 +891,7 @@ MainWindow::MainWindow(QWidget* parent)
 
   RibbonGroup* help_group = home_page->add_group(QStringLiteral("help"), tr("Help"));
   help_group->add_action(about_action);
+  help_group->add_action(diagnostics_action_);
 
   RibbonPage* view_page = ribbon->add_page(QStringLiteral("view"), tr("View"));
   RibbonGroup* display_ribbon =
@@ -1360,6 +1370,11 @@ Result<void> MainWindow::populate_document_meshes(
 
 void MainWindow::open_about() {
   AboutDialog dialog(this);
+  dialog.exec();
+}
+
+void MainWindow::open_graphics_diagnostics() {
+  GraphicsDiagnosticsDialog dialog(this);
   dialog.exec();
 }
 

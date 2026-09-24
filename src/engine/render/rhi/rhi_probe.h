@@ -53,6 +53,8 @@ struct RhiProbeReport {
   std::string summary;  // 一行：日志 / 对话框 / --probe-rhi 都用它
 
   [[nodiscard]] std::string to_json() const;
+  // 人读版：诊断面板「复制到剪贴板」用它（内容与 to_json 一致，排版给人看）。
+  [[nodiscard]] std::string to_text() const;
 };
 
 // 设备工厂可注入：单测里造「Vulkan 失败 → OpenGL 成功」，不用真 GPU。

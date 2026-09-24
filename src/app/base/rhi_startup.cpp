@@ -52,6 +52,10 @@ RhiCliOptions parse_rhi_cli(const QStringList& arguments) {
       view.has_value() && !view->isEmpty()) {
     options.render_view_path = *view;
   }
+  if (const auto report = argument_value(arguments, QStringLiteral("--diagnostics-report"));
+      report.has_value() && !report->isEmpty()) {
+    options.diagnostics_report_path = *report;
+  }
   if (const auto size = argument_value(arguments, QStringLiteral("--render-size"));
       size.has_value() && !size->isEmpty()) {
     const QStringList parts = size->split(QLatin1Char('x'), Qt::SkipEmptyParts);

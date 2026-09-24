@@ -12,6 +12,8 @@ add_executable(tamias
   base/rhi_backends.cpp
   base/rhi_startup.cpp
   base/startup_guard.cpp
+  base/log_buffer.cpp
+  base/rhi_diagnostics.cpp
   # 窗口骨架：主窗口、欢迎页、Ribbon、通用对话框、提示条
   shell/main_window.cpp
   shell/home_page.cpp
@@ -21,6 +23,7 @@ add_executable(tamias
   shell/toast.cpp
   shell/mesh_thumbnail.cpp
   shell/about_dialog.cpp
+  shell/graphics_diagnostics_dialog.cpp
   shell/settings_dialog.cpp
   shell/settings_section.cpp
   shell/plugin_manager_dialog.cpp

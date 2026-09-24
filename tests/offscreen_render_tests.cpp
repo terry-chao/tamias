@@ -61,6 +61,31 @@ void check_offscreen_clear(GraphicsBackend backend) {
   EXPECT_EQ((*target)->height(), 2u);
 }
 
+// GL 的 GPU 身份：适配器 / 厂商来自 GL 字符串；驱动版本在 Windows 上从注册表补（GL 没有
+// 标准 API 给驱动版本）。这条测试盯着「注册表那条路真的读到了东西」。
+TEST(OffscreenRender, OpenGlGpuIdentityIsFilled) {
+#if !defined(TAMIAS_HAS_RHI_OPENGL)
+  GTEST_SKIP() << "OpenGL backend not built";
+#else
+  register_opengl_backend();
+  DeviceCreateInfo info{};
+  info.backend = GraphicsBackend::OpenGL;
+  info.enable_validation = false;
+  info.app_name = "tamias-gl-identity-test";
+  Result<std::unique_ptr<RHIDevice>> device = RHIDevice::create(info);
+  if (!device.has_value()) {
+    GTEST_SKIP() << "OpenGL unavailable: " << device.error();
+  }
+  const RhiGpuIdentity identity = (*device)->gpu_identity();
+  EXPECT_FALSE(identity.adapter_name.empty());
+  EXPECT_FALSE(identity.driver_name.empty());
+#if defined(_WIN32)
+  EXPECT_FALSE(identity.driver_version.empty())
+      << "Windows 上应该能从注册表读到驱动版本（adapter=" << identity.adapter_name << ")";
+#endif
+#endif
+}
+
 TEST(OffscreenRender, VulkanClearsAndReadsBack) {
 #if !defined(TAMIAS_HAS_RHI_VULKAN)
   GTEST_SKIP() << "Vulkan backend not built";

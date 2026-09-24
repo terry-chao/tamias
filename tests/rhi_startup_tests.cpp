@@ -194,23 +194,44 @@ TEST(RhiStartupDecision, PriorityChain) {
   RhiStartupInput input{};
   auto decision = decide_rhi_startup(input);
   ASSERT_EQ(decision.candidates.size(), 2u);
-  EXPECT_EQ(decision.candidates[0], GraphicsBackend::Vulkan);  // 默认顺序
+  EXPECT_EQ(decision.candidates[0], GraphicsBackend::Vulkan);  // 没偏好时的默认
   EXPECT_EQ(decision.candidates[1], GraphicsBackend::OpenGL);
+  EXPECT_TRUE(decision.remember_result);
 
-  input.last_good_backend = GraphicsBackend::OpenGL;
+  // 用户偏好排第一：设置里选了 OpenGL 就先试 OpenGL（以前这里是忽略偏好的 bug）。
+  input.preferred_backend = GraphicsBackend::OpenGL;
   decision = decide_rhi_startup(input);
   ASSERT_EQ(decision.candidates.size(), 2u);
-  EXPECT_EQ(decision.candidates[0], GraphicsBackend::OpenGL);  // 上次可用优先
+  EXPECT_EQ(decision.candidates[0], GraphicsBackend::OpenGL);
   EXPECT_EQ(decision.candidates[1], GraphicsBackend::Vulkan);
 
-  input.last_good_trusted = false;  // 上次没干净退出 → 不信任它
+  // 上次可用作为第二顺位（实测证据），且在偏好之后。
+  input.last_good_backend = GraphicsBackend::Vulkan;
   decision = decide_rhi_startup(input);
-  EXPECT_EQ(decision.candidates[0], GraphicsBackend::Vulkan);
+  ASSERT_EQ(decision.candidates.size(), 2u);
+  EXPECT_EQ(decision.candidates[0], GraphicsBackend::OpenGL);
+  EXPECT_EQ(decision.candidates[1], GraphicsBackend::Vulkan);
+
+  input.last_good_trusted = false;  // 上次没干净退出 → 不信任它（但仍按偏好排）
+  decision = decide_rhi_startup(input);
+  EXPECT_EQ(decision.candidates[0], GraphicsBackend::OpenGL);
+  EXPECT_EQ(decision.candidates[1], GraphicsBackend::Vulkan);
+  EXPECT_TRUE(decision.remember_result);
+
+  // 启动标记还在（上次死在启动期）→ 按设计强制安全模式，别拿同一块驱动再赌一次。
+  input.previous_startup_incomplete = true;
+  decision = decide_rhi_startup(input);
+  ASSERT_EQ(decision.candidates.size(), 1u);
+  EXPECT_EQ(decision.candidates[0], GraphicsBackend::OpenGL);
+  EXPECT_TRUE(decision.safe_mode);
+  EXPECT_FALSE(decision.remember_result);  // 被迫走的这条路不该被记成「上次可用」
+  input.previous_startup_incomplete = false;
 
   input.cli_backend = GraphicsBackend::OpenGL;
   decision = decide_rhi_startup(input);
   ASSERT_EQ(decision.candidates.size(), 1u);
   EXPECT_EQ(decision.candidates[0], GraphicsBackend::OpenGL);
+  EXPECT_FALSE(decision.remember_result);  // 调试指定也不该覆盖记忆
 
   input.policy.force_backend = GraphicsBackend::Vulkan;
   input.policy.lock = true;
@@ -218,12 +239,14 @@ TEST(RhiStartupDecision, PriorityChain) {
   ASSERT_EQ(decision.candidates.size(), 1u);
   EXPECT_EQ(decision.candidates[0], GraphicsBackend::Vulkan);  // 策略压过命令行
   EXPECT_TRUE(decision.policy_locked);
+  EXPECT_FALSE(decision.remember_result);  // 策略定的，不是这台机器自然选的
 
   input.cli_safe_mode = true;
   decision = decide_rhi_startup(input);
   ASSERT_EQ(decision.candidates.size(), 1u);
   EXPECT_EQ(decision.candidates[0], GraphicsBackend::OpenGL);  // 安全模式最高优先
   EXPECT_TRUE(decision.safe_mode);
+  EXPECT_FALSE(decision.remember_result);
 }
 
 // ---------------------------------------------------------------- 探测
@@ -354,6 +377,26 @@ TEST(RhiProbe, PixelDepthReportsMissingOffscreenSupport) {
   ASSERT_EQ(report.attempts.size(), 2u);
   EXPECT_NE(report.attempts[0].reason.find("offscreen target"), std::string::npos);
   EXPECT_NE(report.summary.find("no usable"), std::string::npos);
+}
+
+// 面板「复制到剪贴板」用的就是 to_text()：它得把关键信息都写进去（诊断靠这段文本）。
+TEST(RhiProbe, TextReportCarriesDiagnostics) {
+  const RhiDeviceFactory factory = [](const DeviceCreateInfo& info)
+      -> Result<std::unique_ptr<RHIDevice>> {
+    if (info.backend == GraphicsBackend::Vulkan) {
+      return Err("vkCreateInstance failed");
+    }
+    return std::unique_ptr<RHIDevice>(
+        new FakeDevice(info.backend, make_identity(0x8086, 0x1234, "31.0.101.4502"), true));
+  };
+  RhiProbeOptions options{};
+  const std::string text = probe_rhi(options, factory).to_text();
+  EXPECT_NE(text.find("chosen  : OpenGL"), std::string::npos);
+  EXPECT_NE(text.find("Vulkan: failed"), std::string::npos);
+  EXPECT_NE(text.find("vkCreateInstance failed"), std::string::npos);  // 失败原因要在
+  EXPECT_NE(text.find("Test Adapter"), std::string::npos);
+  EXPECT_NE(text.find("31.0.101.4502"), std::string::npos);
+  EXPECT_NE(text.find("vendor=0x8086"), std::string::npos);
 }
 
 TEST(RhiProbe, JsonReportMentionsChosenBackendAndAdapter) {

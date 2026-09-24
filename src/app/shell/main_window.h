@@ -57,6 +57,7 @@ class MainWindow final : public QMainWindow {
   void open_drawing_file();
   void open_settings();
   void open_about();
+  void open_graphics_diagnostics();
   void open_plugin_manager();
   void show_home();
   void show_documents();
@@ -125,6 +126,8 @@ class MainWindow final : public QMainWindow {
   QAction* realistic_action_ = nullptr;
   QAction* xray_action_ = nullptr;
   QAction* grid_action_ = nullptr;
+  // 图形诊断（帮助 → 图形诊断）：显示启动探测报告，一键复制给支持/IT。
+  QAction* diagnostics_action_ = nullptr;
   // 注释：放一段文字注记（世界锚点 + 屏幕朝向，见 docs/TEXT.md §5）。
   QAction* text_action_ = nullptr;
   // 标注（文字）显示开关：轴号 / 标高 / 尺寸链，见 docs/TEXT.md §4.4。

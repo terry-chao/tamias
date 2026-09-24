@@ -22,14 +22,19 @@
 
 ```
 --safe-mode（最高）
-   → IT 策略 force_backend（可 lock）
-      → --gpu-backend=X
-         → 上次可用的后端（干净退出的前提下）
-            → 默认顺序：Vulkan → OpenGL
+   → 上次死在启动期（启动标记还在）→ 强制安全模式
+      → IT 策略 force_backend（可 lock）
+         → --gpu-backend=X
+            → 用户偏好（设置里选的）
+               → 上次可用的后端（干净退出的前提下，作为第二顺位）
+                  → 另一个后端兜底
 ```
 
 块名单**不在这条链里**——它按「GPU 身份」匹配，而身份要建出设备才知道，所以在探测**过程中**
 逐后端生效（见 §3）。规则落在 `decide_rhi_startup()`（纯函数、可单测）。
+
+**只有「自然选中并跑通」的会话才会写进记忆**：安全模式、策略强制、`--gpu-backend` 指定这三种
+不算（`remember_result`）。否则一次崩溃循环（被迫走 OpenGL）就会把这台机器永久降级。
 
 ## 2. 探测：两档深度
 
@@ -86,8 +91,11 @@
 约定与容错：
 
 - **驱动版本写成四段数字**（NVIDIA 566.03 → `566.0.3.0`）。各家 `driverVersion` 打包方式不同，
-  Vulkan 后端按厂商拆包（见 `format_vulkan_driver_version()`）；OpenGL 目前拿不到驱动版本，
-  所以点名驱动版本的条目在 GL 上不会命中。
+  Vulkan 后端按厂商拆包（见 `format_vulkan_driver_version()`）。
+- **两个后端的驱动版本号写法不一样，条目按平台分开写**：Vulkan 是「厂商拆包形式」
+  （NVIDIA 566.03 → `566.0.3.0`）；OpenGL 在 Windows 上读注册表的 `DriverVersion`，那是
+  **Windows 驱动版本号**（NVIDIA 566.36 在这里形如 `32.0.15.9636`）。数值分段比较不会让两者
+  误命中，所以混写只会「不匹配」，不会误伤。
 - 一台机器报不出驱动版本时，点名了版本的条目**宁可不命中**。
 - 坏条目（认不出的 `skip` 值、没有动作、`os` 拼错）只跳过那一行并记 warning，**不影响其它条目**。
 - 命中会写进日志与体检报告：
@@ -131,6 +139,16 @@
 | `tamias --probe-rhi --json` | 体检报告输出 JSON（适配器名 / 驱动版本 / API 版本 / 失败原因 / 命中条目） |
 | `tamias --gpu-backend=opengl` | 只试这个后端（调试用；策略优先于它） |
 | `tamias --safe-mode` | 只试 OpenGL、关校验层（驱动出问题时的逃生口） |
+| `tamias --diagnostics-report=out.txt` | 把「图形诊断」面板显示的那份文本写成文件后退出（IT / 脚本收集现场用） |
+
+**应用内入口：帮助 → Graphics Diagnostics**（`Ctrl` 快捷键无）——同一个对话框里能看到：
+本次实际后端与用户偏好、是否降级 / 安全模式、策略与块名单状态、探测报告（适配器 / 驱动版本 /
+API 版本 / 每条尝试的原因）、以及**最近 400 行日志**；底下两个按钮：**Copy to Clipboard**
+（客户把这段贴进工单即可）和 **Save Report…**。
+
+面板**不重新探测**：volk 是单设备模型，进程里已有渲染设备时再建一台 Vulkan 设备会被守卫拒绝，
+所以展示的是启动那一刻的可信快照（`RhiDiagnostics` 缓存）。报告文本与
+`--diagnostics-report` 输出**同一份**（`build_diagnostics_report()`），不会两边不一致。
 
 体检报告例子（本机实测）：
 
@@ -162,8 +180,10 @@
 - **feature 级 workaround**（只关某个扩展，比如 calibrated timestamps）：等真遇到再加；
   现在只有「跳过后端 / 改走后端」两种动作，不先加空壳。
 - **块名单远程更新**：文件随包发；要远程更新，换掉 `load_rhi_blocklist()` 的读取来源即可。
-- **图形诊断面板**（把报告显示出来、一键复制给 IT）：报告已经结构化，接 UI 是下一步。
-- **OpenGL 的驱动版本**：Windows 上要读注册表才拿得到（Qt 也这么干），未做。
+- **面板里的「重新检测」**：单设备模型下没法在运行中重新建 Vulkan 设备（要 `volkLoadDeviceTable`
+  支持多设备才行）；面板现在显示的是启动快照。
+- **OpenGL 的驱动版本在 Linux 上**：Windows 已从注册表拿到（见 §3 的写法差异）；Linux 要从
+  Mesa 的 `GLX_MESA_query_renderer` 之类取，未做。
 - **多设备**：volk 的函数表是进程全局的，当前只允许一台 Vulkan 设备（见 [RENDERING.md](RENDERING.md) §5）。
 - **离屏渲染的消费者**：RHI 层已经能离屏出图（缩略图 / 截图 / 像素级金样都够用了），但还没接具体
   功能——下一步是「当前视图导出 PNG」和 `RenderSceneGolden` 的像素比对。
