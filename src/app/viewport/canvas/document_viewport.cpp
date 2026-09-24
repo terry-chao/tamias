@@ -624,7 +624,9 @@ void DocumentViewport::ensure_gl_surface() {
   if (gl_hwnd_ || !surface_) {
     return;
   }
-  if (AppSettings::instance().graphics_backend() != GraphicsBackend::OpenGL) {
+  // 用**本次实际用的后端**（可能因为探测降级而不同于用户偏好）：GL 子窗口只在实际走
+  // OpenGL 时才需要，否则会画到一个没有 GL 表面的窗口上。
+  if (AppSettings::instance().resolved_backend() != GraphicsBackend::OpenGL) {
     return;
   }
   // Force the Qt native child to exist, then create our GL HWND on the UI thread.

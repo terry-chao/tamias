@@ -204,6 +204,13 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
   const auto current = AppSettings::instance().graphics_backend();
   const int index = backend_combo_->findData(static_cast<int>(current));
   backend_combo_->setCurrentIndex(index >= 0 ? index : 0);
+  // IT 策略锁住时（rhi_policy.json 的 "lock": true）不让改：探测链会按策略走，
+  // 界面里再给一个改不动的下拉，比"改了却不生效"诚实。
+  if (AppSettings::instance().backend_locked()) {
+    backend_combo_->setEnabled(false);
+    backend_combo_->setToolTip(
+        tr("Locked by policy (rhi_policy.json in the application or program data folder)"));
+  }
 
   backend_hint_ = new QLabel(this);
   backend_hint_->setWordWrap(true);

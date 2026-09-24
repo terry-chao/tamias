@@ -182,7 +182,7 @@ void ReplayViewport::ensure_gl_surface() {
   if (gl_hwnd_ || !surface_) {
     return;
   }
-  if (AppSettings::instance().graphics_backend() != GraphicsBackend::OpenGL) {
+  if (AppSettings::instance().resolved_backend() != GraphicsBackend::OpenGL) {
     return;
   }
   const WId parent_id = surface_->winId();
