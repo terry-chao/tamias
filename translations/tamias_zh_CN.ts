@@ -132,6 +132,26 @@
         <source>Delete %1 axes</source>
         <translation>删除 %1 根轴线</translation>
     </message>
+    <message>
+        <source>Click in the view to place the text (Esc to cancel)</source>
+        <translation>在视图中点击放置文字（Esc 取消）</translation>
+    </message>
+    <message>
+        <source>Text</source>
+        <translation>文字</translation>
+    </message>
+    <message>
+        <source>Text:</source>
+        <translation>文字：</translation>
+    </message>
+    <message>
+        <source>Edit Text</source>
+        <translation>编辑文字</translation>
+    </message>
+    <message>
+        <source>Edit Text…</source>
+        <translation>编辑文字…</translation>
+    </message>
 </context>
 <context>
     <name>tamias::ViewportToolPanel</name>
