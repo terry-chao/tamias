@@ -15,6 +15,7 @@
     <file alias="text_label.svg">../../assets/icons/text_label.svg</file>
     <file alias="level.svg">../../assets/icons/level.svg</file>
     <file alias="dimension.svg">../../assets/icons/dimension.svg</file>
+    <file alias="gpu.svg">../../assets/icons/gpu.svg</file>
     <file alias="tracing.svg">../../assets/icons/tracing.svg</file>
     <file alias="check.svg">../../assets/icons/check.svg</file>
     <file alias="check_partial.svg">../../assets/icons/check_partial.svg</file>

@@ -482,7 +482,7 @@ MainWindow::MainWindow(QWidget* parent)
   addAction(about_action);
 
   // 图形诊断：把启动探测报告摊开给用户 / IT 看（一键复制）。比像素金样更贴近交付现场。
-  diagnostics_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/inspector.svg")),
+  diagnostics_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/gpu.svg")),
                                     tr("Graphics Diagnostics"), this);
   diagnostics_action_->setToolTip(
       tr("Show which graphics backend this machine uses and why (copy for support)"));
@@ -891,7 +891,6 @@ MainWindow::MainWindow(QWidget* parent)
 
   RibbonGroup* help_group = home_page->add_group(QStringLiteral("help"), tr("Help"));
   help_group->add_action(about_action);
-  help_group->add_action(diagnostics_action_);
 
   RibbonPage* view_page = ribbon->add_page(QStringLiteral("view"), tr("View"));
   RibbonGroup* display_ribbon =
@@ -965,6 +964,7 @@ MainWindow::MainWindow(QWidget* parent)
   panels_group->add_action(property_toggle);
   panels_group->add_action(texture_toggle);
   panels_group->add_action(handle_toggle);
+  panels_group->add_action(diagnostics_action_);  // 图形诊断也是「面板」类工具
   panels_group->add_action(debug_scene_action);
   panels_group->add_action(timing_toggle);
 

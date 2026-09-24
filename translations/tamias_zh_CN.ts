@@ -1176,6 +1176,14 @@ Click an object to select it, or use a create tool</source>
         <translation>帮助</translation>
     </message>
     <message>
+        <source>Graphics Diagnostics</source>
+        <translation>图形诊断</translation>
+    </message>
+    <message>
+        <source>Show which graphics backend this machine uses and why (copy for support)</source>
+        <translation>查看本机用的是哪个图形后端、为什么（可复制给技术支持）</translation>
+    </message>
+    <message>
         <source>Render Scene</source>
         <translation>渲染场景</translation>
     </message>
@@ -2343,6 +2351,10 @@ Plugin ID: %4</source>
 </context>
 <context>
     <name>tamias::SettingsDialog</name>
+    <message>
+        <source>Locked by policy (rhi_policy.json in the application or program data folder)</source>
+        <translation>已被策略锁定（应用目录或 ProgramData 下的 rhi_policy.json）</translation>
+    </message>
     <message>
         <source>Preferences</source>
         <translation>偏好设置</translation>
@@ -4234,6 +4246,29 @@ Export the drawing to DXF, SVG or an image, or rebuild with Qt6::Pdf available.<
     <message>
         <source>Open a model document to open its floor views here.</source>
         <translation>打开模型文档后，可在这里打开楼层视图。</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::GraphicsDiagnosticsDialog</name>
+    <message>
+        <source>Graphics Diagnostics</source>
+        <translation>图形诊断</translation>
+    </message>
+    <message>
+        <source>Copy to Clipboard</source>
+        <translation>复制到剪贴板</translation>
+    </message>
+    <message>
+        <source>Save Report…</source>
+        <translation>保存报告…</translation>
+    </message>
+    <message>
+        <source>Save Diagnostics Report</source>
+        <translation>保存诊断报告</translation>
+    </message>
+    <message>
+        <source>Text files (*.txt)</source>
+        <translation>文本文件 (*.txt)</translation>
     </message>
 </context>
 </TS>
