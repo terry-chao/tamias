@@ -1184,6 +1184,46 @@ Click an object to select it, or use a create tool</source>
         <translation>查看本机用的是哪个图形后端、为什么（可复制给技术支持）</translation>
     </message>
     <message>
+        <source>Annotate</source>
+        <translation>注释</translation>
+    </message>
+    <message>
+        <source>Annotations</source>
+        <translation>标注</translation>
+    </message>
+    <message>
+        <source>Text</source>
+        <translation>文字</translation>
+    </message>
+    <message>
+        <source>Place a text annotation: click a point, then type</source>
+        <translation>放置文字注记：点一下落位，然后输入内容</translation>
+    </message>
+    <message>
+        <source>Axis Tags</source>
+        <translation>轴号</translation>
+    </message>
+    <message>
+        <source>Show grid axis tags (A, B, 1, 2 …)</source>
+        <translation>显示轴网编号（A、B、1、2…）</translation>
+    </message>
+    <message>
+        <source>Levels</source>
+        <translation>标高</translation>
+    </message>
+    <message>
+        <source>Show storey names and elevations</source>
+        <translation>显示楼层名与标高</translation>
+    </message>
+    <message>
+        <source>Dimensions</source>
+        <translation>尺寸</translation>
+    </message>
+    <message>
+        <source>Show grid spacing dimensions (plan view)</source>
+        <translation>显示轴网尺寸（平面视图）</translation>
+    </message>
+    <message>
         <source>Render Scene</source>
         <translation>渲染场景</translation>
     </message>
