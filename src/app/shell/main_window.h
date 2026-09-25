@@ -24,7 +24,9 @@ class QAction;
 class QActionGroup;
 class QCloseEvent;
 class QDockWidget;
+class QEvent;
 class QToolButton;
+class QTimer;
 
 namespace tamias {
 
@@ -75,6 +77,9 @@ class MainWindow final : public QMainWindow {
  private:
   void showEvent(QShowEvent* event) override;
   void closeEvent(QCloseEvent* event) override;
+  // 面板停靠布局变了（拖动 / 改大小 / 显隐）会连发 LayoutRequest，节流后存盘。
+  bool eventFilter(QObject* watched, QEvent* event) override;
+  void persist_window_state();
 
   // Returns false if the user cancelled (or save failed) and the document
   // must stay open.
@@ -179,6 +184,9 @@ class MainWindow final : public QMainWindow {
   // 命令控制台：每次执行的内核命令的一行等价 C# 调用（默认收起）。
   ConsolePanel* console_panel_ = nullptr;
   QDockWidget* console_dock_ = nullptr;
+  // 停靠布局的存盘节流（拖动面板时 LayoutRequest 连发，见 persist_window_state）。
+  QTimer* window_state_timer_ = nullptr;
+  bool window_state_ready_ = false;
   PluginHost plugin_host_;
   PluginManager plugin_manager_;
   struct PluginRibbonButton {

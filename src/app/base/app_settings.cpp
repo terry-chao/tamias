@@ -101,6 +101,7 @@ void AppSettings::load() {
       settings.value(QStringLiteral("ui/ribbon_floating_groups")).toStringList();
   ribbon_layout_ = settings.value(QStringLiteral("ui/ribbon_layout")).toStringList();
   ribbon_collapsed_ = settings.value(QStringLiteral("ui/ribbon_collapsed"), false).toBool();
+  window_state_ = settings.value(QStringLiteral("ui/window_state")).toByteArray();
   const QString disabled_key = QStringLiteral("plugins/disabled_ids");
   disabled_plugin_ids_ =
       settings.contains(disabled_key)
@@ -135,6 +136,11 @@ void AppSettings::save() const {
     settings.setValue(QStringLiteral("ui/ribbon_layout"), ribbon_layout_);
   }
   settings.setValue(QStringLiteral("ui/ribbon_collapsed"), ribbon_collapsed_);
+  if (window_state_.isEmpty()) {
+    settings.remove(QStringLiteral("ui/window_state"));
+  } else {
+    settings.setValue(QStringLiteral("ui/window_state"), window_state_);
+  }
   settings.setValue(QStringLiteral("plugins/disabled_ids"), disabled_plugin_ids_);
   settings.setValue(QStringLiteral("plugins/ribbon_command_order"),
                     ribbon_command_order_);
@@ -177,6 +183,8 @@ void AppSettings::set_ribbon_floating_groups(const QStringList& entries) {
 void AppSettings::set_ribbon_layout(const QStringList& entries) { ribbon_layout_ = entries; }
 
 void AppSettings::set_ribbon_collapsed(bool collapsed) { ribbon_collapsed_ = collapsed; }
+
+void AppSettings::set_window_state(const QByteArray& state) { window_state_ = state; }
 
 void AppSettings::set_disabled_plugin_ids(const QStringList& ids) {
   disabled_plugin_ids_ = ids;

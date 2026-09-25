@@ -58,6 +58,7 @@
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QDockWidget>
+#include <QEvent>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFontDatabase>
@@ -77,6 +78,7 @@
 #include <QSize>
 #include <QStatusBar>
 #include <QToolButton>
+#include <QTimer>
 #include <QUrl>
 #include <QVector>
 #include <QVBoxLayout>
@@ -1144,6 +1146,21 @@ MainWindow::MainWindow(QWidget* parent)
   // 卷起 / 展开的状态也记着（放在 setMenuWidget 之后：这时 Ribbon 才真正进了窗口）
   ribbon->set_collapsed(AppSettings::instance().ribbon_collapsed());
 
+  // 面板停靠布局（属性 / 绘制 / 贴图 / 句柄 / 计时 / 控制台）：上次拖到哪儿、多大、
+  // 是不是浮着、关掉没有，一起还原。
+  {
+    const QByteArray dock_state = AppSettings::instance().window_state();
+    if (!dock_state.isEmpty()) {
+      restoreState(dock_state);
+    }
+  }
+  // 从那以后：布局一动就（节流）记下来，不用等到关窗口。
+  window_state_timer_ = new QTimer(this);
+  window_state_timer_->setSingleShot(true);
+  window_state_timer_->setInterval(400);
+  connect(window_state_timer_, &QTimer::timeout, this, &MainWindow::persist_window_state);
+  installEventFilter(this);
+  window_state_ready_ = true;
 
   connect(property_panel_, &PropertyPanel::param_edited, this,
           [this](std::uint64_t entity_id, std::uint64_t feature_id, const QString& param_name,
@@ -2682,7 +2699,27 @@ void MainWindow::closeEvent(QCloseEvent* event) {
       return;
     }
   }
+  persist_window_state();  // 面板布局：关窗前再存一次，别指望那点节流时间
   QMainWindow::closeEvent(event);
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
+  // QMainWindow 没有「停靠布局变了」的信号；面板挪动 / 改大小 / 显隐都会让这一层
+  // 重新布局，拿 LayoutRequest 当触发点，再用定时器把连续的一串收敛成一次存盘。
+  if (watched == this && event->type() == QEvent::LayoutRequest && window_state_ready_ &&
+      window_state_timer_ != nullptr) {
+    window_state_timer_->start();
+  }
+  return QMainWindow::eventFilter(watched, event);
+}
+
+void MainWindow::persist_window_state() {
+  if (!window_state_ready_) {
+    return;
+  }
+  auto& settings = AppSettings::instance();
+  settings.set_window_state(saveState());
+  settings.save();
 }
 
 void MainWindow::close_tab(int index) {

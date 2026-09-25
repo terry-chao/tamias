@@ -5,6 +5,7 @@
 
 #include <QString>
 #include <QStringList>
+#include <QByteArray>
 
 namespace tamias {
 
@@ -47,6 +48,10 @@ class AppSettings {
   // Ribbon 卷起（只留页签那一条）。
   [[nodiscard]] bool ribbon_collapsed() const { return ribbon_collapsed_; }
   void set_ribbon_collapsed(bool collapsed);
+  // 主窗口的面板停靠布局（QMainWindow::saveState：每个面板停在哪一区、多大、
+  // 是否浮动、显不显示）。拖动面板之后记下来，下次开还是这样。
+  [[nodiscard]] QByteArray window_state() const { return window_state_; }
+  void set_window_state(const QByteArray& state);
 
   [[nodiscard]] QStringList disabled_plugin_ids() const {
     return disabled_plugin_ids_;
@@ -94,6 +99,7 @@ class AppSettings {
   QStringList ribbon_floating_groups_;
   QStringList ribbon_layout_;
   bool ribbon_collapsed_ = false;
+  QByteArray window_state_;
   QStringList disabled_plugin_ids_;
   QStringList ribbon_command_order_;
   std::optional<GraphicsBackend> resolved_backend_;
