@@ -9,6 +9,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMouseEvent>
+#include <QMoveEvent>
 #include <QStyleHints>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -153,6 +154,11 @@ void RibbonFloatWindow::closeEvent(QCloseEvent* event) {
     emit dock_requested(group_);
   }
   QWidget::closeEvent(event);
+}
+
+void RibbonFloatWindow::moveEvent(QMoveEvent* event) {
+  QWidget::moveEvent(event);
+  emit moved();  // 宿主节流后记位置，别每挪一像素就写一次设置
 }
 
 void RibbonFloatWindow::mousePressEvent(QMouseEvent* event) {

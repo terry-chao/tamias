@@ -41,6 +41,12 @@ class AppSettings {
     return ribbon_floating_groups_;
   }
   void set_ribbon_floating_groups(const QStringList& entries);
+  // 整条 Ribbon 的分组布局："page_id|group_id|row|index"（见 RibbonBar::layout_keys）。
+  [[nodiscard]] QStringList ribbon_layout() const { return ribbon_layout_; }
+  void set_ribbon_layout(const QStringList& entries);
+  // Ribbon 卷起（只留页签那一条）。
+  [[nodiscard]] bool ribbon_collapsed() const { return ribbon_collapsed_; }
+  void set_ribbon_collapsed(bool collapsed);
 
   [[nodiscard]] QStringList disabled_plugin_ids() const {
     return disabled_plugin_ids_;
@@ -86,6 +92,8 @@ class AppSettings {
   bool zoom_to_mouse_position_ = true;
   QString ribbon_style_ = QStringLiteral("text");
   QStringList ribbon_floating_groups_;
+  QStringList ribbon_layout_;
+  bool ribbon_collapsed_ = false;
   QStringList disabled_plugin_ids_;
   QStringList ribbon_command_order_;
   std::optional<GraphicsBackend> resolved_backend_;

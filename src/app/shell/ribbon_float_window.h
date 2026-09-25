@@ -6,6 +6,7 @@
 class QEvent;
 class QCloseEvent;
 class QLabel;
+class QMoveEvent;
 class QMouseEvent;
 class QToolButton;
 class QVBoxLayout;
@@ -27,10 +28,13 @@ class RibbonFloatWindow final : public QWidget {
 
  signals:
   void dock_requested(RibbonGroup* group);
+  // 浮窗被拖到别的地方了。拖动过程中会连发很多次，接收方自己节流再存盘。
+  void moved();
 
  protected:
   void changeEvent(QEvent* event) override;
   void closeEvent(QCloseEvent* event) override;
+  void moveEvent(QMoveEvent* event) override;
   void mousePressEvent(QMouseEvent* event) override;
   void mouseMoveEvent(QMouseEvent* event) override;
   void mouseReleaseEvent(QMouseEvent* event) override;

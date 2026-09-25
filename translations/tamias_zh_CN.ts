@@ -2436,6 +2436,14 @@ Plugin ID: %4</source>
         <source>FreeCAD-like: icons only, the name appears on hover</source>
         <translation>像 FreeCAD：只有图标，鼠标悬浮时才显示名字</translation>
     </message>
+    <message>
+        <source>Reset ribbon layout</source>
+        <translation>重置功能区布局</translation>
+    </message>
+    <message>
+        <source>Put every group back to its factory position and dock the floating toolbars</source>
+        <translation>把每个分组放回出厂位置，并把浮动的小工具栏收回来</translation>
+    </message>
 </context>
 <context>
     <name>tamias::RibbonGroup</name>

@@ -26,6 +26,7 @@
 #include <QSizePolicy>
 #include <QStackedWidget>
 #include <QStyleHints>
+#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <algorithm>
@@ -257,6 +258,12 @@ RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
     });
   }
 
+  // 浮窗拖到哪儿了要记下来：moveEvent 一次拖动会连发，歇 400ms 再让宿主存一次。
+  float_save_timer_ = new QTimer(this);
+  float_save_timer_->setSingleShot(true);
+  float_save_timer_->setInterval(400);
+  connect(float_save_timer_, &QTimer::timeout, this, [this] { emit floating_groups_changed(); });
+
   update_collapse_button();
   update_style_actions();
   apply_theme();
@@ -324,6 +331,7 @@ void RibbonBar::set_collapsed(bool collapsed) {
   pages_->setVisible(!collapsed_);
   update_collapse_button();
   updateGeometry();
+  emit collapsed_changed(collapsed_);
 }
 
 void RibbonBar::toggle_collapsed() { set_collapsed(!collapsed_); }
@@ -360,6 +368,12 @@ void RibbonBar::build_style_menu() {
           [this] { set_display_mode(RibbonDisplayMode::IconWithText); });
   connect(style_icons_action_, &QAction::triggered, this,
           [this] { set_display_mode(RibbonDisplayMode::IconOnly); });
+  // 拖乱了想回到出厂排布：把浮动的收回、分组按默认顺序摆。
+  style_menu_->addSeparator();
+  QAction* reset_action = style_menu_->addAction(tr("Reset ribbon layout"));
+  reset_action->setToolTip(tr("Put every group back to its factory position and dock the "
+                              "floating toolbars"));
+  connect(reset_action, &QAction::triggered, this, &RibbonBar::reset_layout);
 }
 
 void RibbonBar::set_style_button_icon(const QIcon& icon) {
@@ -467,6 +481,12 @@ RibbonFloatWindow* RibbonBar::float_group(RibbonGroup* group, RibbonPage* page) 
               floating_.remove(group);
             }
           });
+  // 浮窗被拖到别处：节流后把新位置存下来（见构造函数里的 float_save_timer_）。
+  connect(entry.window, &RibbonFloatWindow::moved, this, [this] {
+    if (float_save_timer_ != nullptr) {
+      float_save_timer_->start();
+    }
+  });
   return entry.window;
 }
 
@@ -488,6 +508,7 @@ void RibbonBar::dock_group(RibbonGroup* group, RibbonPage* page, RibbonPage::Slo
   group->set_floating(false);
   group->show();
   emit floating_groups_changed();
+  emit layout_changed();  // 组的落点变了：排/序号要记下来
 }
 
 void RibbonBar::handle_group_dropped_outside(RibbonGroup* group,
@@ -511,6 +532,7 @@ void RibbonBar::handle_group_dropped_outside(RibbonGroup* group,
     }
   }
   emit floating_groups_changed();
+  emit layout_changed();  // 这一组离开了页面：页面上剩下的分组位置也要记
 }
 
 QStringList RibbonBar::floating_group_keys() const {
@@ -545,6 +567,119 @@ bool RibbonBar::restore_floating_group(const QString& page_id, const QString& gr
   window->show();
   clamp_to_screen(window);
   return true;
+}
+
+// ==== 布局记忆 ====
+
+std::vector<RibbonPage*> RibbonBar::pages_in_order() const {
+  std::vector<RibbonPage*> pages;
+  if (pages_ == nullptr) {
+    return pages;
+  }
+  for (int i = 0; i < pages_->count(); ++i) {
+    if (auto* page = qobject_cast<RibbonPage*>(pages_->widget(i))) {
+      pages.push_back(page);
+    }
+  }
+  return pages;
+}
+
+QStringList RibbonBar::layout_keys() const {
+  QStringList keys;
+  for (RibbonPage* page : pages_in_order()) {
+    if (page == nullptr) {
+      continue;
+    }
+    for (const RibbonPage::Placement& placement : page->placements()) {
+      if (placement.group == nullptr) {
+        continue;
+      }
+      keys.push_back(QStringLiteral("%1|%2|%3|%4")
+                         .arg(page->page_id(), placement.group->group_id())
+                         .arg(placement.slot.row)
+                         .arg(placement.slot.index));
+    }
+  }
+  return keys;
+}
+
+bool RibbonBar::apply_layout(const QStringList& keys) {
+  if (keys.isEmpty()) {
+    return false;
+  }
+  const std::vector<RibbonPage*> pages = pages_in_order();
+  // 先摘光再按记录插回。不摘光的话 insert_group 里的「自己原来在左边，序号要减一」
+  // 修正会把回放顺序带偏（一次回放里每个组都会被挪一次）。
+  // 摘之前留一份「每一页当前的组顺序」：记录里没提到的组要按这个顺序补回去，
+  // 而不是按哈希表的任意顺序（那份顺序在摘光之后就没了）。
+  std::vector<std::vector<RibbonGroup*>> page_groups;
+  page_groups.reserve(pages.size());
+  for (RibbonPage* page : pages) {
+    std::vector<RibbonGroup*> before;
+    for (const RibbonPage::Placement& placement : page->placements()) {
+      before.push_back(placement.group);
+    }
+    for (RibbonGroup* group : page->all_groups()) {
+      if (group != nullptr && std::find(before.begin(), before.end(), group) == before.end()) {
+        before.push_back(group);
+      }
+    }
+    page_groups.push_back(std::move(before));
+    page->detach_all_groups();
+  }
+  int applied = 0;
+  for (const QString& entry : keys) {
+    const QStringList fields = entry.split(QLatin1Char('|'));
+    if (fields.size() != 4) {
+      continue;
+    }
+    RibbonPage* page = find_page(fields[0]);
+    RibbonGroup* group = page != nullptr ? page->find_group(fields[1]) : nullptr;
+    // 浮动出去的组由 floating_group_keys 负责，这里跳过（否则会把它从浮窗里拽出来）。
+    if (group == nullptr || floating_.contains(group)) {
+      continue;
+    }
+    bool row_ok = false;
+    bool index_ok = false;
+    const int row = fields[2].toInt(&row_ok);
+    const int index = fields[3].toInt(&index_ok);
+    if (!row_ok || !index_ok) {
+      continue;
+    }
+    page->insert_group(group, RibbonPage::Slot{row, index});
+    ++applied;
+  }
+  // 记录里没有的分组（新版本新增的、插件后加的）补在末尾：旧布局不该让新工具消失。
+  for (std::size_t i = 0; i < pages.size(); ++i) {
+    RibbonPage* page = pages[i];
+    for (RibbonGroup* group : page_groups[i]) {
+      if (group == nullptr || floating_.contains(group) || page->row_of(group) >= 0) {
+        continue;
+      }
+      page->append_group(group);
+    }
+  }
+  return applied > 0;
+}
+
+void RibbonBar::remember_default_layout() { default_layout_keys_ = layout_keys(); }
+
+void RibbonBar::reset_layout() {
+  // 先把漂在外面的都收回原位（收回会清掉浮动登记），再按默认布局重摆。
+  std::vector<RibbonGroup*> floats;
+  floats.reserve(static_cast<std::size_t>(floating_.size()));
+  for (auto it = floating_.constBegin(); it != floating_.constEnd(); ++it) {
+    floats.push_back(it.key());
+  }
+  for (RibbonGroup* group : floats) {
+    const auto it = floating_.find(group);
+    if (it != floating_.end()) {
+      dock_group(group, it->page, it->slot);
+    }
+  }
+  (void)apply_layout(default_layout_keys_);
+  emit layout_changed();
+  emit floating_groups_changed();
 }
 
 RibbonGroup* RibbonBar::group_for_mime(const QMimeData* mime) const {

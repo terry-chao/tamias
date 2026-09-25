@@ -895,6 +895,21 @@ MainWindow::MainWindow(QWidget* parent)
     settings.set_ribbon_floating_groups(ribbon_->floating_group_keys());
     settings.save();
   });
+  // 拖动分组（换排 / 换位置）之后立刻记下来：「这次拖完是什么样，下次开还是什么样」。
+  connect(ribbon, &RibbonBar::layout_changed, this, [this] {
+    if (ribbon_ == nullptr) {
+      return;
+    }
+    auto& settings = AppSettings::instance();
+    settings.set_ribbon_layout(ribbon_->layout_keys());
+    settings.save();
+  });
+  // 卷起 / 展开也属于布局，一起记。
+  connect(ribbon, &RibbonBar::collapsed_changed, this, [](bool collapsed) {
+    auto& settings = AppSettings::instance();
+    settings.set_ribbon_collapsed(collapsed);
+    settings.save();
+  });
   ribbon->add_quick_action(undo_action);
   ribbon->add_quick_action(redo_action);
 
@@ -1098,6 +1113,17 @@ MainWindow::MainWindow(QWidget* parent)
     extension_watcher_->rewatch();  // 目录可能新增或消失
   });
 
+  // 分组布局：把上次的排 / 排内位置原样摆回来。先在这之前记下「代码里的默认布局」，
+  // 这样「重置布局」（Ribbon 样式菜单里）有东西可回。
+  ribbon->remember_default_layout();
+  {
+    auto& settings = AppSettings::instance();
+    if (!ribbon->apply_layout(settings.ribbon_layout())) {
+      // 没有记录（首次运行）或记录全对不上：丢掉它，别留着一份永远用不上的旧布局。
+      settings.set_ribbon_layout({});
+    }
+  }
+
   // 上次被拖出去、还漂在外面的那几组工具：按记住的位置恢复。
   for (const QString& entry : AppSettings::instance().ribbon_floating_groups()) {
     const QStringList fields = entry.split(QLatin1Char('|'));
@@ -1115,6 +1141,9 @@ MainWindow::MainWindow(QWidget* parent)
   }
 
   setMenuWidget(ribbon);
+  // 卷起 / 展开的状态也记着（放在 setMenuWidget 之后：这时 Ribbon 才真正进了窗口）
+  ribbon->set_collapsed(AppSettings::instance().ribbon_collapsed());
+
 
   connect(property_panel_, &PropertyPanel::param_edited, this,
           [this](std::uint64_t entity_id, std::uint64_t feature_id, const QString& param_name,

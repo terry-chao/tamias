@@ -52,6 +52,24 @@ class RibbonPage final : public QWidget {
   void insert_group(RibbonGroup* group, Slot slot);
   [[nodiscard]] int group_count() const;
   [[nodiscard]] QWidget* content() const { return content_; }
+  // 这一组现在挂在哪一排（-1 = 没挂在页面上：浮动出去了，或刚被摘下来）。
+  [[nodiscard]] int row_of(RibbonGroup* group) const;
+
+  // ==== 布局记忆（见 ribbon_bar.h 的 layout_keys / apply_layout）====
+  // 挂在页面上的一组工具 + 它占的格子。
+  struct Placement {
+    RibbonGroup* group = nullptr;
+    Slot slot{};
+  };
+  // 现在还挂在页面上的分组，按排 → 排内序号（浮动出去的不在内）。
+  [[nodiscard]] std::vector<Placement> placements() const;
+  // 这一页登记的全部分组（含浮动出去的）：回放时要靠它把「记录里没有的组」补回来。
+  [[nodiscard]] std::vector<RibbonGroup*> all_groups() const;
+  // 回放前把这一页的分组一次摘光：只有全空着，insert_group 的「自己原来在左边」
+  // 修正才不会把回放顺序搞乱。
+  void detach_all_groups();
+  // 补到最后一排末尾（记录里没有这一组时用），新版本新增的分组不会因为旧布局消失。
+  void append_group(RibbonGroup* group);
   // 落点落在哪一格：按 y 选排、按 x 选这一排里插到第几组之前。
   [[nodiscard]] Slot drop_slot_at(const QPoint& content_pos) const;
   void show_drop_indicator(Slot slot);
@@ -73,7 +91,6 @@ class RibbonPage final : public QWidget {
   void apply_rows();
   void refresh_chrome();
   [[nodiscard]] std::vector<RibbonGroup*> ordered_groups(int row) const;
-  [[nodiscard]] int row_of(RibbonGroup* group) const;
   QFrame* ensure_drop_indicator();
 
   QString page_id_;

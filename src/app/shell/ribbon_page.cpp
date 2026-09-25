@@ -240,6 +240,66 @@ int RibbonPage::group_count() const {
   return total;
 }
 
+std::vector<RibbonPage::Placement> RibbonPage::placements() const {
+  std::vector<Placement> out;
+  for (int row = 0; row < static_cast<int>(row_layouts_.size()); ++row) {
+    const std::vector<RibbonGroup*> groups = ordered_groups(row);
+    for (int i = 0; i < static_cast<int>(groups.size()); ++i) {
+      out.push_back(Placement{groups[i], Slot{row, i}});
+    }
+  }
+  return out;
+}
+
+std::vector<RibbonGroup*> RibbonPage::all_groups() const {
+  // 先按页面上的顺序，再把浮动出去的补在后面——回放时要看到全量，不能漏掉任何一组。
+  std::vector<RibbonGroup*> out;
+  for (const Placement& placement : placements()) {
+    out.push_back(placement.group);
+  }
+  for (RibbonGroup* group : groups_by_id_) {
+    if (group != nullptr && std::find(out.begin(), out.end(), group) == out.end()) {
+      out.push_back(group);
+    }
+  }
+  return out;
+}
+
+void RibbonPage::detach_all_groups() {
+  // 只动**挂在页面上**的那些：浮动出去的分组住在浮窗里，不能碰（碰了就把浮窗掏空）。
+  std::vector<RibbonGroup*> docked;
+  for (const Placement& placement : placements()) {
+    docked.push_back(placement.group);
+  }
+  // 每一排都摘一遍（removeWidget 不在的话是空操作），最后只 apply_rows 一次：
+  // 逐个 detach 会把页高来回算几十遍。
+  for (QHBoxLayout* layout : row_layouts_) {
+    for (RibbonGroup* group : docked) {
+      if (group != nullptr) {
+        layout->removeWidget(group);
+      }
+    }
+  }
+  // 摘下来的控件还挂在原来的排宿主下面，不隐藏的话会浮在页面上；insert_group 会 show()。
+  for (RibbonGroup* group : docked) {
+    group->hide();
+  }
+  apply_rows();
+}
+
+void RibbonPage::append_group(RibbonGroup* group) {
+  if (group == nullptr) {
+    return;
+  }
+  int row = 0;
+  for (int r = 0; r < static_cast<int>(row_layouts_.size()); ++r) {
+    if (!ordered_groups(r).empty()) {
+      row = r;
+    }
+  }
+  insert_group(group, Slot{row, static_cast<int>(ordered_groups(row).size())});
+}
+
 RibbonPage::Slot RibbonPage::drop_slot_at(const QPoint& content_pos) const {
   // 每排等高，所以排号就是 y 除以排高——不去读还没更新完的几何。
   const int rows = (std::max)(1, visible_rows_);
