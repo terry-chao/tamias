@@ -149,6 +149,8 @@ class DocumentViewport final : public QWidget {
   // 打开全局三维：所有楼层可见 + 透视 + 框住整个模型。
   void open_global_view();
   // 打开某一层的视图：只显示该层、把它设为当前楼层、切到平面（2D）并框到这一层。
+  // 打开的是"这一层"而不是"这一层的平面"：2D/3D 只是同一张视图的两种看法，
+  // 切回三维（set_plan_view(false)）仍然是该层的三维，只留这一层的过滤照旧。
   void open_floor_view(std::size_t floor_index);
   [[nodiscard]] ViewportState capture_viewport_state() const;
   [[nodiscard]] RenderScene::View capture_render_scene_view() const;
@@ -286,9 +288,13 @@ class DocumentViewport final : public QWidget {
                            bool finish_orthographic = false);
   void stop_view_animation();
   // 平面 / 三维切换的实现体：animate=false 时立刻到位（打开楼层视图要一次落到
-  // "该层平面"，不能先转一半再被 framing 打断）。回到三维会一并丢掉楼层视图状态。
+  // "该层平面"，不能先转一半再被 framing 打断）。三维不吃掉楼层视图状态：在某一
+  // 层的视图里切回三维 = 该层的三维（见 open_floor_view）。
   void apply_plan_view(bool plan, bool restore_perspective, bool animate);
   void refresh_floors();
+  // 某一层视图的包围盒：模型的平面范围 + 这层的标高区间（平面视图下高度不参与
+  // 投影，压到这一层只是为了框住这一层的平面范围）；没有楼层表时返回无效盒。
+  [[nodiscard]] Aabb floor_view_box(std::size_t floor_index) const;
   [[nodiscard]] bool node_visible_in_view(std::uint64_t id) const;
   // 导入网格（无 Entity 的 SceneNode）的节点 id。
   [[nodiscard]] std::vector<std::uint64_t> imported_node_ids() const;

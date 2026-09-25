@@ -337,8 +337,31 @@ void DocumentViewport::apply_viewport_state(const ViewportState& state) {
 
 void DocumentViewport::frame_scene() {
   stop_view_animation();
+  // 打开的是某一层的视图时，"适应窗口"框的是这一层（和双击楼层时同一块盒子）；
+  // 只有全局视图才框整个模型。
+  if (floor_view_.has_value()) {
+    refresh_floors();
+    const Aabb floor_box =
+        floor_view_.has_value() ? floor_view_box(*floor_view_) : Aabb{};
+    if (floor_box.valid()) {
+      camera_.frame_aabb(floor_box);
+      request_redraw();
+      return;
+    }
+  }
   camera_.frame_aabb(document_->bounds());
   request_redraw();
+}
+
+Aabb DocumentViewport::floor_view_box(std::size_t floor_index) const {
+  Aabb box = document_->bounds();
+  if (!box.valid() || floor_index >= floors_.size()) {
+    return Aabb{};
+  }
+  // 平面视图下高度不参与投影，把框压到这一层只是为了框住这一层的平面范围。
+  box.min.y = floors_[floor_index].y_min;
+  box.max.y = floors_[floor_index].y_max;
+  return box;
 }
 
 void DocumentViewport::frame_node(std::uint64_t node_id) {
@@ -1955,8 +1978,10 @@ void DocumentViewport::set_plan_view(bool plan, bool restore_perspective) {
   const bool had_floor_view = floor_view_.has_value();
   const bool had_floor_filter = !hidden_floors_.empty();
   apply_plan_view(plan, restore_perspective, /*animate=*/true);
+  // 在某一层的视图里 2D ⇄ 3D 换的只是看法，不是"离开这一层"：楼层过滤、楼层的
+  // 高亮都留在原地。回到全局三维走 open_global_view（楼层管理页第一行）/ 全部显示。
   if (had_floor_view && !floor_view_.has_value()) {
-    emit view_changed();  // 手动切到三维 = 离开楼层视图，回到全局三维
+    emit view_changed();
   }
   if (had_floor_filter && hidden_floors_.empty()) {
     emit visibility_changed();
@@ -1964,11 +1989,8 @@ void DocumentViewport::set_plan_view(bool plan, bool restore_perspective) {
 }
 
 void DocumentViewport::apply_plan_view(bool plan, bool restore_perspective, bool animate) {
-  if (!plan && floor_view_.has_value()) {
-    // 回到三维就不再是"某一层的视图"：楼层过滤一并复位，等于全局三维。
-    floor_view_.reset();
-    hidden_floors_.clear();
-  }
+  // 三维不吃掉楼层视图：当前打开的是某一层时，这里是"这一层的三维"——只留这一层的
+  // 过滤照旧，相机的目标点 / 距离也是 open_floor_view 框这一层时定下的。
   if (plan_view_ != plan) {
     if (plan) {
       persp_yaw_ = camera_.yaw();
@@ -2049,11 +2071,8 @@ void DocumentViewport::open_floor_view(std::size_t floor_index) {
   const bool filter_changed = hidden != hidden_floors_;
   hidden_floors_ = std::move(hidden);
   apply_plan_view(true, /*restore_perspective=*/false, /*animate=*/false);
-  Aabb box = document_->bounds();
+  const Aabb box = floor_view_box(floor_index);
   if (box.valid()) {
-    // 平面视图下高度不参与投影，把框压到这一层只是为了框住这一层的平面范围。
-    box.min.y = floors_[floor_index].y_min;
-    box.max.y = floors_[floor_index].y_max;
     camera_.frame_aabb(box);
   }
   request_redraw();
