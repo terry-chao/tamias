@@ -5,6 +5,11 @@ repo_url: https://github.com/terry-chao/tamias
 repo_name: terry-chao/tamias
 edit_uri: edit/main/docs/
 
+# 老链接保活：这一页已经拆成 教程 + API 参考，留着只为不 404，
+# 不进导航（mkdocs >= 1.5 的 not_in_nav 用来消掉"未收录"警告）。
+not_in_nav: |
+  plugin/develop.md
+
 theme:
   name: cinder
   custom_dir: overrides
@@ -60,8 +65,21 @@ nav:
       - plugin/index.md
       - 设计理念: plugin/design.md
       - 使用: plugin/usage.md
-      - 宿主功能: plugin/api.md
-      - 开发插件: plugin/develop.md
+      - 教程（Tutorial）:
+          - plugin/tutorial.md
+          - 1. 第一个扩展: plugin/tutorial/01-first-extension.md
+          - 2. 读文档: plugin/tutorial/02-read-document.md
+          - 3. 改文档: plugin/tutorial/03-edit-and-undo.md
+          - 4. 对话框与视口输入: plugin/tutorial/04-dialogs-and-input.md
+          - 5. 工程、元数据与发布: plugin/tutorial/05-project-and-ship.md
+      - API 参考（API Reference）:
+          - plugin/api.md
+          - IHost: plugin/api/host.md
+          - 文档快照与枚举: plugin/api/document.md
+          - 宿主对话框: plugin/api/ui.md
+          - 视口输入: plugin/api/input.md
+          - 命令与参数: plugin/api/commands.md
+          - C ABI: plugin/api/abi.md
   - BIM:
       - bim/index.md
       - BIM 业务层: BIM.md

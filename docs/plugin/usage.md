@@ -127,4 +127,4 @@ NURBS 按钮启动宿主拾点：左键添加控制点，Enter 或双击完成�
 
 [`HelloPlugin.cs`](https://github.com/terry-chao/tamias/blob/main/plugins/csharp/Tamias.Hello/HelloPlugin.cs) 是最小范本：`Load` 里 `AddCommand`，回调里读 `Selection` / `Entities`、弹 `IUi` 对话框、视口拾点后 `HostDraw.Wall`，或 `Dispatch`。不直接改 `Document`，也不自建窗口。
 
-下一篇：[宿主功能](api.md)（能调哪些 API、能发哪些命令）。要写自己的 DLL，见[开发插件](develop.md)。
+下一篇：[教程](tutorial.md)（从第一个扩展写到发布）· [API 参考](api.md)（`IHost` 能查什么、能发哪些命令）。

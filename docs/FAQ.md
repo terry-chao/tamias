@@ -676,7 +676,7 @@ struct HostApi {
 
 插件调 `BeginPointInput(options, callback)` 时，宿主生成一个 `request_id`，之后鼠标 / 工作平面 / 吸附 / Esc 取消**全由宿主管**；点够了（或取消）就回调 `PointInputCompleted(request_id, points, count, status)`，C# 侧用 `request_id` 找回原来的 `callback`，把原始 `NativePickPoint` 数组（含 `EntityId`）解成 `PickPoint` 列表。
 
-**回调不在 C++ 的调用栈上返回，而是从宿主事件循环里发出来的。** 这就是「C# 事件」的实际形态：不是 `event` / 委托订阅，而是**带 id 的一次性续延（continuation）**。每个视口只能有一个活动请求；新请求、切文档、Esc 或右键都会取消旧的并回调 `Cancelled = true`（[plugin/develop.md](plugin/develop.md) §3）。
+**回调不在 C++ 的调用栈上返回，而是从宿主事件循环里发出来的。** 这就是「C# 事件」的实际形态：不是 `event` / 委托订阅，而是**带 id 的一次性续延（continuation）**。每个视口只能有一个活动请求；新请求、切文档、Esc 或右键都会取消旧的并回调 `Cancelled = true`（[plugin/api/input.md](plugin/api/input.md) §5）。
 
 ### 和宿主自身事件的关系
 
@@ -1319,4 +1319,4 @@ ConsolePanel（Ctrl+Enter）
 | 性能分析 | [timing_session.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/profile/timing_session.cpp)、[timing_scope.h](https://github.com/terry-chao/tamias/blob/main/src/engine/profile/timing_scope.h)、[timing_event.h](https://github.com/terry-chao/tamias/blob/main/src/engine/profile/timing_event.h) |
 | 插件 | [host_api.h](https://github.com/terry-chao/tamias/blob/main/src/plugin/host_api.h)、[plugin_host.h](https://github.com/terry-chao/tamias/blob/main/src/plugin/plugin_host.h)、[csharp_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/plugin/csharp_runtime.cpp)、[Bootstrap.cs](https://github.com/terry-chao/tamias/blob/main/plugin-sdk/csharp/Tamias.Host/Bootstrap.cs)、[HostApi.cs](https://github.com/terry-chao/tamias/blob/main/plugin-sdk/csharp/Tamias.Api/HostApi.cs) |
 
-相关文档：[超大规模三角](MASSIVE-GEOMETRY.md) · [合批 / Instancing](INSTANCING.md) · [语义树](SCENE-GRAPH.md) · [渲染管线](RENDERING.md) · [OpenGL 后端](OPENGL.md) · [WebGPU 后端](WGPU.md) · [视锥剔除](FRUSTUM-CULLING.md) · [建模内核](MODELING-KERNEL.md) · [特征树求值器](FEATURE-TREE-EVALUATOR.md) · [MCAD 管线](MCAD-PIPELINE.md) · [几何边界](ISHAPE-OPS.md) · [参考图纸](DRAWING.md) · [插件开发](plugin/develop.md) · [脚本与命令控制台](SCRIPTING.md) · [性能分析](PROFILING.md) · [测试](TESTING.md) · [路线图](ROADMAP.md)
+相关文档：[超大规模三角](MASSIVE-GEOMETRY.md) · [合批 / Instancing](INSTANCING.md) · [语义树](SCENE-GRAPH.md) · [渲染管线](RENDERING.md) · [OpenGL 后端](OPENGL.md) · [WebGPU 后端](WGPU.md) · [视锥剔除](FRUSTUM-CULLING.md) · [建模内核](MODELING-KERNEL.md) · [特征树求值器](FEATURE-TREE-EVALUATOR.md) · [MCAD 管线](MCAD-PIPELINE.md) · [几何边界](ISHAPE-OPS.md) · [参考图纸](DRAWING.md) · [插件教程](plugin/tutorial.md) · [插件 API 参考](plugin/api.md) · [脚本与命令控制台](SCRIPTING.md) · [性能分析](PROFILING.md) · [测试](TESTING.md) · [路线图](ROADMAP.md)

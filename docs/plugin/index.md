@@ -5,10 +5,21 @@ C++ 内核不动。C# 做插件 / 脚本宿主。对标 Revit / Rhino：扩展�
 扩展从**约定目录**加载，两种形态走同一套机制：`main.cs` 源码（加载时现编译）或 `.dll` 预编译。
 内置的放 `<exe>/plugins/`，用户装的放 `<AppData>/tamias/tamias/extensions/`；同 id 时**用户那份覆盖内置**。
 
+## 两套文档
+
+| 想干什么 | 去哪 |
+|---|---|
+| **跟着做一遍**：从"一个能点的按钮"到会读文档、会改文档、会在视口取输入 | [教程 Tutorial](tutorial.md) |
+| **查某个类型 / 成员 / 命令**：`IHost`、`EntityInfo`、`PromptForm`、`CommandArgs`、可 dispatch 的命令…… | [API 参考 API Reference](api.md) |
+
+教程五章： [1. 第一个扩展](tutorial/01-first-extension.md) · [2. 读文档](tutorial/02-read-document.md) · [3. 改文档](tutorial/03-edit-and-undo.md) · [4. 对话框与视口输入](tutorial/04-dialogs-and-input.md) · [5. 工程、元数据与发布](tutorial/05-project-and-ship.md)
+
+API 参考： [IHost](api/host.md) · [文档快照与枚举](api/document.md) · [宿主对话框](api/ui.md) · [视口输入](api/input.md) · [命令与参数](api/commands.md) · [C ABI](api/abi.md)
+
+## 其他
+
+- [使用](usage.md) —— Ribbon「插件」页、示例命令、运行时目录、插件管理
 - [设计理念](design.md) —— 为什么是宿主而不是内核脚本、稳定面在哪
-- [使用](usage.md) —— Ribbon「插件」页、示例命令、运行时目录
-- [宿主功能](api.md) —— `IHost` 能查什么、能 `Dispatch` 哪些命令
-- [开发插件](develop.md) —— 实现 `IPlugin`、参数格式、部署
 
 代码：[`src/plugin/`](https://github.com/terry-chao/tamias/tree/main/src/plugin)（C++ 宿主）、[`plugin-sdk/csharp/`](https://github.com/terry-chao/tamias/tree/main/plugin-sdk/csharp)（`Tamias.Api` / `Tamias.Host` 插件 SDK）、[`plugins/csharp/`](https://github.com/terry-chao/tamias/tree/main/plugins/csharp)（预编译扩展示例，如 `Tamias.Hello`）、[`plugins/extensions/`](https://github.com/terry-chao/tamias/tree/main/plugins/extensions)（源码扩展示例 `Tamias.Sample.Tools`）。
 

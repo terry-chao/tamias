@@ -1,204 +1,127 @@
-# 插件：宿主功能
+# 插件：API 参考
 
-> 插件能做的事 = **`IHost` 查询/写选择 + 日志 + Ribbon 命令 + 宿主视口拾点/拾对象 + 宿主对话框 + `Dispatch` 内核命令**。没有相机、GPU、自定义 Qt 句柄，也没有几何内核指针。
+> 这一页是**手册**：插件能调用的每一个类型、成员、枚举值和命令，按名字列全。
+> 想跟着做一遍，看[教程](tutorial.md)；想知道为什么边界是这样，看[设计理念](design.md)。
 
-C# 契约在 [`plugin-sdk/csharp/Tamias.Api/`](https://github.com/terry-chao/tamias/tree/main/plugin-sdk/csharp/Tamias.Api)。C ABI 在 [`host_api.h`](https://github.com/terry-chao/tamias/blob/main/src/plugin/host_api.h)，布局必须与 [`HostApi.cs`](https://github.com/terry-chao/tamias/blob/main/plugin-sdk/csharp/Tamias.Api/HostApi.cs) 一致。
+插件能碰到的东西只有一套：`Tamias.Api`（[`plugin-sdk/csharp/Tamias.Api/`](https://github.com/terry-chao/tamias/tree/main/plugin-sdk/csharp/Tamias.Api)）。
+`Tamias.Host` 是宿主自己的实现，插件不链接它；唯一例外是命令控制台的全局对象 `host`（见 [§2](#2)）。
 
-每个 `IPlugin` 可通过 `Metadata` 声明稳定 id、名称、作者、是否内置、版本、发布日期、描述、首页和插件图标。未声明时，加载器使用类型名和程序集版本回退；相对图标路径按插件 DLL 目录解析。首页只接受绝对 `http/https` URL。
+契约是 C ABI（当前 **v8**），C# 这层是它的强类型包装。没有相机、GPU、Qt 句柄，也没有几何内核指针——**写路径只有 `Dispatch`**。
 
 ---
 
-## 1. `IHost`
+## 1. 一页速查
 
-```csharp
-public interface IHost
-{
-    string DocumentName { get; }
-    IReadOnlyList<EntityInfo> Entities { get; }
-    IReadOnlyList<FeatureInfo> Features(ulong entityId);
-    IReadOnlyList<ulong> Selection { get; }
-    IUi Ui { get; }
-    void Log(string message);
-    void Dispatch(string command, CommandArgs? args = null);
-    void AddCommand(string id, string title, Action action, string? tooltip = null,
-                    RibbonPlacement? placement = null);
-    void SetSelection(IEnumerable<ulong> ids);
-    void ClearSelection();
-    ITransaction BeginTransaction(string? name = null);
-    ulong BeginPointInput(PointInputOptions options, Action<PointInputResult> completed);
-    ulong BeginEntityInput(EntityInputOptions options, Action<EntityInputResult> completed);
-    void CancelPointInput(ulong requestId);
-}
-```
+### 1.1 我想……用什么
 
-| 成员 | 行为 |
+| 我想做的事 | 用这个 |
 |---|---|
-| `DocumentName` | 当前绑定文档的名字；无文档时为空 |
-| `Entities` | 全部实体：`Id` / `Kind` / `Name`。id 升序。种类是字符串解析成 `EntityKind`（`Wall`…`Nurbs`，解析失败为 `Unknown`） |
-| `Features(entityId)` | 该实体的特征树（只读）。每条：`Id` / `Kind`（`FeatureKind`）/ `Inputs`（上游特征 id）/ `Params`（`Name` + `Value`）。实体不存在返回空表。参数按名字升序，顺序稳定 |
-| `Selection` | 当前选中 id 列表（文档选择顺序） |
-| `SetSelection` / `ClearSelection` | 写入选择并刷新属性面板；无效 id 会被跳过 |
-| `BeginTransaction` | 开一次批量编辑：`Commit()` 之前 dispatch 的命令合计**一条**撤销记录；没提交就 `Dispose` = 回滚。不能嵌套 |
-| `Ui` | 宿主 Qt 对话框：消息、字符串/数字、多字段表单、打开/保存文件。窗口由 Tamias 弹出，插件不要自建 HWND |
-| `Log` | UTF-8 日志；主窗口接到后显示状态栏 |
-| `Dispatch` | 把命令名 + 参数文本交给 C++ `CommandSystem`；失败抛 `InvalidOperationException`（宿主会 `Log` 异常消息） |
-| `AddCommand` | 在 `Load` 时登记 Ribbon 按钮。`RibbonPlacement` 可指定稳定的 page/group id、顺序、图标和可选中状态；缺省为 `home/plugins` |
-| `BeginPointInput` | 非阻塞地启动宿主视口拾点；可预览线/墙/圆等。回调返回世界坐标和可选实体 id |
-| `BeginEntityInput` | 只接受点中的实体（可按 `FilterKind` 过滤）；漏点忽略，重复 id 忽略 |
-| `CancelPointInput` | 取消指定请求；切换文档或启动另一交互也会取消旧请求 |
+| 知道当前有没有文档、叫什么 | `host.DocumentName` |
+| 列出文档里的实体 | `host.Entities` |
+| 读实体名字 / 种类 | `EntityInfo.Name` / `EntityInfo.Kind` |
+| 知道用户选了谁 | `host.Selection` |
+| 改选择 | `host.SetSelection(ids)` / `host.ClearSelection()` |
+| 读某个实体的特征树和参数 | `host.Features(entityId)` |
+| 按名字改参数 | `host.Dispatch("set_param", …)` |
+| 建墙 / 建梁板柱 / 画线 | `host.Wall(…)` / `host.Beam(…)` / `host.Slab(…)` / `host.Column(…)` / `host.Line(…)`，或 `host.Dispatch("create_*", …)` |
+| 让用户填尺寸 | `host.Ui.ShowForm(…)` / `host.Ui.PromptNumber(…)` |
+| 在视口里点几个点 | `host.BeginPointInput(…)` |
+| 在视口里点选对象 | `host.BeginEntityInput(…)` |
+| 一次改一堆东西只留一步撤销 | `host.BeginTransaction(…)` |
+| 往状态栏 / 控制台说话 | `host.Log("…")` |
+| 加一个 Ribbon 按钮 | `host.AddCommand(…)`（只能在 `Load` 里） |
+| 找到自己扩展的目录 | `ExtensionContext.SourcePath`（只在 `Load` 期间有效） |
 
-`EntityInfo`：`(ulong Id, EntityKind Kind, string Name)`。  
-`EntityKind`：`Unknown = -1`，其余与 C++ `EntityKind` 同序（Wall=0 … Nurbs=15）。
+### 1.2 类型索引
 
-`FeatureInfo`：`(ulong Id, FeatureKind Kind, IReadOnlyList<ulong> Inputs, IReadOnlyList<FeatureParam> Params)`；
-`FeatureParam`：`(string Name, double Value)`。`FeatureKind` 与 C++ 同序（`RectProfile=0` … `Cylinder=16`，只追加不复用旧值）。
+| 类型 | 形态 | 说明 | 详见 |
+|---|---|---|---|
+| `IHost` | 接口 | 插件唯一入口：读文档、写选择、发命令、登记按钮、开事务、起拾点 | [IHost](api/host.md) |
+| `ITransaction` | 接口 : `IDisposable` | 批量编辑合成一条撤销记录；`Commit()` 才落地 | [IHost §4](api/host.md) |
+| `IUi` | 接口 | 宿主 Qt 对话框：消息 / 字符串 / 数字 / 表单 / 打开 / 保存 | [宿主对话框](api/ui.md) |
+| `IPlugin` | 接口 | 预编译扩展的入口：`Metadata` + `Load(IHost)` | [教程 5](tutorial/05-project-and-ship.md) |
+| `PluginMetadata` | 类 | 扩展的 id / 名称 / 作者 / 版本 / 图标 / 首页 | [教程 5](tutorial/05-project-and-ship.md) |
+| `RibbonPlacement` | 类 | 命令落在哪个 Ribbon page/group、顺序、图标、可选中 | [教程 5](tutorial/05-project-and-ship.md) |
+| `CommandArgs` | 类 | 链式构造一条 `Dispatch` 的参数文本 | [命令与参数](api/commands.md) |
+| `HostDraw` | 静态类（`IHost` 扩展方法） | 建墙 / 梁 / 板 / 柱 / 门窗 / 各种曲线的语法糖 | [命令与参数](api/commands.md) |
+| `ExtensionContext` | 静态类 | `SourcePath`：当前正在加载的扩展目录 | [API 参考 §2](#2) |
+| `EntityInfo` | `readonly record struct` | 一个实体的只读快照：`Id` / `Kind` / `Name` | [文档快照](api/document.md) |
+| `EntityKind` | 枚举 | `Wall`…`Nurbs`，加 `Unknown` | [文档快照](api/document.md) |
+| `FeatureInfo` | `readonly record struct` | 一条特征：`Id` / `Kind` / `Inputs` / `Params` | [文档快照](api/document.md) |
+| `FeatureKind` | 枚举 | `RectProfile`…`Cylinder`，加 `Unknown` | [文档快照](api/document.md) |
+| `FeatureParam` | `readonly record struct` | 一个特征参数：`Name` + `Value`（只有名字和 double） | [文档快照](api/document.md) |
+| `PickPoint` | `readonly record struct` | 视口拾到的点：`X` / `Y` / `Z` / `EntityId` | [文档快照](api/document.md) |
+| `PointInputOptions` | 类 | 拾点规格：点数上下限、吸附、预览形状、过滤 | [视口输入](api/input.md) |
+| `PointInputResult` | 类 | 拾点结果：`Points` + `Cancelled` | [视口输入](api/input.md) |
+| `PointInputPreviewKind` | 枚举 | 预览形状：`None` / `Curve` / `Line` / … / `Slab` | [视口输入](api/input.md) |
+| `EntityInputOptions` | 类 | 拾对象规格：`MinCount` / `MaxCount` / `AllowConfirm` / `FilterKind` | [视口输入](api/input.md) |
+| `EntityInputResult` | 类 | 拾对象结果：`Hits` / `EntityIds` / `Cancelled` | [视口输入](api/input.md) |
+| `PromptForm` / `PromptField` | 类 | 多字段表单 | [宿主对话框](api/ui.md) |
+| `PromptFieldKind` | 枚举 | `String` / `Number` / `Bool` | [宿主对话框](api/ui.md) |
+| `DialogButtons` / `DialogResult` | 枚举 | 消息框的按钮与返回值 | [宿主对话框](api/ui.md) |
+| `HostApi` / `HostApiVersion` | 结构体 / 静态类 | C ABI 表与版本号（给原生对照实现用） | [C ABI](api/abi.md) |
+
+命名空间只有一个：`using Tamias.Api;`。
+
+---
+
+## 2. 全局对象
+
+插件里**没有** `doc`、`document`、`selection`、`camera` 这类全局变量，也没有全局函数。
+一切能力都挂在 `Load(IHost host)` 递进来的那个 `host` 上；命令回调要用，就自己在 `Load` 里捕获进闭包或存进字段。
+
+真正的"全局"只有两个，而且都在插件之外：
+
+| 名字 | 出现在哪 | 类型 | 说明 |
+|---|---|---|---|
+| `host` | **命令控制台**脚本 | `IHost` | Roslyn scripting 的 globals（[`ScriptGlobals.cs`](https://github.com/terry-chao/tamias/blob/main/plugin-sdk/csharp/Tamias.Host/ScriptGlobals.cs)）。每段脚本自动带一个事务，所以脚本里**不要**再 `BeginTransaction`。见[脚本与命令控制台](../SCRIPTING.md) |
+| `ExtensionContext.SourcePath` | **源码扩展**的 `Load` 期间 | `string` | 正在加载的扩展目录（预编译扩展是 DLL 所在目录）。`Load` 一返回就还回去了，回调里要用先存进字段 |
+
+控制台脚本预置了 `using System;`、`System.Collections.Generic`、`System.Linq`、`Tamias.Api`，所以 `List<>`、LINQ、`host` 都不用写 using。
 
 ```csharp
-// 以前只能猜 feature_id；v6 之后先枚举，再按名字改参数。
-foreach (var feature in host.Features(entityId))
+// 源码扩展：Load 里先把自己目录存下来，回调里再用
+static string source_ = "";
+
+public static void Load(IHost host)
 {
-    host.Log($"{feature.Kind} #{feature.Id} 依赖 [{string.Join(", ", feature.Inputs)}]");
-    foreach (var param in feature.Params)
-    {
-        host.Log($"  {param.Name} = {param.Value}");
-    }
+    source_ = ExtensionContext.SourcePath;
+    host.AddCommand("my.where", "我从哪来", () => host.Log(source_));
 }
 ```
 
-模型里的参数只有一个 `double`，**没有类型和取值范围**——范围属于界面规格（`param_spec`），不在文档里，别指望 ABI 给你。
+`ExtensionContext.Enter(string)` 是宿主专用（加载扩展时进作用域、装完还原），插件不要调。
 
-### 2.1 事务：批量编辑只留一步撤销
+---
 
-脚本改 20 个参数，用户不该按 20 次 Ctrl+Z。用 `using` 包起来，**显式 `Commit()`** 才落地：
+## 3. 命名与类型约定
 
-```csharp
-using var tx = host.BeginTransaction("批量改参数");
-foreach (var id in host.Selection.ToList())
-{
-    foreach (var feature in host.Features(id))
-    {
-        foreach (var param in feature.Params)
-        {
-            host.Dispatch("set_param", new CommandArgs()
-                .SetInt("entity_id", (long)id)
-                .SetInt("feature_id", (long)feature.Id)
-                .SetString("param_name", param.Name)
-                .SetDouble("value", param.Value + 0.1));
-        }
-    }
-}
-tx.Commit();  // 这一步之前，撤销栈上一个字都没留下
-```
-
-语义上有意选成**显式提交**：只有 `Commit()` 留撤销记录；没提交就 `Dispose`（包括异常从 `using` 里逃出去）一律回滚。宁可什么都不做，也不要留下半截改动。
-
-| 情况 | 结果 |
+| 约定 | 含义 |
 |---|---|
-| `Commit()` | 这一段命令合成一条撤销记录 |
-| 不提交就 `Dispose()` / `Abort()` | 逆序撤销这一段，撤销栈不留记录（文档回到 `Begin` 时的样子） |
-| 事务里没 dispatch 任何命令 | 提交 / 回滚都不产生记录 |
-| 事务里 `dispatch` 交互式命令（点没给全） | 报错。点齐的时刻由鼠标决定，不在事务窗口里 |
-| 第二次 `BeginTransaction` | 报错（不支持嵌套） |
-| 插件命令返回时事务还开着 | 宿主回滚全部并记一条日志，**不会**把用户之后的编辑吞进悬空事务 |
-
-没有活动文档时：实体/选择为空，`Dispatch` / `SetSelection` 失败（「no active document」/ -1）。
-
----
-
-## 2. 对话框 `IUi`
-
-窗口一律由宿主用 Qt 弹出，外观跟软件其余对话框一致。
-
-```csharp
-host.Ui.ShowMessage("摘要", $"实体 {host.Entities.Count}");
-if (host.Ui.PromptNumber("高度", "数值 (m)", 3, 0.1, 50) is double h) { ... }
-
-var form = new PromptForm { Title = "创建墙" }
-    .AddNumber("thickness", "厚度 (m)", 0.2, 0.01, 5)
-    .AddNumber("height", "高度 (m)", 3, 0.1, 50);
-if (host.Ui.ShowForm(form)) {
-    var t = form.Number("thickness");
-}
-var path = host.Ui.OpenFile("打开", "IFC (*.ifc);;All (*.*)");
-```
-
-`ShowMessage` 的 `DialogButtons`：`Ok` / `OkCancel` / `YesNo` / `YesNoCancel`，返回 `DialogResult`。输入类 API 取消时返回 `null` / `false`。
+| `ulong` id，`0` = 无 | 实体 / 特征 / 请求 id。`0` 永远不是一个合法实体 id，可以用 `id == 0` 当"没有" |
+| 尺寸 / 标高都是 `double` | 模型里参数只有"名字 + 一个 double"，**没有类型和取值范围**；范围属于界面规格，不在文档里 |
+| 坐标是 `float` | `PickPoint.X/Y/Z`（世界坐标，Y 向上）。`Y` 是竖直方向 |
+| 字符串 UTF-8 | 中文没问题；`Dispatch` 的参数文本用 `CommandArgs` 拼，别手搓 |
+| 长度单位是米 | 默认墙厚 0.2、层高 3.0 这类默认值和工具条一致 |
+| 快照，不是句柄 | `Entities` / `Features` 都是一次读取的结果，不是活对象。**边改边读要重新取** |
+| id 升序 / 参数名升序 | `host.Entities` 按 id 升序；`FeatureInfo.Params` 按参数名升序（顺序稳定，可以按下标遍历） |
+| 依赖在前 | `FeatureInfo.Inputs` 是上游特征 id，按拓扑序排 |
 
 ---
 
-## 3. `CommandArgs` 与参数文本
+## 4. 稳定性与版本
 
-C# 用链式 setter，序列化成一段文本再过 ABI：
+稳定面是 **C ABI**（[`host_api.h`](https://github.com/terry-chao/tamias/blob/main/src/plugin/host_api.h)）+ [`Tamias.Api`](https://github.com/terry-chao/tamias/tree/main/plugin-sdk/csharp/Tamias.Api) 里的公开类型。
+`Tamias.Host` 的内部实现（`Host`、`PluginLoader`、`ScriptEngine`…）**不是**契约，不要反射去用。
 
-| 方法 | 文本 |
-|---|---|
-| `SetInt("entity_id", 7)` | `i:entity_id=7` |
-| `SetDouble("radius", 0.25)` | `d:radius=0.25` |
-| `SetString("name", "wall")` | `s:name=wall` |
-| `SetVec3("origin", 1, 2, 3)` | `v:origin=1,2,3` |
-| `SetPoints("points", points)` | `p:points=1,2,3|4,5,6` |
-| `SetDoubles("weights", weights)` | `a:weights=1|2.5` |
+当前 ABI 版本 **8**（`HostApiVersion.Current` 与 C++ `kHostApiVersion` 必须一致，对不上就拒绝加载）。各版本追加了什么，见 [C ABI](api/abi.md)。
 
-多参数用 `;` 拼接。内核解析见 [`parse_command_arg_text`](https://github.com/terry-chao/tamias/blob/main/src/host/command_arg_text.h)。
-
-无类型前缀时按值推断：带逗号当 `Vec3`，纯整数当 `int64`，否则像数字当 `double`，再否则当字符串。内核读参数时按 **variant 类型**取（`arg_int` 不认 double）。**id 请用 `SetInt` / `i:`**，不要写成 `entity_id=1.0`。
+演进规则：**只在表尾追加字段并升版本**，不在中间插；C# 枚举只追加、不复用旧值。
 
 ---
 
-## 4. 可 `Dispatch` 的内核命令
+## 5. 下一步
 
-与工具条同一张表（[`register_commands.cpp`](https://github.com/terry-chao/tamias/blob/main/src/command/core/register_commands.cpp)）。
-
-### 4.1 立刻执行（适合脚本 / 插件绘制）
-
-这些在参数给齐时 `interactive() == false`，`dispatch` 成功就会 `execute` 并压栈。
-
-| 命令 | 主要参数 | 说明 |
-|---|---|---|
-| `delete_entity` | `i:entity_id` | 删一个实体 |
-| `set_param` | `i:entity_id`、`i:feature_id`、`s:param_name`、`d:value` | 改特征参数并重算 |
-| `fillet` / `chamfer` | `i:entity_id`、半径或距离、`i:edge` | 追加圆角 / 倒角 |
-| `boolean` | `i:a`、`i:b`、`i:operation` | 布尔 |
-| `set_material` | `i:entity_id` 及材质字段 | 赋材质 |
-| `create_curve` | `s:curve_kind`、`p:points` | Line/Polyline/Bezier/B-spline/NURBS |
-| `create_wall` | `p:points`（2 点）、`d:thickness`、`d:height` | 给齐两点则立即建墙 |
-| `create_beam` | `p:points`（2 点）、`d:width`、`d:depth` | 给齐两点则立即建梁 |
-| `create_slab` | `p:points`（2 对角）、`d:thickness`、`d:elevation` | 给齐两点则立即建板 |
-| `create_box` / `create_cylinder` / `create_column` | `v:origin` 或 `p:points`（1 点） | 给齐原点则立即放置 |
-| `create_door` / `create_window` | 同上，可选 `i:host_id` | 可贴宿主墙 |
-| `create_line` / `create_polyline` / `create_circle` / `create_arc` / `create_rectangle` / `create_bezier` / `create_bspline` | `p:points` | 点数够则立即生成草图 |
-
-C# 也可走扩展方法 [`HostDraw`](https://github.com/terry-chao/tamias/blob/main/plugin-sdk/csharp/Tamias.Api/HostDraw.cs)：`host.Wall(a, b, 0.2, 3)`、`host.Box(origin)`、`host.Line(a, b)`。
-
-不给点时，上述 `create_*` 仍是交互式：dispatch 只武装工具，和 Ribbon 按钮一样要在视口点。
-
-示例：
-
-```csharp
-host.Dispatch("delete_entity", new CommandArgs().SetInt("entity_id", (long)id));
-host.Wall(result.Points[0], result.Points[1], thickness: 0.2, height: 3);
-```
-
-未知命令名：`CommandSystem: unknown command '…'`。
-
-`BeginPointInput` 的 `PreviewKind`：`None` / `Curve` / `Line` / `Polyline` / `Rectangle` / `Circle` / `Arc` / `Wall` / `Slab`。曲线预览仍可用 `PreviewCurveKind`（`nurbs` / `bspline` / `bezier`）。
-
----
-
-## 5. C ABI（给对照实现用）
-
-`HostApi`：`abi_version`（int32，现为 8）+ `context` + 函数指针。x64 上 int32 后有 padding，C# `LayoutKind.Sequential` 与之对齐。**只在表尾追加字段并升版本**，不要在中间插。
-
-v5 追加：`begin_point_input` 末尾 `filter_kind`；`set_selection`；`show_dialog`。
-
-v6 追加：`entity_feature_count` / `entity_feature_at` / `feature_input_at` / `feature_param_count` / `feature_param_at`。全部只读；`feature_param_at` 的名字缓冲可以传空（只取值）。
-
-v7 追加：`begin_transaction` / `commit_transaction` / `abort_transaction`。`abort_transaction` 返回回滚的命令条数（0 = 空事务）。
-
-v8 追加：`unregister_plugin`。插件侧一般不用直接调——是宿主做自动重载时「先摘旧的」那一步。
-
-指针约定：字符串 UTF-8；填缓冲的函数写入 `cap-1` 字节并补 `'\0'`，返回写入长度；查询失败返回 -1；`dispatch` / `register_command` / `register_plugin` / `set_selection` 成功 0、失败 -1。`show_dialog`：输入类成功 0、取消 1、失败 -1；消息框返回按钮（1=Ok, 2=Cancel, 3=Yes, 4=No）。
-
-调用约定：Cdecl。C# 委托标了 `CallingConvention.Cdecl`；`Bootstrap.Initialize` / `Invoke` / `PointInputCompleted` 为 `[UnmanagedCallersOnly]`。视口点以 POD 数组回调，回调发生在 UI 线程。
-
-下一篇：[开发插件](develop.md)
+- 想写第一个扩展：[教程](tutorial.md)
+- 想知道插件不该做什么：[设计理念](design.md) §5、[教程 5](tutorial/05-project-and-ship.md) §6
+- 想了解命令和撤销的主线：[命令与撤销](../tutorial/07-commands-and-undo.md)

@@ -325,4 +325,4 @@ C++ 已经测 HostApi 和（可选）加载 Hello。C# 侧缺的是**文本协�
 7. RHI 离屏 readback 落地后再谈 PNG。
 8. IfcGeom 接线后再谈 IFC 网格。
 
-相关：[构建](https://github.com/terry-chao/tamias/blob/main/BUILD.md)、[架构](ARCHITECTURE.md)、[渲染场景快照](RENDER-SCENE.md)、[插件开发](plugin/develop.md)、[Web 查看器](WEB.md)。
+相关：[构建](https://github.com/terry-chao/tamias/blob/main/BUILD.md)、[架构](ARCHITECTURE.md)、[渲染场景快照](RENDER-SCENE.md)、[插件教程](plugin/tutorial.md)、[插件 API 参考](plugin/api.md)、[Web 查看器](WEB.md)。

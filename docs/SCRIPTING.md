@@ -65,7 +65,7 @@ foreach (var id in host.Selection.ToList())
 ```
 
 - **`host` 就是 `IHost`**（globals）。文档、示例插件里怎么写，这里就怎么写；
-  可用的成员见[宿主功能](plugin/api.md)。
+  可用的成员见[IHost](plugin/api/host.md)，类型索引见[插件 API 参考](plugin/api.md)。
 - **最后那个表达式的值会回来。** 敲 `host.Selection.Count` 回一行 `1`；敲 `host.Entities`
   格式化成一行列表，而不是类型名。
 - **每段自带一个事务**（ABI v7）。写到一半发现不对，按一次 `Ctrl+Z` 全部退回——
@@ -109,7 +109,7 @@ foreach (var id in host.Selection.ToList())
 | 入口 | `IPlugin.Load(IHost)` 里 `AddCommand` | 直接是一段代码 |
 | 进 Ribbon | 能（`RibbonPlacement`） | 不能（还没有「钉成按钮」） |
 | 事务 | 手动 `BeginTransaction` | 每段求值自动一个 |
-| 改动怎么生效 | 保存文件即自动重载（见[使用](plugin/usage.md#11-自动重载改完不用重启)） | 改控制台里的脚本，下次按运行就是新的 |
+| 改动怎么生效 | 保存文件即自动重载（见[使用](plugin/usage.md#11)） | 改控制台里的脚本，下次按运行就是新的 |
 
 写得顺手的脚本，迟早会想变成插件——那时候把代码搬进 `IPlugin.Load` 即可，API 是同一套。
 
@@ -129,7 +129,7 @@ foreach (var id in host.Selection.ToList())
 
 | 缺什么 | 说明 |
 |---|---|
-| **补全** | 数据早就有（[`IHost.Features`](plugin/api.md) 能枚举特征和参数），缺的是把 Roslyn 的 completion 接到编辑器上。现在仍得先读文档才知道 `host.` 后面有什么 |
+| **补全** | 数据早就有（[`IHost.Features`](plugin/api/host.md) 能枚举特征和参数），缺的是把 Roslyn 的 completion 接到编辑器上。现在仍得先读文档才知道 `host.` 后面有什么 |
 | 多页签 | 一次只能开一个脚本 |
 | 断点 / 单步 | 没有调试器，靠 `host.Log` |
 | 长脚本不冻界面 | 求值是同步的；以后要么搬到线程，要么给取消/进度 |
