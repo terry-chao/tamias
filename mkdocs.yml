@@ -39,7 +39,7 @@ nav:
       - MCAD 与 BIM: DECISION-MCAD-BIM.md
       - 内嵌浏览器（决策）: DECISION-EMBEDDED-BROWSER.md
       - 架构: ARCHITECTURE.md
-  - 答疑、测试与性能分析:
+  - 其他:
       - 答疑（Q&A）: FAQ.md
       - 测试: TESTING.md
       - 性能分析（Tracy）: PROFILING.md
