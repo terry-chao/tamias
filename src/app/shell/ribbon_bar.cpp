@@ -1,22 +1,34 @@
 #include "app/shell/ribbon_bar.h"
 
+#include "app/shell/ribbon_float_window.h"
+#include "app/shell/ribbon_group.h"
 #include "app/shell/ribbon_page.h"
 
 #include <QAction>
+#include <QActionGroup>
 #include <QApplication>
 #include <QButtonGroup>
+#include <QCursor>
+#include <QDragEnterEvent>
+#include <QDragLeaveEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
 #include <QEvent>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
+#include <QMenu>
+#include <QMimeData>
 #include <QPixmap>
+#include <QScreen>
 #include <QSize>
 #include <QSizePolicy>
 #include <QStackedWidget>
 #include <QStyleHints>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <algorithm>
 
 namespace tamias {
 namespace {
@@ -60,6 +72,11 @@ QString ribbon_stylesheet(bool dark) {
         "QToolButton#ribbonQuickButton:hover, QToolButton#ribbonCollapse:hover {"
         "  background: #3c3f41;"
         "}"
+        "QToolButton#ribbonStyleButton {"
+        "  background: transparent; border: none; border-radius: 4px; padding: 4px;"
+        "}"
+        "QToolButton#ribbonStyleButton:hover { background: #3c3f41; }"
+        "QToolButton#ribbonStyleButton::menu-indicator { image: none; width: 0; }"
         "QToolButton#ribbonButton {"
         "  background: transparent; border: none; border-radius: 4px;"
         "  color: #dcdcdc; padding: 4px 8px 2px 8px; font-size: 11px;"
@@ -69,6 +86,8 @@ QString ribbon_stylesheet(bool dark) {
         "QToolButton#ribbonButton:checked, QToolButton#ribbonButton:pressed {"
         "  background: #45494b;"
         "}"
+        "#ribbonGroup:hover { background: #3a3d41; border-radius: 4px; }"
+        "#ribbonDropIndicator { background: #6cb6ff; }"
         "#ribbonGroupTitle {"
         "  color: #8c8c8c; font-size: 11px;"
         "  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;"
@@ -100,6 +119,11 @@ QString ribbon_stylesheet(bool dark) {
       "QToolButton#ribbonQuickButton:hover, QToolButton#ribbonCollapse:hover {"
       "  background: #ececec;"
       "}"
+      "QToolButton#ribbonStyleButton {"
+      "  background: transparent; border: none; border-radius: 4px; padding: 4px;"
+      "}"
+      "QToolButton#ribbonStyleButton:hover { background: #ececec; }"
+      "QToolButton#ribbonStyleButton::menu-indicator { image: none; width: 0; }"
       "QToolButton#ribbonButton {"
       "  background: transparent; border: none; border-radius: 4px;"
       "  color: #333333; padding: 4px 8px 2px 8px; font-size: 11px;"
@@ -109,6 +133,8 @@ QString ribbon_stylesheet(bool dark) {
       "QToolButton#ribbonButton:checked, QToolButton#ribbonButton:pressed {"
       "  background: #dadada;"
       "}"
+      "#ribbonGroup:hover { background: #ececec; border-radius: 4px; }"
+      "#ribbonDropIndicator { background: #1a73e8; }"
       "#ribbonGroupTitle {"
       "  color: #6a6a6a; font-size: 11px;"
       "  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;"
@@ -123,6 +149,8 @@ RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
   setObjectName(QStringLiteral("ribbonBar"));
   setAttribute(Qt::WA_StyledBackground, true);
   setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+  // 分组的拖出 / 拖回都落在这个窗口上。
+  setAcceptDrops(true);
 
   auto* root = new QVBoxLayout(this);
   root->setContentsMargins(0, 0, 0, 0);
@@ -158,6 +186,21 @@ RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
   tabs->addLayout(tab_buttons_layout_);
   tabs->addStretch(1);
 
+  // 形态切换：放在折叠箭头旁边，一眼能看见，也不占 Ribbon 的地方。
+  style_button_ = new QToolButton(tab_row_);
+  style_button_->setObjectName(QStringLiteral("ribbonStyleButton"));
+  style_button_->setAutoRaise(true);
+  style_button_->setFocusPolicy(Qt::NoFocus);
+  style_button_->setCursor(Qt::PointingHandCursor);
+  style_button_->setIconSize(QSize(14, 14));
+  style_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
+  style_button_->setPopupMode(QToolButton::InstantPopup);
+  style_button_->setToolTip(tr("Ribbon style"));
+  style_menu_ = new QMenu(style_button_);
+  style_button_->setMenu(style_menu_);
+  build_style_menu();
+  tabs->addWidget(style_button_, 0, Qt::AlignVCenter);
+
   collapse_button_ = new QToolButton(tab_row_);
   collapse_button_->setObjectName(QStringLiteral("ribbonCollapse"));
   collapse_button_->setAutoRaise(true);
@@ -192,6 +235,7 @@ RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
   }
 
   update_collapse_button();
+  update_style_actions();
   apply_theme();
 }
 
@@ -217,8 +261,11 @@ RibbonPage* RibbonBar::add_page(const QString& id, const QString& title) {
   }
 
   auto* page = new RibbonPage(pages_);
+  page->set_page_id(id);
   const int index = pages_->addWidget(page);
   pages_by_id_.insert(id, page);
+  connect(page, &RibbonPage::group_added, this, &RibbonBar::install_group_hooks);
+  page->set_display_mode(display_mode_);
 
   auto* tab = new QToolButton(tab_row_);
   tab->setObjectName(QStringLiteral("ribbonTab"));
@@ -263,6 +310,285 @@ void RibbonBar::apply_theme() {
   applying_theme_ = true;
   setStyleSheet(ribbon_stylesheet(is_dark_theme()));
   applying_theme_ = false;
+}
+
+// ==== 两种形态 ====
+
+void RibbonBar::build_style_menu() {
+  style_group_ = new QActionGroup(this);
+  style_group_->setExclusive(true);
+  style_text_action_ = style_menu_->addAction(tr("Icon + text"));
+  style_text_action_->setCheckable(true);
+  style_text_action_->setToolTip(tr("The ribbon as it is today: every tool with its name"));
+  style_group_->addAction(style_text_action_);
+  style_icons_action_ = style_menu_->addAction(tr("Icon only (hover shows the name)"));
+  style_icons_action_->setCheckable(true);
+  style_icons_action_->setToolTip(tr("FreeCAD-like: icons only, the name appears on hover"));
+  style_group_->addAction(style_icons_action_);
+  connect(style_text_action_, &QAction::triggered, this,
+          [this] { set_display_mode(RibbonDisplayMode::IconWithText); });
+  connect(style_icons_action_, &QAction::triggered, this,
+          [this] { set_display_mode(RibbonDisplayMode::IconOnly); });
+}
+
+void RibbonBar::set_style_button_icon(const QIcon& icon) {
+  if (style_button_ != nullptr) {
+    style_button_->setIcon(icon);
+  }
+}
+
+void RibbonBar::update_style_actions() {
+  const bool icon_only = display_mode_ == RibbonDisplayMode::IconOnly;
+  if (style_icons_action_ != nullptr) {
+    style_icons_action_->setChecked(icon_only);
+  }
+  if (style_text_action_ != nullptr) {
+    style_text_action_->setChecked(!icon_only);
+  }
+}
+
+void RibbonBar::set_display_mode(RibbonDisplayMode mode) {
+  display_mode_ = mode;
+  for (RibbonPage* page : pages_by_id_) {
+    if (page != nullptr) {
+      page->set_display_mode(mode);
+    }
+  }
+  update_style_actions();
+  updateGeometry();
+  emit display_mode_changed(mode);
+}
+
+// ==== 分组拖出 / 拖回 ====
+
+void RibbonBar::install_group_hooks(RibbonGroup* group) {
+  if (group == nullptr) {
+    return;
+  }
+  group->set_display_mode(display_mode_);
+  connect(group, &RibbonGroup::drag_dropped_outside, this,
+          &RibbonBar::handle_group_dropped_outside);
+}
+
+RibbonPage* RibbonBar::current_page() const {
+  return qobject_cast<RibbonPage*>(pages_->currentWidget());
+}
+
+RibbonPage* RibbonBar::page_of_group(RibbonGroup* group) const {
+  if (group == nullptr) {
+    return nullptr;
+  }
+  RibbonPage* page = find_page(group->page_id());
+  if (page != nullptr && page->find_group(group->group_id()) == group) {
+    return page;
+  }
+  return nullptr;
+}
+
+bool RibbonBar::over_ribbon(const QPoint& global_pos) const {
+  return rect().contains(mapFromGlobal(global_pos));
+}
+
+void RibbonBar::clamp_to_screen(RibbonFloatWindow* window) {
+  if (window == nullptr) {
+    return;
+  }
+  QScreen* screen = QGuiApplication::screenAt(window->frameGeometry().center());
+  if (screen == nullptr) {
+    screen = QGuiApplication::primaryScreen();
+  }
+  if (screen == nullptr) {
+    return;
+  }
+  const QRect avail = screen->availableGeometry();
+  QRect frame = window->frameGeometry();
+  const int max_x = (std::max)(avail.left(), avail.right() - frame.width() + 1);
+  const int max_y = (std::max)(avail.top(), avail.bottom() - frame.height() + 1);
+  frame.moveLeft(std::clamp(frame.left(), avail.left(), max_x));
+  frame.moveTop(std::clamp(frame.top(), avail.top(), max_y));
+  window->move(frame.topLeft());
+}
+
+RibbonFloatWindow* RibbonBar::float_group(RibbonGroup* group, RibbonPage* page) {
+  if (group == nullptr || page == nullptr) {
+    return nullptr;
+  }
+  FloatingEntry entry;
+  entry.page = page;
+  // 先摘下来，浮窗 addWidget 时才不会和旧布局打架；顺手记住原位，点「收回」能回到原处。
+  entry.slot = page->detach_group(group);
+  entry.window = new RibbonFloatWindow(group, window());
+  floating_.insert(group, entry);
+  group->set_floating(true);
+  connect(entry.window, &RibbonFloatWindow::dock_requested, this,
+          [this](RibbonGroup* target) {
+            const auto it = floating_.find(target);
+            if (it != floating_.end()) {
+              dock_group(target, it->page, it->slot);
+            }
+          });
+  // 浮窗被别的方式销毁（关主窗口等）时把登记清掉，别留悬空。
+  connect(entry.window, &QObject::destroyed, this,
+          [this, group](QObject* source) {
+            const auto it = floating_.find(group);
+            // 只清自己那一条：这一组可能已经被重新拖出来了（换了个浮窗）。
+            if (it != floating_.end() && static_cast<QObject*>(it->window) == source) {
+              floating_.remove(group);
+            }
+          });
+  return entry.window;
+}
+
+void RibbonBar::dock_group(RibbonGroup* group, RibbonPage* page, RibbonPage::Slot slot) {
+  if (group == nullptr || page == nullptr) {
+    return;
+  }
+  const auto it = floating_.find(group);
+  if (it != floating_.end()) {
+    RibbonFloatWindow* window = it->window;
+    if (window != nullptr) {
+      window->release_group();
+      window->hide();
+      window->deleteLater();
+    }
+    floating_.erase(it);
+  }
+  page->insert_group(group, slot);
+  group->set_floating(false);
+  group->show();
+  emit floating_groups_changed();
+}
+
+void RibbonBar::handle_group_dropped_outside(RibbonGroup* group,
+                                             const QPoint& group_top_left) {
+  if (group == nullptr) {
+    return;
+  }
+  // 松手时指针还在 Ribbon 上（多半是 Esc 取消）：什么都不用动。
+  if (over_ribbon(QCursor::pos())) {
+    return;
+  }
+  if (const auto it = floating_.find(group); it != floating_.end()) {
+    it->window->move(group_top_left - it->window->group_offset());
+    clamp_to_screen(it->window);
+  } else if (RibbonPage* page = page_of_group(group)) {
+    if (RibbonFloatWindow* window = float_group(group, page)) {
+      window->move(group_top_left - window->group_offset());
+      window->show();
+      window->raise();
+      clamp_to_screen(window);
+    }
+  }
+  emit floating_groups_changed();
+}
+
+QStringList RibbonBar::floating_group_keys() const {
+  QStringList keys;
+  for (auto it = floating_.constBegin(); it != floating_.constEnd(); ++it) {
+    const RibbonGroup* group = it.key();
+    const FloatingEntry& entry = it.value();
+    if (group == nullptr || entry.window == nullptr) {
+      continue;
+    }
+    const QPoint pos = entry.window->pos();
+    keys.push_back(QStringLiteral("%1|%2|%3|%4")
+                       .arg(group->page_id(), group->group_id())
+                       .arg(pos.x())
+                       .arg(pos.y()));
+  }
+  return keys;
+}
+
+bool RibbonBar::restore_floating_group(const QString& page_id, const QString& group_id,
+                                       const QPoint& window_pos) {
+  RibbonPage* page = find_page(page_id);
+  RibbonGroup* group = page != nullptr ? page->find_group(group_id) : nullptr;
+  if (group == nullptr || floating_.contains(group)) {
+    return false;
+  }
+  RibbonFloatWindow* window = float_group(group, page);
+  if (window == nullptr) {
+    return false;
+  }
+  window->move(window_pos);
+  window->show();
+  clamp_to_screen(window);
+  return true;
+}
+
+RibbonGroup* RibbonBar::group_for_mime(const QMimeData* mime) const {
+  if (mime == nullptr || !mime->hasFormat(QString::fromLatin1(kRibbonGroupMimeType))) {
+    return nullptr;
+  }
+  const QString payload =
+      QString::fromUtf8(mime->data(QString::fromLatin1(kRibbonGroupMimeType)));
+  const int split = payload.indexOf(QLatin1Char('|'));
+  if (split <= 0) {
+    return nullptr;
+  }
+  RibbonPage* page = find_page(payload.left(split));
+  return page != nullptr ? page->find_group(payload.mid(split + 1)) : nullptr;
+}
+
+void RibbonBar::dragEnterEvent(QDragEnterEvent* event) {
+  RibbonGroup* group = group_for_mime(event->mimeData());
+  RibbonPage* page = group != nullptr ? page_of_group(group) : nullptr;
+  if (page == nullptr) {
+    event->ignore();
+    return;
+  }
+  // 拖动期间把第二排亮出来当落点：不然空着的第二排没高度，拖不进去。
+  page->set_drop_target_visible(true);
+  event->acceptProposedAction();
+}
+
+void RibbonBar::dragMoveEvent(QDragMoveEvent* event) {
+  RibbonGroup* group = group_for_mime(event->mimeData());
+  // **别用光标位置去认页面**：第二排要先撑高才存在，而撑高要等一次布局；
+  // 光标稍微偏出 pages_ 的当前几何就会认不到页面，第二排永远亮不起来。
+  // 拖动的是哪一组，它属于哪一页本来就知道——页面身份由组决定，光标只用来选排和排内位置。
+  RibbonPage* page = group != nullptr ? page_of_group(group) : nullptr;
+  if (page == nullptr) {
+    hide_drop_indicator();
+    event->ignore();
+    return;
+  }
+  page->set_drop_target_visible(true);
+  const QPoint content_pos =
+      page->content()->mapFromGlobal(mapToGlobal(event->position().toPoint()));
+  page->show_drop_indicator(page->drop_slot_at(content_pos));
+  event->acceptProposedAction();
+}
+
+void RibbonBar::dragLeaveEvent(QDragLeaveEvent* event) {
+  hide_drop_indicator();
+  event->accept();
+}
+
+void RibbonBar::dropEvent(QDropEvent* event) {
+  RibbonGroup* group = group_for_mime(event->mimeData());
+  RibbonPage* page = group != nullptr ? page_of_group(group) : nullptr;
+  if (page == nullptr) {
+    hide_drop_indicator();
+    event->ignore();
+    return;
+  }
+  // 落点要**先算**：hide_drop_indicator() 会把空着的第二排收回去，收完就找不到那一排了。
+  const QPoint content_pos =
+      page->content()->mapFromGlobal(mapToGlobal(event->position().toPoint()));
+  const RibbonPage::Slot slot = page->drop_slot_at(content_pos);
+  hide_drop_indicator();
+  dock_group(group, page, slot);
+  event->acceptProposedAction();
+}
+
+void RibbonBar::hide_drop_indicator() {
+  for (RibbonPage* page : pages_by_id_) {
+    if (page != nullptr) {
+      page->hide_drop_indicator();
+      page->set_drop_target_visible(false);  // 没落下的第二排收回去
+    }
+  }
 }
 
 void RibbonBar::changeEvent(QEvent* event) {

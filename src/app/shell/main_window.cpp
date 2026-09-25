@@ -874,6 +874,27 @@ MainWindow::MainWindow(QWidget* parent)
   debug_scene_action->setText(tr("Scene Debugger"));
 
   auto* ribbon = new RibbonBar(this);
+  ribbon_ = ribbon;
+  // 两种形态：图标 + 文字（现状）/ 仅图标（FreeCAD 那种，悬浮出提示）。
+  // 右上角的小按钮和「设置 → 界面」都能切，选哪个记在设置里。
+  ribbon->set_style_button_icon(ribbon_icon(QStringLiteral(":/icons/ribbon_style.svg")));
+  ribbon->set_display_mode(AppSettings::instance().ribbon_style() == QStringLiteral("icons")
+                               ? RibbonDisplayMode::IconOnly
+                               : RibbonDisplayMode::IconWithText);
+  connect(ribbon, &RibbonBar::display_mode_changed, this, [](RibbonDisplayMode mode) {
+    auto& settings = AppSettings::instance();
+    settings.set_ribbon_style(mode == RibbonDisplayMode::IconOnly ? QStringLiteral("icons")
+                                                                 : QStringLiteral("text"));
+    settings.save();
+  });
+  connect(ribbon, &RibbonBar::floating_groups_changed, this, [this] {
+    if (ribbon_ == nullptr) {
+      return;
+    }
+    auto& settings = AppSettings::instance();
+    settings.set_ribbon_floating_groups(ribbon_->floating_group_keys());
+    settings.save();
+  });
   ribbon->add_quick_action(undo_action);
   ribbon->add_quick_action(redo_action);
 
@@ -1076,6 +1097,22 @@ MainWindow::MainWindow(QWidget* parent)
     statusBar()->showMessage(text, 8000);
     extension_watcher_->rewatch();  // 目录可能新增或消失
   });
+
+  // 上次被拖出去、还漂在外面的那几组工具：按记住的位置恢复。
+  for (const QString& entry : AppSettings::instance().ribbon_floating_groups()) {
+    const QStringList fields = entry.split(QLatin1Char('|'));
+    if (fields.size() != 4) {
+      continue;
+    }
+    bool x_ok = false;
+    bool y_ok = false;
+    const int x = fields[2].toInt(&x_ok);
+    const int y = fields[3].toInt(&y_ok);
+    if (!x_ok || !y_ok) {
+      continue;
+    }
+    ribbon->restore_floating_group(fields[0], fields[1], QPoint(x, y));
+  }
 
   setMenuWidget(ribbon);
 
@@ -1387,6 +1424,11 @@ void MainWindow::open_settings() {
   }
   if (dialog.backend_changed()) {
     notes << tr("Render backend changes take effect after restarting Tamias.");
+  }
+  if (dialog.ribbon_style_changed() && ribbon_ != nullptr) {
+    ribbon_->set_display_mode(AppSettings::instance().ribbon_style() == QStringLiteral("icons")
+                                  ? RibbonDisplayMode::IconOnly
+                                  : RibbonDisplayMode::IconWithText);
   }
   if (!notes.isEmpty()) {
     QMessageBox::information(this, tr("Settings"), notes.join(QStringLiteral("\n\n")));

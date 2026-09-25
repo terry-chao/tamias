@@ -191,6 +191,23 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
   auto* theme_section = new SettingsSection(tr("Color"), this);
   theme_section->add_row(tr("Appearance"), theme_combo_);
 
+  // Ribbon 形态：图标 + 文字（现状）或仅图标（FreeCAD 那种，悬浮出提示）。
+  ribbon_style_combo_ = new QComboBox(this);
+  ribbon_style_combo_->addItem(tr("Icon + text"), QStringLiteral("text"));
+  ribbon_style_combo_->addItem(tr("Icon only (hover shows the name)"),
+                               QStringLiteral("icons"));
+  const int ribbon_index =
+      ribbon_style_combo_->findData(AppSettings::instance().ribbon_style());
+  ribbon_style_combo_->setCurrentIndex(ribbon_index >= 0 ? ribbon_index : 0);
+  auto* ribbon_hint = new QLabel(this);
+  ribbon_hint->setWordWrap(true);
+  ribbon_hint->setObjectName(QStringLiteral("settingsHint"));
+  ribbon_hint->setText(tr("Groups can be dragged out of the ribbon by the grip on top of "
+                          "them, and dropped back anywhere in the ribbon."));
+  auto* ribbon_section = new SettingsSection(tr("Ribbon"), this);
+  ribbon_section->add_row(tr("Tools"), ribbon_style_combo_);
+  ribbon_section->add_row(ribbon_hint);
+
   zoom_to_mouse_check_ = new QCheckBox(this);
   zoom_to_mouse_check_->setChecked(AppSettings::instance().zoom_to_mouse_position());
   zoom_to_mouse_check_->setMinimumHeight(22);
@@ -241,7 +258,7 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
   kernel_section->add_row(tr("Kernel backend"), kernel_combo_);
   kernel_section->add_row(kernel_hint_);
 
-  stack->addWidget(wrap_page(make_page({translation_section})));
+  stack->addWidget(wrap_page(make_page({translation_section, ribbon_section})));
   stack->addWidget(wrap_page(make_page({theme_section})));
   stack->addWidget(wrap_page(make_page({zoom_section})));
   stack->addWidget(wrap_page(make_page({graphics_section})));
@@ -329,15 +346,18 @@ void SettingsDialog::accept() {
   const auto theme =
       static_cast<UiColorScheme>(theme_combo_->currentData().toInt());
   const QString kernel = kernel_combo_->currentData().toString();
+  const QString ribbon_style = ribbon_style_combo_->currentData().toString();
   auto& settings = AppSettings::instance();
   language_changed_ = language != settings.ui_language();
   backend_changed_ = backend != settings.graphics_backend();
   theme_changed_ = theme != settings.ui_color_scheme();
   kernel_changed_ = kernel != settings.kernel_backend();
+  ribbon_style_changed_ = ribbon_style != settings.ribbon_style();
   settings.set_graphics_backend(backend);
   settings.set_kernel_backend(kernel);
   settings.set_ui_language(language);
   settings.set_ui_color_scheme(theme);
+  settings.set_ribbon_style(ribbon_style);
   settings.set_zoom_to_mouse_position(zoom_to_mouse_check_->isChecked());
   settings.save();
   if (theme_changed_) {

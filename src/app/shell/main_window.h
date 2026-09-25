@@ -126,6 +126,7 @@ class MainWindow final : public QMainWindow {
   QStackedWidget* stack_ = nullptr;
   HomePage* home_ = nullptr;
   QTabWidget* tabs_ = nullptr;
+  RibbonBar* ribbon_ = nullptr;
   RecentFilesStore recent_;
   QAction* wireframe_action_ = nullptr;
   QAction* shaded_action_ = nullptr;

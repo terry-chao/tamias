@@ -69,6 +69,12 @@ QString normalize_ui_language_preference(const QString& key) {
   return default_ui_language();
 }
 
+QString normalize_ribbon_style(const QString& key) {
+  return key.compare(QStringLiteral("icons"), Qt::CaseInsensitive) == 0
+             ? QStringLiteral("icons")
+             : QStringLiteral("text");
+}
+
 }  // namespace
 
 AppSettings& AppSettings::instance() {
@@ -89,6 +95,10 @@ void AppSettings::load() {
       settings.value(QStringLiteral("ui/color_scheme"), QStringLiteral("system")).toString());
   zoom_to_mouse_position_ =
       settings.value(QStringLiteral("viewport/zoom_to_mouse_position"), true).toBool();
+  ribbon_style_ = normalize_ribbon_style(
+      settings.value(QStringLiteral("ui/ribbon_style"), QStringLiteral("text")).toString());
+  ribbon_floating_groups_ =
+      settings.value(QStringLiteral("ui/ribbon_floating_groups")).toStringList();
   const QString disabled_key = QStringLiteral("plugins/disabled_ids");
   disabled_plugin_ids_ =
       settings.contains(disabled_key)
@@ -111,6 +121,12 @@ void AppSettings::save() const {
   settings.setValue(QStringLiteral("ui/language"), ui_language_);
   settings.setValue(QStringLiteral("ui/color_scheme"), color_scheme_to_key(ui_color_scheme_));
   settings.setValue(QStringLiteral("viewport/zoom_to_mouse_position"), zoom_to_mouse_position_);
+  settings.setValue(QStringLiteral("ui/ribbon_style"), ribbon_style_);
+  if (ribbon_floating_groups_.isEmpty()) {
+    settings.remove(QStringLiteral("ui/ribbon_floating_groups"));
+  } else {
+    settings.setValue(QStringLiteral("ui/ribbon_floating_groups"), ribbon_floating_groups_);
+  }
   settings.setValue(QStringLiteral("plugins/disabled_ids"), disabled_plugin_ids_);
   settings.setValue(QStringLiteral("plugins/ribbon_command_order"),
                     ribbon_command_order_);
@@ -140,6 +156,14 @@ void AppSettings::set_ui_color_scheme(UiColorScheme scheme) {
 
 void AppSettings::set_zoom_to_mouse_position(bool enabled) {
   zoom_to_mouse_position_ = enabled;
+}
+
+void AppSettings::set_ribbon_style(const QString& style) {
+  ribbon_style_ = normalize_ribbon_style(style);
+}
+
+void AppSettings::set_ribbon_floating_groups(const QStringList& entries) {
+  ribbon_floating_groups_ = entries;
 }
 
 void AppSettings::set_disabled_plugin_ids(const QStringList& ids) {

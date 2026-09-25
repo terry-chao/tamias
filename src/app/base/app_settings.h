@@ -33,6 +33,15 @@ class AppSettings {
   [[nodiscard]] bool zoom_to_mouse_position() const { return zoom_to_mouse_position_; }
   void set_zoom_to_mouse_position(bool enabled);
 
+  // Ribbon 形态："text"（图标 + 文字）或 "icons"（仅图标，悬浮出提示）。
+  [[nodiscard]] QString ribbon_style() const { return ribbon_style_; }
+  void set_ribbon_style(const QString& style);
+  // 被拖出 Ribbon、漂在外面的分组："page_id|group_id|x|y"。
+  [[nodiscard]] QStringList ribbon_floating_groups() const {
+    return ribbon_floating_groups_;
+  }
+  void set_ribbon_floating_groups(const QStringList& entries);
+
   [[nodiscard]] QStringList disabled_plugin_ids() const {
     return disabled_plugin_ids_;
   }
@@ -75,6 +84,8 @@ class AppSettings {
   QString ui_language_ = QStringLiteral("system");
   UiColorScheme ui_color_scheme_ = UiColorScheme::System;
   bool zoom_to_mouse_position_ = true;
+  QString ribbon_style_ = QStringLiteral("text");
+  QStringList ribbon_floating_groups_;
   QStringList disabled_plugin_ids_;
   QStringList ribbon_command_order_;
   std::optional<GraphicsBackend> resolved_backend_;

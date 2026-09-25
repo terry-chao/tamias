@@ -2416,6 +2416,40 @@ Plugin ID: %4</source>
         <source>Expand the ribbon</source>
         <translation>展开功能区</translation>
     </message>
+    <message>
+        <source>Ribbon style</source>
+        <translation>功能区样式</translation>
+    </message>
+    <message>
+        <source>Icon + text</source>
+        <translation>图标 + 文字</translation>
+    </message>
+    <message>
+        <source>Icon only (hover shows the name)</source>
+        <translation>仅图标（悬浮显示名称）</translation>
+    </message>
+    <message>
+        <source>The ribbon as it is today: every tool with its name</source>
+        <translation>和现在一样：每个工具都带名字</translation>
+    </message>
+    <message>
+        <source>FreeCAD-like: icons only, the name appears on hover</source>
+        <translation>像 FreeCAD：只有图标，鼠标悬浮时才显示名字</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::RibbonGroup</name>
+    <message>
+        <source>Drag this group out of the ribbon to float it; drop it back to dock</source>
+        <translation>拖动这一组工具：拖出功能区就是浮动小工具栏，拖回来重新停靠</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::RibbonFloatWindow</name>
+    <message>
+        <source>Dock this group back onto the ribbon</source>
+        <translation>把这一组收回功能区</translation>
+    </message>
 </context>
 <context>
     <name>tamias::SettingsDialog</name>
@@ -2460,6 +2494,26 @@ Plugin ID: %4</source>
     <message>
         <source>Appearance</source>
         <translation>外观</translation>
+    </message>
+    <message>
+        <source>Ribbon</source>
+        <translation>功能区</translation>
+    </message>
+    <message>
+        <source>Tools</source>
+        <translation>工具</translation>
+    </message>
+    <message>
+        <source>Icon + text</source>
+        <translation>图标 + 文字</translation>
+    </message>
+    <message>
+        <source>Icon only (hover shows the name)</source>
+        <translation>仅图标（悬浮显示名称）</translation>
+    </message>
+    <message>
+        <source>Groups can be dragged out of the ribbon by the grip on top of them, and dropped back anywhere in the ribbon.</source>
+        <translation>每组工具顶上有一条抓手：可以把它拖出功能区变成浮动小工具栏，也可以拖回功能区的任意位置。</translation>
     </message>
     <message>
         <source>Zoom</source>
