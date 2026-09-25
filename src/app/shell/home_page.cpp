@@ -245,6 +245,15 @@ HomePage::HomePage(QWidget* parent) : QWidget(parent) {
   header_layout->addLayout(brand_text);
   header_layout->addSpacing(20);
 
+  // FreeCAD 的 Start 页也是「新建 / 打开」这两件事摆在最顺手的位置。
+  auto* new_btn = new QPushButton(tr("New"), header_);
+  new_btn->setObjectName(QStringLiteral("homeAction"));
+  new_btn->setCursor(Qt::PointingHandCursor);
+  new_btn->setIcon(QIcon(QStringLiteral(":/icons/new.svg")));
+  new_btn->setToolTip(tr("New document"));
+  connect(new_btn, &QPushButton::clicked, this, &HomePage::newRequested);
+  header_layout->addWidget(new_btn, 0, Qt::AlignVCenter);
+
   auto* open_btn = new QPushButton(tr("Open…"), header_);
   open_btn->setObjectName(QStringLiteral("homeAction"));
   open_btn->setCursor(Qt::PointingHandCursor);

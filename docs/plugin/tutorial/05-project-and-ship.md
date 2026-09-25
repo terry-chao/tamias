@@ -105,7 +105,7 @@ host.AddCommand("tamias.nurbs.create", "NURBS", () => BeginCreate(host),
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
-| `PageId` | `"home"` | Ribbon 页 id。`"plugins"` 是退役写法，会被改到 `home` |
+| `PageId` | `"home"` | 落哪一段分区（工具带上「开始」那一段就写 `"home"`）。`"plugins"` 是退役写法，会被改到 `home` |
 | `GroupId` | `"plugins"` | 组 id。`"commands"` / `"manage"` 也是退役写法，会被改到 `plugins` |
 | `IconPath` | 空 | 图标路径；空则用默认图标。**相对路径按插件 DLL 目录解析**，预编译插件建议像示例那样传绝对路径 |
 | `Order` | 0 | 同组内排序键，小的在左 |

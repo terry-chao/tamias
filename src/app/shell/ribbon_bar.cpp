@@ -17,8 +17,8 @@
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QIcon>
-#include <QLabel>
 #include <QMenu>
+#include <QMenuBar>
 #include <QMimeData>
 #include <QPixmap>
 #include <QScreen>
@@ -30,29 +30,10 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <algorithm>
+#include <iterator>
 
 namespace tamias {
 namespace {
-
-// 页栈：**只按当前页**算高度（sizeHint 与最小高度）。
-//
-// QStackedWidget 默认取所有页的最大值——只要有一个页签到过第二排，别的页签就永远
-// 空出一条（页高 92、栈 184，多出来的 92 就是那条空白）。代价是切页签时 Ribbon 会
-// 跟着变高变矮，这和主流 Ribbon 一致：每页要几排由它自己决定。
-class RibbonPageStack final : public QStackedWidget {
- public:
-  using QStackedWidget::QStackedWidget;
-
-  [[nodiscard]] QSize sizeHint() const override {
-    const QWidget* page = currentWidget();
-    return page != nullptr ? page->sizeHint() : QStackedWidget::sizeHint();
-  }
-
-  [[nodiscard]] QSize minimumSizeHint() const override {
-    const QWidget* page = currentWidget();
-    return page != nullptr ? page->minimumSizeHint() : QStackedWidget::minimumSizeHint();
-  }
-};
 
 bool is_dark_theme() {
   if (const QStyleHints* hints = QGuiApplication::styleHints()) {
@@ -72,25 +53,23 @@ QString ribbon_stylesheet(bool dark) {
   if (dark) {
     return QStringLiteral(
         "#ribbonBar { background: #2b2d30; }"
-        "#ribbonTabRow {"
-        "  background: #2b2d30; border-bottom: 1px solid #3c3f41;"
+        "QMenuBar#ribbonMenuBar {"
+        "  background: #2b2d30; padding: 3px 4px; border-bottom: 1px solid #3c3f41;"
         "}"
+        "QMenuBar#ribbonMenuBar::item {"
+        "  background: transparent; padding: 4px 10px; color: #dcdcdc;"
+        "  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;"
+        "}"
+        "QMenuBar#ribbonMenuBar::item:selected { background: #3c3f41; color: #ffffff; }"
+        "QMenuBar#ribbonMenuBar::item:pressed { background: #45494b; }"
         "#ribbonPages, #ribbonPage, #ribbonPageContent, #ribbonPageScroll {"
         "  background: #313338;"
         "}"
-        "QToolButton#ribbonTab {"
-        "  background: transparent; border: none; border-bottom: 3px solid transparent;"
-        "  color: #dcdcdc; padding: 8px 14px 6px 14px; font-size: 13px;"
-        "  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;"
-        "}"
-        "QToolButton#ribbonTab:checked {"
-        "  color: #6cb6ff; border-bottom: 3px solid #6cb6ff; font-weight: 600;"
-        "}"
-        "QToolButton#ribbonTab:hover { color: #ffffff; }"
-        "QToolButton#ribbonQuickButton, QToolButton#ribbonCollapse {"
+        "#ribbonSectionSep { background: #3c3f41; border: none; }"
+        "QToolButton#ribbonCollapse {"
         "  background: transparent; border: none; border-radius: 4px; padding: 4px;"
         "}"
-        "QToolButton#ribbonQuickButton:hover, QToolButton#ribbonCollapse:hover {"
+        "QToolButton#ribbonCollapse:hover {"
         "  background: #3c3f41;"
         "}"
         "QToolButton#ribbonStyleButton {"
@@ -119,25 +98,23 @@ QString ribbon_stylesheet(bool dark) {
 
   return QStringLiteral(
       "#ribbonBar { background: #f7f7f7; }"
-      "#ribbonTabRow {"
-      "  background: #ffffff; border-bottom: 1px solid #e6e6e6;"
+      "QMenuBar#ribbonMenuBar {"
+      "  background: #f7f7f7; padding: 3px 4px; border-bottom: 1px solid #e6e6e6;"
       "}"
+      "QMenuBar#ribbonMenuBar::item {"
+      "  background: transparent; padding: 4px 10px; color: #222222;"
+      "  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;"
+      "}"
+      "QMenuBar#ribbonMenuBar::item:selected { background: #e8f2fb; color: #1f1f1f; }"
+      "QMenuBar#ribbonMenuBar::item:pressed { background: #d7e6f8; }"
       "#ribbonPages, #ribbonPage, #ribbonPageContent, #ribbonPageScroll {"
       "  background: #f7f7f7;"
       "}"
-      "QToolButton#ribbonTab {"
-      "  background: transparent; border: none; border-bottom: 3px solid transparent;"
-      "  color: #222222; padding: 8px 14px 6px 14px; font-size: 13px;"
-      "  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;"
-      "}"
-      "QToolButton#ribbonTab:checked {"
-      "  color: #1a73e8; border-bottom: 3px solid #1a73e8; font-weight: 600;"
-      "}"
-      "QToolButton#ribbonTab:hover { color: #1a73e8; }"
-      "QToolButton#ribbonQuickButton, QToolButton#ribbonCollapse {"
+      "#ribbonSectionSep { background: #d8d8d8; border: none; }"
+      "QToolButton#ribbonCollapse {"
       "  background: transparent; border: none; border-radius: 4px; padding: 4px;"
       "}"
-      "QToolButton#ribbonQuickButton:hover, QToolButton#ribbonCollapse:hover {"
+      "QToolButton#ribbonCollapse:hover {"
       "  background: #ececec;"
       "}"
       "QToolButton#ribbonStyleButton {"
@@ -177,38 +154,25 @@ RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
   root->setContentsMargins(0, 0, 0, 0);
   root->setSpacing(0);
 
-  tab_row_ = new QWidget(this);
-  tab_row_->setObjectName(QStringLiteral("ribbonTabRow"));
-  tab_row_->setFixedHeight(36);
-  auto* tabs = new QHBoxLayout(tab_row_);
-  tabs->setContentsMargins(10, 0, 8, 0);
-  tabs->setSpacing(2);
+  // 最上面（也是唯一）那一行：菜单 + 两端的角部 widget。
+  //
+  // 原来菜单下面还有一条 36px 的「工具行」：品牌 + 新建 / 打开 / 保存 / 撤销 / 重做 +
+  // 样式 / 卷起。撤销 / 重做 现在住进工具带的「编辑」组，新建 / 打开 / 保存 本来在
+  // 「文件」组里就有，那条行整条去掉了——省下来的 36px 全给工具带。样式 / 卷起两个小
+  // 按钮改挂在这条菜单栏的右端（QMenuBar 的角部 widget），一行装下，不另占高度；
+  // 品牌 logo 也一并从栏里撤了，菜单直接从「文件」开始。
+  //
+  // 菜单本体由宿主填（见 MainWindow::build_menu_bar），RibbonBar 只管这一行的高度和配色。
+  menu_bar_ = new QMenuBar(this);
+  menu_bar_->setObjectName(QStringLiteral("ribbonMenuBar"));
+  menu_bar_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+  // 菜单栏的空白处双击也卷起 / 展开：页签和工具行都没了，这一行是唯一「点哪儿都不
+  // 触发命令」的地方，拿它当双击目标最稳（落在菜单 / 按钮上的双击由它们自己吃掉）。
+  menu_bar_->installEventFilter(this);
 
-  auto* logo = new QLabel(tab_row_);
-  logo->setFixedSize(22, 22);
-  logo->setAlignment(Qt::AlignCenter);
-  const QPixmap brand(QStringLiteral(":/branding/logo.png"));
-  if (!brand.isNull()) {
-    logo->setPixmap(brand.scaled(22, 22, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-  }
-  tabs->addWidget(logo, 0, Qt::AlignVCenter);
-  tabs->addSpacing(6);
-
-  auto* quick_host = new QWidget(tab_row_);
-  quick_layout_ = new QHBoxLayout(quick_host);
-  quick_layout_->setContentsMargins(0, 0, 0, 0);
-  quick_layout_->setSpacing(0);
-  tabs->addWidget(quick_host, 0, Qt::AlignVCenter);
-  tabs->addSpacing(8);
-
-  tab_buttons_layout_ = new QHBoxLayout();
-  tab_buttons_layout_->setContentsMargins(0, 0, 0, 0);
-  tab_buttons_layout_->setSpacing(0);
-  tabs->addLayout(tab_buttons_layout_);
-  tabs->addStretch(1);
-
-  // 形态切换：放在折叠箭头旁边，一眼能看见，也不占 Ribbon 的地方。
-  style_button_ = new QToolButton(tab_row_);
+  // 菜单栏右边角部：形态切换 + 卷起。放在菜单栏末端，一眼能看见，也不占工具带的地方。
+  // 左边不放东西（原来这里挂品牌小图标，去掉之后菜单直接从「文件」开始）。
+  style_button_ = new QToolButton(menu_bar_);
   style_button_->setObjectName(QStringLiteral("ribbonStyleButton"));
   style_button_->setAutoRaise(true);
   style_button_->setFocusPolicy(Qt::NoFocus);
@@ -220,37 +184,34 @@ RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
   style_menu_ = new QMenu(style_button_);
   style_button_->setMenu(style_menu_);
   build_style_menu();
-  tabs->addWidget(style_button_, 0, Qt::AlignVCenter);
 
-  collapse_button_ = new QToolButton(tab_row_);
+  collapse_button_ = new QToolButton(menu_bar_);
   collapse_button_->setObjectName(QStringLiteral("ribbonCollapse"));
   collapse_button_->setAutoRaise(true);
   collapse_button_->setFocusPolicy(Qt::NoFocus);
   collapse_button_->setCursor(Qt::PointingHandCursor);
   collapse_button_->setIconSize(QSize(12, 12));
   connect(collapse_button_, &QToolButton::clicked, this, &RibbonBar::toggle_collapsed);
-  tabs->addWidget(collapse_button_, 0, Qt::AlignVCenter);
 
-  tab_group_ = new QButtonGroup(this);
-  tab_group_->setExclusive(true);
+  auto* corner_host = new QWidget(menu_bar_);
+  auto* corner_layout = new QHBoxLayout(corner_host);
+  corner_layout->setContentsMargins(0, 0, 6, 0);
+  corner_layout->setSpacing(2);
+  corner_layout->addWidget(style_button_, 0, Qt::AlignVCenter);
+  corner_layout->addWidget(collapse_button_, 0, Qt::AlignVCenter);
+  menu_bar_->setCornerWidget(corner_host, Qt::TopRightCorner);
 
-  pages_ = new RibbonPageStack(this);
-  pages_->setObjectName(QStringLiteral("ribbonPages"));
+  root->addWidget(menu_bar_);
 
-  root->addWidget(tab_row_);
-  root->addWidget(pages_);
+  // 工具带本体：所有分区（开始 / 视图 / 插件页…）**同时**铺在这里，一个接一个。
+  // 每段各自决定要几排（见 RibbonPage::apply_rows），段与段之间一条横线。
+  pages_host_ = new QWidget(this);
+  pages_host_->setObjectName(QStringLiteral("ribbonPages"));
+  pages_layout_ = new QVBoxLayout(pages_host_);
+  pages_layout_->setContentsMargins(0, 0, 0, 0);
+  pages_layout_->setSpacing(0);
 
-  connect(tab_group_, &QButtonGroup::idClicked, this, [this](int id) {
-    if (id >= 0) {
-      pages_->setCurrentIndex(id);
-      // 页高按页走：切页之后让栈（和整条 Ribbon）立刻按当前页重算高度。
-      pages_->updateGeometry();
-      updateGeometry();
-      if (collapsed_) {
-        set_collapsed(false);
-      }
-    }
-  });
+  root->addWidget(pages_host_);
 
   if (QStyleHints* hints = QGuiApplication::styleHints()) {
     connect(hints, &QStyleHints::colorSchemeChanged, this, [this](Qt::ColorScheme) {
@@ -269,18 +230,6 @@ RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
   apply_theme();
 }
 
-void RibbonBar::add_quick_action(QAction* action) {
-  auto* button = new QToolButton(this);
-  button->setObjectName(QStringLiteral("ribbonQuickButton"));
-  button->setDefaultAction(action);
-  button->setToolButtonStyle(Qt::ToolButtonIconOnly);
-  button->setIconSize(QSize(16, 16));
-  button->setAutoRaise(true);
-  button->setFocusPolicy(Qt::NoFocus);
-  button->setCursor(Qt::PointingHandCursor);
-  quick_layout_->addWidget(button);
-}
-
 RibbonPage* RibbonBar::add_page(const QString& title) {
   return add_page(title.trimmed().toCaseFolded(), title);
 }
@@ -290,34 +239,41 @@ RibbonPage* RibbonBar::add_page(const QString& id, const QString& title) {
     return existing;
   }
 
-  auto* page = new RibbonPage(pages_);
+  const int section = static_cast<int>(page_list_.size());
+  if (section > 0) {
+    // 分区之间的横线：两段工具之间要有一刀，不然「开始」的最后一组和「视图」的
+    // 第一组看上去像同一段里的两组。
+    auto* sep = new QFrame(pages_host_);
+    sep->setObjectName(QStringLiteral("ribbonSectionSep"));
+    sep->setFixedHeight(1);
+    sep->setFrameShape(QFrame::NoFrame);
+    sep->setAttribute(Qt::WA_StyledBackground, true);
+    pages_layout_->addWidget(sep);
+  }
+
+  auto* page = new RibbonPage(pages_host_);
   page->set_page_id(id);
-  const int index = pages_->addWidget(page);
+  page->set_section_title(title);
+  page->set_section_tooltip(tr("Collapse the ribbon"));
+  page->set_section_accent(section_accent(section));
+  page_list_.push_back(page);
+  pages_layout_->addWidget(page);
   pages_by_id_.insert(id, page);
   connect(page, &RibbonPage::group_added, this, &RibbonBar::install_group_hooks);
   // 页高变了要立刻转告外层：RibbonBar 的父窗口是 QMainWindow，
   // 菜单区高度取的是 RibbonBar 的 sizeHint，不 updateGeometry 就还按旧高度留位置。
   connect(page, &RibbonPage::rows_changed, this, [this] {
-    if (pages_ != nullptr) {
-      pages_->updateGeometry();
+    if (pages_host_ != nullptr) {
+      pages_host_->updateGeometry();
     }
     updateGeometry();
   });
+  // 双击分区标题栏 = 卷起 / 展开（老 Ribbon 里是双击页签，页签没了就落在它身上）。
+  connect(page, &RibbonPage::section_header_double_clicked, this,
+          [this] { toggle_collapsed(); });
   page->set_display_mode(display_mode_);
-
-  auto* tab = new QToolButton(tab_row_);
-  tab->setObjectName(QStringLiteral("ribbonTab"));
-  tab->setText(title);
-  tab->setCheckable(true);
-  tab->setAutoRaise(true);
-  tab->setFocusPolicy(Qt::NoFocus);
-  tab->setCursor(Qt::PointingHandCursor);
-  tab_group_->addButton(tab, index);
-  tab_buttons_layout_->addWidget(tab);
-  if (index == 0) {
-    tab->setChecked(true);
-    pages_->setCurrentIndex(0);
-  }
+  // 只有一段时不画分区标题栏：一个分区没有「跟谁区分」的问题，白占 22px。
+  refresh_section_chrome();
   return page;
 }
 
@@ -328,7 +284,7 @@ void RibbonBar::set_collapsed(bool collapsed) {
     return;
   }
   collapsed_ = collapsed;
-  pages_->setVisible(!collapsed_);
+  pages_host_->setVisible(!collapsed_);
   update_collapse_button();
   updateGeometry();
   emit collapsed_changed(collapsed_);
@@ -348,7 +304,40 @@ void RibbonBar::apply_theme() {
   }
   applying_theme_ = true;
   setStyleSheet(ribbon_stylesheet(is_dark_theme()));
+  // 分区主色是主题相关的（深色底上用亮一档的蓝 / 青绿），换主题要把颜色重发一遍。
+  refresh_section_chrome();
   applying_theme_ = false;
+}
+
+// ==== 分区外观 ====
+
+// 分区主色：第 1 段蓝、第 2 段青绿，再往后（插件页、更多分区）从一张小表里轮着取。
+// 深色主题用亮一档的同一组色，保证在深底上也看得清。
+QColor RibbonBar::section_accent(int index) const {
+  static const QColor kLight[] = {
+      QColor(0x1a, 0x73, 0xe8), QColor(0x0f, 0x9d, 0x8c),
+      QColor(0xc2, 0x6b, 0x0d), QColor(0x7a, 0x4f, 0xc9),
+  };
+  static const QColor kDark[] = {
+      QColor(0x6c, 0xb6, 0xff), QColor(0x3d, 0xc9, 0xb6),
+      QColor(0xe0, 0x9a, 0x3d), QColor(0xa9, 0x8b, 0xea),
+  };
+  const int count = static_cast<int>(std::size(kLight));
+  const int slot = ((index % count) + count) % count;
+  return is_dark_theme() ? kDark[slot] : kLight[slot];
+}
+
+void RibbonBar::refresh_section_chrome() {
+  // 只有一段分区时不画标题栏与色标：那是「没有第二个分区」的情况，画了反而像装饰。
+  const bool many = page_list_.size() > 1;
+  for (std::size_t i = 0; i < page_list_.size(); ++i) {
+    RibbonPage* page = page_list_[i];
+    if (page == nullptr) {
+      continue;
+    }
+    page->set_section_accent(section_accent(static_cast<int>(i)));
+    page->set_section_chrome_visible(many);
+  }
 }
 
 // ==== 两种形态 ====
@@ -413,10 +402,6 @@ void RibbonBar::install_group_hooks(RibbonGroup* group) {
   group->set_display_mode(display_mode_);
   connect(group, &RibbonGroup::drag_dropped_outside, this,
           &RibbonBar::handle_group_dropped_outside);
-}
-
-RibbonPage* RibbonBar::current_page() const {
-  return qobject_cast<RibbonPage*>(pages_->currentWidget());
 }
 
 RibbonPage* RibbonBar::page_of_group(RibbonGroup* group) const {
@@ -572,16 +557,7 @@ bool RibbonBar::restore_floating_group(const QString& page_id, const QString& gr
 // ==== 布局记忆 ====
 
 std::vector<RibbonPage*> RibbonBar::pages_in_order() const {
-  std::vector<RibbonPage*> pages;
-  if (pages_ == nullptr) {
-    return pages;
-  }
-  for (int i = 0; i < pages_->count(); ++i) {
-    if (auto* page = qobject_cast<RibbonPage*>(pages_->widget(i))) {
-      pages.push_back(page);
-    }
-  }
-  return pages;
+  return page_list_;
 }
 
 QStringList RibbonBar::layout_keys() const {
@@ -763,6 +739,15 @@ void RibbonBar::changeEvent(QEvent* event) {
     apply_theme();
   }
   QWidget::changeEvent(event);
+}
+
+bool RibbonBar::eventFilter(QObject* watched, QEvent* event) {
+  // 菜单栏空白处双击 = 卷起 / 展开（见构造函数里为什么挑这一行）。
+  if (watched == menu_bar_ && event->type() == QEvent::MouseButtonDblClick) {
+    toggle_collapsed();
+    return true;
+  }
+  return QWidget::eventFilter(watched, event);
 }
 
 }  // namespace tamias

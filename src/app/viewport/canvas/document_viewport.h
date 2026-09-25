@@ -185,6 +185,11 @@ class DocumentViewport final : public QWidget {
   void begin_grid_placement(std::vector<GridAxis> axes, Vec2 anchor);
   [[nodiscard]] bool grid_placement_active() const { return pending_grid_.has_value(); }
   void cancel_grid_placement();
+  // 轴网布柱（柱 → 轴网布置）：武装后拖框选轴线，落框时把被框到的轴线**两两交点**
+  // 各放一根柱（一次框选 = 一条命令 = 一步撤销）。Esc / 右键退出工具。
+  [[nodiscard]] bool column_grid_placement_active() const {
+    return pending_column_grid_.has_value();
+  }
   // 翻模对话框的落点：把复核后的候选一次落进文档（一条命令 = 一步撤销）。
   void apply_drawing_import(DrawingImportPlan plan);
   // 轴网显示开关（视图 → 轴网）；轴网是参考线，不进实体表。
@@ -252,6 +257,9 @@ class DocumentViewport final : public QWidget {
   void plugin_point_input_changed(bool active);
   void visibility_changed();               // 隐藏/隔离/楼层过滤变化，面板据此刷新
   void view_changed();  // 打开的视图变了（全局三维 ↔ 某楼层），楼层管理页据此换高亮
+  // 轴网显示开关变了：Ribbon 上的「显示轴网」要跟着勾（视口也会自己打开它——
+  // 轴网布柱看不见轴就没得框）。
+  void grid_visible_changed(bool visible);
   // 图纸管理页要求把某张图纸开成二维页签（主窗口接）。
   void drawing_open_requested(const QString& path);
   void drawings_changed();  // 底图显隐 / 摆放变了，图纸管理页据此刷新
@@ -361,6 +369,14 @@ class DocumentViewport final : public QWidget {
   void commit_grid_placement(const QPoint& pos);
   // 放置预览用的表：整张轴网按光标位置平移后的副本。
   [[nodiscard]] std::vector<GridAxis> ghost_grid_axes(const QPoint& pos) const;
+  // ==== 轴网布柱（柱 → 轴网布置）====
+  // 进入框选会话（参数是绘制面板那一份），落框时按框到的轴线布柱。
+  void begin_column_grid_placement(const CommandArgs& args);
+  void clear_column_grid_placement();
+  void finish_column_grid_box_select(const QPoint& pos);
+  // 框（按下点 → pos）里的轴线 id，以及它们的交点（y 恒为 0，画在楼层标高上）。
+  [[nodiscard]] std::vector<std::uint64_t> column_grid_axes_in_rect(const QPoint& pos) const;
+  [[nodiscard]] std::vector<Vec3> column_grid_preview_points(const QPoint& pos) const;
   void refuse_slab_outside_plan(bool popup);
   [[nodiscard]] bool finish_pending_if_done(const Result<bool>& done);
   [[nodiscard]] Vec3 snapped_ground_position(const QPoint& pos) const;
@@ -472,6 +488,9 @@ class DocumentViewport final : public QWidget {
     Vec2 anchor;
   };
   std::optional<GridPlacement> pending_grid_;
+  // 轴网布柱的武装状态：绘制面板确认的那份参数（截面 / 高度 / 子类型），落框时
+  // 再补上框到的轴线 id 交给 create_columns_on_grid。空 = 不在这个模式里。
+  std::optional<CommandArgs> pending_column_grid_;
   // 绘制面板最近一次武装的参数（连续绘制同类型构件时复用，避免回退到硬编码默认）。
   ToolMode last_arm_mode_ = ToolMode::None;
   CommandArgs last_arm_args_;

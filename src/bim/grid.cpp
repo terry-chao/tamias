@@ -235,6 +235,53 @@ void append_axis_segments(const std::vector<GridAxis>& axes, std::vector<Vec3>& 
   }
 }
 
+std::vector<Vec3> grid_intersections(const std::vector<GridAxis>& axes,
+                                     const std::vector<std::uint64_t>& ids, double tolerance) {
+  const double tol = std::max(tolerance, 0.0);
+  const auto wanted = [&ids](std::uint64_t id) {
+    return ids.empty() || std::find(ids.begin(), ids.end(), id) != ids.end();
+  };
+  // 分两拨：AlongZ 定 x（编号轴），AlongX 定 z（字母轴）。只有两拨都有才谈得上交点。
+  std::vector<const GridAxis*> numbered;
+  std::vector<const GridAxis*> lettered;
+  for (const GridAxis& axis : axes) {
+    if (!wanted(axis.id) || axis.length() <= 0.0) {
+      continue;
+    }
+    if (axis.direction == GridAxisDirection::AlongZ) {
+      numbered.push_back(&axis);
+    } else {
+      lettered.push_back(&axis);
+    }
+  }
+
+  std::vector<Vec3> points;
+  points.reserve(numbered.size() * lettered.size());
+  for (const GridAxis* x_axis : numbered) {
+    for (const GridAxis* z_axis : lettered) {
+      const double x = x_axis->position;
+      const double z = z_axis->position;
+      // 两个方向各自在自己的范围里：竖轴管 z 的区间，横轴管 x 的区间。
+      if (x < z_axis->start - tol || x > z_axis->end + tol) {
+        continue;
+      }
+      if (z < x_axis->start - tol || z > x_axis->end + tol) {
+        continue;
+      }
+      const Vec3 point{static_cast<float>(x), 0.f, static_cast<float>(z)};
+      const bool duplicate =
+          std::any_of(points.begin(), points.end(), [&point, tol](const Vec3& other) {
+            return std::fabs(static_cast<double>(other.x) - point.x) <= tol &&
+                   std::fabs(static_cast<double>(other.z) - point.z) <= tol;
+          });
+      if (!duplicate) {
+        points.push_back(point);
+      }
+    }
+  }
+  return points;
+}
+
 void translate_grid(std::vector<GridAxis>& axes, double dx, double dz) {
   for (GridAxis& axis : axes) {
     if (axis.direction == GridAxisDirection::AlongZ) {

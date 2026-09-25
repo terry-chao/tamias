@@ -173,6 +173,34 @@
         <translation>删除 %1 根轴线</translation>
     </message>
     <message>
+        <source>Drag a box across the grid axes to place columns at every intersection (Esc or right-click exits)</source>
+        <translation>拖动框选轴线：被框到的轴线两两交点各布置一根柱（Esc 或右键退出）</translation>
+    </message>
+    <message>
+        <source>Drag a box across the grid axes — a click alone has nothing to place</source>
+        <translation>请拖动框选轴线：只点一下没有可布置的位置</translation>
+    </message>
+    <message>
+        <source>No grid axes inside the box — nothing to place</source>
+        <translation>框里没有轴线，没有可布置的位置</translation>
+    </message>
+    <message>
+        <source>No grid yet — generate one in Grid Settings, then box-select its axes</source>
+        <translation>还没有轴网：先到「轴网设置」生成轴网，再框选轴线</translation>
+    </message>
+    <message>
+        <source>Those axes do not cross — box at least one numbered axis and one lettered axis</source>
+        <translation>这些轴线之间没有交点：至少要把一根编号轴和一根字母轴一起框进来</translation>
+    </message>
+    <message>
+        <source>Columns on grid: %1 placed</source>
+        <translation>轴网布柱：已布置 %1 根柱</translation>
+    </message>
+    <message>
+        <source>Columns on grid: %1 placed, %2 intersections already had a column</source>
+        <translation>轴网布柱：已布置 %1 根柱，%2 个交点已有柱（跳过）</translation>
+    </message>
+    <message>
         <source>Click in the view to place the text (Esc to cancel)</source>
         <translation>在视图中点击放置文字（Esc 取消）</translation>
     </message>
@@ -274,6 +302,16 @@
         <location filename="../src/app/shell/home_page.cpp" line="261"/>
         <source>Settings</source>
         <translation>设置</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/home_page.cpp" line="249"/>
+        <source>New</source>
+        <translation>新建</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/home_page.cpp" line="253"/>
+        <source>New document</source>
+        <translation>新建文档</translation>
     </message>
     <message>
         <location filename="../src/app/shell/home_page.cpp" line="270"/>
@@ -1498,6 +1536,47 @@ Meshes / textures: %2
     <message>
         <source>Show the command echo: every executed kernel command as a paste-ready C# call</source>
         <translation>显示命令回显：每条执行过的内核命令都以可直接粘贴的 C# 调用列出</translation>
+    </message>
+    <!-- 菜单栏（文件 / 编辑 / 视图 / 工具 / 窗口 / 帮助）里的新条目 -->
+    <message>
+        <source>&amp;Window</source>
+        <translation>窗口(&amp;W)</translation>
+    </message>
+    <message>
+        <source>&amp;Help</source>
+        <translation>帮助(&amp;H)</translation>
+    </message>
+    <message>
+        <source>Recent Files</source>
+        <translation>最近打开</translation>
+    </message>
+    <message>
+        <source>No recent files</source>
+        <translation>暂无最近文件</translation>
+    </message>
+    <message>
+        <source>Clear Recent Files</source>
+        <translation>清空最近打开</translation>
+    </message>
+    <message>
+        <source>Close Tab</source>
+        <translation>关闭标签页</translation>
+    </message>
+    <message>
+        <source>Next Tab</source>
+        <translation>下一个标签页</translation>
+    </message>
+    <message>
+        <source>Previous Tab</source>
+        <translation>上一个标签页</translation>
+    </message>
+    <message>
+        <source>Documentation</source>
+        <translation>使用手册</translation>
+    </message>
+    <message>
+        <source>Open the online manual</source>
+        <translation>打开在线手册</translation>
     </message>
 </context>
 <context>

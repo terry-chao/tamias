@@ -69,6 +69,17 @@ class Grid {
 // 一组轴线 → (起点, 终点) 两两成对（长度为 0 的轴跳过）。Grid 与放置预览共用。
 void append_axis_segments(const std::vector<GridAxis>& axes, std::vector<Vec3>& out);
 
+// 轴交点：编号轴（AlongZ）× 字母轴（AlongX）的笛卡尔积 —— 「轴交布置」的几何底子。
+// ids 为空就用整张表；给了 id 就只认表里的这些轴（表里已经没有的 id 跳过）。
+// 交点必须同时落在两根轴**自己的范围**里（留 tolerance 的余量），一根画短了的轴
+// 不会把柱子带到它没画到的地方。同一个平面点（tolerance 内）只出一次，重复的轴线
+// 不会叠出两根柱子。
+// y 恒为 0：轴网是平面参考，抬到哪一层的标高由调用方决定（见
+// command/create/create_columns_on_grid_command.h）。
+[[nodiscard]] std::vector<Vec3> grid_intersections(const std::vector<GridAxis>& axes,
+                                                   const std::vector<std::uint64_t>& ids = {},
+                                                   double tolerance = 1e-6);
+
 // 放置（整张轴网平移）：轴的方向不变，固定坐标和沿轴两端一起挪。
 // dx 落在 X 方向、dz 落在 Z 方向——编号轴的 position 是 x、字母轴的 position 是 z，
 // 端点跟着各自的方向挪，别把 start/end 当成同一种坐标。

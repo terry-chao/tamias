@@ -28,6 +28,7 @@ class HomePage final : public QWidget {
   void set_open_documents(const QVector<OpenDocumentItem>& items);
 
  signals:
+  void newRequested();
   void openRequested();
   void settingsRequested();
   void fileActivated(const QString& path);

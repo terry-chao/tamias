@@ -9,6 +9,7 @@ add_library(tamias_command STATIC
   create/create_slab_command.cpp
   create/create_structural_wall_command.cpp
   create/create_foundation_command.cpp
+  create/create_columns_on_grid_command.cpp
   create/create_primitive_command.cpp
   create/create_curve_command.cpp
   create/create_sketch_command.cpp

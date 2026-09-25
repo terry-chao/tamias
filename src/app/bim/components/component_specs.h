@@ -34,8 +34,21 @@ struct ComponentSpec {
   std::unordered_map<std::string, SectionPreviewSpec> sub_type_section;
   int pick_points = 1;   // 1=点放置，2=线/对角
   QString pick_hint;      // "点击两点确定墙的起止"
+  // 子类型专属提示（按 sub_type id 索引）：同一构件的不同子类型摆法不一样时用
+  // （柱的「轴网布置」是框选，不是点一下）。没有的子类型退回 pick_hint。
+  std::unordered_map<std::string, QString> sub_type_hint;
 
   [[nodiscard]] bool has_sub_types() const { return !sub_types.empty(); }
+
+  [[nodiscard]] QString hint_for(const QString& sub_type) const {
+    if (!sub_type.isEmpty()) {
+      const auto it = sub_type_hint.find(sub_type.toStdString());
+      if (it != sub_type_hint.end()) {
+        return it->second;
+      }
+    }
+    return pick_hint;
+  }
 
   [[nodiscard]] SectionPreviewSpec section_for(const QString& sub_type) const {
     if (!sub_type.isEmpty()) {

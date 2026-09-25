@@ -6,6 +6,7 @@
 #include "command/create/create_curve_command.h"
 #include "command/create/create_curtain_wall_command.h"
 #include "command/create/create_foundation_command.h"
+#include "command/create/create_columns_on_grid_command.h"
 #include "command/create/create_grid_axis_command.h"
 #include "command/create/create_primitive_command.h"
 #include "command/create/create_sketch_command.h"
@@ -256,6 +257,28 @@ void register_commands(CommandRegistry& registry) {
     return std::make_unique<CreatePrimitiveCommand>(doc, col_shape,
                                                       col_shape == ColumnShape::Circular ? diameter : width,
                                                       depth, height);
+  });
+
+  // 轴网布柱：在轴网的两两交点上一次布置柱。框选轴网后由视口带着 axis_ids 调用，
+  // 也可以脚本直调（axis_ids 不给 = 整张轴网）。整批 = 一步撤销。
+  registry.register_command("create_columns_on_grid", [](Document& doc, const CommandArgs& args) {
+    const std::string shape_name = arg_string(args, "sub_type", "rect");
+    const ColumnShape shape =
+        shape_name == "circle" ? ColumnShape::Circular : ColumnShape::Rectangular;
+    const double width = arg_double(args, "width", 0.4);
+    const double depth = arg_double(args, "depth", 0.4);
+    const double diameter = arg_double(args, "diameter", 0.4);
+    const double height = arg_double(args, "height", 3.0);
+    // 轴线 id 走数组参数（CommandArg 只有 double 数组这一种）；0 不是合法 id，丢掉。
+    std::vector<std::uint64_t> axis_ids;
+    for (const double id : arg_doubles(args, "axis_ids")) {
+      if (id > 0.0) {
+        axis_ids.push_back(static_cast<std::uint64_t>(id));
+      }
+    }
+    return std::make_unique<CreateColumnsOnGridCommand>(
+        doc, shape, shape == ColumnShape::Circular ? diameter : width, depth, height,
+        std::move(axis_ids));
   });
 
   registry.register_command("create_structural_wall", [](Document& doc, const CommandArgs& args) {

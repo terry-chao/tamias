@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QColor>
 #include <QHash>
 #include <QPoint>
 #include <QString>
@@ -8,12 +9,14 @@
 
 class QFrame;
 class QHBoxLayout;
+class QScrollArea;
 class QVBoxLayout;
 
 namespace tamias {
 
 enum class RibbonDisplayMode;
 class RibbonGroup;
+class RibbonSectionRail;
 
 class RibbonPage final : public QWidget {
   Q_OBJECT
@@ -31,6 +34,17 @@ class RibbonPage final : public QWidget {
 
   void set_page_id(const QString& id) { page_id_ = id; }
   [[nodiscard]] QString page_id() const { return page_id_; }
+
+  // ==== 分区外观 ====
+  // 页签去掉以后，一「页」就是工具带上的一段分区：左边一条主色竖线（贯穿这一段
+  // 的全部排），名字只进这条线的悬浮提示、不画在带上。只有一段时外面会把它关掉
+  // （见 RibbonBar::refresh_section_chrome），免得光秃秃多一条线。
+  void set_section_title(const QString& title);
+  void set_section_accent(const QColor& accent);
+  void set_section_chrome_visible(bool visible);
+  // 竖线上的第二行提示（RibbonBar 给，用现成的「折叠功能区」文案，省一条要翻译的串）。
+  void set_section_tooltip(const QString& text);
+  [[nodiscard]] QString section_title() const { return section_title_; }
 
   RibbonGroup* add_group(const QString& title);
   RibbonGroup* add_group(const QString& id, const QString& title);
@@ -79,10 +93,15 @@ class RibbonPage final : public QWidget {
   void group_added(RibbonGroup* group);
   // 可见排数（或单排高度）变了：RibbonBar 收到后要把新高度转告 QMainWindow。
   void rows_changed();
+  // 双击分区标题栏：和双击页签一样，把整条工具带卷起来 / 展开（RibbonBar 接）。
+  void section_header_double_clicked();
 
  private:
   // 需要几排就建几排（只加不减，删排没必要）。
   void ensure_rows(int count);
+  void update_section_tooltip();
+  // 横向滚动条要占的高度（没有滚动条时 0）。不把它算进页高，组名就会被滚动条压掉。
+  [[nodiscard]] int horizontal_bar_height() const;
   // 有内容的排数（最后一排有东西的那一排 + 1，至少 1）。
   [[nodiscard]] int rows_with_content() const;
   // 去掉中间的空排：后面的排整体上移，别在页面上留一条空白带。
@@ -94,7 +113,13 @@ class RibbonPage final : public QWidget {
   QFrame* ensure_drop_indicator();
 
   QString page_id_;
+  QString section_title_;
+  QString section_tooltip_;
+  QColor section_accent_;
+  bool section_chrome_visible_ = false;
+  RibbonSectionRail* section_rail_ = nullptr;
   QWidget* content_ = nullptr;
+  QScrollArea* scroll_ = nullptr;
   QVBoxLayout* rows_layout_ = nullptr;
   std::vector<QWidget*> row_hosts_;
   std::vector<QHBoxLayout*> row_layouts_;

@@ -25,6 +25,8 @@ class QActionGroup;
 class QCloseEvent;
 class QDockWidget;
 class QEvent;
+class QMenu;
+class QMenuBar;
 class QToolButton;
 class QTimer;
 
@@ -92,6 +94,15 @@ class MainWindow final : public QMainWindow {
   Result<void> populate_document_meshes(Document& document, RenderThread& thread,
                                         const UiLoadProgressCallback& progress = {});
   void refresh_home();
+  // ==== 菜单栏（FreeCAD 的排法：文件 / 编辑 / 视图 / 工具 / 窗口 / 帮助）====
+  // 菜单项和功能区共用同一批 QAction：改名、换图标、灰掉都只做一次。
+  void build_menu_bar();
+  // 「最近打开」是动态子菜单：每次弹出前按当前的记录重建。
+  void refresh_recent_menu();
+  // 「窗口」列出所有打开的文档（当前那个打勾），同样每次弹出前重建。
+  void refresh_window_menu();
+  // 没有打开文档时，把只对文档有意义的菜单项 / 工具按钮一起灰掉。
+  void sync_document_actions();
   bool open_path(const QString& path);
   void open_drawing_tab(const QString& path);
   // 把图纸挂到有文档的视口里（视口里当底图看）；没有打开的文档视口时返回 false，
@@ -134,6 +145,48 @@ class MainWindow final : public QMainWindow {
   HomePage* home_ = nullptr;
   QTabWidget* tabs_ = nullptr;
   RibbonBar* ribbon_ = nullptr;
+  // 菜单栏本体归 RibbonBar（它和最上面那行工具图标是一块 widget），这里只留引用；
+  // 两个动态子菜单要反复重建，也留一份。
+  QMenuBar* menu_bar_ = nullptr;
+  QMenu* recent_menu_ = nullptr;
+  QMenu* window_menu_ = nullptr;
+  // 顶层工具：新建 / 打开 / 保存 / 撤销 / 重做 / 编辑 / 工具 / 帮助。
+  // 这些既在菜单里，也在最上面那行图标里（撤销 / 重做就是 FreeCAD 那种图标按钮）。
+  QAction* new_action_ = nullptr;
+  QAction* open_action_ = nullptr;
+  QAction* open_drawing_action_ = nullptr;
+  QAction* save_action_ = nullptr;
+  QAction* save_as_action_ = nullptr;
+  QAction* export_scene_action_ = nullptr;
+  QAction* close_tab_action_ = nullptr;
+  QAction* next_tab_action_ = nullptr;
+  QAction* prev_tab_action_ = nullptr;
+  QAction* exit_action_ = nullptr;
+  QAction* undo_action_ = nullptr;
+  QAction* redo_action_ = nullptr;
+  QAction* move_action_ = nullptr;
+  QAction* copy_action_ = nullptr;
+  QAction* rotate_action_ = nullptr;
+  QAction* mirror_action_ = nullptr;
+  QAction* array_action_ = nullptr;
+  QAction* frame_all_action_ = nullptr;
+  QAction* home_action_ = nullptr;
+  QAction* settings_action_ = nullptr;
+  QAction* manage_action_ = nullptr;
+  QAction* about_action_ = nullptr;
+  QAction* pin_render_action_ = nullptr;
+  QAction* debug_scene_action_ = nullptr;
+  // 视口右侧工具列的入口（构件显隐 / 楼层 / 楼层视图 / 图纸管理）。
+  QAction* components_action_ = nullptr;
+  QAction* floors_action_ = nullptr;
+  QAction* floor_views_action_ = nullptr;
+  QAction* drawings_action_ = nullptr;
+  // 停靠面板的显隐开关（属性 / 贴图库 / 句柄 / 计时 / 控制台）。
+  QAction* property_toggle_ = nullptr;
+  QAction* texture_toggle_ = nullptr;
+  QAction* handle_toggle_ = nullptr;
+  QAction* timing_toggle_ = nullptr;
+  QAction* console_toggle_ = nullptr;
   RecentFilesStore recent_;
   QAction* wireframe_action_ = nullptr;
   QAction* shaded_action_ = nullptr;

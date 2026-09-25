@@ -882,6 +882,12 @@ void DocumentViewport::submit_current_frame() {
       point.y = grid_y;
     }
   }
+  // 轴网布柱：框还没落，先把框里会布到的交点标出来——落框前就知道布到哪儿。
+  if (pending_column_grid_ && box_selecting_) {
+    for (const Vec3& point : column_grid_preview_points(last_mouse_)) {
+      frame.preview_points.push_back(Vec3{point.x, grid_y, point.z});
+    }
+  }
   // 派生标注（轴号 / 标高 / 尺寸链）：按类别开关逐条决定，见 docs/TEXT.md §4.4。
   append_text_annotations(frame);
   if (pending_grid_ && has_cursor_) {
@@ -937,6 +943,13 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
     if (pending_grid_) {
       commit_grid_placement(event->pos());
       grid_press_consumed_ = true;  // 抬起时别把这一下当成选择点击 / 清空选择
+      return;
+    }
+    // 轴网布柱：左键起手就是框选——轴网上常常压着墙，这一模式不看按在了什么上面。
+    if (pending_column_grid_) {
+      box_selecting_ = true;
+      grid_press_consumed_ = true;  // 抬起时别再当选择点击处理
+      update_box_select_rect(event->pos());
       return;
     }
     if (plugin_point_input_.active()) {
@@ -1104,6 +1117,9 @@ void DocumentViewport::mouseMoveEvent(QMouseEvent* event) {
     }
     if (box_selecting_) {
       update_box_select_rect(event->pos());
+      if (pending_column_grid_) {
+        request_redraw();  // 框里的交点预览跟着框走
+      }
       return;
     }
   }
@@ -1119,7 +1135,10 @@ void DocumentViewport::mouseMoveEvent(QMouseEvent* event) {
 void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
   if (event->button() == Qt::LeftButton) {
     // 框选优先：拖动可能正好从一根轴线上起手，按下那一下的"选中轴线"不该吃掉框选。
-    if (box_selecting_) {
+    if (box_selecting_ && pending_column_grid_) {
+      // 轴网布柱：这一框是"要用哪些轴"，不是"选哪些东西"。
+      finish_column_grid_box_select(event->pos());
+    } else if (box_selecting_) {
       finish_box_select(event->pos(), (event->modifiers() & Qt::ShiftModifier) != 0);
     } else if (!grid_press_consumed_ && !text_press_consumed_) {
       // 已交给轴网（落位 / 选轴）或文字注记（选中 / 放置）的那一下，不再当选择点击。
@@ -1316,6 +1335,7 @@ void DocumentViewport::refuse_slab_outside_plan(bool popup) {
 void DocumentViewport::set_tool(ToolMode mode) {
   if (mode != ToolMode::None) {
     clear_grid_placement();  // 换工具 = 放弃这一步放置
+    clear_column_grid_placement();
   }
   unsetCursor();
   session_->set_tool(mode);
@@ -1340,6 +1360,7 @@ void DocumentViewport::arm_create(ToolMode mode, const CommandArgs& args) {
     return;
   }
   clear_grid_placement();
+  clear_column_grid_placement();
   session_->set_tool(mode);
   cancel_plugin_point_input();
   command_system_.cancel();
@@ -1347,6 +1368,18 @@ void DocumentViewport::arm_create(ToolMode mode, const CommandArgs& args) {
   const ComponentSpec* spec = find_component_spec(mode);
   if (spec == nullptr) {
     log_error("arm_create: no component spec for tool");
+    return;
+  }
+  // 柱的「轴网布置」不是点一下放一根：进框选会话，落框时按轴网交点整批布柱。
+  const auto sub_type = args.find("sub_type");
+  if (mode == ToolMode::Column && sub_type != args.end() &&
+      std::holds_alternative<std::string>(sub_type->second) &&
+      std::get<std::string>(sub_type->second) == "grid") {
+    begin_column_grid_placement(args);
+    last_arm_mode_ = mode;
+    last_arm_args_ = args;
+    request_redraw();
+    emit tool_mode_changed(mode);
     return;
   }
   dispatch_armed_component(spec->command.toStdString(), args);
@@ -3354,6 +3387,115 @@ void DocumentViewport::clear_grid_placement() {
   unsetCursor();
 }
 
+// 轴网布柱：和「轴网放置」一样是一步会话，但落的是构件——起手不看按在了什么上面
+// （轴网上常常压着墙），拖出来的框只认轴线。
+void DocumentViewport::begin_column_grid_placement(const CommandArgs& args) {
+  clear_column_grid_placement();
+  pending_column_grid_ = args;
+  // 轴网藏起来就没得框：这一模式下把它打开（Ribbon 的勾选跟着 grid_visible_changed 走）。
+  if (!grid_visible_) {
+    set_grid_visible(true);
+  }
+  document_->bim().grid().clear_selection();  // 上一次框选的琥珀色别留到这一次
+  setCursor(Qt::CrossCursor);
+  setFocus();
+  request_redraw();
+  emit status_message(tr("Drag a box across the grid axes to place columns at every "
+                        "intersection (Esc or right-click exits)"));
+}
+
+void DocumentViewport::clear_column_grid_placement() {
+  if (!pending_column_grid_) {
+    return;
+  }
+  pending_column_grid_.reset();
+  unsetCursor();
+}
+
+std::vector<std::uint64_t> DocumentViewport::column_grid_axes_in_rect(const QPoint& pos) const {
+  const QSize area = scene_area_size();
+  const bool crossing = pos.x() < press_mouse_.x();
+  return grid_axes_in_screen_rect(document_->bim().grid().axes(), view_proj(),
+                                  static_cast<float>(area.width()),
+                                  static_cast<float>(area.height()), grid_plane_y(),
+                                  static_cast<float>(press_mouse_.x()),
+                                  static_cast<float>(press_mouse_.y()),
+                                  static_cast<float>(pos.x()), static_cast<float>(pos.y()),
+                                  crossing);
+}
+
+std::vector<Vec3> DocumentViewport::column_grid_preview_points(const QPoint& pos) const {
+  return grid_intersections(document_->bim().grid().axes(), column_grid_axes_in_rect(pos));
+}
+
+void DocumentViewport::finish_column_grid_box_select(const QPoint& pos) {
+  if (!pending_column_grid_) {
+    return;
+  }
+  if ((pos - press_mouse_).manhattanLength() < 4) {
+    emit status_message(
+        tr("Drag a box across the grid axes — a click alone has nothing to place"));
+    return;
+  }
+  if (document_->bim().grid().empty()) {
+    emit status_message(
+        tr("No grid yet — generate one in Grid Settings, then box-select its axes"));
+    return;
+  }
+  const std::vector<std::uint64_t> axis_ids = column_grid_axes_in_rect(pos);
+  Grid& grid = document_->bim().grid();
+  if (axis_ids.empty()) {
+    emit status_message(tr("No grid axes inside the box — nothing to place"));
+    request_redraw();
+    return;
+  }
+  // 框到的轴线亮琥珀色：用了哪几根轴，落框后一眼能对上。
+  grid.clear_selection();
+  for (const std::uint64_t id : axis_ids) {
+    grid.select(id);
+  }
+  const std::vector<Vec3> points = grid_intersections(grid.axes(), axis_ids);
+  if (points.empty()) {
+    emit status_message(tr("Those axes do not cross — box at least one numbered axis and one "
+                          "lettered axis"));
+    request_redraw();
+    return;
+  }
+  // 框到的轴线 id 交给命令：整批柱一条命令 = 一步撤销。
+  CommandArgs args = *pending_column_grid_;
+  std::vector<double> ids;
+  ids.reserve(axis_ids.size());
+  for (const std::uint64_t id : axis_ids) {
+    ids.push_back(static_cast<double>(id));
+  }
+  args["axis_ids"] = std::move(ids);
+
+  std::vector<std::uint64_t> before;
+  before.reserve(document_->entities().size());
+  for (const auto& [id, unused] : document_->entities()) {
+    (void)unused;
+    before.push_back(id);
+  }
+  if (auto r = session_->dispatch("create_columns_on_grid", args); !r) {
+    log_error(r.error());
+    emit status_message(QString::fromStdString(r.error()));
+    request_redraw();
+    return;
+  }
+  // 命令只会加柱，但差集还是按"变多了多少"算：万一失败也不至于在 size_t 上翻车。
+  const std::size_t after = document_->entities().size();
+  const std::size_t placed = after > before.size() ? after - before.size() : 0;
+  select_entities_created_since(before);  // 刚布置的柱选中（和复制 / 阵列一个规矩）
+  refresh_after_edit();
+  const int skipped = static_cast<int>(points.size() - placed);
+  emit status_message(
+      skipped > 0
+          ? tr("Columns on grid: %1 placed, %2 intersections already had a column")
+                .arg(static_cast<int>(placed))
+                .arg(skipped)
+          : tr("Columns on grid: %1 placed").arg(static_cast<int>(placed)));
+}
+
 Vec3 DocumentViewport::plan_position_at_storey(const QPoint& pos) const {
   const Ray ray = ray_at(pos);
   Vec3 hit = ray.origin + ray.direction * camera_.distance();
@@ -3395,6 +3537,7 @@ void DocumentViewport::set_grid_visible(bool visible) {
   }
   grid_visible_ = visible;
   request_redraw();
+  emit grid_visible_changed(visible);
 }
 
 void DocumentViewport::apply_drawing_import(DrawingImportPlan plan) {

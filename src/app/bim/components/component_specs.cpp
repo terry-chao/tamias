@@ -140,24 +140,35 @@ ComponentSpec column_spec() {
   s.sub_types = {
     {QStringLiteral("rect"), QStringLiteral("矩形柱")},
     {QStringLiteral("circle"), QStringLiteral("圆柱")},
+    // 轴网布置：不是另一种截面，而是另一种摆法——框选轴网，交点上一次布一排柱。
+    {QStringLiteral("grid"), QStringLiteral("轴网布置")},
   };
   s.default_sub_type = QStringLiteral("rect");
   s.params = {
     param("height", "高度", 3.0, 0.5, 30.0, 0.1),
   };
-  // 矩形柱：宽 × 深；圆柱：直径。
+  // 矩形柱：宽 × 深；圆柱：直径；轴网布置：按矩形柱截面（宽 × 深）。
   s.sub_type_params = {
     {"rect",
      {param("width", "宽度", 0.4, 0.05, 3.0, 0.05),
       param("depth", "深度", 0.4, 0.05, 3.0, 0.05)}},
     {"circle",
      {param("diameter", "直径", 0.4, 0.05, 3.0, 0.05)}},
+    {"grid",
+     {param("width", "宽度", 0.4, 0.05, 3.0, 0.05),
+      param("depth", "深度", 0.4, 0.05, 3.0, 0.05)}},
   };
   s.pick_points = 1;
   s.pick_hint = QStringLiteral("点击放置柱的位置");
+  s.sub_type_hint = {
+    {"grid", QStringLiteral(
+                 "拖动框选轴线：被框到的轴线两两交点（编号轴 × 字母轴）各布置一根柱，"
+                 "一次框选一步撤销。已在同一位置的柱会跳过。")},
+  };
   s.sub_type_section = {
     {"rect", rect_section("width", "depth")},
     {"circle", circle_section("diameter")},
+    {"grid", rect_section("width", "depth")},
   };
   return s;
 }

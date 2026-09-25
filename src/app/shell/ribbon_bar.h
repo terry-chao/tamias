@@ -3,6 +3,7 @@
 #include "app/shell/ribbon_group.h"
 #include "app/shell/ribbon_page.h"
 
+#include <QColor>
 #include <QHash>
 #include <QIcon>
 #include <QPoint>
@@ -12,17 +13,16 @@
 
 class QAction;
 class QActionGroup;
-class QButtonGroup;
 class QEvent;
 class QDragEnterEvent;
 class QDragLeaveEvent;
 class QDragMoveEvent;
 class QDropEvent;
+class QFrame;
 class QHBoxLayout;
-class QLabel;
 class QMenu;
+class QMenuBar;
 class QMimeData;
-class QStackedWidget;
 class QToolButton;
 class QVBoxLayout;
 class QTimer;
@@ -37,10 +37,15 @@ class RibbonBar final : public QWidget {
  public:
   explicit RibbonBar(QWidget* parent = nullptr);
 
-  void add_quick_action(QAction* action);
+  // 加一段分区（原来叫「页」）：页签去掉以后，所有页同时铺在工具带上，
+  // 每页左边一条竖排标题 + 主色，页与页之间一条横线——见 refresh_section_chrome。
   RibbonPage* add_page(const QString& title);
   RibbonPage* add_page(const QString& id, const QString& title);
   [[nodiscard]] RibbonPage* find_page(const QString& id) const;
+  // 窗口最上面那一行菜单（文件 / 编辑 / 视图 / 工具 / 窗口 / 帮助）。
+  // 它和功能区同属这一个 widget：菜单行 + 工具行 + 分区一起算高度，
+  // QMainWindow 的菜单区才留得对（见 setMenuWidget 那一处）。
+  [[nodiscard]] QMenuBar* menu_bar() const { return menu_bar_; }
   void set_collapsed(bool collapsed);
   [[nodiscard]] bool is_collapsed() const { return collapsed_; }
 
@@ -78,6 +83,7 @@ class RibbonBar final : public QWidget {
   void collapsed_changed(bool collapsed);
 
  protected:
+  bool eventFilter(QObject* watched, QEvent* event) override;
   void changeEvent(QEvent* event) override;
   void dragEnterEvent(QDragEnterEvent* event) override;
   void dragMoveEvent(QDragMoveEvent* event) override;
@@ -92,15 +98,17 @@ class RibbonBar final : public QWidget {
   };
 
   void apply_theme();
+  // 分区外观：主色的取值 + 把「要不要画分区标题栏 / 组色标」重新发一遍。
+  [[nodiscard]] QColor section_accent(int index) const;
+  void refresh_section_chrome();
   void toggle_collapsed();
   void update_collapse_button();
   void build_style_menu();
   void update_style_actions();
   void install_group_hooks(RibbonGroup* group);
 
-  [[nodiscard]] RibbonPage* current_page() const;
   [[nodiscard]] RibbonPage* page_of_group(RibbonGroup* group) const;
-  // 页签顺序（= pages_ 栈里的顺序）。
+  // 分区顺序（= 加进来的先后）。
   [[nodiscard]] std::vector<RibbonPage*> pages_in_order() const;
   [[nodiscard]] RibbonGroup* group_for_mime(const QMimeData* mime) const;
   [[nodiscard]] bool over_ribbon(const QPoint& global_pos) const;
@@ -111,17 +119,16 @@ class RibbonBar final : public QWidget {
   void hide_drop_indicator();
   static void clamp_to_screen(RibbonFloatWindow* window);
 
-  QWidget* tab_row_ = nullptr;
-  QHBoxLayout* quick_layout_ = nullptr;
-  QHBoxLayout* tab_buttons_layout_ = nullptr;
-  QButtonGroup* tab_group_ = nullptr;
+  QMenuBar* menu_bar_ = nullptr;
   QToolButton* style_button_ = nullptr;
   QMenu* style_menu_ = nullptr;
   QActionGroup* style_group_ = nullptr;
   QAction* style_text_action_ = nullptr;
   QAction* style_icons_action_ = nullptr;
   QToolButton* collapse_button_ = nullptr;
-  QStackedWidget* pages_ = nullptr;
+  QWidget* pages_host_ = nullptr;
+  QVBoxLayout* pages_layout_ = nullptr;
+  std::vector<RibbonPage*> page_list_;
   QHash<QString, RibbonPage*> pages_by_id_;
   QHash<RibbonGroup*, FloatingEntry> floating_;
   QStringList default_layout_keys_;

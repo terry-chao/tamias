@@ -4,12 +4,17 @@
 
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QMouseEvent>
+#include <QPainter>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QSizePolicy>
 #include <QVBoxLayout>
+#include <QWheelEvent>
 #include <QWidget>
 
 #include <algorithm>
+#include <functional>
 
 namespace tamias {
 namespace {
@@ -17,24 +22,102 @@ namespace {
 constexpr int kRowHeightText = 92;
 constexpr int kRowHeightIconOnly = 54;
 constexpr int kEdgeMargin = 4;
+// 分区标记的宽度：3px 主色竖线 + 7px 淡淡的同色底。名字不画在带上（太占地方，
+// 也开始 / 视图 这种名字看菜单就知道），改成悬浮提示。
+constexpr int kRailWidth = 10;
 
 }  // namespace
+
+// 分区标记：左边缘一条主色竖线（贯穿这一段的全部排）+ 一点点同色底。
+// 一条带子上并排着几段（开始 / 视图 / 插件页…），靠这一条线区分；
+// 段名不画出来，鼠标停在线上的提示里给（见 RibbonPage::update_section_tooltip）。
+class RibbonSectionRail final : public QWidget {
+ public:
+  explicit RibbonSectionRail(QWidget* parent = nullptr) : QWidget(parent) {
+    setObjectName(QStringLiteral("ribbonSectionRail"));
+    setFixedWidth(kRailWidth);
+    setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    setCursor(Qt::PointingHandCursor);
+  }
+
+  void set_accent(const QColor& accent) {
+    if (!accent.isValid()) {
+      return;
+    }
+    accent_ = accent;
+    update();
+  }
+
+  void set_double_click_handler(std::function<void()> handler) {
+    on_double_click_ = std::move(handler);
+  }
+
+ protected:
+  void mouseDoubleClickEvent(QMouseEvent* event) override {
+    if (on_double_click_) {
+      on_double_click_();
+    }
+    event->accept();
+  }
+
+  void paintEvent(QPaintEvent*) override {
+    QPainter painter(this);
+    QColor tint = accent_;
+    tint.setAlpha(26);
+    painter.fillRect(rect(), tint);
+    QColor edge = accent_;
+    edge.setAlpha(240);
+    painter.fillRect(QRect(0, 0, 3, height()), edge);
+  }
+
+ private:
+  QColor accent_ = QColor(0x1a, 0x73, 0xe8);
+  std::function<void()> on_double_click_;
+};
+
+// 工具带自己的滚动区：一排工具放不下时**用滚轮横着滚**。QScrollArea 默认把滚轮
+// 当纵向滚动，而这里的纵向滚动条是关着的——不接这一下，鼠标在带上滚就是没反应，
+// 右边被挡住的组（设置 / 插件 / 帮助…）就不好够。
+class RibbonBandScroll final : public QScrollArea {
+ public:
+  using QScrollArea::QScrollArea;
+
+ protected:
+  void wheelEvent(QWheelEvent* event) override {
+    QScrollBar* bar = horizontalScrollBar();
+    if (bar == nullptr || bar->maximum() <= 0) {
+      QScrollArea::wheelEvent(event);
+      return;
+    }
+    const int steps = event->angleDelta().y() != 0 ? event->angleDelta().y()
+                                                   : event->angleDelta().x();
+    bar->setValue(bar->value() - steps / 3);
+    event->accept();
+  }
+};
 
 RibbonPage::RibbonPage(QWidget* parent) : QWidget(parent) {
   setObjectName(QStringLiteral("ribbonPage"));
   setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
-  auto* root = new QVBoxLayout(this);
+  auto* root = new QHBoxLayout(this);
   root->setContentsMargins(0, 0, 0, 0);
   root->setSpacing(0);
 
-  auto* scroll = new QScrollArea(this);
+  // 分区标题栏：只有本页是工具带上的一段时才露面（见 set_section_chrome_visible）。
+  section_rail_ = new RibbonSectionRail(this);
+  section_rail_->hide();
+  section_rail_->set_double_click_handler([this] { emit section_header_double_clicked(); });
+  root->addWidget(section_rail_);
+
+  auto* scroll = new RibbonBandScroll(this);
   scroll->setObjectName(QStringLiteral("ribbonPageScroll"));
   scroll->setWidgetResizable(true);
   scroll->setFrameShape(QFrame::NoFrame);
   scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
   scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   scroll->setFocusPolicy(Qt::NoFocus);
+  scroll_ = scroll;
 
   content_ = new QWidget(scroll);
   content_->setObjectName(QStringLiteral("ribbonPageContent"));
@@ -44,8 +127,57 @@ RibbonPage::RibbonPage(QWidget* parent) : QWidget(parent) {
   ensure_rows(1);
   scroll->setWidget(content_);
 
-  root->addWidget(scroll);
+  root->addWidget(scroll, 1);
+
+  // 横向滚动条一出现 / 一消失，页高要跟着变（见 horizontal_bar_height）。
+  if (QScrollBar* bar = scroll->horizontalScrollBar()) {
+    connect(bar, &QScrollBar::rangeChanged, this, [this](int, int) { apply_rows(); });
+  }
   apply_rows();
+}
+
+void RibbonPage::set_section_title(const QString& title) {
+  section_title_ = title;
+  update_section_tooltip();
+}
+
+void RibbonPage::set_section_tooltip(const QString& text) {
+  section_tooltip_ = text;
+  update_section_tooltip();
+}
+
+// 段名不画在带上（太占地方），挂在竖线的悬浮提示里：第一行是段名，第二行是
+// 「双击卷起」那句（RibbonBar 给的现成文案）。
+void RibbonPage::update_section_tooltip() {
+  if (section_rail_ == nullptr) {
+    return;
+  }
+  if (section_title_.isEmpty()) {
+    section_rail_->setToolTip(section_tooltip_);
+    return;
+  }
+  if (section_tooltip_.isEmpty()) {
+    section_rail_->setToolTip(section_title_);
+    return;
+  }
+  section_rail_->setToolTip(QStringLiteral("%1\n%2").arg(section_title_, section_tooltip_));
+}
+
+void RibbonPage::set_section_accent(const QColor& accent) {
+  if (!accent.isValid()) {
+    return;
+  }
+  section_accent_ = accent;
+  if (section_rail_ != nullptr) {
+    section_rail_->set_accent(accent);
+  }
+}
+
+void RibbonPage::set_section_chrome_visible(bool visible) {
+  section_chrome_visible_ = visible;
+  if (section_rail_ != nullptr) {
+    section_rail_->setVisible(visible);
+  }
 }
 
 RibbonGroup* RibbonPage::add_group(const QString& title) {
@@ -97,6 +229,18 @@ QSize RibbonPage::minimumSizeHint() const {
   QSize hint = QWidget::minimumSizeHint();
   hint.setHeight(visible_rows_ * row_height_);
   return hint;
+}
+
+int RibbonPage::horizontal_bar_height() const {
+  if (scroll_ == nullptr) {
+    return 0;
+  }
+  const QScrollBar* bar = scroll_->horizontalScrollBar();
+  if (bar == nullptr || bar->maximum() <= bar->minimum()) {
+    return 0;
+  }
+  // 用 sizeHint 而不是 height()：滚动条刚露头那一下 height() 还是 0。
+  return bar->sizeHint().height();
 }
 
 void RibbonPage::ensure_rows(int count) {
@@ -161,7 +305,10 @@ void RibbonPage::apply_rows() {
     row_hosts_[row]->setVisible(row < wanted);
   }
   visible_rows_ = wanted;
-  const int height = wanted * row_height_;
+  // 页高要**连横向滚动条一起算**：滚动条是从页里切走一条空间画的，只按「排数 × 排高」
+  // 给高度的话，一旦出滚动条，排里最下面那条组名就被压在滚动条底下（92 的排高只剩 80 能看）。
+  const int bar_height = horizontal_bar_height();
+  const int height = wanted * row_height_ + bar_height;
   setFixedHeight(height);
   // 拖动期间 set_drop_target_visible(true) 每次 dragMove 都会被叫一遍；
   // 高度没变就别通知外层，不然每动一下鼠标都重排一次主窗口。

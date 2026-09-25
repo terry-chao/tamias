@@ -1,10 +1,12 @@
 #include "command/core/command_system.h"
 #include "command/import/import_texture_command.h"
 #include "command/edit/update_material_command.h"
+#include "bim/grid.h"
 #include "engine/document/document.h"
 #include "engine/modeling/feature/feature.h"
 #include "engine/render/resource/texture_asset.h"
 #include "entity/core/entity.h"
+#include "entity/core/entity_storey.h"
 
 #include <gtest/gtest.h>
 
@@ -58,6 +60,77 @@ TEST(CommandDispatch, CreateColumnFromOrigin) {
   EXPECT_EQ(cmd.doc.entities().begin()->second->kind(), EntityKind::Column);
   cmd.system.undo();
   EXPECT_EQ(cmd.doc.entities().size(), 0u);
+}
+
+// 轴网布柱：3 根编号轴 × 2 根字母轴 = 6 个交点 → 6 根柱，整批一步撤销。
+TEST(CommandDispatch, CreateColumnsOnGridPlacesOneColumnPerIntersection) {
+  Cmd cmd("columns-on-grid");
+  auto grid = cmd.system.dispatch(cmd.doc, "auto_grid",
+                                  {{"x_spacings", std::vector<double>{6.0, 6.0}},
+                                   {"z_spacings", std::vector<double>{5.0}},
+                                   {"margin", 1.0}});
+  ASSERT_TRUE(grid) << grid.error();
+
+  auto r = cmd.system.dispatch(cmd.doc, "create_columns_on_grid",
+                               {{"width", 0.5}, {"depth", 0.5}, {"height", 3.0}});
+  ASSERT_TRUE(r) << r.error();
+  EXPECT_FALSE(cmd.system.has_pending());
+  ASSERT_EQ(cmd.doc.entities().size(), 6u);
+  for (const auto& [id, entity] : cmd.doc.entities()) {
+    (void)id;
+    EXPECT_EQ(entity->kind(), EntityKind::Column);
+  }
+  // 一次布置 = 一步撤销：6 根柱一起退回去（轴网不是实体，还在）。
+  cmd.system.undo();
+  EXPECT_EQ(cmd.doc.entities().size(), 0u);
+  EXPECT_EQ(cmd.doc.bim().grid().size(), 5u);
+  cmd.system.redo();
+  EXPECT_EQ(cmd.doc.entities().size(), 6u);
+}
+
+// 同一个交点上已经站着柱就不再重复布置（连点两次框选不会叠出两根柱）。
+TEST(CommandDispatch, CreateColumnsOnGridSkipsOccupiedIntersections) {
+  Cmd cmd("columns-on-grid-twice");
+  ASSERT_TRUE(cmd.system.dispatch(cmd.doc, "auto_grid",
+                                  {{"x_spacings", std::vector<double>{6.0}},
+                                   {"z_spacings", std::vector<double>{5.0}}}));
+  ASSERT_TRUE(cmd.system.dispatch(cmd.doc, "create_columns_on_grid", {}));
+  ASSERT_EQ(cmd.doc.entities().size(), 4u);  // 2 × 2
+
+  ASSERT_TRUE(cmd.system.dispatch(cmd.doc, "create_columns_on_grid", {}));
+  EXPECT_EQ(cmd.doc.entities().size(), 4u);  // 全部跳过，不再加
+}
+
+// 脚本式：axis_ids 只在框到的轴线之间求交，柱底标高取当前楼层。
+TEST(CommandDispatch, CreateColumnsOnGridHonoursAxisIdsAndStorey) {
+  Cmd cmd("columns-on-grid-ids");
+  ASSERT_TRUE(cmd.system.dispatch(cmd.doc, "auto_grid",
+                                  {{"x_spacings", std::vector<double>{6.0, 6.0}},
+                                   {"z_spacings", std::vector<double>{5.0}},
+                                   {"margin", 1.0}}));
+  const std::vector<GridAxis>& axes = cmd.doc.bim().grid().axes();
+  ASSERT_EQ(axes.size(), 5u);  // 3 编号轴（x = 0/6/12）+ 2 字母轴（z = 0/5）
+  const std::uint64_t numbered_id = axes[1].id;  // x = 6
+  const std::uint64_t lettered_id = axes[3].id;  // z = 0
+
+  const std::uint64_t storey_id = cmd.doc.add_storey("2F", 3.0).id;
+  cmd.doc.set_active_storey(storey_id);
+
+  auto r = cmd.system.dispatch(
+      cmd.doc, "create_columns_on_grid",
+      {{"sub_type", std::string("circle")},
+       {"diameter", 0.6},
+       {"height", 3.0},
+       {"axis_ids", std::vector<double>{static_cast<double>(numbered_id),
+                                        static_cast<double>(lettered_id)}}});
+  ASSERT_TRUE(r) << r.error();
+  ASSERT_EQ(cmd.doc.entities().size(), 1u);
+  const Entity& column = *cmd.doc.entities().begin()->second;
+  EXPECT_EQ(column.kind(), EntityKind::Column);
+  EXPECT_NEAR(column.local_transform(0, 3), 6.0, 1e-6);  // 交点 (6, 0)
+  EXPECT_NEAR(column.local_transform(1, 3), 3.0, 1e-6);  // 本层标高
+  EXPECT_NEAR(column.local_transform(2, 3), 0.0, 1e-6);
+  EXPECT_EQ(entity_storey_id(column), storey_id);
 }
 
 TEST(CommandDispatch, CreateArcAndRectangleFromPoints) {

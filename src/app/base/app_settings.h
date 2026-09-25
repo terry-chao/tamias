@@ -45,7 +45,7 @@ class AppSettings {
   // 整条 Ribbon 的分组布局："page_id|group_id|row|index"（见 RibbonBar::layout_keys）。
   [[nodiscard]] QStringList ribbon_layout() const { return ribbon_layout_; }
   void set_ribbon_layout(const QStringList& entries);
-  // Ribbon 卷起（只留页签那一条）。
+  // Ribbon 卷起（只留最上面那行：品牌 + 快速工具 + 形态 / 卷起按钮）。
   [[nodiscard]] bool ribbon_collapsed() const { return ribbon_collapsed_; }
   void set_ribbon_collapsed(bool collapsed);
   // 主窗口的面板停靠布局（QMainWindow::saveState：每个面板停在哪一区、多大、

@@ -36,6 +36,21 @@ public static class HostDraw
     public static void Column(this IHost host, PickPoint origin) =>
         Primitive(host, "create_column", origin);
 
+    // 轴网布柱：在轴线的两两交点上一次布置柱；axisIds 为空 = 整张轴网。
+    public static void ColumnsOnGrid(this IHost host, IEnumerable<ulong>? axisIds = null,
+        double width = 0.4, double depth = 0.4, double height = 3.0)
+    {
+        var args = new CommandArgs()
+            .SetDouble("width", width)
+            .SetDouble("depth", depth)
+            .SetDouble("height", height);
+        if (axisIds != null)
+        {
+            args.SetDoubles("axis_ids", axisIds.Select(id => (double)id));
+        }
+        Dispatch(host, "create_columns_on_grid", args);
+    }
+
     public static void Door(this IHost host, PickPoint origin, ulong hostId = 0) =>
         Primitive(host, "create_door", origin, hostId);
 

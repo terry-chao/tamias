@@ -17,6 +17,7 @@ add_executable(tamias
   base/rhi_diagnostics.cpp
   # 窗口骨架：主窗口、欢迎页、Ribbon、通用对话框、提示条
   shell/main_window.cpp
+  shell/main_menu.cpp
   shell/home_page.cpp
   shell/ribbon_bar.cpp
   shell/ribbon_page.cpp

@@ -68,6 +68,8 @@
 #include <QInputDialog>
 #include <QKeySequence>
 #include <QLineEdit>
+#include <QMenu>
+#include <QMenuBar>
 #include <QAbstractButton>
 #include <QMessageBox>
 #include <QPainter>
@@ -226,8 +228,10 @@ MainWindow::MainWindow(QWidget* parent)
     refresh_texture_library_panel();
     sync_draw_panel();
     bind_plugin_session();
+    sync_document_actions();
   });
   connect(home_, &HomePage::openRequested, this, &MainWindow::open_file);
+  connect(home_, &HomePage::newRequested, this, &MainWindow::new_document);
   connect(home_, &HomePage::fileActivated, this, &MainWindow::open_recent_path);
   connect(home_, &HomePage::missingFileActivated, this, &MainWindow::on_missing_recent);
   connect(home_, &HomePage::recentRemoveRequested, this, [this](const QString& path) {
@@ -237,74 +241,74 @@ MainWindow::MainWindow(QWidget* parent)
   connect(home_, &HomePage::openDocumentActivated, this, &MainWindow::activate_open_document);
   connect(home_, &HomePage::settingsRequested, this, &MainWindow::open_settings);
 
-  auto* new_action = new QAction(ribbon_icon(QStringLiteral(":/icons/new.svg")),
-                                 tr("New"), this);
-  new_action->setShortcut(QKeySequence::New);
-  new_action->setToolTip(tr("New document"));
-  connect(new_action, &QAction::triggered, this, &MainWindow::new_document);
-  addAction(new_action);
+  new_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/new.svg")),
+                            tr("New"), this);
+  new_action_->setShortcut(QKeySequence::New);
+  new_action_->setToolTip(tr("New document"));
+  connect(new_action_, &QAction::triggered, this, &MainWindow::new_document);
+  addAction(new_action_);
 
-  auto* open_action = new QAction(ribbon_icon(QStringLiteral(":/icons/open.svg")),
-                                  tr("Open"), this);
-  open_action->setShortcut(QKeySequence::Open);
-  open_action->setToolTip(tr("Open a model file"));
-  connect(open_action, &QAction::triggered, this, &MainWindow::open_file);
-  addAction(open_action);
+  open_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/open.svg")),
+                             tr("Open"), this);
+  open_action_->setShortcut(QKeySequence::Open);
+  open_action_->setToolTip(tr("Open a model file"));
+  connect(open_action_, &QAction::triggered, this, &MainWindow::open_file);
+  addAction(open_action_);
 
-  auto* open_drawing_action =
+  open_drawing_action_ =
       new QAction(ribbon_icon(QStringLiteral(":/icons/drawing.svg")),
                   tr("Open Drawing"), this);
-  open_drawing_action->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+O")));
-  open_drawing_action->setToolTip(
+  open_drawing_action_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+O")));
+  open_drawing_action_->setToolTip(
       tr("Attach a reference drawing (PDF / DXF / SVG / image) to the open document — it is "
          "drawn under the model in the viewport"));
-  connect(open_drawing_action, &QAction::triggered, this, &MainWindow::open_drawing_file);
-  addAction(open_drawing_action);
+  connect(open_drawing_action_, &QAction::triggered, this, &MainWindow::open_drawing_file);
+  addAction(open_drawing_action_);
 
-  auto* save_action = new QAction(ribbon_icon(QStringLiteral(":/icons/save.svg")),
-                                  tr("Save"), this);
-  save_action->setShortcut(QKeySequence::Save);
-  save_action->setToolTip(tr("Save the document"));
-  connect(save_action, &QAction::triggered, this, &MainWindow::save_file);
-  addAction(save_action);
+  save_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/save.svg")),
+                             tr("Save"), this);
+  save_action_->setShortcut(QKeySequence::Save);
+  save_action_->setToolTip(tr("Save the document"));
+  connect(save_action_, &QAction::triggered, this, &MainWindow::save_file);
+  addAction(save_action_);
 
-  auto* save_as_action = new QAction(ribbon_icon(QStringLiteral(":/icons/save_as.svg")),
-                                    tr("Save As"), this);
-  save_as_action->setShortcut(QKeySequence::SaveAs);
-  save_as_action->setToolTip(tr("Save the document to a new file"));
-  connect(save_as_action, &QAction::triggered, this, &MainWindow::save_file_as);
-  addAction(save_as_action);
+  save_as_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/save_as.svg")),
+                                tr("Save As"), this);
+  save_as_action_->setShortcut(QKeySequence::SaveAs);
+  save_as_action_->setToolTip(tr("Save the document to a new file"));
+  connect(save_as_action_, &QAction::triggered, this, &MainWindow::save_file_as);
+  addAction(save_as_action_);
 
-  auto* pin_render_action = new QAction(tr("Pin Render Scene for Tests"), this);
-  pin_render_action->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+P")));
-  pin_render_action->setToolTip(
+  pin_render_action_ = new QAction(tr("Pin Render Scene for Tests"), this);
+  pin_render_action_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+P")));
+  pin_render_action_->setToolTip(
       tr("Write the current view to assets/samples/render/<name>/ and run RenderSceneGolden*"));
-  connect(pin_render_action, &QAction::triggered, this, &MainWindow::pin_render_scene_golden);
-  addAction(pin_render_action);
+  connect(pin_render_action_, &QAction::triggered, this, &MainWindow::pin_render_scene_golden);
+  addAction(pin_render_action_);
 
-  auto* debug_scene_action = new QAction(tr("Debug This Frame"), this);
-  debug_scene_action->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+D")));
-  debug_scene_action->setToolTip(
+  debug_scene_action_ = new QAction(tr("Debug This Frame"), this);
+  debug_scene_action_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+D")));
+  debug_scene_action_->setToolTip(
       tr("Capture the current viewport's draw list and open the scene debugger"));
-  connect(debug_scene_action, &QAction::triggered, this, &MainWindow::debug_current_frame);
-  addAction(debug_scene_action);
+  connect(debug_scene_action_, &QAction::triggered, this, &MainWindow::debug_current_frame);
+  addAction(debug_scene_action_);
   auto* debug_scene_alias = new QAction(this);
   debug_scene_alias->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+I")));
   connect(debug_scene_alias, &QAction::triggered, this, &MainWindow::debug_current_frame);
   addAction(debug_scene_alias);
 
-  auto* frame_all_action = new QAction(ribbon_icon(QStringLiteral(":/icons/frame_all.svg")),
-                                      tr("Fit All"), this);
-  frame_all_action->setShortcut(QKeySequence(tr("F")));
-  frame_all_action->setToolTip(tr("Frame all geometry in the view"));
-  connect(frame_all_action, &QAction::triggered, this, &MainWindow::frame_all);
-  addAction(frame_all_action);
+  frame_all_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/frame_all.svg")),
+                                  tr("Fit All"), this);
+  frame_all_action_->setShortcut(QKeySequence(tr("F")));
+  frame_all_action_->setToolTip(tr("Frame all geometry in the view"));
+  connect(frame_all_action_, &QAction::triggered, this, &MainWindow::frame_all);
+  addAction(frame_all_action_);
 
   create_group_ = new QActionGroup(this);
   create_group_->setExclusive(true);
 
   wall_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/wall.svg")),
-                            tr("Wall"), this);
+                             tr("Wall"), this);
   wall_action_->setCheckable(true);
   wall_action_->setProperty("toolMode", static_cast<int>(ToolMode::Wall));
   wall_action_->setToolTip(tr("Create a wall: click start, then click end"));
@@ -313,7 +317,7 @@ MainWindow::MainWindow(QWidget* parent)
   addAction(wall_action_);
 
   beam_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/beam.svg")),
-                            tr("Beam"), this);
+                             tr("Beam"), this);
   beam_action_->setCheckable(true);
   beam_action_->setProperty("toolMode", static_cast<int>(ToolMode::Beam));
   beam_action_->setToolTip(tr("Create a beam: click start, then click end"));
@@ -322,7 +326,7 @@ MainWindow::MainWindow(QWidget* parent)
   addAction(beam_action_);
 
   column_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/column.svg")),
-                              tr("Column"), this);
+                               tr("Column"), this);
   column_action_->setCheckable(true);
   column_action_->setProperty("toolMode", static_cast<int>(ToolMode::Column));
   column_action_->setToolTip(tr("Create a column: click to place"));
@@ -332,7 +336,7 @@ MainWindow::MainWindow(QWidget* parent)
   addAction(column_action_);
 
   slab_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/slab.svg")),
-                            tr("Slab"), this);
+                             tr("Slab"), this);
   slab_action_->setCheckable(true);
   slab_action_->setProperty("toolMode", static_cast<int>(ToolMode::Slab));
   slab_action_->setToolTip(
@@ -342,7 +346,7 @@ MainWindow::MainWindow(QWidget* parent)
   addAction(slab_action_);
 
   door_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/door.svg")),
-                            tr("Door"), this);
+                             tr("Door"), this);
   door_action_->setCheckable(true);
   door_action_->setProperty("toolMode", static_cast<int>(ToolMode::Door));
   door_action_->setToolTip(tr("Create a door: click a wall to host it"));
@@ -351,7 +355,7 @@ MainWindow::MainWindow(QWidget* parent)
   addAction(door_action_);
 
   window_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/window.svg")),
-                              tr("Window"), this);
+                               tr("Window"), this);
   window_action_->setCheckable(true);
   window_action_->setProperty("toolMode", static_cast<int>(ToolMode::Window));
   window_action_->setToolTip(tr("Create a window: click a wall to host it"));
@@ -391,7 +395,7 @@ MainWindow::MainWindow(QWidget* parent)
   addAction(curtain_wall_action_);
 
   line_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/line.svg")),
-                            tr("Line"), this);
+                             tr("Line"), this);
   line_action_->setCheckable(true);
   line_action_->setProperty("toolMode", static_cast<int>(ToolMode::Line));
   line_action_->setToolTip(tr("Create a line: click start, then click end"));
@@ -400,7 +404,7 @@ MainWindow::MainWindow(QWidget* parent)
   addAction(line_action_);
 
   polyline_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/polyline.svg")),
-                                tr("Polyline"), this);
+                                 tr("Polyline"), this);
   polyline_action_->setCheckable(true);
   polyline_action_->setProperty("toolMode", static_cast<int>(ToolMode::Polyline));
   polyline_action_->setToolTip(tr("Create a polyline: click points, Enter or double-click to finish"));
@@ -410,7 +414,7 @@ MainWindow::MainWindow(QWidget* parent)
   addAction(polyline_action_);
 
   rectangle_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/rectangle.svg")),
-                                 tr("Rectangle"), this);
+                                  tr("Rectangle"), this);
   rectangle_action_->setCheckable(true);
   rectangle_action_->setProperty("toolMode", static_cast<int>(ToolMode::Rectangle));
   rectangle_action_->setToolTip(tr("Create a rectangle: click two opposite corners"));
@@ -420,7 +424,7 @@ MainWindow::MainWindow(QWidget* parent)
   addAction(rectangle_action_);
 
   circle_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/circle.svg")),
-                              tr("Circle"), this);
+                               tr("Circle"), this);
   circle_action_->setCheckable(true);
   circle_action_->setProperty("toolMode", static_cast<int>(ToolMode::Circle));
   circle_action_->setToolTip(tr("Create a circle: click center, then click radius"));
@@ -430,7 +434,7 @@ MainWindow::MainWindow(QWidget* parent)
   addAction(circle_action_);
 
   arc_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/arc.svg")),
-                           tr("Arc"), this);
+                            tr("Arc"), this);
   arc_action_->setCheckable(true);
   arc_action_->setProperty("toolMode", static_cast<int>(ToolMode::Arc));
   arc_action_->setToolTip(tr("Create an arc: click start, through, then end"));
@@ -439,7 +443,7 @@ MainWindow::MainWindow(QWidget* parent)
   addAction(arc_action_);
 
   bezier_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/bezier.svg")),
-                              tr("Bezier"), this);
+                               tr("Bezier"), this);
   bezier_action_->setCheckable(true);
   bezier_action_->setProperty("toolMode", static_cast<int>(ToolMode::Bezier));
   bezier_action_->setToolTip(
@@ -450,7 +454,7 @@ MainWindow::MainWindow(QWidget* parent)
   addAction(bezier_action_);
 
   bspline_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/bspline.svg")),
-                               tr("B-spline"), this);
+                                tr("B-spline"), this);
   bspline_action_->setCheckable(true);
   bspline_action_->setProperty("toolMode", static_cast<int>(ToolMode::BSpline));
   bspline_action_->setToolTip(
@@ -461,7 +465,7 @@ MainWindow::MainWindow(QWidget* parent)
   addAction(bspline_action_);
 
   fillet_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/fillet.svg")),
-                              tr("Fillet"), this);
+                               tr("Fillet"), this);
   fillet_action_->setToolTip(tr("Fillet the selected entity's first edge"));
   connect(fillet_action_, &QAction::triggered, this, [this] {
     if (auto* vp = current_viewport()) {
@@ -471,7 +475,7 @@ MainWindow::MainWindow(QWidget* parent)
   addAction(fillet_action_);
 
   chamfer_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/chamfer.svg")),
-                               tr("Chamfer"), this);
+                                tr("Chamfer"), this);
   chamfer_action_->setToolTip(tr("Chamfer the selected entity's first edge"));
   connect(chamfer_action_, &QAction::triggered, this, [this] {
     if (auto* vp = current_viewport()) {
@@ -482,57 +486,57 @@ MainWindow::MainWindow(QWidget* parent)
 
   // 通用编辑：移动 / 复制 / 旋转 / 镜像 / 阵列（见 command/edit/entity_transform.h）。
   // 前四个是「点基点 → 点目标点」的交互式工具；阵列收参数后一次落位。
-  auto* move_action = new QAction(ribbon_icon(QStringLiteral(":/icons/move.svg")),
-                                  tr("Move"), this);
-  move_action->setShortcut(QKeySequence(tr("Ctrl+M")));
-  move_action->setToolTip(tr("Move the selection: click a base point, then the target point"));
-  connect(move_action, &QAction::triggered, this, [this] {
+  move_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/move.svg")),
+                             tr("Move"), this);
+  move_action_->setShortcut(QKeySequence(tr("Ctrl+M")));
+  move_action_->setToolTip(tr("Move the selection: click a base point, then the target point"));
+  connect(move_action_, &QAction::triggered, this, [this] {
     if (auto* vp = current_viewport()) {
       vp->begin_move_selection();
     }
   });
-  addAction(move_action);
+  addAction(move_action_);
 
-  auto* copy_action = new QAction(ribbon_icon(QStringLiteral(":/icons/copy.svg")),
-                                  tr("Copy"), this);
-  copy_action->setShortcut(QKeySequence(tr("Ctrl+K")));
-  copy_action->setToolTip(tr("Copy the selection: click a base point, then the target point "
+  copy_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/copy.svg")),
+                             tr("Copy"), this);
+  copy_action_->setShortcut(QKeySequence(tr("Ctrl+K")));
+  copy_action_->setToolTip(tr("Copy the selection: click a base point, then the target point "
                              "(walls bring their doors and windows along)"));
-  connect(copy_action, &QAction::triggered, this, [this] {
+  connect(copy_action_, &QAction::triggered, this, [this] {
     if (auto* vp = current_viewport()) {
       vp->begin_copy_selection();
     }
   });
-  addAction(copy_action);
+  addAction(copy_action_);
 
-  auto* rotate_action = new QAction(ribbon_icon(QStringLiteral(":/icons/rotate.svg")),
-                                    tr("Rotate"), this);
-  rotate_action->setShortcut(QKeySequence(tr("Ctrl+R")));
-  rotate_action->setToolTip(tr("Rotate the selection about a vertical axis: base point, "
+  rotate_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/rotate.svg")),
+                               tr("Rotate"), this);
+  rotate_action_->setShortcut(QKeySequence(tr("Ctrl+R")));
+  rotate_action_->setToolTip(tr("Rotate the selection about a vertical axis: base point, "
                                "reference direction, target direction"));
-  connect(rotate_action, &QAction::triggered, this, [this] {
+  connect(rotate_action_, &QAction::triggered, this, [this] {
     if (auto* vp = current_viewport()) {
       vp->begin_rotate_selection();
     }
   });
-  addAction(rotate_action);
+  addAction(rotate_action_);
 
-  auto* mirror_action = new QAction(ribbon_icon(QStringLiteral(":/icons/mirror.svg")),
-                                    tr("Mirror"), this);
-  mirror_action->setShortcut(QKeySequence(tr("Ctrl+Shift+M")));
-  mirror_action->setToolTip(tr("Mirror the selection: click the two ends of the mirror axis"));
-  connect(mirror_action, &QAction::triggered, this, [this] {
+  mirror_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/mirror.svg")),
+                               tr("Mirror"), this);
+  mirror_action_->setShortcut(QKeySequence(tr("Ctrl+Shift+M")));
+  mirror_action_->setToolTip(tr("Mirror the selection: click the two ends of the mirror axis"));
+  connect(mirror_action_, &QAction::triggered, this, [this] {
     if (auto* vp = current_viewport()) {
       vp->begin_mirror_selection();
     }
   });
-  addAction(mirror_action);
+  addAction(mirror_action_);
 
-  auto* array_action = new QAction(ribbon_icon(QStringLiteral(":/icons/array.svg")),
-                                   tr("Array"), this);
-  array_action->setShortcut(QKeySequence(tr("Ctrl+Shift+A")));
-  array_action->setToolTip(tr("Array the selection: repeat it linearly or around a centre"));
-  connect(array_action, &QAction::triggered, this, [this] {
+  array_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/array.svg")),
+                              tr("Array"), this);
+  array_action_->setShortcut(QKeySequence(tr("Ctrl+Shift+A")));
+  array_action_->setToolTip(tr("Array the selection: repeat it linearly or around a centre"));
+  connect(array_action_, &QAction::triggered, this, [this] {
     DocumentViewport* vp = current_viewport();
     if (vp == nullptr) {
       return;
@@ -551,20 +555,20 @@ MainWindow::MainWindow(QWidget* parent)
     out.center = {static_cast<float>(params.centre_x), 0.f, static_cast<float>(params.centre_z)};
     vp->array_selection(out);
   });
-  addAction(array_action);
+  addAction(array_action_);
 
-  auto* settings_action = new QAction(ribbon_icon(QStringLiteral(":/icons/settings.svg")),
-                                     tr("Settings"), this);
-  settings_action->setShortcut(QKeySequence(tr("Ctrl+,")));
-  settings_action->setToolTip(tr("Open settings"));
-  connect(settings_action, &QAction::triggered, this, &MainWindow::open_settings);
-  addAction(settings_action);
+  settings_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/settings.svg")),
+                                 tr("Settings"), this);
+  settings_action_->setShortcut(QKeySequence(tr("Ctrl+,")));
+  settings_action_->setToolTip(tr("Open settings"));
+  connect(settings_action_, &QAction::triggered, this, &MainWindow::open_settings);
+  addAction(settings_action_);
 
-  auto* about_action = new QAction(ribbon_icon(QStringLiteral(":/icons/about.svg")),
-                                   tr("About"), this);
-  about_action->setToolTip(tr("About Tamias"));
-  connect(about_action, &QAction::triggered, this, &MainWindow::open_about);
-  addAction(about_action);
+  about_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/about.svg")),
+                              tr("About"), this);
+  about_action_->setToolTip(tr("About Tamias"));
+  connect(about_action_, &QAction::triggered, this, &MainWindow::open_about);
+  addAction(about_action_);
 
   // 图形诊断：把启动探测报告摊开给用户 / IT 看（一键复制）。比像素金样更贴近交付现场。
   diagnostics_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/gpu.svg")),
@@ -574,48 +578,48 @@ MainWindow::MainWindow(QWidget* parent)
   connect(diagnostics_action_, &QAction::triggered, this, &MainWindow::open_graphics_diagnostics);
   addAction(diagnostics_action_);
 
-  auto* manage_action = new QAction(ribbon_icon(QStringLiteral(":/icons/settings.svg")),
-                                    tr("Plugin Manager"), this);
-  manage_action->setToolTip(tr("Choose which loaded plugins appear on the ribbon"));
-  connect(manage_action, &QAction::triggered, this, &MainWindow::open_plugin_manager);
-  addAction(manage_action);
+  manage_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/settings.svg")),
+                               tr("Plugin Manager"), this);
+  manage_action_->setToolTip(tr("Choose which loaded plugins appear on the ribbon"));
+  connect(manage_action_, &QAction::triggered, this, &MainWindow::open_plugin_manager);
+  addAction(manage_action_);
 
-  auto* home_action = new QAction(ribbon_icon(QStringLiteral(":/icons/home.svg")),
-                                 tr("Welcome"), this);
-  home_action->setToolTip(tr("Back to the welcome page"));
-  connect(home_action, &QAction::triggered, this, &MainWindow::show_home);
-  addAction(home_action);
+  home_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/home.svg")),
+                             tr("Welcome"), this);
+  home_action_->setToolTip(tr("Back to the welcome page"));
+  connect(home_action_, &QAction::triggered, this, &MainWindow::show_home);
+  addAction(home_action_);
 
-  auto* undo_action = new QAction(ribbon_icon(QStringLiteral(":/icons/undo.svg")),
-                                 tr("Undo"), this);
-  undo_action->setShortcut(QKeySequence::Undo);
-  connect(undo_action, &QAction::triggered, this, [this] {
+  undo_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/undo.svg")),
+                             tr("Undo"), this);
+  undo_action_->setShortcut(QKeySequence::Undo);
+  connect(undo_action_, &QAction::triggered, this, [this] {
     if (auto* vp = current_viewport()) {
       vp->undo();
     }
   });
-  addAction(undo_action);
+  addAction(undo_action_);
 
-  auto* redo_action = new QAction(ribbon_icon(QStringLiteral(":/icons/redo.svg")),
-                                 tr("Redo"), this);
-  redo_action->setShortcut(QKeySequence::Redo);
-  connect(redo_action, &QAction::triggered, this, [this] {
+  redo_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/redo.svg")),
+                             tr("Redo"), this);
+  redo_action_->setShortcut(QKeySequence::Redo);
+  connect(redo_action_, &QAction::triggered, this, [this] {
     if (auto* vp = current_viewport()) {
       vp->redo();
     }
   });
-  addAction(redo_action);
+  addAction(redo_action_);
 
-  auto* exit_action = new QAction(tr("E&xit"), this);
-  exit_action->setShortcut(QKeySequence::Quit);
-  connect(exit_action, &QAction::triggered, this, &QWidget::close);
-  addAction(exit_action);
+  exit_action_ = new QAction(tr("E&xit"), this);
+  exit_action_->setShortcut(QKeySequence::Quit);
+  connect(exit_action_, &QAction::triggered, this, &QWidget::close);
+  addAction(exit_action_);
 
   auto* display_group = new QActionGroup(this);
   display_group->setExclusive(true);
 
   wireframe_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/wireframe.svg")),
-                                 tr("Wireframe"), this);
+                                  tr("Wireframe"), this);
   wireframe_action_->setCheckable(true);
   wireframe_action_->setShortcut(QKeySequence(tr("Ctrl+1")));
   wireframe_action_->setToolTip(tr("Line drawing — edges only"));
@@ -626,7 +630,7 @@ MainWindow::MainWindow(QWidget* parent)
   addAction(wireframe_action_);
 
   shaded_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/shaded.svg")),
-                              tr("Shaded"), this);
+                               tr("Shaded"), this);
   shaded_action_->setCheckable(true);
   shaded_action_->setChecked(true);
   shaded_action_->setShortcut(QKeySequence(tr("Ctrl+2")));
@@ -638,7 +642,7 @@ MainWindow::MainWindow(QWidget* parent)
   addAction(shaded_action_);
 
   realistic_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/realistic.svg")),
-                                 tr("Realistic"), this);
+                                  tr("Realistic"), this);
   realistic_action_->setCheckable(true);
   realistic_action_->setShortcut(QKeySequence(tr("Ctrl+3")));
   realistic_action_->setToolTip(tr("Lit display with specular highlights"));
@@ -797,9 +801,9 @@ MainWindow::MainWindow(QWidget* parent)
   property_dock->setWidget(property_panel_);
   property_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
   addDockWidget(Qt::RightDockWidgetArea, property_dock);
-  QAction* property_toggle = property_dock->toggleViewAction();
-  property_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/properties.svg")));
-  addAction(property_toggle);
+  property_toggle_ = property_dock->toggleViewAction();
+  property_toggle_->setIcon(ribbon_icon(QStringLiteral(":/icons/properties.svg")));
+  addAction(property_toggle_);
 
   // 左侧绘制设置面板：点构件 icon 后在此选子类型/参数，再"开始绘制"武装命令。
   // 默认收起——没有文档时它没有意义；用构件工具或"视图 · 面板 · 绘制设置"唤出。
@@ -849,9 +853,9 @@ MainWindow::MainWindow(QWidget* parent)
       refresh_texture_library_panel();
     }
   });
-  auto* texture_toggle = texture_library_dock_->toggleViewAction();
-  texture_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/texture_library.svg")));
-  addAction(texture_toggle);
+  texture_toggle_ = texture_library_dock_->toggleViewAction();
+  texture_toggle_->setIcon(ribbon_icon(QStringLiteral(":/icons/texture_library.svg")));
+  addAction(texture_toggle_);
 
 
   handle_inspector_ = new HandleInspector(this);
@@ -860,12 +864,12 @@ MainWindow::MainWindow(QWidget* parent)
   handle_dock->setWidget(handle_inspector_);
   handle_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
   addDockWidget(Qt::RightDockWidgetArea, handle_dock);
-  auto* handle_toggle = handle_dock->toggleViewAction();
-  handle_toggle->setText(tr("Inspector"));
-  handle_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/inspector.svg")));
-  handle_toggle->setShortcut(QKeySequence(tr("Ctrl+D")));
-  handle_toggle->setToolTip(tr("Inspect the selected component's document handle"));
-  addAction(handle_toggle);
+  handle_toggle_ = handle_dock->toggleViewAction();
+  handle_toggle_->setText(tr("Inspector"));
+  handle_toggle_->setIcon(ribbon_icon(QStringLiteral(":/icons/inspector.svg")));
+  handle_toggle_->setShortcut(QKeySequence(tr("Ctrl+D")));
+  handle_toggle_->setToolTip(tr("Inspect the selected component's document handle"));
+  addAction(handle_toggle_);
   connect(handle_inspector_, &HandleInspector::locate_requested, this,
           [this](std::uint64_t node_id) {
             if (auto* vp = current_viewport()) {
@@ -883,11 +887,11 @@ MainWindow::MainWindow(QWidget* parent)
   timing_dock_->setMinimumWidth(360);
   addDockWidget(Qt::BottomDockWidgetArea, timing_dock_);
   timing_dock_->hide();
-  auto* timing_toggle = timing_dock_->toggleViewAction();
-  timing_toggle->setText(tr("Timing"));
-  timing_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/timing.svg")));
-  timing_toggle->setToolTip(tr("Show the timing timeline"));
-  addAction(timing_toggle);
+  timing_toggle_ = timing_dock_->toggleViewAction();
+  timing_toggle_->setText(tr("Timing"));
+  timing_toggle_->setIcon(ribbon_icon(QStringLiteral(":/icons/timing.svg")));
+  timing_toggle_->setToolTip(tr("Show the timing timeline"));
+  addAction(timing_toggle_);
 
   timing_record_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/timing.svg")),
                                       tr("Record"), this);
@@ -906,13 +910,13 @@ MainWindow::MainWindow(QWidget* parent)
                                  Qt::RightDockWidgetArea);
   addDockWidget(Qt::BottomDockWidgetArea, console_dock_);
   console_dock_->hide();
-  auto* console_toggle = console_dock_->toggleViewAction();
-  console_toggle->setText(tr("Command Console"));
-  console_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/console.svg")));
-  console_toggle->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+J")));
-  console_toggle->setToolTip(
+  console_toggle_ = console_dock_->toggleViewAction();
+  console_toggle_->setText(tr("Command Console"));
+  console_toggle_->setIcon(ribbon_icon(QStringLiteral(":/icons/console.svg")));
+  console_toggle_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+J")));
+  console_toggle_->setToolTip(
       tr("Show the command echo: every executed kernel command as a paste-ready C# call"));
-  addAction(console_toggle);
+  addAction(console_toggle_);
 
   connect(console_panel_, &ConsolePanel::run_requested, this, [this](const QString& code) {
     // 回显输入：多行只回第一行，免得刷屏。
@@ -951,8 +955,8 @@ MainWindow::MainWindow(QWidget* parent)
     }
   });
 
-  debug_scene_action->setIcon(ribbon_icon(QStringLiteral(":/icons/shaded.svg")));
-  debug_scene_action->setText(tr("Scene Debugger"));
+  debug_scene_action_->setIcon(ribbon_icon(QStringLiteral(":/icons/shaded.svg")));
+  debug_scene_action_->setText(tr("Scene Debugger"));
 
   auto* ribbon = new RibbonBar(this);
   ribbon_ = ribbon;
@@ -991,17 +995,23 @@ MainWindow::MainWindow(QWidget* parent)
     settings.set_ribbon_collapsed(collapsed);
     settings.save();
   });
-  ribbon->add_quick_action(undo_action);
-  ribbon->add_quick_action(redo_action);
-
+  // 菜单下面只有这一条工具带：菜单栏那行不再挂「新建 / 打开 / 保存 / 撤销 / 重做」
+  // 那一排小图标——新建 / 打开 / 保存 在「文件」组里本来就有，撤销 / 重做 归下边的
+  // 「编辑」组（见 build_menu_bar 里那条 编辑 菜单，命令是同一批 QAction）。
   RibbonPage* home_page = ribbon->add_page(QStringLiteral("home"), tr("Home"));
   RibbonGroup* file_group = home_page->add_group(QStringLiteral("file"), tr("File"));
-  file_group->add_action(new_action);
-  file_group->add_action(open_action);
-  file_group->add_action(open_drawing_action);
+  file_group->add_action(new_action_);
+  file_group->add_action(open_action_);
+  file_group->add_action(open_drawing_action_);
   file_group->add_action(trace_drawing_action_);
-  file_group->add_action(save_action);
-  file_group->add_action(save_as_action);
+  file_group->add_action(save_action_);
+  file_group->add_action(save_as_action_);
+
+  // 撤销 / 重做：住工具带而不是菜单栏那排小图标。放在「文件」组右边，
+  // 和菜单栏的「文件 → 编辑」是一个顺序。
+  RibbonGroup* edit_group = home_page->add_group(QStringLiteral("edit"), tr("Edit"));
+  edit_group->add_action(undo_action_);
+  edit_group->add_action(redo_action_);
 
   RibbonGroup* draw_group = home_page->add_group(QStringLiteral("draw"), tr("Draw"));
   draw_group->add_action(line_action_);
@@ -1028,11 +1038,11 @@ MainWindow::MainWindow(QWidget* parent)
   structural_group->add_action(foundation_action_);
 
   RibbonGroup* modify_group = home_page->add_group(QStringLiteral("modify"), tr("Modify"));
-  modify_group->add_action(move_action);
-  modify_group->add_action(copy_action);
-  modify_group->add_action(rotate_action);
-  modify_group->add_action(mirror_action);
-  modify_group->add_action(array_action);
+  modify_group->add_action(move_action_);
+  modify_group->add_action(copy_action_);
+  modify_group->add_action(rotate_action_);
+  modify_group->add_action(mirror_action_);
+  modify_group->add_action(array_action_);
   modify_group->add_action(fillet_action_);
   modify_group->add_action(chamfer_action_);
 
@@ -1043,18 +1053,18 @@ MainWindow::MainWindow(QWidget* parent)
 
   RibbonGroup* navigation_group =
       home_page->add_group(QStringLiteral("navigation"), tr("Navigation"));
-  navigation_group->add_action(frame_all_action);
+  navigation_group->add_action(frame_all_action_);
 
   RibbonGroup* setting_group =
       home_page->add_group(QStringLiteral("settings"), tr("Settings"));
-  setting_group->add_action(settings_action);
+  setting_group->add_action(settings_action_);
 
   RibbonGroup* plugins_group =
       home_page->add_group(QStringLiteral("plugins"), tr("Plugins"));
-  plugins_group->add_action(manage_action);
+  plugins_group->add_action(manage_action_);
 
   RibbonGroup* help_group = home_page->add_group(QStringLiteral("help"), tr("Help"));
-  help_group->add_action(about_action);
+  help_group->add_action(about_action_);
 
   RibbonPage* view_page = ribbon->add_page(QStringLiteral("view"), tr("View"));
   RibbonGroup* display_ribbon =
@@ -1076,66 +1086,75 @@ MainWindow::MainWindow(QWidget* parent)
 
   RibbonGroup* panels_group = view_page->add_group(QStringLiteral("panels"), tr("Panels"));
   // 构件显隐面板住在视口右上角的工具面板里（不在停靠区），这里只给入口与快捷键。
-  auto* components_action =
+  components_action_ =
       new QAction(ribbon_icon(QStringLiteral(":/icons/components.svg")), tr("Components"), this);
-  components_action->setShortcut(QKeySequence(tr("Ctrl+L")));
-  components_action->setToolTip(tr("Show or hide components by category"));
-  connect(components_action, &QAction::triggered, this, [this] {
+  components_action_->setShortcut(QKeySequence(tr("Ctrl+L")));
+  components_action_->setToolTip(tr("Show or hide components by category"));
+  connect(components_action_, &QAction::triggered, this, [this] {
     if (auto* vp = current_viewport()) {
       vp->toggle_visibility_panel();
     }
   });
-  addAction(components_action);
-  panels_group->add_action(components_action);
+  addAction(components_action_);
+  panels_group->add_action(components_action_);
   // 楼层面板同样住在视口右侧的工具列里（同一列的第二个功能页）。
-  auto* floors_action =
+  floors_action_ =
       new QAction(ribbon_icon(QStringLiteral(":/icons/storey.svg")), tr("Floors"), this);
-  floors_action->setShortcut(QKeySequence(tr("Ctrl+Shift+L")));
-  floors_action->setToolTip(tr("Show or hide floors, and set floor heights"));
-  connect(floors_action, &QAction::triggered, this, [this] {
+  floors_action_->setShortcut(QKeySequence(tr("Ctrl+Shift+L")));
+  floors_action_->setToolTip(tr("Show or hide floors, and set floor heights"));
+  connect(floors_action_, &QAction::triggered, this, [this] {
     if (auto* vp = current_viewport()) {
       vp->toggle_floor_panel();
     }
   });
-  addAction(floors_action);
-  panels_group->add_action(floors_action);
+  addAction(floors_action_);
+  panels_group->add_action(floors_action_);
   // 楼层管理：同一列里的第三个功能页，把楼层当视图清单用（双击打开某层视图）。
-  auto* floor_views_action = new QAction(
-      ribbon_icon(QStringLiteral(":/icons/floor_manager.svg")), tr("Floor Views"), this);
-  floor_views_action->setToolTip(
+  floor_views_action_ =
+      new QAction(ribbon_icon(QStringLiteral(":/icons/floor_manager.svg")), tr("Floor Views"),
+                  this);
+  floor_views_action_->setToolTip(
       tr("List the global 3D view and every floor; double-click one to open it"));
-  connect(floor_views_action, &QAction::triggered, this, [this] {
+  connect(floor_views_action_, &QAction::triggered, this, [this] {
     if (auto* vp = current_viewport()) {
       vp->toggle_floor_manager_panel();
     }
   });
-  addAction(floor_views_action);
-  panels_group->add_action(floor_views_action);
+  addAction(floor_views_action_);
+  panels_group->add_action(floor_views_action_);
   // 图纸管理：住在视口右侧工具列里的功能页（和构件显隐 / 楼层同一列）。
-  auto* drawings_action =
+  drawings_action_ =
       new QAction(ribbon_icon(QStringLiteral(":/icons/drawing.svg")), tr("Drawings"), this);
-  drawings_action->setToolTip(
+  drawings_action_->setToolTip(
       tr("Manage reference drawings (DWF / DWFx / DXF / PDF…): add, show/hide, place, "
          "or open in a 2D page"));
-  connect(drawings_action, &QAction::triggered, this, [this] {
+  connect(drawings_action_, &QAction::triggered, this, [this] {
     if (auto* vp = current_viewport()) {
       vp->toggle_drawing_panel();
     }
   });
-  addAction(drawings_action);
-  panels_group->add_action(drawings_action);
+  addAction(drawings_action_);
+  panels_group->add_action(drawings_action_);
   panels_group->add_action(draw_toggle_);
-  panels_group->add_action(property_toggle);
-  panels_group->add_action(texture_toggle);
-  panels_group->add_action(handle_toggle);
+  panels_group->add_action(property_toggle_);
+  panels_group->add_action(texture_toggle_);
+  panels_group->add_action(handle_toggle_);
   panels_group->add_action(diagnostics_action_);  // 图形诊断也是「面板」类工具
-  panels_group->add_action(debug_scene_action);
-  panels_group->add_action(timing_toggle);
-  panels_group->add_action(console_toggle);
+  panels_group->add_action(debug_scene_action_);
+  panels_group->add_action(timing_toggle_);
+  panels_group->add_action(console_toggle_);
 
   RibbonGroup* workspace_group =
       view_page->add_group(QStringLiteral("workspace"), tr("Workspace"));
-  workspace_group->add_action(home_action);
+  workspace_group->add_action(home_action_);
+
+  // 最上面那行菜单（文件 / 编辑 / 视图 / 工具 / 窗口 / 帮助）。功能区在这行下面，
+  // 和 FreeCAD 一样：菜单管"找得到"，图标行和功能区管"够得着"。
+  //
+  // 注意上面两条 add_page：页签已经去掉了，开始 / 视图 这两页现在是同一条工具带上的
+  // 两段分区（左边竖排分区名 + 主色条，见 RibbonBar::refresh_section_chrome），
+  // 不再需要切页签。页 id（home / view）保留着，布局记忆与插件落点还按它认。
+  build_menu_bar();
 
   plugin_host_.set_log_sink([this](std::string_view msg) {
     const QString text = QString::fromUtf8(msg.data(), static_cast<int>(msg.size()));
@@ -1453,6 +1472,7 @@ void MainWindow::show_home() {
   refresh_home();
   stack_->setCurrentWidget(home_);
   sync_draw_panel();
+  sync_document_actions();
 }
 
 void MainWindow::show_documents() {
@@ -1467,6 +1487,7 @@ void MainWindow::show_documents() {
   refresh_handle_inspector();
   refresh_texture_library_panel();
   sync_draw_panel();
+  sync_document_actions();
 }
 
 void MainWindow::activate_open_document(int index) {
@@ -1776,6 +1797,14 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
       }
     }
   });
+  // 视口自己打开轴网时（轴网布柱看不见轴就没得框）Ribbon 的勾选也跟着走。
+  connect(vp, &DocumentViewport::grid_visible_changed, this, [this](bool visible) {
+    if (grid_action_ == nullptr) {
+      return;
+    }
+    const QSignalBlocker block(grid_action_);
+    grid_action_->setChecked(visible);
+  });
   connect(vp, &DocumentViewport::status_message, this, [this](const QString& text) {
     statusBar()->showMessage(text, 5000);
   });
@@ -1786,6 +1815,8 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
   });
   connect(vp, &DocumentViewport::selection_changed, this, &MainWindow::refresh_property_panel);
   connect(vp, &DocumentViewport::document_changed, this, &MainWindow::refresh_property_panel);
+  // 撤销 / 重做有没有得撤，命令执行完才准——菜单栏和顶栏那两个图标一起跟着灰 / 亮。
+  connect(vp, &DocumentViewport::document_changed, this, &MainWindow::sync_document_actions);
   connect(vp, &DocumentViewport::selection_changed, this, &MainWindow::refresh_handle_inspector);
   connect(vp, &DocumentViewport::document_changed, this, &MainWindow::refresh_handle_inspector);
   connect(vp, &DocumentViewport::document_changed, this,

@@ -236,7 +236,7 @@ void DrawPanel::rebuild_form() {
   rebuild_param_rows();
 
   // 提示 + 武装按钮。
-  hint_label_ = new QLabel(spec_->pick_hint, content_);
+  hint_label_ = new QLabel(spec_->hint_for(current_sub_type_), content_);
   hint_label_->setWordWrap(true);
   hint_label_->setStyleSheet(QStringLiteral("color:#5f6368;font-size:11px;padding:2px 0;"));
   column->addWidget(hint_label_);
@@ -272,6 +272,11 @@ void DrawPanel::rebuild_param_rows() {
 
   const SectionPreviewSpec section = spec_->section_for(current_sub_type_);
   const std::vector<ParamSpec> merged = spec_->merged_params(current_sub_type_);
+  // 提示跟着子类型走：柱的「轴网布置」是框选轴网，不是点一下（rebuild_form 里
+  // 这一步先于 hint_label_ 创建，所以两边都要判空）。
+  if (hint_label_ != nullptr) {
+    hint_label_->setText(spec_->hint_for(current_sub_type_));
+  }
   if (section_preview_ != nullptr) {
     section_preview_->set_section(section, merged);
   }

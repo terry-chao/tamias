@@ -105,6 +105,7 @@ host.Dispatch("set_param", new CommandArgs()
 | `create_beam` | `points`（2 点）、`width`(0.3)、`depth`(0.5)；`sub_type`(`s`) 为 `tee`/`i` 时改用 `flange_width`/`web_thickness`/`height`/`flange_thickness`，且只支持交互式 |
 | `create_slab` | `points`（2 对角点）、`thickness`(0.2)、`elevation`(`d`，默认当前楼层层高 / 本层顶；无楼层时为 0) |
 | `create_column` | `points`（1 点）或 `origin`、`sub_type`(`s`：`rect`/`circle`)、`width`(0.4)、`depth`(0.4)、`diameter`(0.4)、`height`(3.0)、`host_id`(`i`) |
+| `create_columns_on_grid` | `sub_type`(`s`：`rect`/`circle`)、`width`(0.4)、`depth`(0.4)、`diameter`(0.4)、`height`(3.0)、`axis_ids`(`a`，可省) | 轴网布柱：在轴线的**两两交点**（编号轴 × 字母轴）一次布置柱，整批一步撤销。`axis_ids` 省略 = 整张轴网；柱底标高取当前楼层；同层已有柱的交点跳过 |
 | `create_foundation` | `points`（1 点）或 `origin`、`sub_type`(`s`：`isolated`/`strip`/`raft`/`pile`)、`length`、`width`、`height`、`diameter` |
 | `create_door` | `points`（1 点）或 `origin`、`width`(1.0)、`height`(2.1)、`thickness`(0.05)、`sill`(0.0)、`host_id`(`i`，可贴宿主墙) |
 | `create_window` | `points`（1 点）或 `origin`、`width`(1.2)、`height`(1.2)、`thickness`(0.08)、`sill`(0.9)、`host_id`(`i`) |
@@ -202,6 +203,7 @@ host.Dispatch("array_entities", new CommandArgs()
 | `host.Beam(start, end, width = 0.3, depth = 0.5)` | `create_beam` |
 | `host.Slab(a, b, thickness = 0.2, elevation = null)` | `create_slab` |
 | `host.Column(origin)` | `create_column` |
+| `host.ColumnsOnGrid(axisIds = null, width = 0.4, depth = 0.4, height = 3.0)` | `create_columns_on_grid` |
 | `host.Door(origin, hostId = 0)` | `create_door` |
 | `host.Window(origin, hostId = 0)` | `create_window` |
 | `host.Line(a, b)` | `create_line` |

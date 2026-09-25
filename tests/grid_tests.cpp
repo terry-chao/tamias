@@ -404,4 +404,112 @@ TEST(Grid, SurvivesDocumentRoundTrip) {
   EXPECT_GE(loaded->document.bim().grid().next_id(), 7u);
 }
 
+// 轴交点（「轴网布置」的几何底子）：编号轴 × 字母轴的笛卡尔积。
+TEST(GridIntersections, CartesianProductOfBothDirections) {
+  // 3 根编号轴（x = 0 / 6 / 12）× 2 根字母轴（z = 0 / 5）= 6 个交点。
+  const std::vector<GridAxis> axes =
+      make_orthogonal_grid(0.0, 0.0, {6.0, 6.0}, {5.0}, 1.0);
+  const std::vector<Vec3> points = grid_intersections(axes);
+  ASSERT_EQ(points.size(), 6u);
+  for (const Vec3& point : points) {
+    EXPECT_FLOAT_EQ(point.y, 0.f);  // 轴网是平面参考，交点恒在 y = 0
+  }
+  // 6 个点两两不同，且都落在网格范围内。
+  for (std::size_t i = 0; i < points.size(); ++i) {
+    EXPECT_GE(points[i].x, -1.f);
+    EXPECT_LE(points[i].x, 13.f);
+    EXPECT_GE(points[i].z, -1.f);
+    EXPECT_LE(points[i].z, 6.f);
+    for (std::size_t j = i + 1; j < points.size(); ++j) {
+      EXPECT_FALSE(points[i].x == points[j].x && points[i].z == points[j].z);
+    }
+  }
+}
+
+TEST(GridIntersections, IdsNarrowTheAxesThatTakePart) {
+  // 过一遍 Grid：生成的轴线自己不带 id，按 id 筛选得先有 id。
+  Grid grid;
+  for (const GridAxis& axis : make_orthogonal_grid(0.0, 0.0, {6.0, 6.0}, {5.0}, 1.0)) {
+    grid.add(axis);
+  }
+  const std::vector<GridAxis>& axes = grid.axes();
+  ASSERT_EQ(axes.size(), 5u);  // 3 根编号轴（x = 0/6/12）+ 2 根字母轴（z = 0/5）
+  // 只留「第 2 根编号轴」+「第 A 根字母轴」：一个交点（6, 0）。
+  const std::vector<std::uint64_t> ids{axes[1].id, axes[3].id};
+  const std::vector<Vec3> points = grid_intersections(axes, ids);
+  ASSERT_EQ(points.size(), 1u);
+  EXPECT_FLOAT_EQ(points[0].x, 6.f);
+  EXPECT_FLOAT_EQ(points[0].z, 0.f);
+
+  // 表里已经没有的 id 不算数（删了轴线再布柱不该凭空冒出交点）。
+  const std::vector<Vec3> gone = grid_intersections(axes, {9999u});
+  EXPECT_TRUE(gone.empty());
+}
+
+TEST(GridIntersections, SkipsPointsOutsideTheAxisExtent) {
+  std::vector<GridAxis> axes;
+  GridAxis numbered;  // 编号轴：x = 0，z 只画到 4
+  numbered.name = "1";
+  numbered.direction = GridAxisDirection::AlongZ;
+  numbered.position = 0.0;
+  numbered.start = 0.0;
+  numbered.end = 4.0;
+  axes.push_back(numbered);
+  GridAxis lettered;  // 字母轴：z = 0，x 从 0 到 10
+  lettered.name = "A";
+  lettered.direction = GridAxisDirection::AlongX;
+  lettered.position = 0.0;
+  lettered.start = 0.0;
+  lettered.end = 10.0;
+  axes.push_back(lettered);
+
+  ASSERT_EQ(grid_intersections(axes).size(), 1u);  // (0, 0) 落在两根轴的范围里
+
+  // 字母轴挪到 z = 6：编号轴只画到 z = 4，交点不该出现。
+  axes[1].position = 6.0;
+  EXPECT_TRUE(grid_intersections(axes).empty());
+}
+
+TEST(GridIntersections, CoincidentAxesYieldOnePoint) {
+  std::vector<GridAxis> axes;
+  GridAxis first;
+  first.name = "1";
+  first.direction = GridAxisDirection::AlongZ;
+  first.position = 3.0;
+  first.start = -5.0;
+  first.end = 5.0;
+  axes.push_back(first);
+  axes.push_back(first);  // 重复的轴线：同一个平面点只算一次
+  GridAxis lettered;
+  lettered.name = "A";
+  lettered.direction = GridAxisDirection::AlongX;
+  lettered.position = 0.0;
+  lettered.start = -5.0;
+  lettered.end = 5.0;
+  axes.push_back(lettered);
+
+  const std::vector<Vec3> points = grid_intersections(axes);
+  ASSERT_EQ(points.size(), 1u);
+  EXPECT_FLOAT_EQ(points[0].x, 3.f);
+  EXPECT_FLOAT_EQ(points[0].z, 0.f);
+}
+
+TEST(GridIntersections, IgnoresDegenerateAxes) {
+  std::vector<GridAxis> axes;
+  GridAxis numbered;
+  numbered.direction = GridAxisDirection::AlongZ;
+  numbered.position = 0.0;
+  numbered.start = 0.0;
+  numbered.end = 0.0;  // 长度 0：不是一根线
+  axes.push_back(numbered);
+  GridAxis lettered;
+  lettered.direction = GridAxisDirection::AlongX;
+  lettered.position = 0.0;
+  lettered.start = -5.0;
+  lettered.end = 5.0;
+  axes.push_back(lettered);
+
+  EXPECT_TRUE(grid_intersections(axes).empty());
+}
+
 }  // namespace tamias
