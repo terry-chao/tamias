@@ -32,6 +32,7 @@ nav:
   - 总览:
       - 路线图: ROADMAP.md
       - MCAD 与 BIM: DECISION-MCAD-BIM.md
+      - 内嵌浏览器（决策）: DECISION-EMBEDDED-BROWSER.md
       - 架构: ARCHITECTURE.md
   - 答疑（Q&A）: FAQ.md
   - 测试: TESTING.md
@@ -52,6 +53,7 @@ nav:
   - 客户端:
       - app/index.md
       - Qt 壳: APP.md
+      - 脚本与命令控制台: SCRIPTING.md
       - 参考图纸: DRAWING.md
   - 插件:
       - plugin/index.md
@@ -78,6 +80,7 @@ nav:
       - 几何边界入口: kernel/index.md
   - 渲染:
       - render/index.md
+      - 超大规模三角: MASSIVE-GEOMETRY.md
       - 管线与 RHI: RENDERING.md
       - RHI 启动（探测/降级/块名单）: RHI-STARTUP.md
       - 视锥、NDC 与屏幕: NDC.md

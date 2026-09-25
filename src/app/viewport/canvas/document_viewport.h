@@ -224,6 +224,8 @@ class DocumentViewport final : public QWidget {
   void selection_changed();  // 选中对象变化
   void document_changed();   // 文档内容/参数变化（undo/redo/命令执行后）
   void status_message(const QString& text);  // 状态栏提示（如三维中拒绝画板）
+  // 命令回显：会话层执行完一条命令后给出等价 C# 调用（主窗口的控制台面板收）。
+  void console_message(const QString& text);
   void plugin_point_input_changed(bool active);
   void visibility_changed();               // 隐藏/隔离/楼层过滤变化，面板据此刷新
   void view_changed();  // 打开的视图变了（全局三维 ↔ 某楼层），楼层管理页据此换高亮

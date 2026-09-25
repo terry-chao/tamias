@@ -9,6 +9,7 @@ add_executable(tamias
   base/theme.cpp
   base/i18n.cpp
   base/recent_files.cpp
+  base/script_store.cpp
   base/rhi_backends.cpp
   base/rhi_startup.cpp
   base/startup_guard.cpp
@@ -22,12 +23,14 @@ add_executable(tamias
   shell/ribbon_group.cpp
   shell/toast.cpp
   shell/mesh_thumbnail.cpp
+  shell/code_editor.cpp
   shell/about_dialog.cpp
   shell/graphics_diagnostics_dialog.cpp
   shell/settings_dialog.cpp
   shell/settings_section.cpp
   shell/plugin_manager_dialog.cpp
   shell/plugin_prompt_dialog.cpp
+  shell/console_panel.cpp
   # 三维视口：画布本体 / 画布上的浮层 / 右侧工具列 / 录制回放
   viewport/canvas/document_viewport.cpp
   viewport/overlay/view_cube_widget.cpp

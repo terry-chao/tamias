@@ -52,6 +52,7 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <string_view>
 #include <utility>
 
 #if defined(_WIN32)
@@ -158,6 +159,14 @@ DocumentViewport::DocumentViewport(std::shared_ptr<Document> document,
   QPalette pal = palette();
   pal.setColor(QPalette::Window, QColor(36, 46, 61));
   setPalette(pal);
+
+  // 命令回显：内核执行完一条命令就发一行等价 C# 调用（见 host/command_echo.h）。
+  // 视口只做转发，文本怎么显示由控制台面板决定。
+  session_->set_listener([this](HostEvent event, std::string_view message) {
+    if (event == HostEvent::ConsoleMessage) {
+      emit console_message(QString::fromUtf8(message.data(), static_cast<int>(message.size())));
+    }
+  });
 
   // Vulkan draws into a native child surface; this parent stays a normal Qt
   // widget so overlays (view cube) can paint and receive clicks on top.

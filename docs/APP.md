@@ -42,6 +42,7 @@ BIM 业务层的分组只影响「谁在管哪个面板」，不放宽上面那�
 | ViewCube | `view_cube_widget` |
 | 属性面板（改特征参数） | `property_panel` |
 | 视口工具列（视口右侧通高，左列按钮 + 右侧功能页） | `viewport_tool_panel` |
+| 命令控制台（底部停靠，Ctrl+Shift+J；回显 + C# 求值） | `console_panel` |
 | 构件显隐页（按类别显隐，Ctrl+L） | `visibility_panel` / `entity_kind_catalog` |
 | 楼层面板（按楼层显隐 + 当前楼层，Ctrl+Shift+L） | `floor_panel` / `viewport_floor.h` |
 | 图纸管理页（视口右列；把 DWF/DXF/PDF 等图纸挂在文档下，显隐 / 摆放 / 定位） | `drawing_manager_panel` / `drawing_settings_dialog` |
@@ -73,10 +74,35 @@ Ribbon「开始 → 插件」由 `PluginHost` 在启动时加载 C# 插件。插
 
 完整说明：[插件系列](plugin/index.md)（理念、使用、宿主功能、开发）。
 
+## 命令控制台
+
+底部停靠面板（**视图 → 面板 → 命令控制台**，`Ctrl+Shift+J`），上下两半：
+
+**输出面**：每条真正执行的内核命令长一行等价的 C# 调用（`host.Dispatch("create_wall", …)`）。在工具条上画一面墙，这里就有可抄走的代码——学 API 不必先读文档。文本由 [command_echo.h](https://github.com/terry-chao/tamias/blob/main/src/host/command_echo.h) 生成，插件 `Log` 也落在同一个面板。
+
+**输入面**：敲一段 C#，`Ctrl+Enter` 跑。`host` 就是当前文档的宿主（`IHost`），能读特征树、能 `Dispatch`、能弹宿主对话框。
+
+它同时是个**文件型脚本页**（见 [console_panel](https://github.com/terry-chao/tamias/blob/main/src/app/shell/console_panel.cpp)）：
+
+- 带行号的编辑器，上下拖动分隔条调「回显 / 编辑器」比例。
+- 脚本住在 `<AppData>/scripts`（`Ctrl+S` 保存；第一次保存直接落进这个目录，不弹框）。**不进 `.tdoc`**——脚本是行为，工作文档是数据；脚本应该能用 git 管、能拷给同事。
+- 下拉框列出脚本目录里的 `.cs`，换脚本前有未保存改动会先问一句（标题上带 `*`）。
+- 求值失败时，错误文本里的 `(行,列)` 会把光标直接带到出错那行（Roslyn 的诊断格式）。
+
+两条要说清楚的：
+
+- **全信任，不是沙箱。** 脚本在 Tamias 进程里跑，拿到的是 `IHost` 的全部能力——和 FreeCAD 的 Python 控制台一个性质：给操作者自己用的工具。
+- **每段求值 = 一个事务。** 改错了按一次 `Ctrl+Z` 全部退回。所以脚本里**不要**自己再开事务（不支持嵌套）。
+
+求值在托管侧的 `Tamias.Host`（Roslyn scripting），所以需要 .NET 运行时；没有时控制台只回显、不能求值，其余功能照常。代价是 `managed/` 多了约 10 MB 的 Roslyn 程序集。
+
 ---
 
 ## 现在有 / 还没有
 
 **有：** 打开 `.tdoc` / `.trscn` / 导入网格、转相机、点选、挤出等特征的属性编辑、墙工具预览线、线框/着色/真实模式、**开始 → 轴网设置**（按间距生成正交轴网 / 逐根增删改名，确定后在视口里**点击放置**）、**视图 → 渲染场景**（`Ctrl+Shift+I`：对照 draw list、写 `.trscn` / 钉金样 / 导出 OBJ；`Ctrl+Shift+P` 钉进 `assets/samples/render/`，调试步骤见 [渲染场景快照](RENDER-SCENE.md#调试步骤)）、**Ctrl+D 句柄检查窗口**（点选构件显示 `.tdoc` 里的 id）、**构件显隐页**（`Ctrl+L`，按类别一键显隐）、**楼层面板**（`Ctrl+Shift+L`，一层一行勾选显隐 + 选当前楼层，齿轮开「楼层设置」改标高 / 层高 / 夹层）、**楼层管理页**（视口右列，一张楼层视图清单，第一行「全局三维」= 默认视图；双击某层就是打开该层的平面视图：只留这一层、设为当前楼层、切到平面并框到该层；切回三维或「全部显示」即回到全局三维）、**开始 → 插件**（C# 示例：列出选择 / 删除所选）、**设置 → Modeling → Kernel backend**（选建模内核：OCCT 完整 / Truck 实验性，重启生效，见 [建模内核](MODELING-KERNEL.md)）。
+
+**命令控制台**（`Ctrl+Shift+J`）：输出面把每条执行过的内核命令渲染成可抄走的 C# 调用，
+输入面能直接跑 C# 片段（每段一个事务），脚本存在 `<AppData>/scripts`。见[脚本与命令控制台](SCRIPTING.md)。
 
 **还没有（路线图支撑线）：** 大纲树、测量、工作台切换、完整建模草图 UI。壳继续长在 app 里；BIM 规则走 [BIM 业务层](BIM.md)，内核仍是 command →（bim）→ document → modeling。

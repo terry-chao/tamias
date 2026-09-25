@@ -1,6 +1,7 @@
 #include "app/shell/main_window.h"
 
 #include "app/shell/about_dialog.h"
+#include "app/shell/console_panel.h"
 #include "app/shell/graphics_diagnostics_dialog.h"
 #include "app/base/app_settings.h"
 #include "bim/ifc_spatial_tree.h"
@@ -811,6 +812,44 @@ MainWindow::MainWindow(QWidget* parent)
   timing_record_action_->setToolTip(tr("Start recording, then stop to inspect the timeline"));
   addAction(timing_record_action_);
 
+  // 命令控制台：底部停靠，默认收起。每次真正执行的内核命令长一行等价 C# 调用
+  // （见 host/command_echo.h）——点着学 API，抄走改参数就能重跑。
+  console_panel_ = new ConsolePanel(this);
+  console_dock_ = new QDockWidget(tr("Command Console"), this);
+  console_dock_->setObjectName(QStringLiteral("consoleDock"));
+  console_dock_->setWidget(console_panel_);
+  console_dock_->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::LeftDockWidgetArea |
+                                 Qt::RightDockWidgetArea);
+  addDockWidget(Qt::BottomDockWidgetArea, console_dock_);
+  console_dock_->hide();
+  auto* console_toggle = console_dock_->toggleViewAction();
+  console_toggle->setText(tr("Command Console"));
+  console_toggle->setIcon(ribbon_icon(QStringLiteral(":/icons/console.svg")));
+  console_toggle->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+J")));
+  console_toggle->setToolTip(
+      tr("Show the command echo: every executed kernel command as a paste-ready C# call"));
+  addAction(console_toggle);
+
+  connect(console_panel_, &ConsolePanel::run_requested, this, [this](const QString& code) {
+    // 回显输入：多行只回第一行，免得刷屏。
+    QString echo = code.section(QLatin1Char('\n'), 0, 0);
+    if (echo.size() < code.size()) {
+      echo += QStringLiteral(" …");
+    }
+    console_panel_->append_line(QStringLiteral("> ") + echo, ConsolePanel::LineStyle::Input);
+    // 求值在 Tamias.Host 的脚本引擎里做：`host` 就是当前文档的宿主，整段自带一个事务。
+    const auto result = plugin_host_.evaluate(code.toStdString());
+    if (result) {
+      if (!result->empty()) {
+        console_panel_->append_line(QString::fromStdString(*result));
+      }
+    } else {
+      const QString error = QString::fromStdString(result.error());
+      console_panel_->append_line(error, ConsolePanel::LineStyle::Error);
+      console_panel_->focus_error_line(error);  // 报错带 (行,列) 就把光标带过去
+    }
+  });
+
   connect(timing_record_action_, &QAction::toggled, this, [this](bool checked) {
     if (checked) {
       timing_dock_->show();
@@ -967,13 +1006,18 @@ MainWindow::MainWindow(QWidget* parent)
   panels_group->add_action(diagnostics_action_);  // 图形诊断也是「面板」类工具
   panels_group->add_action(debug_scene_action);
   panels_group->add_action(timing_toggle);
+  panels_group->add_action(console_toggle);
 
   RibbonGroup* workspace_group =
       view_page->add_group(QStringLiteral("workspace"), tr("Workspace"));
   workspace_group->add_action(home_action);
 
   plugin_host_.set_log_sink([this](std::string_view msg) {
-    statusBar()->showMessage(QString::fromUtf8(msg.data(), static_cast<int>(msg.size())), 8000);
+    const QString text = QString::fromUtf8(msg.data(), static_cast<int>(msg.size()));
+    statusBar()->showMessage(text, 8000);
+    if (console_panel_ != nullptr) {
+      console_panel_->append_line(text);  // 插件 / 脚本的输出也落在同一个控制台
+    }
   });
   plugin_host_.set_dialog_handler(
       [this](std::int32_t kind, std::int32_t buttons, std::string_view spec, std::string& out) {
@@ -1496,6 +1540,11 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
   });
   connect(vp, &DocumentViewport::status_message, this, [this](const QString& text) {
     statusBar()->showMessage(text, 5000);
+  });
+  connect(vp, &DocumentViewport::console_message, this, [this](const QString& text) {
+    if (console_panel_ != nullptr) {
+      console_panel_->append_line(text);
+    }
   });
   connect(vp, &DocumentViewport::selection_changed, this, &MainWindow::refresh_property_panel);
   connect(vp, &DocumentViewport::document_changed, this, &MainWindow::refresh_property_panel);

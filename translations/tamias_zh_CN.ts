@@ -1391,6 +1391,14 @@ Meshes / textures: %2
         <source>Attached %1 — it is drawn under the model (Drawings panel: show/hide, scale, position, 2D page)</source>
         <translation>已挂上 %1——它画在模型下面（「图纸管理」面板：显隐、比例、位置、二维页）</translation>
     </message>
+    <message>
+        <source>Command Console</source>
+        <translation>命令控制台</translation>
+    </message>
+    <message>
+        <source>Show the command echo: every executed kernel command as a paste-ready C# call</source>
+        <translation>显示命令回显：每条执行过的内核命令都以可直接粘贴的 C# 调用列出</translation>
+    </message>
 </context>
 <context>
     <name>tamias::DrawingSettingsDialog</name>
@@ -4329,6 +4337,133 @@ Export the drawing to DXF, SVG or an image, or rebuild with Qt6::Pdf available.<
     <message>
         <source>Text files (*.txt)</source>
         <translation>文本文件 (*.txt)</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::ConsolePanel</name>
+    <message>
+        <source>Command Echo</source>
+        <translation>命令回显</translation>
+    </message>
+    <message>
+        <source>Every command you run shows up here as a C# call you can copy back.</source>
+        <translation>你执行的每条命令都会在这里显示成一段可以直接抄回去用的 C# 调用。</translation>
+    </message>
+    <message>
+        <source>Follow</source>
+        <translation>跟随</translation>
+    </message>
+    <message>
+        <source>Scroll to the newest command</source>
+        <translation>自动滚到最新一条命令</translation>
+    </message>
+    <message>
+        <source>Copy All</source>
+        <translation>全部复制</translation>
+    </message>
+    <message>
+        <source>Copy every line to the clipboard</source>
+        <translation>把所有行复制到剪贴板</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>清空</translation>
+    </message>
+    <message>
+        <source>Clear the echo</source>
+        <translation>清空回显</translation>
+    </message>
+    <message>
+        <source>Scripts in the Tamias scripts folder</source>
+        <translation>Tamias 脚本目录里的脚本</translation>
+    </message>
+    <message>
+        <source>New</source>
+        <translation>新建</translation>
+    </message>
+    <message>
+        <source>New script</source>
+        <translation>新建脚本</translation>
+    </message>
+    <message>
+        <source>Open…</source>
+        <translation>打开…</translation>
+    </message>
+    <message>
+        <source>Open a script from disk</source>
+        <translation>从磁盘打开脚本</translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation>保存</translation>
+    </message>
+    <message>
+        <source>Save the script (Ctrl+S)</source>
+        <translation>保存脚本（Ctrl+S）</translation>
+    </message>
+    <message>
+        <source>Save As…</source>
+        <translation>另存为…</translation>
+    </message>
+    <message>
+        <source>Save the script under a new name</source>
+        <translation>换一个名字保存</translation>
+    </message>
+    <message>
+        <source>Run</source>
+        <translation>运行</translation>
+    </message>
+    <message>
+        <source>Run the snippet (Ctrl+Enter)</source>
+        <translation>运行这段脚本（Ctrl+Enter）</translation>
+    </message>
+    <message>
+        <source>C# here, Ctrl+Enter to run. `host` is the document host; each run is one undo step.</source>
+        <translation>在这里写 C#，Ctrl+Enter 运行。`host` 是当前文档的宿主；每次运行只占一步撤销。</translation>
+    </message>
+    <message>
+        <source>Script</source>
+        <translation>脚本</translation>
+    </message>
+    <message>
+        <source>Save changes to the current script?</source>
+        <translation>当前脚本有改动，要保存吗？</translation>
+    </message>
+    <message>
+        <source>Untitled</source>
+        <translation>未命名</translation>
+    </message>
+    <message>
+        <source>Not saved yet — Save puts it in the scripts folder</source>
+        <translation>还没保存过——「保存」会把它放进脚本目录</translation>
+    </message>
+    <message>
+        <source>Open Script</source>
+        <translation>打开脚本</translation>
+    </message>
+    <message>
+        <source>Tamias scripts (*.cs);;All files (*.*)</source>
+        <translation>Tamias 脚本 (*.cs);;所有文件 (*.*)</translation>
+    </message>
+    <message>
+        <source>Cannot read %1: %2</source>
+        <translation>读不了 %1：%2</translation>
+    </message>
+    <message>
+        <source>Scripts folder is not available.</source>
+        <translation>脚本目录不可用。</translation>
+    </message>
+    <message>
+        <source>Cannot save %1: %2</source>
+        <translation>存不了 %1：%2</translation>
+    </message>
+    <message>
+        <source>Saved %1</source>
+        <translation>已保存 %1</translation>
+    </message>
+    <message>
+        <source>Save Script As</source>
+        <translation>脚本另存为</translation>
     </message>
 </context>
 </TS>

@@ -33,6 +33,7 @@ class HandleInspector;
 class SceneDebuggerWindow;
 class TextureLibraryPanel;
 class TimingPanel;
+class ConsolePanel;
 class PluginManager;
 class RibbonGroup;
 class DrawPanel;
@@ -167,6 +168,9 @@ class MainWindow final : public QMainWindow {
   TimingPanel* timing_panel_ = nullptr;
   QDockWidget* timing_dock_ = nullptr;
   QAction* timing_record_action_ = nullptr;
+  // 命令控制台：每次执行的内核命令的一行等价 C# 调用（默认收起）。
+  ConsolePanel* console_panel_ = nullptr;
+  QDockWidget* console_dock_ = nullptr;
   PluginHost plugin_host_;
   PluginManager plugin_manager_;
   struct PluginRibbonButton {

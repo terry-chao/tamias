@@ -2,7 +2,7 @@
 
 > 状态：**已落地**。回答一个问题：**这台机器上该用哪个图形后端，怎么决定，坏了怎么办。**
 >
-> 相关：[管线与 RHI](RENDERING.md)（§5 讲后端抽象）、[构建](BUILD.md)。
+> 相关：[管线与 RHI](RENDERING.md)（§5 讲后端抽象）、[构建](https://github.com/terry-chao/tamias/blob/main/BUILD.md)。
 
 ---
 
