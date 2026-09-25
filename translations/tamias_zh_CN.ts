@@ -2902,6 +2902,14 @@ Plugin ID: %4</source>
         <translation>类型</translation>
     </message>
     <message>
+        <source>Storey</source>
+        <translation>所在楼层</translation>
+    </message>
+    <message>
+        <source>Unassigned</source>
+        <translation>未指定</translation>
+    </message>
+    <message>
         <source>Name</source>
         <translation>名称</translation>
     </message>

@@ -1,8 +1,10 @@
 #include "app/debug/handle_inspector.h"
 
 #include "bim/bim_model.h"
+#include "bim/length_text.h"
 #include "engine/document/document.h"
 #include "entity/core/entity.h"
+#include "entity/core/entity_storey.h"
 
 #include <QClipboard>
 #include <QEvent>
@@ -144,6 +146,28 @@ QString entity_ref(const HandleInspector& self, const Document& document, std::u
   return self.tr("%1 %2 (#%3)").arg(kind).arg(name).arg(id);
 }
 
+// 所在楼层：构件自己记的楼层（族实体 storey_id，见 entity_storey.h）。
+// 导入网格没有 BIM 语义，就退一步看它挂在哪个楼层节点下面（场景父节点）；
+// 都没有归属时显示"未指定"。带标高与楼层句柄——这是个调试面板。
+QString storey_text(const HandleInspector& self, const Document& document,
+                    const SceneNode& node, const Entity* entity) {
+  std::uint64_t storey_id = entity != nullptr ? entity_storey_id(*entity) : 0;
+  if (storey_id == 0 && node.parent != 0) {
+    const SceneNode* parent = document.scene().find(node.parent);
+    if (parent != nullptr && document.bim().find_storey(parent->id) != nullptr) {
+      storey_id = parent->id;
+    }
+  }
+  const Storey* storey = document.bim().find_storey(storey_id);
+  if (storey == nullptr) {
+    return self.tr("Unassigned");
+  }
+  return QStringLiteral("%1  %2  (#%3)")
+      .arg(QString::fromStdString(storey->name),
+           QString::fromStdString(format_elevation(storey->elevation)))
+      .arg(storey->id);
+}
+
 QString format_relation(const HandleInspector& self, const Document& document,
                         const Relation& rel) {
   const QString along = self.tr("%1 (0 = wall start, 1 = wall end)")
@@ -182,14 +206,16 @@ HandleInspector::HandleInspector(QWidget* parent) : QWidget(parent) {
   auto* form = new QFormLayout();
   handle_ = new QLabel(this);
   kind_ = new QLabel(this);
+  storey_ = new QLabel(this);
   name_ = new QLabel(this);
   mesh_ = new QLabel(this);
-  for (auto* label : {handle_, kind_, name_, mesh_}) {
+  for (auto* label : {handle_, kind_, storey_, name_, mesh_}) {
     label->setTextInteractionFlags(Qt::TextSelectableByMouse);
     label->installEventFilter(this);
   }
   form->addRow(tr("Handle"), handle_);
   form->addRow(tr("Kind"), kind_);
+  form->addRow(tr("Storey"), storey_);
   form->addRow(tr("Name"), name_);
   form->addRow(tr("Mesh"), mesh_);
   layout->addLayout(form);
@@ -277,6 +303,7 @@ void HandleInspector::emit_locate() {
 void HandleInspector::set_empty(const QString& note) {
   handle_->setText(QStringLiteral("—"));
   kind_->setText(QStringLiteral("—"));
+  storey_->setText(QStringLiteral("—"));
   name_->setText(QStringLiteral("—"));
   mesh_->setText(QStringLiteral("—"));
   if (auto* relation_edit = static_cast<RelationTextEdit*>(relations_)) {
@@ -308,6 +335,7 @@ void HandleInspector::show_selection(const Document* document, std::uint64_t nod
   } else {
     kind_->setText(tr("Imported mesh"));
   }
+  storey_->setText(storey_text(*this, *document, *node, entity));
 
   QStringList lines;
   QHash<int, std::uint64_t> line_entity_ids;

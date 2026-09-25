@@ -36,6 +36,7 @@ class HandleInspector final : public QWidget {
 
   QLabel* handle_ = nullptr;
   QLabel* kind_ = nullptr;
+  QLabel* storey_ = nullptr;
   QLabel* name_ = nullptr;
   QLabel* mesh_ = nullptr;
   QPlainTextEdit* relations_ = nullptr;
