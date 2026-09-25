@@ -25,9 +25,38 @@
 
 ---
 
-## 2. 写清单
+## 2. 元数据：写在代码里
 
-`extension.json` 整个文件是可选的，但它决定插件管理里显示什么：
+插件管理里显示什么（名字、版本、作者、图标）写在**代码**里——和预编译扩展的
+`IPlugin.Metadata` 是同一条规则。源码扩展的入口类型上放一个静态成员就行：
+
+```csharp
+using Tamias.Api;
+
+public static class Entry
+{
+    public static PluginMetadata Metadata => new()
+    {
+        Id = "my.tools",
+        Name = "我的工具",
+        Version = "1.0.0",
+        Author = "Me",
+        ReleaseDate = "2026-09-25",
+        Description = "把选中构件的拉伸深度改一改。",
+        IconPath = "icon.svg",          // 相对扩展目录
+    };
+
+    public static void Load(IHost host) { ... }
+}
+```
+
+不写也行：那就用同目录的 `extension.json`，再没有就用目录名当 id 和名称。三者的优先级是
+**代码 > 清单 > 目录名**（字段级：代码没写的字段才轮到清单补）。
+
+### 2.1 可选的 `extension.json`
+
+适合两种场合：不想改代码就换名字/图标；以及发布给别人时**不跑代码就能看到它是什么**。
+整个文件可选：
 
 ```json
 {
@@ -43,7 +72,7 @@
 
 | 字段 | 说明 |
 |---|---|
-| `id` | 稳定标识，插件管理里启停设置就认它；发布后别改 |
+| `id` | 稳定标识，插件管理里启停设置就认它；发布后别改。**和代码里的 `Id` 不一致会记一条日志** |
 | `name` | 显示名 |
 | `version` / `releaseDate` | `releaseDate` 用 `yyyy-MM-dd`，格式不对会被丢掉并记一条日志 |
 | `author` / `description` | 显示用 |
@@ -51,7 +80,7 @@
 | `icon` | 相对扩展目录的图标路径（`.svg` / `.png`） |
 | `entry` | 入口文件名，默认 `main.cs` |
 
-**元数据来自清单，所以源码扩展不要自己调 `host.RegisterPlugin`**——清单已经登记过了，重复登记会失败。
+不管写在哪，**别自己调 `host.RegisterPlugin`**——宿主已经登记过了，重复登记会失败。
 
 ---
 
@@ -146,7 +175,11 @@ public static void Load(IHost host)
 
 ## 7. 现成例子
 
-[`plugins/extensions/Tamias.Sample.Tools`](https://github.com/terry-chao/tamias/tree/main/plugins/extensions/Tamias.Sample.Tools) 就是一个完整目录式扩展（清单 + `main.cs` + 图标），随构建拷进 `<exe>/plugins/`。
+[`plugins/csharp/Tamias.Sample.Tools`](https://github.com/terry-chao/tamias/tree/main/plugins/csharp/Tamias.Sample.Tools) 就是一个完整目录式扩展（清单 + `main.cs` + 图标），随构建拷进 `<exe>/plugins/`。
+
+扩展目录本身还得待在约定目录里。**工程有自己的仓库、不想搬过来**，就在用户根放一个
+`loader.cs` 当总入口，里面 `host.LoadExtension(@"C:\dev\myproject")` 指过去——
+一样是保存即生效，见[使用 §1.2](../usage.md#12-loader一个-cs-文件决定加载谁)。
 
 ---
 

@@ -30,6 +30,11 @@ sealed class Host : IHost, IUi
     // 之后的 AddCommand 就算在这个扩展名下——重载时好一并摘掉。
     string currentPlugin_ = "";
 
+    // 本次装载期间登记过的插件 id。重载 / 装载失败时**按它摘**：扩展可以在代码里
+    // 自报一个和目录名不同的 id，一个 dll 也可能一次登记多个 IPlugin，
+    // 光按扫描到的那个 id 摘会漏。
+    internal readonly List<string> RegistrationBatch = [];
+
     public void RegisterPlugin(PluginMetadata metadata)
     {
         if (!alive_)
@@ -65,6 +70,7 @@ sealed class Host : IHost, IUi
                 throw new InvalidOperationException("Failed to register plugin '" + metadata.Id + "'");
             }
             currentPlugin_ = metadata.Id;
+            RegistrationBatch.Add(metadata.Id);
         }
         finally
         {
@@ -294,6 +300,18 @@ sealed class Host : IHost, IUi
         }
         actions_[id] = action;
         actionOwners_[id] = currentPlugin_;
+    }
+
+    // 把任意路径的扩展装进来——loader.cs 的总入口，也可以顺手在控制台里用。
+    // 路径会被登记成扫描根，所以它跟着重载走：改那个工程里的源码，保存即生效。
+    public void LoadExtension(string path)
+    {
+        if (!alive_)
+        {
+            return;
+        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        PluginLoader.LoadFrom(this, path);
     }
 
     // 摘掉一个扩展：它的命令入口 + 它自己。重载时先摘旧的再装新的，否则命令 id 会撞。

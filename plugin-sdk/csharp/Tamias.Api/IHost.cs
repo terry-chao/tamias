@@ -16,6 +16,9 @@ public interface IHost
         Action action,
         string? tooltip = null,
         RibbonPlacement? placement = null);
+    // 把任意路径的扩展装进来：目录（它自己是一个扩展，或装着一批扩展）、.dll、.cs 入口。
+    // 相对路径按调用者所在目录解析（loader.cs 里写相对路径就是相对它）。
+    void LoadExtension(string path);
     void SetSelection(IEnumerable<ulong> ids);
     void ClearSelection();
     // 批量编辑：using 包起来，显式 Commit 才留下一条撤销记录。

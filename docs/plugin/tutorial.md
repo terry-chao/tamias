@@ -16,7 +16,7 @@
 | 要工程吗 | 不要 | 要 |
 | 加载方式 | 启动 / 保存时用 Roslyn 现编译 | hostfxr 加载程序集 |
 | 改完生效 | **保存即生效**（自动重载） | 重新 publish + 重启 |
-| 元数据 | 来自 `extension.json` | 来自 `PluginMetadata` |
+| 元数据 | 代码里的 `PluginMetadata`，缺的用 `extension.json` 补 | 代码里的 `PluginMetadata` |
 | 适合 | 小工具、试想法、团队内部脚本 | 要发布、要第三方依赖、要图标版本号 |
 
 不确定就走源码扩展——写完发现合适了，再搬进[第 5 章](tutorial/05-project-and-ship.md)的工程里，代码基本能原样粘过去。
@@ -68,7 +68,7 @@ host.Log($"文档 {host.DocumentName}，实体 {host.Entities.Count}，选中 {h
 | 症状 | 看 |
 |---|---|
 | 插件管理里没有我的按钮 | [使用 §3](usage.md#3) |
-| 按钮点了没反应 / 报 `no active document` | 先新建或打开文档；[IHost §7](api/host.md) |
+| 按钮点了没反应 / 报 `no active document` | 先新建或打开文档；[IHost §8](api/host.md) |
 | `dispatch` 报 `unknown command` | 命令名拼错了，对照[命令与参数](api/commands.md) |
 | 改了 `main.cs` 没生效 | [使用 §1.1 自动重载](usage.md#11) |
 | 改完 C# 重启也没变（预编译） | 重新 publish；只 build `tamias` 不会重编 C# 插件 |

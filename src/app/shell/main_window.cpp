@@ -1218,7 +1218,9 @@ MainWindow::MainWindow(QWidget* parent)
     const QString text = QString::fromStdString(*summary);
     console_panel_->append_line(text);
     statusBar()->showMessage(text, 8000);
-    extension_watcher_->rewatch();  // 目录可能新增或消失
+    // loader 可能用 LoadExtension 声明了新的根（那些工程不在约定目录里），
+    // 换掉监视表再挂：目录可能新增或消失。
+    extension_watcher_->set_roots(plugin_host_.extension_roots());
   });
 
   // 分组布局：把上次的排 / 排内位置原样摆回来。先在这之前记下「代码里的默认布局」，

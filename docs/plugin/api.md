@@ -36,11 +36,11 @@
 
 | 类型 | 形态 | 说明 | 详见 |
 |---|---|---|---|
-| `IHost` | 接口 | 插件唯一入口：读文档、写选择、发命令、登记按钮、开事务、起拾点 | [IHost](api/host.md) |
+| `IHost` | 接口 | 插件唯一入口：读文档、写选择、发命令、登记按钮、开事务、起拾点、装别的扩展 | [IHost](api/host.md) |
 | `ITransaction` | 接口 : `IDisposable` | 批量编辑合成一条撤销记录；`Commit()` 才落地 | [IHost §4](api/host.md) |
 | `IUi` | 接口 | 宿主 Qt 对话框：消息 / 字符串 / 数字 / 表单 / 打开 / 保存 | [宿主对话框](api/ui.md) |
-| `IPlugin` | 接口 | 预编译扩展的入口：`Metadata` + `Load(IHost)` | [教程 5](tutorial/05-project-and-ship.md) |
-| `PluginMetadata` | 类 | 扩展的 id / 名称 / 作者 / 版本 / 图标 / 首页 | [教程 5](tutorial/05-project-and-ship.md) |
+| `IPlugin` | 接口 | 预编译扩展的入口：`Metadata` + `Load(IHost)`（源码扩展在入口类型上放个静态 `Metadata` 即可，不用实现这个接口） | [教程 1](tutorial/01-first-extension.md) · [教程 5](tutorial/05-project-and-ship.md) |
+| `PluginMetadata` | 类 | 扩展的 id / 名称 / 作者 / 版本 / 图标 / 首页；代码里写的优先，缺的用 `extension.json` 补 | [教程 1](tutorial/01-first-extension.md) |
 | `RibbonPlacement` | 类 | 命令落在哪个 Ribbon page/group、顺序、图标、可选中 | [教程 5](tutorial/05-project-and-ship.md) |
 | `CommandArgs` | 类 | 链式构造一条 `Dispatch` 的参数文本 | [命令与参数](api/commands.md) |
 | `HostDraw` | 静态类（`IHost` 扩展方法） | 建墙 / 梁 / 板 / 柱 / 门窗 / 各种曲线的语法糖 | [命令与参数](api/commands.md) |

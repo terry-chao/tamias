@@ -13,6 +13,13 @@ inline std::string path_to_utf8(const std::filesystem::path& path) {
   return std::string(reinterpret_cast<const char*>(u8.data()), u8.size());
 }
 
+// UTF-8 → path：Windows 上**不能**直接喂 std::string（那是 ANSI 代码页，中文路径会乱码
+// 甚至解析失败），必须先还原成 char8_t 序列。
+inline std::filesystem::path path_from_utf8(std::string_view text) {
+  return std::filesystem::path(std::u8string(
+      reinterpret_cast<const char8_t*>(text.data()), static_cast<std::size_t>(text.size())));
+}
+
 inline std::string path_extension_lower(const std::filesystem::path& path) {
   auto ext = path_to_utf8(path.extension());
   for (char& c : ext) {

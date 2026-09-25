@@ -173,10 +173,21 @@ public static class Bootstrap
         }
     }
 
+    // 文件监视要盯的根：约定根 + loader 用 LoadExtension 登记进来的（换行分隔）。
+    // C++ 侧拿它去挂监视——那些工程目录不在约定目录里，不主动报回去就没人盯。
+    // 0 = 成功（缓冲里是路径表，可能是空串）。
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int ExtensionRoots(IntPtr outUtf8, int cap)
+    {
+        WriteUtf8(host_ == null ? "" : PluginLoader.RootsText(), outUtf8, cap);
+        return 0;
+    }
+
     static void WriteUtf8(string text, IntPtr buffer, int cap)
     {
         if (buffer == IntPtr.Zero || cap <= 0)
         {
+        
             return;
         }
         var bytes = Encoding.UTF8.GetBytes(text);

@@ -63,6 +63,7 @@ void CsharpRuntime::shutdown() {
   invoke_ = nullptr;
   reload_ = nullptr;
   evaluate_ = nullptr;
+  extension_roots_fn_ = nullptr;
   init_ = nullptr;
   point_input_completed_ = nullptr;
   // CoreCLR cannot be unloaded. hostfxr_close only drops the *context*; the
@@ -170,6 +171,12 @@ Result<void> CsharpRuntime::start(const std::filesystem::path& managed_dir,
 #else
       "Reload";
 #endif
+  const char_t* extension_roots_name =
+#ifdef _WIN32
+      L"ExtensionRoots";
+#else
+      "ExtensionRoots";
+#endif
 
   rc = load_assembly(assembly_native.c_str(), type_name, init_name, UNMANAGEDCALLERSONLY_METHOD, nullptr,
                      reinterpret_cast<void**>(&init_));
@@ -206,6 +213,15 @@ Result<void> CsharpRuntime::start(const std::filesystem::path& managed_dir,
     return Err("failed to bind Tamias.Host.Bootstrap.Reload (" + std::to_string(rc) + ")");
   }
 
+  // 可选导出：老版本 Tamias.Host 没有 ExtensionRoots。缺了不影响装载，
+  // 只是 loader 声明的额外根没人挂文件监视（改完得重启）。
+  void* extension_roots_fn = nullptr;
+  if (load_assembly(assembly_native.c_str(), type_name, extension_roots_name,
+                    UNMANAGEDCALLERSONLY_METHOD, nullptr, &extension_roots_fn) == 0 &&
+      extension_roots_fn != nullptr) {
+    extension_roots_fn_ = reinterpret_cast<ExtensionRootsFn>(extension_roots_fn);
+  }
+
   const std::string roots_utf8(extension_roots);
   const int init_rc = init_(api, roots_utf8.c_str());
   if (init_rc != 0) {
@@ -236,6 +252,19 @@ Result<std::string> CsharpRuntime::evaluate(std::string_view code) {
     return Err(text.empty() ? std::string("script failed") : text);
   }
   return Err(text.empty() ? std::string("C# host is not available") : text);
+}
+
+Result<std::string> CsharpRuntime::extension_roots() {
+  if (extension_roots_fn_ == nullptr) {
+    return std::string();
+  }
+  // 路径表最多几十条，64 KiB 绰绰有余；真截断了也只是少盯几个目录。
+  std::vector<char> buffer(64 * 1024, '\0');
+  const int rc = extension_roots_fn_(buffer.data(), static_cast<std::int32_t>(buffer.size()));
+  if (rc != 0) {
+    return Err("failed to query extension roots (" + std::to_string(rc) + ")");
+  }
+  return std::string(buffer.data());
 }
 
 Result<std::string> CsharpRuntime::reload() {

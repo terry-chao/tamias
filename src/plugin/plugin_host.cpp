@@ -130,6 +130,8 @@ Result<void> PluginHost::load() {
   if (!started) {
     return started;
   }
+  // loader.cs 已经跑过了：它用 LoadExtension 声明的根要问回来，否则没人盯它们。
+  refresh_extension_roots();
   log_info("Loaded C# plugin host from " + managed.string());
   return {};
 }
@@ -151,7 +153,47 @@ Result<std::string> PluginHost::reload_extensions() {
   if (!summary) {
     return Err(summary.error());
   }
+  refresh_extension_roots();
   return *summary;
+}
+
+// loader 里 host.LoadExtension 声明的根只在托管侧知道。这里问回来、追加到约定根后面，
+// 让 ExtensionWatcher 跟着盯——不然那些工程改了源码不重载。
+//
+// 两道过滤都是必要的：托管侧可能回一个"猜出来但不存在"的兜底目录（比如 managed/plugins），
+// 也可能回一个已经在本列表里的路径。
+void PluginHost::refresh_extension_roots() {
+  if (!csharp_ || !csharp_->started()) {
+    return;
+  }
+  auto text = csharp_->extension_roots();
+  if (!text) {
+    return;  // 老版本托管宿主没有这个导出：保持现状，别把已有的根弄丢
+  }
+  std::size_t begin = 0;
+  while (begin < text->size()) {
+    const auto end = text->find('\n', begin);
+    const auto part = text->substr(begin, end == std::string::npos ? std::string::npos : end - begin);
+    begin = end == std::string::npos ? text->size() : end + 1;
+    if (part.empty()) {
+      continue;
+    }
+    const std::filesystem::path root = path_from_utf8(part);
+    std::error_code ec;
+    // 目录（装着一批扩展的根）和文件（LoadExtension 直接指的 .cs / .dll 入口）都得认。
+    if (!std::filesystem::is_directory(root, ec) && !std::filesystem::is_regular_file(root, ec)) {
+      continue;  // 托管侧猜出来但实际不存在的兜底路径
+    }
+    const auto normalized = root.lexically_normal();
+    const bool known =
+        std::any_of(extension_roots_.begin(), extension_roots_.end(),
+                    [&normalized](const std::filesystem::path& existing) {
+                      return existing.lexically_normal() == normalized;
+                    });
+    if (!known) {
+      extension_roots_.push_back(root);
+    }
+  }
 }
 
 Result<std::string> PluginHost::evaluate(std::string_view code) {

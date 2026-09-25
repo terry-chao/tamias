@@ -127,6 +127,9 @@ class PluginHost {
   // 插件忘了 commit：回滚并留一条日志。不能让一条悬着的事务把用户之后的每次编辑
   // 都吞进一个永远不会提交的缓冲里。
   void close_dangling_transaction();
+  // loader 用 host.LoadExtension 声明的根在托管侧——问回来、追加进 extension_roots_，
+  // 文件监视才有得盯（那些工程不在约定目录里）。
+  void refresh_extension_roots();
   [[nodiscard]] std::vector<std::uint64_t> entity_ids() const;
 
   HostApi api_{};

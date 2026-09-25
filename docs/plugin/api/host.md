@@ -1,6 +1,6 @@
 # IHost
 
-> `Tamias.Api.IHost` —— 插件和脚本唯一的总入口。14 个成员：4 个属性、10 个方法。
+> `Tamias.Api.IHost` —— 插件和脚本唯一的总入口。15 个成员：4 个属性、11 个方法。
 
 ```csharp
 public interface IHost
@@ -15,6 +15,7 @@ public interface IHost
     void Dispatch(string command, CommandArgs? args = null);
     void AddCommand(string id, string title, Action action,
                     string? tooltip = null, RibbonPlacement? placement = null);
+    void LoadExtension(string path);
     void SetSelection(IEnumerable<ulong> ids);
     void ClearSelection();
     ITransaction BeginTransaction(string? name = null);
@@ -253,7 +254,46 @@ host.AddCommand("my.report", "汇报文档",
 
 ---
 
-## 7. 没有活动文档时
+## 7. 装别的扩展 `LoadExtension`
+
+### `void LoadExtension(string path)`
+
+把一个**任意路径**的扩展装进来。约定目录之外还想接自己的工程时用它——最典型的调用点是
+约定根顶层的 [`loader.cs`](../usage.md#12-loader一个-cs-文件决定加载谁)。
+
+| `path` 是 | 怎么装 |
+|---|---|
+| 目录，里面有入口文件（清单里写的那个，缺省 `main.cs`） | 这个目录**自己**是一个扩展 |
+| 目录，没有入口文件 | 当成"装着一批扩展的根"来扫：顶层 `*.dll` + 每个一级子目录 |
+| `.dll` | 预编译扩展 |
+| `.cs` | 源码入口文件；它所在目录作为扩展目录，同目录的 `extension.json` 照样生效 |
+
+```csharp
+host.LoadExtension(@"C:\dev\myplugin\src\main.cs");          // 指入口文件
+host.LoadExtension(@"C:\dev\myplugin");                      // 也可以指目录，里面得有 main.cs
+host.LoadExtension(@"C:\dev\other\bin\Debug\net8.0\Other.dll");
+```
+
+两条要分清的：**指目录**时，只有目录里有入口文件（缺省 `main.cs`）才算"这个目录是一个扩展"，
+否则当成"装着一批扩展的根"来扫——所以编译型工程的源码目录（有 `.cs` 但没有 `main.cs`）
+指过来会什么都不装，得指它的**输出**（`bin/Debug/net8.0/` 或那个 `.dll`）。**指文件**时
+那个文件就是入口，它所在目录当扩展目录。
+
+约定：
+
+- **相对路径按调用者所在目录解析**：`loader.cs` 里写相对路径就是相对它那个目录，
+  控制台里调用就是相对 Tamias 的工作目录。
+- **装进来的路径跟着重载走**：它进扫描表，所以改那个工程里的源码保存即生效，删掉目录
+  就连同命令一起摘掉。这是它和"自己 `new` 一个 `IPlugin` 再手动 `Load`"的区别。
+- **会话内只记不退**：登记过的路径一直在扫描表里。想换掉某个工程，改 `loader.cs` 里那几行；
+  想让**已经从 loader 里删掉**的路径不再加载，得重启（或者把那个目录删掉）。
+- 路径找不到 / 类型不对，只 `Log` 一条，不影响别的扩展。
+
+`LoadExtension` 装进来的扩展和普通扩展没有区别：一样登记命令、一样出现在插件管理里。
+
+---
+
+## 8. 没有活动文档时
 
 停在欢迎页（没有打开/新建文档）时，宿主可能还没绑 `CommandSystem`。各成员的表现：
 
@@ -269,6 +309,7 @@ host.AddCommand("my.report", "汇报文档",
 | `BeginPointInput` / `BeginEntityInput` | 抛 `InvalidOperationException` |
 | `Ui` | 正常工作 |
 | `AddCommand` | 正常工作（`Load` 时本来就没有文档） |
+| `LoadExtension` | 正常工作（装载扩展和文档无关） |
 
 这也是为什么插件命令应该先判空：
 

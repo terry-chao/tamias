@@ -83,7 +83,8 @@ public interface IPlugin
 | `IconPath` | 图标；**相对路径按插件 DLL 所在目录解析** |
 | `IsBuiltIn` | 仅供随 Tamias 一起发布的官方插件标记。实际取值由**所在根目录**决定，扩展自报无效，也不改变权限 |
 
-元数据缺失的字段会回退：源码扩展用 `extension.json`，预编译扩展用清单 / 程序集版本 / 类型名。
+元数据**代码优先**（就是上面这个 `Metadata`）：缺的字段用同目录的 `extension.json` 补，
+再缺就退回程序集版本 / 类型名（源码扩展退回目录名）。两种形态同一条规则。
 
 ---
 
@@ -134,6 +135,7 @@ page 或 group **不存在时会自动新建**，标题就是那串 id——所�
 
 - 预编译扩展：`*.dll`（顶层平铺）或 `<名字>/<名字>.dll`（目录形式）
 - 源码扩展：`<名字>/main.cs`（+ 可选 `extension.json`）
+- 总入口：根顶层的 `loader.cs`——见下
 
 发布命令（在自己的工程目录）：
 
@@ -142,6 +144,24 @@ dotnet publish -c Release -o "<Tamias 安装目录>/plugins"
 ```
 
 仓库里的示例走 CMake 的 `tamias_publish_csharp`，构建 `tamias` 目标时会自动把 `Tamias.Hello` / `Tamias.Nurbs` publish 过去。也可以在自己的 CMake 里加一条同样的 `dotnet publish`。
+
+**开发期不想来回 publish**：工程留在自己的目录，在用户根放一个 `loader.cs` 指过去，
+改完源码保存就生效（细节见[使用 §1.2](../usage.md#12-loader一个-cs-文件决定加载谁)）：
+
+```csharp
+// %APPDATA%/tamias/tamias/extensions/loader.cs
+using Tamias.Api;
+
+public static class Entry
+{
+    public static void Load(IHost host)
+    {
+        host.LoadExtension(@"C:\dev\myplugin");          // 工程目录（里面有 main.cs）
+        // 编译型工程指向它的输出：那里面才是 .dll
+        host.LoadExtension(@"C:\dev\myplugin2\bin\Debug\net8.0\MyPlugin2.dll");
+    }
+}
+```
 
 ---
 
@@ -181,7 +201,7 @@ dotnet publish -c Release -o "<Tamias 安装目录>/plugins"
 |---|---|
 | [`Tamias.Hello`](https://github.com/terry-chao/tamias/blob/main/plugins/csharp/Tamias.Hello/HelloPlugin.cs) | 最小 `IPlugin`：选择、特征、事务、对话框、视口拾点、建墙 |
 | [`Tamias.Nurbs`](https://github.com/terry-chao/tamias/blob/main/plugins/csharp/Tamias.Nurbs/NurbsPlugin.cs) | 往 `home/draw` 插按钮 + `Checkable` + 收集控制点后发 `create_curve` |
-| [`Tamias.Sample.Tools`](https://github.com/terry-chao/tamias/tree/main/plugins/extensions/Tamias.Sample.Tools) | 目录式源码扩展：清单 + `main.cs` + 图标 |
+| [`Tamias.Sample.Tools`](https://github.com/terry-chao/tamias/tree/main/plugins/csharp/Tamias.Sample.Tools) | 目录式源码扩展：清单 + `main.cs` + 图标 |
 
 ---
 

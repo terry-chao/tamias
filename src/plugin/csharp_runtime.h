@@ -27,6 +27,9 @@ class CsharpRuntime {
   // 控制台：把一段 C# 片段交给脚本引擎求值。
   // 返回 Ok(结果文本) 或 Err(错误文本)——两种情况都有文本要显示。
   [[nodiscard]] Result<std::string> evaluate(std::string_view code);
+  // 文件监视要盯的根（约定根 + loader 用 LoadExtension 登记进来的），换行分隔。
+  // 老版本 Tamias.Host 没这个导出，那时返回空串——额外根没人盯，其余照常。
+  [[nodiscard]] Result<std::string> extension_roots();
   Result<void> complete_point_input(std::uint64_t request_id,
                                     const std::vector<HostPickPoint>& points, bool cancelled);
   void shutdown();
@@ -37,6 +40,7 @@ class CsharpRuntime {
   using InvokeFn = int (*)(const char* command_id);
   using ReloadFn = int (*)(char* out_utf8, std::int32_t cap);
   using EvaluateFn = int (*)(const char* code_utf8, char* out_utf8, std::int32_t cap);
+  using ExtensionRootsFn = int (*)(char* out_utf8, std::int32_t cap);
   using ShutdownFn = int (*)();
   using PointInputCompletedFn =
       int (*)(std::uint64_t request_id, const HostPickPoint* points, std::int32_t count,
@@ -46,6 +50,7 @@ class CsharpRuntime {
   InvokeFn invoke_ = nullptr;
   ReloadFn reload_ = nullptr;
   EvaluateFn evaluate_ = nullptr;
+  ExtensionRootsFn extension_roots_fn_ = nullptr;
   ShutdownFn shutdown_fn_ = nullptr;
   PointInputCompletedFn point_input_completed_ = nullptr;
   void* hostfxr_lib_ = nullptr;

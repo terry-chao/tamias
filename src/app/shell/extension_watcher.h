@@ -19,6 +19,8 @@ class ExtensionWatcher final : public QObject {
  public:
   explicit ExtensionWatcher(std::vector<std::filesystem::path> roots, QObject* parent = nullptr);
 
+  // loader 可能用 LoadExtension 声明新的根（它不在约定目录里）。换掉监视表再重新挂。
+  void set_roots(std::vector<std::filesystem::path> roots);
   // 重载之后调一次：目录可能新增或消失。
   void rewatch();
 

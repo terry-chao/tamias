@@ -663,7 +663,14 @@ TEST(PluginHost, ManagedHostEndToEnd) {
       manifest << R"({"id":"tamias.test.reload","name":"Reload Test","version":"1.0.0"})";
     }
     std::ofstream entry(reload_dir / "main.cs", std::ios::binary | std::ios::trunc);
-    entry << "using Tamias.Api;\npublic static class Entry {\n  public static void Load(IHost host) {\n"
+    // 元数据写在**代码里**：Name / Author / Version 应当盖掉清单里的，Id 也是——
+    // 清单里 id 是 tamias.test.reload，代码里故意写成另一个，验证两件事：
+    // ① 代码优先（和预编译扩展同一条规则）② 摘的时候按真正登记的 id 摘干净。
+    entry << "using Tamias.Api;\npublic static class Entry {\n"
+          << "  public static PluginMetadata Metadata => new() {\n"
+          << "    Id = \"tamias.test.codeid\", Name = \"Code Name\",\n"
+          << "    Author = \"Code Author\", Version = \"9.9.9\" };\n"
+          << "  public static void Load(IHost host) {\n"
           << body << "\n  }\n}\n";
   };
   const auto has_command = [&host](const char* id) {
@@ -684,11 +691,23 @@ TEST(PluginHost, ManagedHostEndToEnd) {
   };
 
   write_extension(R"(host.AddCommand("reloadtest.one", "One", () => host.Log("one"));)");
+  log.clear();
   auto first = host.reload_extensions();
   ASSERT_TRUE(first) << first.error();
   EXPECT_FALSE(first->empty());
   EXPECT_TRUE(has_command("reloadtest.one")) << *first;
-  EXPECT_TRUE(has_plugin("tamias.test.reload")) << *first;
+  // 代码里的 Id 优先于清单：装上去的是 tamias.test.codeid，清单那个不该出现。
+  EXPECT_TRUE(has_plugin("tamias.test.codeid")) << *first;
+  EXPECT_FALSE(has_plugin("tamias.test.reload")) << "清单里的 id 不该盖过代码：" << *first;
+  for (const auto& plugin : host.plugins()) {
+    if (plugin.id == "tamias.test.codeid") {
+      EXPECT_EQ(plugin.title, "Code Name") << "名字/作者/版本应当以代码里的为准";
+      EXPECT_EQ(plugin.author, "Code Author");
+      EXPECT_EQ(plugin.version, "9.9.9");
+    }
+  }
+  EXPECT_NE(log.find("code declares Id"), std::string::npos)
+      << "代码 id 与目录/清单不一致时应当留一条日志：" << log;
 
   // 改内容：旧命令必须消失（说明旧登记摘干净了），新命令出现。
   write_extension(R"(host.AddCommand("reloadtest.two", "Two", () => host.Log("two"));)");
@@ -712,12 +731,111 @@ TEST(PluginHost, ManagedHostEndToEnd) {
   auto removed = host.reload_extensions();
   ASSERT_TRUE(removed) << removed.error();
   EXPECT_FALSE(has_command("reloadtest.two")) << *removed;
-  EXPECT_FALSE(has_plugin("tamias.test.reload")) << *removed;
+  EXPECT_FALSE(has_plugin("tamias.test.codeid")) << "摘的时候要按真正登记的 id 摘：" << *removed;
 
   // 幂等：什么都没变就不该有摘要（壳据此决定要不要重建 Ribbon）。
   auto idle = host.reload_extensions();
   ASSERT_TRUE(idle) << idle.error();
   EXPECT_TRUE(idle->empty()) << "没变化却报了：" << *idle;
+
+  // ── loader.cs：总入口 ─────────────────────────────────────────────────
+  // 约定：根顶层的 loader.cs 会被执行，里面用 host.LoadExtension(path) 指向**任何地方**
+  // 的工程。这里现场造一个约定目录之外的工程，走一遍装上 → 改它 → 摘掉的完整循环。
+  const auto loader_file = executable_directory() / "plugins" / "loader.cs";
+  const auto project_dir = std::filesystem::temp_directory_path() / "tamias-loader-project";
+  const auto cleanup_loader = [&] {
+    std::error_code ec;
+    std::filesystem::remove(loader_file, ec);
+    std::filesystem::remove_all(project_dir, ec);
+  };
+  cleanup_loader();
+  std::filesystem::create_directories(project_dir);
+
+  const auto write_project = [&project_dir](const std::string& command_id) {
+    std::ofstream entry(project_dir / "main.cs", std::ios::binary | std::ios::trunc);
+    entry << "using Tamias.Api;\npublic static class Entry {\n"
+          << "  public static void Load(IHost host) {\n"
+          << "    host.AddCommand(\"" << command_id << "\", \"Loader\", () => host.Log(\"loader\"));\n"
+          << "  }\n}\n";
+  };
+  {
+    // 路径写成正斜杠，省得在 C# 字符串里转义反斜杠。
+    std::ofstream loader(loader_file, std::ios::binary | std::ios::trunc);
+    loader << "using Tamias.Api;\npublic static class Entry {\n"
+           << "  public static void Load(IHost host) {\n"
+           << "    host.LoadExtension(\"" << project_dir.generic_string() << "\");\n"
+           << "  }\n}\n";
+  }
+  write_project("loadertest.project");
+
+  auto loader_added = host.reload_extensions();
+  ASSERT_TRUE(loader_added) << loader_added.error();
+  // loader 的 id 按根区分（<根目录名>.loader）：官方根和用户根各一个时不会互相覆盖。
+  EXPECT_TRUE(has_plugin("plugins.loader")) << *loader_added;
+  EXPECT_TRUE(has_command("loadertest.project"))
+      << "loader 应当把约定目录之外的工程装进来：" << *loader_added;
+  // 声明的根要回传给 C++ 侧（文件监视靠它盯那个工程目录）。
+  bool watches_project = false;
+  for (const auto& root : host.extension_roots()) {
+    watches_project = watches_project || root == project_dir;
+  }
+  EXPECT_TRUE(watches_project) << "LoadExtension 登记的根应当进 extension_roots()";
+
+  // 改**外部工程**的文件就该生效：它跟着重扫走，不必碰 loader.cs。
+  write_project("loadertest.project2");
+  auto project_changed = host.reload_extensions();
+  ASSERT_TRUE(project_changed) << project_changed.error();
+  EXPECT_TRUE(has_command("loadertest.project2")) << *project_changed;
+  EXPECT_FALSE(has_command("loadertest.project")) << "旧登记没摘干净：" << *project_changed;
+
+  // 删掉 loader.cs：总入口连同它装的东西一起摘掉。
+  cleanup_loader();
+  auto loader_removed = host.reload_extensions();
+  ASSERT_TRUE(loader_removed) << loader_removed.error();
+  EXPECT_FALSE(has_plugin("plugins.loader")) << *loader_removed;
+  EXPECT_FALSE(has_command("loadertest.project2")) << *loader_removed;
+
+  // 指到"编译型工程的源码目录"（有 .cs，但没有 main.cs / 清单 / dll）不该静默什么都不做：
+  // 那种工程的入口是它的 **publish 输出**，得给一句照着改的提示。顺带走一遍控制台怎么调。
+  const auto project_source_dir = std::filesystem::temp_directory_path() / "tamias-loader-csproj";
+  std::error_code ec;
+  std::filesystem::remove_all(project_source_dir, ec);
+  std::filesystem::create_directories(project_source_dir);
+  {
+    std::ofstream source(project_source_dir / "MyCompany.Plugin.cs", std::ios::binary | std::ios::trunc);
+    source << "public sealed class MyCompanyPlugin { }\n";
+  }
+  log.clear();
+  auto from_console = host.evaluate(
+      "host.LoadExtension(@\"" + project_source_dir.generic_string() + "\");");
+  ASSERT_TRUE(from_console) << from_console.error();
+  EXPECT_NE(log.find("Point at a source extension's entry file"), std::string::npos)
+      << "指到工程源码目录应当提示去指它的输出：" << log;
+
+  // 指入口**文件**本身也认：这时它所在目录就是扩展目录。改这个文件保存同样重载。
+  const auto single_file = project_source_dir / "MyCompany.Entry.cs";
+  {
+    std::ofstream source(single_file, std::ios::binary | std::ios::trunc);
+    source << "using Tamias.Api;\npublic static class Entry {\n"
+           << "  public static void Load(IHost host) {\n"
+           << "    host.AddCommand(\"loadertest.file\", \"File\", () => host.Log(\"file\"));\n"
+           << "  }\n}\n";
+    // 指文件也要读同目录的清单：否则"指文件"和"指目录"会得到两个不同的 id。
+    std::ofstream manifest(project_source_dir / "extension.json", std::ios::binary | std::ios::trunc);
+    manifest << R"({"id":"tamias.test.single","name":"Single File","version":"2.0.0"})";
+  }
+  log.clear();
+  auto file_loaded = host.evaluate(
+      "host.LoadExtension(@\"" + single_file.generic_string() + "\");");
+  ASSERT_TRUE(file_loaded) << file_loaded.error();
+  EXPECT_TRUE(has_command("loadertest.file")) << "应当能直接指入口文件：" << log;
+  EXPECT_TRUE(has_plugin("tamias.test.single"))
+      << "指入口文件时也要认同目录的 extension.json：" << log;
+
+  std::filesystem::remove_all(project_source_dir, ec);
+  auto file_removed = host.reload_extensions();
+  ASSERT_TRUE(file_removed) << file_removed.error();
+  EXPECT_FALSE(has_command("loadertest.file")) << "文件没了，扩展也该摘掉：" << *file_removed;
 }
 
 // 没有 .NET 时控制台不该崩，只是求值不可用。

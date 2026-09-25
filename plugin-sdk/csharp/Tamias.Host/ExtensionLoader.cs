@@ -53,6 +53,8 @@ sealed class PreparedExtension : IDisposable
     public required AssemblyLoadContext Context { get; init; }
     // 源码扩展的入口；预编译扩展为 null（它的入口是程序集里的 IPlugin）。
     public MethodInfo? Entry { get; init; }
+    // 源码扩展在代码里声明的元数据（`public static PluginMetadata Metadata`），可省。
+    public MemberInfo? MetadataMember { get; init; }
     public Assembly? Assembly { get; init; }
 
     public void Dispose() => Context.Unload();
@@ -61,8 +63,11 @@ sealed class PreparedExtension : IDisposable
 // 把一个扩展候选变成可装载的，再装上去。
 //
 // 源码扩展的约定：程序集里任意一个类型带 `public static void Load(IHost)`——不用实现
-// IPlugin（那需要工程和引用），一个文件就能是个扩展。元数据来自 extension.json，
-// 所以源码扩展**不要**自己调 RegisterPlugin：清单已经登记过了。
+// IPlugin（那需要工程和引用），一个文件就能是个扩展。
+//
+// 元数据**代码优先**：类型上带 `public static PluginMetadata Metadata` 就用它，
+// 缺的字段用同目录的 extension.json 补，再缺就退回目录名。所以源码扩展**不要**自己调
+// RegisterPlugin：宿主已经登记过了。这和预编译扩展是同一条规则（那边是 IPlugin.Metadata）。
 static class ExtensionLoader
 {
     public static PreparedExtension Prepare(ExtensionCandidate candidate) =>
@@ -95,6 +100,7 @@ static class ExtensionLoader
             Context = CurrentContext(assembly),
             Assembly = assembly,
             Entry = entry,
+            MetadataMember = FindMetadata(assembly),
         };
     }
 
@@ -121,8 +127,7 @@ static class ExtensionLoader
     static void ActivateSource(Host host, PreparedExtension prepared)
     {
         var candidate = prepared.Candidate;
-        var metadata = MetadataFor(prepared);
-        Validate(host, metadata);
+        var metadata = MetadataFor(host, prepared);
         host.RegisterPlugin(metadata);
 
         using (Tamias.Api.ExtensionContext.Enter(candidate.Directory))
@@ -168,21 +173,77 @@ static class ExtensionLoader
         }
     }
 
-    static PluginMetadata MetadataFor(PreparedExtension prepared)
+    // 源码扩展的元数据：**代码优先，清单补缺，目录名兜底**——和预编译扩展那条
+    // Normalize 是同一条规则，只是"代码"从 IPlugin.Metadata 变成静态成员。
+    //
+    // candidate 里的 Id / Name / ... 已经是"清单 > 目录名"的结果，所以这里只要拿代码
+    // 声明的字段去盖它。
+    static PluginMetadata MetadataFor(Host host, PreparedExtension prepared)
     {
         var candidate = prepared.Candidate;
-        return new PluginMetadata
+        var declared = ReadDeclaredMetadata(host, prepared);
+        if (declared is not null && !string.IsNullOrWhiteSpace(declared.Id) &&
+            !string.Equals(declared.Id.Trim(), candidate.Id, StringComparison.Ordinal))
         {
-            Id = candidate.Id,
-            Name = candidate.Name,
-            Author = candidate.Author,
+            // 扫描期的身份（跨根覆盖、启停持久化、装载表）用的是候选 id，代码里又写了一个——
+            // 按代码的走（和预编译一致），但这两种 id 不一样迟早会咬人，说一声。
+            host.Log($"Extension '{candidate.Id}': code declares Id '{declared.Id.Trim()}'. " +
+                     "Rename the folder (or drop one of them) so they match.");
+        }
+        var metadata = new PluginMetadata
+        {
+            Id = ValueOrDefault(declared?.Id, candidate.Id),
+            Name = ValueOrDefault(declared?.Name, candidate.Name),
+            Author = ValueOrDefault(declared?.Author, candidate.Author),
+            // 内置与否由**根**决定，不由扩展自报。
             IsBuiltIn = candidate.BuiltIn,
-            Version = candidate.Version,
-            ReleaseDate = candidate.ReleaseDate,
-            Description = candidate.Description,
-            HomepageUrl = candidate.Homepage,
-            IconPath = candidate.IconPath,
+            Version = ValueOrDefault(declared?.Version, candidate.Version),
+            ReleaseDate = ValueOrDefault(declared?.ReleaseDate, candidate.ReleaseDate),
+            Description = ValueOrDefault(declared?.Description, candidate.Description),
+            HomepageUrl = ValueOrDefault(declared?.HomepageUrl, candidate.Homepage),
+            IconPath = string.IsNullOrWhiteSpace(declared?.IconPath)
+                           ? candidate.IconPath
+                           : Path.GetFullPath(Path.Combine(candidate.Directory, declared!.IconPath!)),
         };
+        Validate(host, metadata);
+        return metadata;
+    }
+
+    // 代码里声明的元数据。取不到（没写、类型不对、getter 抛了）就当没写——
+    // 元数据读失败不该让整个扩展装不上，记一条日志继续用清单兜着。
+    static PluginMetadata? ReadDeclaredMetadata(Host host, PreparedExtension prepared)
+    {
+        switch (prepared.MetadataMember)
+        {
+            case PropertyInfo property:
+                try
+                {
+                    return property.GetValue(null) as PluginMetadata;
+                }
+                catch (TargetInvocationException ex) when (ex.InnerException is not null)
+                {
+                    host.Log($"Extension '{prepared.Candidate.Id}': Metadata threw " +
+                             $"{ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
+                    return null;
+                }
+                catch (Exception ex)
+                {
+                    host.Log($"Extension '{prepared.Candidate.Id}': Metadata unreadable: {ex.Message}");
+                    return null;
+                }
+            case FieldInfo field:
+                try
+                {
+                    return field.GetValue(null) as PluginMetadata;
+                }
+                catch (Exception ex)
+                {
+                    host.Log($"Extension '{prepared.Candidate.Id}': Metadata unreadable: {ex.Message}");
+                    return null;
+                }
+            default:
+                return null;
+        }
     }
 
     static Assembly Compile(ExtensionCandidate candidate)
@@ -209,16 +270,7 @@ static class ExtensionLoader
 
     static MethodInfo? FindEntry(Assembly assembly)
     {
-        Type[] types;
-        try
-        {
-            types = assembly.GetTypes();
-        }
-        catch (ReflectionTypeLoadException ex)
-        {
-            types = ex.Types.OfType<Type>().ToArray();
-        }
-        foreach (var type in types)
+        foreach (var type in SafeTypes(assembly))
         {
             var method = type.GetMethod("Load", BindingFlags.Public | BindingFlags.Static,
                                         binder: null, [typeof(IHost)], modifiers: null);
@@ -228,6 +280,40 @@ static class ExtensionLoader
             }
         }
         return null;
+    }
+
+    // 代码里声明的元数据成员：`public static PluginMetadata Metadata`，属性或字段都行。
+    // 只看类型，不调用——真正的取值在 ReadDeclaredMetadata（那边才需要 host 来记日志）。
+    static MemberInfo? FindMetadata(Assembly assembly)
+    {
+        foreach (var type in SafeTypes(assembly))
+        {
+            var property = type.GetProperty("Metadata", BindingFlags.Public | BindingFlags.Static,
+                                            binder: null, typeof(PluginMetadata), Type.EmptyTypes,
+                                            modifiers: null);
+            if (property?.GetMethod is not null)
+            {
+                return property;
+            }
+            var field = type.GetField("Metadata", BindingFlags.Public | BindingFlags.Static);
+            if (field is not null && field.FieldType == typeof(PluginMetadata))
+            {
+                return field;
+            }
+        }
+        return null;
+    }
+
+    static Type[] SafeTypes(Assembly assembly)
+    {
+        try
+        {
+            return assembly.GetTypes();
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            return ex.Types.OfType<Type>().ToArray();
+        }
     }
 
     // dll 扩展可以继续自己声明元数据；缺失的字段用清单 / 程序集信息补。
