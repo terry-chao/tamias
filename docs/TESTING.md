@@ -2,7 +2,8 @@
 
 Tamias 的自动化测试几乎全是 **GoogleTest 可执行文件 `tamias_tests`**：不启动 Qt、不创建窗口、不碰真实 GPU。`ctest` 发现并跑这些用例。除此之外没有第二套测试体系。缺的那些怎么补，见 [§7 缺口怎么测](#7-缺口怎么测)。
 
-> 约 **144** 条 `TEST()`（2026-09 盘点）。数字会变，以 `tamias_tests --gtest_list_tests` 为准。
+> 约 **390** 条 `TEST()`（2026-09 盘点；`tamias_tests` 当前报 395 条用例）。
+> 数字会变，以 `tamias_tests --gtest_list_tests` 为准。
 
 ---
 
@@ -80,7 +81,9 @@ CMake 用 `gtest_discover_tests(... DISCOVERY_MODE PRE_TEST)`，并给 OCCT DLL 
 | [`tests/smoke_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/smoke_tests.cpp) | `Math` `MeshIo` `BinaryArchive` `DocumentIo` `Document` `DocumentHistory` `Picking` `Camera` `ViewportFloor` `Modeling` `RenderConfig` `Occt` `FeatureModel` `Entity` `SketchEntity` `CurveGeom` `CommandSystem` `EntityGrip` `Bim` `Io` | 67 | 杂烩：数学、OBJ / `.tdoc`、拾取、实体建网格、命令撤销、特征 fillet/chamfer/union、BIM 宿主 |
 | [`tests/scene_graph_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/scene_graph_tests.cpp) | `SceneGraph` `SceneDirty` `SceneGraphIncremental` `Document` | 19 | 展平 draw list、材质/透明通道、脏标记、增量更新；**Mock `CommandList`** 记 draw |
 | [`tests/render_scene_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/render_scene_tests.cpp) | `RenderScene` `RenderSceneIo` | 18 | `.trscn` 烘焙、digest、roundtrip、视锥裁剪、水合后再录制、debug OBJ |
-| [`tests/plugin_host_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/plugin_host_tests.cpp) | `CommandArgText` `PluginHost` `PluginManager` `PluginPointInputSession` `PluginPromptSpec` | 11 | 参数解析、HostApi 派发、点选会话；多数**不启动 CLR** |
+| [`tests/plugin_host_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/plugin_host_tests.cpp) | `CommandArgText` `PluginHost` `PluginManager` `PluginPointInputSession` `PluginPromptSpec` | 14 | 参数解析、HostApi 派发、点选会话、特征树宽读（v6）、事务（v7）；另有**一个**用例拉真托管宿主（`hostfxr` 一个进程只能初始化一次，托管断言必须待在同一条用例里） |
+| [`tests/command_echo_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/command_echo_tests.cpp) | `CommandEcho` | 5 | 命令回显：六种参数类型、顺序稳定（`unordered_map` 要排序）、转义、只对**真正执行**的命令回调、交互式命令点齐后补齐坐标 |
+| [`tests/command_transaction_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/command_transaction_tests.cpp) | `Transaction` | 5 | 成组只占一步撤销、回滚不留记录、空事务、嵌套与误用被拒、换文档时丢弃缓冲 |
 | [`tests/host/session_test.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/host/session_test.cpp) | `SessionTest` | 5 | `Session` 的 dispatch / 撤销 / 选择 / 换文档 / 事件监听 |
 | [`tests/location_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/location_tests.cpp) | `Location` | 3 | 墙的线定位、板相对标高、楼层 roundtrip |
 | [`tests/ifc_spatial_tree_tests.cpp`](https://github.com/terry-chao/tamias/blob/main/tests/ifc_spatial_tree_tests.cpp) | `IfcSpatialTree` | 2 | [`assets/samples/spatial-tree.ifc`](https://github.com/terry-chao/tamias/blob/main/assets/samples/spatial-tree.ifc) 空间树；缺文件报错 |
@@ -111,9 +114,10 @@ CMake 用 `gtest_discover_tests(... DISCOVERY_MODE PRE_TEST)`，并给 OCCT DLL 
 | **渲染 CPU** | 场景图录制、`.trscn` IO、Pin 扫描金样（digest / hydrate / Mock draw） | 像素级 PNG 金样未做 |
 | **RHI / GPU** | 仅 `RenderConfig.OpenGlDoesNotShare`（线程共享策略） | **Vulkan / OpenGL / WebGL 设备、shader 编译、离屏像素全部未测** |
 | **宿主 Session** | dispatch / undo / 选择 / reset / `HostEvent` 监听、`CameraController` | 与壳的手势对齐（Qt 按钮映射）未测 |
-| **插件 C++** | HostApi、Ribbon 排序、点选会话、表单 spec | 对话框真正弹出、多视口、失败日志未测 |
-| **插件 C#** | 加载 Hello 的命令 id（可 skip） | **没有** xUnit / NUnit；`Tamias.Api` / `Tamias.Host` / 示例插件无托管单测 |
-| **Qt 壳 `src/app`** | `ViewportFloor` 标高聚类（无 Qt） | MainWindow、Ribbon、属性面板、主页、设置、i18n、最近文件、视口立方体：**零测试** |
+| **命令系统** | 成组与事务（成组一条撤销记录、回滚、空事务、嵌套被拒）、命令回显文本 | 事务的**多文档 / 多视口**交互未测 |
+| **插件 C++** | HostApi、Ribbon 排序、点选会话、表单 spec、特征树与参数（v6）、事务（v7） | 对话框真正弹出、多视口、失败日志未测 |
+| **插件 C#** | 通过真托管宿主跑通：命令登记、`hello.list_features` 枚举特征树、`hello.widen_params` 整批一步撤销、控制台求值（表达式回值 / 日志 / 语法错误） | **没有** xUnit / NUnit；这些断言只能挤在一条用例里（第二个 `PluginHost::load()` 起不来 CLR），`Tamias.Api` / `Tamias.Host` 仍无托管单测 |
+| **Qt 壳 `src/app`** | `ViewportFloor` 标高聚类（无 Qt） | MainWindow、Ribbon、属性面板、主页、设置、i18n、最近文件、视口立方体、**命令控制台 / 脚本页 / `script_store`**：零测试。控制台只能靠手点 |
 | **WASM / `web/`** | 无。Emscripten 关闭 `TAMIAS_BUILD_TESTS` | `ViewerHost`、embind、React 壳无 vitest / Playwright；打开 `.trscn` 靠人眼 |
 | **打包** | 无 | MSI / `cmake --install` 无自动化 |
 

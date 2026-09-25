@@ -51,8 +51,8 @@ UI / 插件
 
 | 方向 | 做什么 | 不做什么 |
 |---|---|---|
-| 对上（C#） | `IHost`：文档名、实体列表、选择读写、日志、Ribbon、拾点/拾对象、宿主对话框、dispatch | 不暴露 Qt 句柄、相机、GPU、OCCT |
-| 对下（C++） | `HostApi` 函数指针；`dispatch` 进 `CommandSystem` | 不让插件持有 `Document*` |
+| 对上（C#） | `IHost`：文档名、实体列表、**特征树（只读）**、选择读写、日志、Ribbon、拾点/拾对象、宿主对话框、dispatch | 不暴露 Qt 句柄、相机、GPU、OCCT、特征树内部对象 |
+| 对下（C++） | `HostApi` 函数指针；`dispatch` 进 `CommandSystem`；事务交 `CommandSystem` 成组 | 不让插件持有 `Document*`；事务不嵌套，也不能在事务里武装交互式命令 |
 | 对 UI | 启动时扫插件；命令可进入指定 Ribbon page/group；视口代插件采集点/对象；`IUi` 由宿主弹出 Qt 对话框；日志进状态栏 | 不给插件自建 HWND / 嵌入 WinForms |
 
 稳定面是 **C ABI**（[`host_api.h`](https://github.com/terry-chao/tamias/blob/main/src/plugin/host_api.h)），不是 C++ 类布局，也不是 C++/CLI。C# 用 P/Invoke 函数指针；以后用 Rust / 纯 C 插件也可以对同一张表。
@@ -67,7 +67,11 @@ UI / 插件
 2. **命令名是公共协议。** `delete_entity`、`set_param` 和工具条用同一套注册表（[`register_commands.cpp`](https://github.com/terry-chao/tamias/blob/main/src/command/core/register_commands.cpp)）。
 3. **宿主失败不能拖死应用。** 找不到 nethost / `managed/Tamias.Host.dll` 时只打日志，主程序照常开。没有插件命令而已。
 
-ABI 版本现在是 `5`。C# `Bootstrap.Initialize` 对不上就拒绝加载。v5 在 v4 的 metadata 上追加：写选择、宿主对话框（消息/输入/表单/文件）、实体拾取与更丰富的点输入预览；创建类命令在参数给齐点列/`origin` 时改为立即 execute。
+ABI 版本现在是 `7`。C# `Bootstrap.Initialize` 对不上就拒绝加载（版本号在 C++ `host_api.h` 与 C# `HostApiVersion.Current` 各写一次，必须一起改）。
+
+- v5 在 v4 的 metadata 上追加：写选择、宿主对话框（消息/输入/表单/文件）、实体拾取与更丰富的点输入预览；创建类命令在参数给齐点列/`origin` 时改为立即 execute。
+- **v6 追加只读的「宽读」面：特征树枚举 + 参数（名字 / 当前值）+ 依赖边。** 写路径一个字没动——插件仍然只能 `dispatch`。这一条是「窄写、宽读」落地的样子：以前插件只能猜 `feature_id` 和参数名，现在能枚举出来，脚本编辑器的补全才有数据源。
+- **v7 追加事务：`begin` / `commit` / `abort`。** 写路径还是只有 `dispatch`，但多条命令可以合成**一条**撤销记录——脚本一次改 20 个参数，用户按一次 Ctrl+Z 就全部退回。不给事务的话，脚本编辑得越多，用户的撤销栈越废。
 
 ---
 

@@ -32,6 +32,30 @@ constexpr std::int32_t kLogError = 2;
   return copy;
 }
 
+// 参数按键升序：model 里的 params 是 unordered_map，没有稳定顺序。
+// 插件按下标取参数时要的是「确定的第 N 个」，所以每次取都排一遍（参数只有几个）。
+[[nodiscard]] std::vector<const std::pair<const std::string, double>*> sorted_params(
+    const Feature& feature) {
+  std::vector<const std::pair<const std::string, double>*> ordered;
+  ordered.reserve(feature.params.size());
+  for (const auto& entry : feature.params) {
+    ordered.push_back(&entry);
+  }
+  std::sort(ordered.begin(), ordered.end(),
+            [](const auto* a, const auto* b) { return a->first < b->first; });
+  return ordered;
+}
+
+// 宽读的公共入口：文档 / 实体 / 特征三级都要在，否则 -1。
+[[nodiscard]] const Feature* find_feature(const Document* document, std::uint64_t entity_id,
+                                          std::uint64_t feature_id) {
+  if (document == nullptr || feature_id == 0) {
+    return nullptr;
+  }
+  const Entity* entity = document->entity(entity_id);
+  return entity == nullptr ? nullptr : entity->model.find(feature_id);
+}
+
 }  // namespace
 
 PluginHost::PluginHost() : csharp_(std::make_unique<CsharpRuntime>()) {
@@ -52,6 +76,14 @@ PluginHost::PluginHost() : csharp_(std::make_unique<CsharpRuntime>()) {
   api_.cancel_point_input = &PluginHost::host_cancel_point_input;
   api_.set_selection = &PluginHost::host_set_selection;
   api_.show_dialog = &PluginHost::host_show_dialog;
+  api_.entity_feature_count = &PluginHost::host_entity_feature_count;
+  api_.entity_feature_at = &PluginHost::host_entity_feature_at;
+  api_.feature_input_at = &PluginHost::host_feature_input_at;
+  api_.feature_param_count = &PluginHost::host_feature_param_count;
+  api_.feature_param_at = &PluginHost::host_feature_param_at;
+  api_.begin_transaction = &PluginHost::host_begin_transaction;
+  api_.commit_transaction = &PluginHost::host_commit_transaction;
+  api_.abort_transaction = &PluginHost::host_abort_transaction;
 }
 
 PluginHost::~PluginHost() { shutdown(); }
@@ -93,7 +125,41 @@ Result<void> PluginHost::invoke(std::string_view command_id) {
   if (!csharp_ || !csharp_->started()) {
     return Err("C# plugin host is not loaded");
   }
-  return csharp_->invoke(std::string(command_id));
+  auto result = csharp_->invoke(std::string(command_id));
+  close_dangling_transaction();
+  return result;
+}
+
+Result<std::string> PluginHost::evaluate(std::string_view code) {
+  if (!csharp_ || !csharp_->started()) {
+    return Err("C# host is not loaded (the console needs the .NET runtime)");
+  }
+  if (document_ == nullptr || command_system_ == nullptr) {
+    return Err("no active document");
+  }
+  auto result = csharp_->evaluate(code);
+  // 脚本自己也可能留下悬空事务（没 commit）：和插件命令一样，收尾时回滚掉。
+  close_dangling_transaction();
+  if (!result) {
+    return Err(result.error());
+  }
+  if (after_edit_) {
+    after_edit_();  // 脚本里可能 dispatch 过命令，壳要刷新
+  }
+  return *result;
+}
+
+void PluginHost::close_dangling_transaction() {
+  if (command_system_ == nullptr || !command_system_->in_transaction()) {
+    return;
+  }
+  auto rolled = command_system_->abort_transaction();
+  const std::size_t count = rolled ? *rolled : 0;
+  emit_log(kLogWarn, "plugin left a transaction open; rolled back " + std::to_string(count) +
+                         " command(s)");
+  if (count > 0 && after_edit_) {
+    after_edit_();
+  }
 }
 
 Result<void> PluginHost::dispatch(std::string_view command, std::string_view args_text) {
@@ -193,6 +259,159 @@ std::int32_t PluginHost::host_entity_name(void* context, std::uint64_t id, char*
     return -1;
   }
   return fill_utf8(entity->name, utf8, cap);
+}
+
+std::int32_t PluginHost::host_entity_feature_count(void* context, std::uint64_t entity_id) {
+  auto* self = static_cast<PluginHost*>(context);
+  if (self == nullptr || self->document_ == nullptr) {
+    return -1;
+  }
+  const Entity* entity = self->document_->entity(entity_id);
+  if (entity == nullptr) {
+    return -1;
+  }
+  return static_cast<std::int32_t>(entity->model.features().size());
+}
+
+std::int32_t PluginHost::host_entity_feature_at(void* context, std::uint64_t entity_id,
+                                                std::int32_t index, std::uint64_t* out_id,
+                                                std::int32_t* out_kind,
+                                                std::int32_t* out_input_count,
+                                                std::int32_t* out_param_count) {
+  auto* self = static_cast<PluginHost*>(context);
+  if (self == nullptr || self->document_ == nullptr || index < 0) {
+    return -1;
+  }
+  const Entity* entity = self->document_->entity(entity_id);
+  if (entity == nullptr) {
+    return -1;
+  }
+  const auto& features = entity->model.features();
+  if (static_cast<std::size_t>(index) >= features.size()) {
+    return -1;
+  }
+  const Feature& feature = features[static_cast<std::size_t>(index)];
+  if (out_id != nullptr) {
+    *out_id = feature.id;
+  }
+  if (out_kind != nullptr) {
+    *out_kind = static_cast<std::int32_t>(feature.kind);
+  }
+  if (out_input_count != nullptr) {
+    *out_input_count = static_cast<std::int32_t>(feature.inputs.size());
+  }
+  if (out_param_count != nullptr) {
+    *out_param_count = static_cast<std::int32_t>(feature.params.size());
+  }
+  return 0;
+}
+
+std::int32_t PluginHost::host_feature_input_at(void* context, std::uint64_t entity_id,
+                                               std::uint64_t feature_id, std::int32_t index,
+                                               std::uint64_t* out_input_id) {
+  auto* self = static_cast<PluginHost*>(context);
+  if (self == nullptr || out_input_id == nullptr || index < 0) {
+    return -1;
+  }
+  const Feature* feature = find_feature(self->document_, entity_id, feature_id);
+  if (feature == nullptr || static_cast<std::size_t>(index) >= feature->inputs.size()) {
+    return -1;
+  }
+  *out_input_id = feature->inputs[static_cast<std::size_t>(index)];
+  return 0;
+}
+
+std::int32_t PluginHost::host_feature_param_count(void* context, std::uint64_t entity_id,
+                                                  std::uint64_t feature_id) {
+  auto* self = static_cast<PluginHost*>(context);
+  if (self == nullptr) {
+    return -1;
+  }
+  const Feature* feature = find_feature(self->document_, entity_id, feature_id);
+  return feature == nullptr ? -1 : static_cast<std::int32_t>(feature->params.size());
+}
+
+std::int32_t PluginHost::host_feature_param_at(void* context, std::uint64_t entity_id,
+                                               std::uint64_t feature_id, std::int32_t index,
+                                               char* name_utf8, std::int32_t cap,
+                                               double* out_value) {
+  auto* self = static_cast<PluginHost*>(context);
+  if (self == nullptr || index < 0) {
+    return -1;
+  }
+  const Feature* feature = find_feature(self->document_, entity_id, feature_id);
+  if (feature == nullptr) {
+    return -1;
+  }
+  const auto ordered = sorted_params(*feature);
+  if (static_cast<std::size_t>(index) >= ordered.size()) {
+    return -1;
+  }
+  const auto* entry = ordered[static_cast<std::size_t>(index)];
+  if (out_value != nullptr) {
+    *out_value = entry->second;
+  }
+  if (name_utf8 == nullptr || cap <= 0) {
+    return 0;  // 只要值的时候可以不给名字缓冲
+  }
+  return fill_utf8(entry->first, name_utf8, cap);
+}
+
+std::int32_t PluginHost::host_begin_transaction(void* context, const char* name_utf8) {
+  auto* self = static_cast<PluginHost*>(context);
+  if (self == nullptr || self->command_system_ == nullptr) {
+    if (self != nullptr) {
+      self->emit_log(kLogError, "no active document");
+    }
+    return -1;
+  }
+  auto r = self->command_system_->begin_transaction(name_utf8 != nullptr ? name_utf8 : "");
+  if (!r) {
+    self->emit_log(kLogError, r.error());
+    return -1;
+  }
+  return 0;
+}
+
+std::int32_t PluginHost::host_commit_transaction(void* context) {
+  auto* self = static_cast<PluginHost*>(context);
+  if (self == nullptr || self->command_system_ == nullptr) {
+    if (self != nullptr) {
+      self->emit_log(kLogError, "no active document");
+    }
+    return -1;
+  }
+  auto r = self->command_system_->commit_transaction();
+  if (!r) {
+    self->emit_log(kLogError, r.error());
+    return -1;
+  }
+  // 事务里的命令各自 dispatch 时已经刷过一次；这里再刷一次是因为撤销记录的粒度
+  // 变了（面板上的「可撤销」状态要跟着变），成本可以忽略。
+  if (self->after_edit_) {
+    self->after_edit_();
+  }
+  return 0;
+}
+
+std::int32_t PluginHost::host_abort_transaction(void* context) {
+  auto* self = static_cast<PluginHost*>(context);
+  if (self == nullptr || self->command_system_ == nullptr) {
+    if (self != nullptr) {
+      self->emit_log(kLogError, "no active document");
+    }
+    return -1;
+  }
+  auto r = self->command_system_->abort_transaction();
+  if (!r) {
+    self->emit_log(kLogError, r.error());
+    return -1;
+  }
+  // 回滚把文档改回去了：视口 / 网格 / BVH 都得重来一遍。
+  if (*r > 0 && self->after_edit_) {
+    self->after_edit_();
+  }
+  return static_cast<std::int32_t>(*r);
 }
 
 std::int32_t PluginHost::host_selection_count(void* context) {

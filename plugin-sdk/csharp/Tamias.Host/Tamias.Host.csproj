@@ -9,4 +9,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Tamias.Api\Tamias.Api.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- 命令控制台的可输入面：把用户敲的 C# 片段当脚本求值（见 ScriptEngine.cs）。 -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.0.0" />
+  </ItemGroup>
 </Project>

@@ -124,7 +124,78 @@ sealed class Host : IHost, IUi
         }
     }
 
+    public IReadOnlyList<FeatureInfo> Features(ulong entityId)
+    {
+        if (!alive_)
+        {
+            return [];
+        }
+        var countFn = As<HostFeatureCountFn>(api_.EntityFeatureCount);
+        var atFn = As<HostFeatureAtFn>(api_.EntityFeatureAt);
+        var n = countFn(api_.Context, entityId);
+        var list = new List<FeatureInfo>(Math.Max(n, 0));
+        for (var i = 0; i < n; ++i)
+        {
+            if (atFn(api_.Context, entityId, i, out var id, out var kind, out var inputCount, out var paramCount) != 0)
+            {
+                continue;
+            }
+            list.Add(new FeatureInfo(
+                id,
+                (FeatureKind)kind,
+                ReadInputs(entityId, id, inputCount),
+                ReadParams(entityId, id, paramCount)));
+        }
+        return list;
+    }
+
     public IUi Ui => this;
+
+    public ITransaction BeginTransaction(string? name = null)
+    {
+        if (!alive_)
+        {
+            throw new InvalidOperationException("Host is not available");
+        }
+        var fn = As<HostBeginTransactionFn>(api_.BeginTransaction);
+        var namePtr = Utf8(name ?? "");
+        try
+        {
+            if (fn(api_.Context, namePtr) != 0)
+            {
+                throw new InvalidOperationException("Failed to begin transaction");
+            }
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(namePtr);
+        }
+        return new Transaction(this, name ?? "");
+    }
+
+    internal void CommitTransaction()
+    {
+        if (!alive_)
+        {
+            return;
+        }
+        if (As<HostCommitTransactionFn>(api_.CommitTransaction)(api_.Context) != 0)
+        {
+            throw new InvalidOperationException("Failed to commit transaction");
+        }
+    }
+
+    internal void AbortTransaction()
+    {
+        if (!alive_)
+        {
+            return;
+        }
+        if (As<HostAbortTransactionFn>(api_.AbortTransaction)(api_.Context) != 0)
+        {
+            throw new InvalidOperationException("Failed to abort transaction");
+        }
+    }
 
     public void Log(string message)
     {
@@ -466,6 +537,52 @@ sealed class Host : IHost, IUi
         }
     }
 
+    IReadOnlyList<ulong> ReadInputs(ulong entityId, ulong featureId, int count)
+    {
+        if (count <= 0)
+        {
+            return [];
+        }
+        var fn = As<HostFeatureInputAtFn>(api_.FeatureInputAt);
+        var list = new List<ulong>(count);
+        for (var i = 0; i < count; ++i)
+        {
+            if (fn(api_.Context, entityId, featureId, i, out var inputId) == 0)
+            {
+                list.Add(inputId);
+            }
+        }
+        return list;
+    }
+
+    IReadOnlyList<FeatureParam> ReadParams(ulong entityId, ulong featureId, int count)
+    {
+        if (count <= 0)
+        {
+            return [];
+        }
+        var fn = As<HostFeatureParamAtFn>(api_.FeatureParamAt);
+        const int cap = 128;
+        var buf = Marshal.AllocCoTaskMem(cap);
+        try
+        {
+            var list = new List<FeatureParam>(count);
+            for (var i = 0; i < count; ++i)
+            {
+                if (fn(api_.Context, entityId, featureId, i, buf, cap, out var value) < 0)
+                {
+                    continue;
+                }
+                list.Add(new FeatureParam(Marshal.PtrToStringUTF8(buf) ?? "", value));
+            }
+            return list;
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(buf);
+        }
+    }
+
     static EntityKind ParseKind(string name)
     {
         return Enum.TryParse<EntityKind>(name, ignoreCase: true, out var kind) ? kind : EntityKind.Unknown;
@@ -517,5 +634,42 @@ sealed class Host : IHost, IUi
         OpenFile = 3,
         SaveFile = 4,
         Form = 5,
+    }
+
+    // 事务句柄：只有显式 Commit 才落地；没提交就 Dispose = 回滚。
+    sealed class Transaction : ITransaction
+    {
+        readonly Host host_;
+        bool finished_;
+
+        internal Transaction(Host host, string name)
+        {
+            host_ = host;
+            Name = name;
+        }
+
+        public string Name { get; }
+
+        public void Commit()
+        {
+            if (finished_)
+            {
+                return;
+            }
+            finished_ = true;
+            host_.CommitTransaction();
+        }
+
+        public void Abort()
+        {
+            if (finished_)
+            {
+                return;
+            }
+            finished_ = true;
+            host_.AbortTransaction();
+        }
+
+        public void Dispose() => Abort();
     }
 }

@@ -2,6 +2,13 @@ using System.Runtime.InteropServices;
 
 namespace Tamias.Api;
 
+// C ABI 版本：必须与 C++ src/plugin/host_api.h 的 kHostApiVersion 一致。
+// Bootstrap.Initialize 对不上就拒绝加载（宁可没有插件，也不要按错位的表调用）。
+public static class HostApiVersion
+{
+    public const int Current = 7;
+}
+
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 public delegate void HostLogFn(IntPtr context, int level, IntPtr utf8);
 
@@ -72,6 +79,49 @@ public delegate int HostShowDialogFn(
     IntPtr outUtf8,
     int cap);
 
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+public delegate int HostFeatureCountFn(IntPtr context, ulong entityId);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+public delegate int HostFeatureAtFn(
+    IntPtr context,
+    ulong entityId,
+    int index,
+    out ulong id,
+    out int kind,
+    out int inputCount,
+    out int paramCount);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+public delegate int HostFeatureInputAtFn(
+    IntPtr context,
+    ulong entityId,
+    ulong featureId,
+    int index,
+    out ulong inputId);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+public delegate int HostFeatureParamCountFn(IntPtr context, ulong entityId, ulong featureId);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+public delegate int HostFeatureParamAtFn(
+    IntPtr context,
+    ulong entityId,
+    ulong featureId,
+    int index,
+    IntPtr nameUtf8,
+    int cap,
+    out double value);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+public delegate int HostBeginTransactionFn(IntPtr context, IntPtr nameUtf8);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+public delegate int HostCommitTransactionFn(IntPtr context);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+public delegate int HostAbortTransactionFn(IntPtr context);
+
 [StructLayout(LayoutKind.Sequential)]
 public struct HostApi
 {
@@ -92,4 +142,14 @@ public struct HostApi
     public IntPtr CancelPointInput;
     public IntPtr SetSelection;
     public IntPtr ShowDialog;
+    // v6：特征树 + 参数的只读面。
+    public IntPtr EntityFeatureCount;
+    public IntPtr EntityFeatureAt;
+    public IntPtr FeatureInputAt;
+    public IntPtr FeatureParamCount;
+    public IntPtr FeatureParamAt;
+    // v7：事务（批量编辑合成一条撤销记录）。
+    public IntPtr BeginTransaction;
+    public IntPtr CommitTransaction;
+    public IntPtr AbortTransaction;
 }

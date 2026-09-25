@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 using Tamias.Api;
 
 namespace Tamias.Host;
@@ -24,7 +25,7 @@ public static class Bootstrap
         try
         {
             var api = Marshal.PtrToStructure<HostApi>(apiPtr);
-            if (api.AbiVersion != 5)
+            if (api.AbiVersion != HostApiVersion.Current)
             {
                 return -2;
             }
@@ -120,5 +121,45 @@ public static class Bootstrap
             }
             return -1;
         }
+    }
+
+    // 命令控制台的入口：求值一段 C# 片段。
+    // 0 = 成功（缓冲里是结果，可能为空）、1 = 脚本报错（缓冲里是错误文本）、-1 = 宿主不可用。
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int Evaluate(IntPtr codeUtf8, IntPtr outUtf8, int cap)
+    {
+        if (host_ == null)
+        {
+            WriteUtf8("C# host is not initialized", outUtf8, cap);
+            return -1;
+        }
+        var code = Marshal.PtrToStringUTF8(codeUtf8);
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            WriteUtf8("", outUtf8, cap);
+            return 0;
+        }
+        try
+        {
+            WriteUtf8(ScriptEngine.Evaluate(host_, code), outUtf8, cap);
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            WriteUtf8(ScriptEngine.DescribeException(ex), outUtf8, cap);
+            return 1;
+        }
+    }
+
+    static void WriteUtf8(string text, IntPtr buffer, int cap)
+    {
+        if (buffer == IntPtr.Zero || cap <= 0)
+        {
+            return;
+        }
+        var bytes = Encoding.UTF8.GetBytes(text);
+        var count = Math.Min(bytes.Length, cap - 1);
+        Marshal.Copy(bytes, 0, buffer, count);
+        Marshal.WriteByte(buffer, count, 0);
     }
 }

@@ -29,15 +29,22 @@ Result<void> CommandSystem::dispatch(Document& doc, const std::string& name,
     return Err("CommandSystem: unknown command '" + name + "'");
   }
   if (command->interactive()) {
+    if (transaction_open_) {
+      // 交互式命令点齐的时刻由鼠标决定，不在事务窗口里——拒绝比默默错位好。
+      return Err("CommandSystem: cannot arm interactive command '" + name +
+                 "' inside a transaction");
+    }
     pending_ = std::move(command);  // 武装，等待交互点
     pending_name_ = name;
+    pending_args_ = args;
     return {};
   }
   TAMIAS_TIMING_SCOPE_DYNAMIC(name, TimingCategory::Command);
   if (auto r = command->execute(); !r) {
     return r;
   }
-  stack_.push_executed(std::move(command));
+  record_executed(std::move(command));
+  notify_executed(name, args);
   return {};
 }
 
@@ -52,13 +59,15 @@ Result<bool> CommandSystem::feed_point(Vec3 point, std::uint64_t picked_entity_i
   if (*done) {
     TAMIAS_TIMING_SCOPE_DYNAMIC(pending_name_, TimingCategory::Command);
     if (auto r = pending_->execute(); !r) {
-      pending_.reset();
-      pending_name_.clear();
+      cancel();
       return Err(r.error());
     }
-    stack_.push_executed(std::move(pending_));
-    pending_.reset();
+    const std::string name = pending_name_;
+    CommandArgs echoed = merged_echo_args();
+    record_executed(std::move(pending_));
     pending_name_.clear();
+    pending_args_.clear();
+    notify_executed(name, echoed);
     return true;  // 完成
   }
   return false;  // 还没完
@@ -81,13 +90,15 @@ Result<bool> CommandSystem::confirm() {
   if (*done) {
     TAMIAS_TIMING_SCOPE_DYNAMIC(pending_name_, TimingCategory::Command);
     if (auto r = pending_->execute(); !r) {
-      pending_.reset();
-      pending_name_.clear();
+      cancel();
       return Err(r.error());
     }
-    stack_.push_executed(std::move(pending_));
-    pending_.reset();
+    const std::string name = pending_name_;
+    CommandArgs echoed = merged_echo_args();
+    record_executed(std::move(pending_));
     pending_name_.clear();
+    pending_args_.clear();
+    notify_executed(name, echoed);
     return true;
   }
   return false;
@@ -96,6 +107,7 @@ Result<bool> CommandSystem::confirm() {
 void CommandSystem::cancel() {
   pending_.reset();
   pending_name_.clear();
+  pending_args_.clear();
 }
 
 void CommandSystem::undo() {
@@ -109,9 +121,75 @@ void CommandSystem::redo() {
 }
 
 void CommandSystem::clear() {
-  pending_.reset();
-  pending_name_.clear();
+  cancel();
+  transaction_open_ = false;
+  transaction_name_.clear();
+  transaction_ = CommandGroup{};  // 文档要换了，别对着旧文档 undo
   stack_.clear();
+}
+
+Result<void> CommandSystem::begin_transaction(std::string name) {
+  if (transaction_open_) {
+    return Err("CommandSystem: transaction already open (no nesting)");
+  }
+  transaction_open_ = true;
+  transaction_name_ = std::move(name);
+  transaction_ = CommandGroup{};
+  return {};
+}
+
+Result<void> CommandSystem::commit_transaction() {
+  if (!transaction_open_) {
+    return Err("CommandSystem: no open transaction");
+  }
+  transaction_open_ = false;
+  transaction_name_.clear();
+  auto commands = transaction_.release();
+  if (commands.empty()) {
+    return {};  // 空事务不产生撤销记录
+  }
+  stack_.push_executed(std::make_unique<CommandGroup>(std::move(commands)));
+  return {};
+}
+
+Result<std::size_t> CommandSystem::abort_transaction() {
+  if (!transaction_open_) {
+    return Err("CommandSystem: no open transaction");
+  }
+  transaction_open_ = false;
+  transaction_name_.clear();
+  auto commands = transaction_.release();
+  const std::size_t count = commands.size();
+  CommandGroup rollback(std::move(commands));
+  rollback.undo();  // 逆序退回去，然后整组丢掉：栈里不留记录
+  return count;
+}
+
+void CommandSystem::record_executed(std::unique_ptr<Command> command) {
+  if (command == nullptr) {
+    return;
+  }
+  if (transaction_open_) {
+    transaction_.add(std::move(command));
+    return;
+  }
+  stack_.push_executed(std::move(command));
+}
+
+void CommandSystem::notify_executed(const std::string& name, const CommandArgs& args) {
+  if (observer_) {
+    observer_(name, args);
+  }
+}
+
+CommandArgs CommandSystem::merged_echo_args() const {
+  CommandArgs merged = pending_args_;
+  if (pending_ != nullptr) {
+    for (auto& [key, value] : pending_->echo_args()) {
+      merged[key] = std::move(value);
+    }
+  }
+  return merged;
 }
 
 }  // namespace tamias

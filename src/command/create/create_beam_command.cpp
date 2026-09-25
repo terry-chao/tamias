@@ -35,6 +35,10 @@ Result<bool> CreateBeamCommand::on_point(Vec3 point) {
   return true;
 }
 
+CommandArgs CreateBeamCommand::echo_args() const {
+  return {{"points", std::vector<Vec3>{start_, end_}}};
+}
+
 Result<void> CreateBeamCommand::execute() {
   std::unique_ptr<BeamEntity> beam;
   switch (shape_) {

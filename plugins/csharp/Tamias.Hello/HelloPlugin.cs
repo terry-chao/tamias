@@ -46,6 +46,68 @@ public sealed class HelloPlugin : IPlugin
             "把当前选择写到状态栏");
 
         host.AddCommand(
+            "hello.list_features",
+            "列出特征",
+            () =>
+            {
+                var id = host.Selection.FirstOrDefault();
+                if (id == 0)
+                {
+                    host.Log("未选择对象");
+                    return;
+                }
+                var features = host.Features(id);
+                if (features.Count == 0)
+                {
+                    host.Log($"#{id} 没有特征树");
+                    return;
+                }
+                host.Log($"#{id} 特征 {features.Count}");
+                foreach (var feature in features)
+                {
+                    var args = string.Join(", ", feature.Params.Select(p => $"{p.Name}={p.Value:0.###}"));
+                    var inputs = feature.Inputs.Count == 0
+                        ? ""
+                        : $" <- [{string.Join(", ", feature.Inputs)}]";
+                    host.Log($"  #{feature.Id} {feature.Kind}({args}){inputs}");
+                }
+            },
+            "把选中实体的特征树和参数写到控制台");
+
+        host.AddCommand(
+            "hello.widen_params",
+            "加宽参数",
+            () =>
+            {
+                var ids = host.Selection.ToList();
+                if (ids.Count == 0)
+                {
+                    host.Log("未选择对象");
+                    return;
+                }
+                var changed = 0;
+                using var tx = host.BeginTransaction("加宽参数");
+                foreach (var id in ids)
+                {
+                    foreach (var feature in host.Features(id))
+                    {
+                        foreach (var param in feature.Params)
+                        {
+                            host.Dispatch("set_param", new CommandArgs()
+                                .SetInt("entity_id", (long)id)
+                                .SetInt("feature_id", (long)feature.Id)
+                                .SetString("param_name", param.Name)
+                                .SetDouble("value", param.Value + 0.1));
+                            ++changed;
+                        }
+                    }
+                }
+                tx.Commit();
+                host.Log($"已加宽 {changed} 个参数，整批算一步撤销");
+            },
+            "把选中实体的所有特征参数 +0.1；整批只占一步撤销");
+
+        host.AddCommand(
             "hello.delete_selected",
             "删除所选",
             () =>

@@ -35,6 +35,10 @@ Result<bool> CreateWallCommand::on_point(Vec3 point) {
   return true;  // 第二点，齐了
 }
 
+CommandArgs CreateWallCommand::echo_args() const {
+  return {{"points", std::vector<Vec3>{start_, end_}}};
+}
+
 Result<void> CreateWallCommand::execute() {
   std::unique_ptr<WallEntity> wall;
   if (leaf_ > 0.0) {

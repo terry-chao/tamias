@@ -21,6 +21,7 @@ class CreateSlabCommand final : public Command {
   }
   [[nodiscard]] std::vector<Vec3> preview_polyline(Vec3 cursor) const override;
 
+  [[nodiscard]] CommandArgs echo_args() const override;
   [[nodiscard]] Result<void> execute() override;
   void undo() override;
   void redo() override;

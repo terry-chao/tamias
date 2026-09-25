@@ -54,6 +54,9 @@ class PluginHost {
   // Load Tamias.Host.dll from <exe>/managed and plugins from <exe>/plugins.
   Result<void> load();
   Result<void> invoke(std::string_view command_id);
+  // 命令控制台的输入面：求值一段 C# 片段（见 Tamias.Host/ScriptEngine.cs）。
+  // Ok(结果文本) / Err(错误文本)——两种都要显示，所以错误也带文本。
+  [[nodiscard]] Result<std::string> evaluate(std::string_view code);
 
   [[nodiscard]] const std::vector<PluginCommand>& commands() const { return registered_; }
   [[nodiscard]] const std::vector<PluginInfo>& plugins() const { return plugins_; }
@@ -88,8 +91,29 @@ class PluginHost {
                                          std::int32_t count);
   static std::int32_t host_show_dialog(void* context, std::int32_t kind, std::int32_t buttons,
                                        const char* spec_utf8, char* out_utf8, std::int32_t cap);
+  static std::int32_t host_entity_feature_count(void* context, std::uint64_t entity_id);
+  static std::int32_t host_entity_feature_at(void* context, std::uint64_t entity_id,
+                                             std::int32_t index, std::uint64_t* out_id,
+                                             std::int32_t* out_kind,
+                                             std::int32_t* out_input_count,
+                                             std::int32_t* out_param_count);
+  static std::int32_t host_feature_input_at(void* context, std::uint64_t entity_id,
+                                            std::uint64_t feature_id, std::int32_t index,
+                                            std::uint64_t* out_input_id);
+  static std::int32_t host_feature_param_count(void* context, std::uint64_t entity_id,
+                                               std::uint64_t feature_id);
+  static std::int32_t host_feature_param_at(void* context, std::uint64_t entity_id,
+                                            std::uint64_t feature_id, std::int32_t index,
+                                            char* name_utf8, std::int32_t cap,
+                                            double* out_value);
+  static std::int32_t host_begin_transaction(void* context, const char* name_utf8);
+  static std::int32_t host_commit_transaction(void* context);
+  static std::int32_t host_abort_transaction(void* context);
 
   void emit_log(std::int32_t level, std::string_view message);
+  // 插件忘了 commit：回滚并留一条日志。不能让一条悬着的事务把用户之后的每次编辑
+  // 都吞进一个永远不会提交的缓冲里。
+  void close_dangling_transaction();
   [[nodiscard]] std::vector<std::uint64_t> entity_ids() const;
 
   HostApi api_{};

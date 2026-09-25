@@ -1,10 +1,18 @@
 #include "host/session.h"
 
+#include "host/command_echo.h"
+
 #include <utility>
 
 namespace tamias {
 
-Session::Session(std::shared_ptr<Document> document) : document_(std::move(document)) {}
+Session::Session(std::shared_ptr<Document> document) : document_(std::move(document)) {
+  // 命令回显：内核只报「谁执行了、参数是什么」，文本长什么样是宿主的事。
+  // 观察者挂在 CommandSystem 上，所以插件、脚本、工具条走的是同一条回显通道。
+  command_system_.set_observer([this](const std::string& name, const CommandArgs& args) {
+    notify(HostEvent::ConsoleMessage, format_dispatch_call(name, args));
+  });
+}
 
 Session::~Session() = default;
 

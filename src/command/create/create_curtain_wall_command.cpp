@@ -30,6 +30,10 @@ Result<bool> CreateCurtainWallCommand::on_point(Vec3 point) {
   return true;
 }
 
+CommandArgs CreateCurtainWallCommand::echo_args() const {
+  return {{"points", std::vector<Vec3>{start_, end_}}};
+}
+
 Result<void> CreateCurtainWallCommand::execute() {
   CurtainWallEntity wall(start_, end_, thickness_, height_);
   document_->assign_active_storey(wall);

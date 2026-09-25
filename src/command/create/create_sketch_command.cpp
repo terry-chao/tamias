@@ -81,6 +81,10 @@ Result<bool> CreateSketchCommand::on_confirm() {
   return true;
 }
 
+CommandArgs CreateSketchCommand::echo_args() const {
+  return {{"points", points_}};
+}
+
 std::vector<Vec3> CreateSketchCommand::live_controls(Vec3 cursor) const {
   if (points_.empty()) {
     return {};

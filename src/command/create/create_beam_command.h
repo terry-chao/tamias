@@ -22,6 +22,7 @@ class CreateBeamCommand final : public Command {
   [[nodiscard]] bool has_start() const override { return has_start_; }
   [[nodiscard]] Vec3 start() const override { return start_; }
 
+  [[nodiscard]] CommandArgs echo_args() const override;
   [[nodiscard]] Result<void> execute() override;
   void undo() override;
   void redo() override;

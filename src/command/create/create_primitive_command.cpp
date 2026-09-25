@@ -87,6 +87,14 @@ CreatePrimitiveCommand::CreatePrimitiveCommand(Document& document, PrimitiveKind
 
 Result<bool> CreatePrimitiveCommand::on_point(Vec3 point) { return on_pick(point, 0); }
 
+CommandArgs CreatePrimitiveCommand::echo_args() const {
+  CommandArgs args{{"points", std::vector<Vec3>{position_}}};
+  if (host_id_ != 0) {
+    args.emplace("host_id", static_cast<std::int64_t>(host_id_));
+  }
+  return args;
+}
+
 Result<bool> CreatePrimitiveCommand::on_pick(Vec3 point, std::uint64_t picked_entity_id) {
   if (is_opening_kind(kind_)) {
     const Entity* host = document_->entity(picked_entity_id);

@@ -23,6 +23,7 @@ class CreateWallCommand final : public Command {
     return static_cast<float>(elevation_);
   }
 
+  [[nodiscard]] CommandArgs echo_args() const override;
   [[nodiscard]] Result<void> execute() override;
   void undo() override;
   void redo() override;

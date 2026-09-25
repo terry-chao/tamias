@@ -26,6 +26,7 @@ class CreateSketchCommand final : public Command {
   [[nodiscard]] bool accepts_confirm() const override { return open_ended(); }
   [[nodiscard]] Result<bool> on_confirm() override;
 
+  [[nodiscard]] CommandArgs echo_args() const override;
   [[nodiscard]] Result<void> execute() override;
   void undo() override;
   void redo() override;

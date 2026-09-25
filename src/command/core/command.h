@@ -1,5 +1,6 @@
 #pragma once
 
+#include "command/core/command_args.h"
 #include "engine/base/result.h"
 #include "engine/math/math.h"
 
@@ -60,6 +61,11 @@ class Command {
   // 折线等：Enter / 双击结束。返回 true 表示输入齐了（可 execute）。
   virtual bool accepts_confirm() const { return false; }
   virtual Result<bool> on_confirm() { return false; }
+
+  // 命令回显：交互式命令点齐后，返回「这次交互采集到的参数」（点 / 宿主 id…）。
+  // CommandSystem 把它合并进武装参数，拼出等价的脚本式调用（见 host/command_echo.h）。
+  // 非交互命令缺省返回空——它们的 dispatch 参数本来就是完整的。
+  [[nodiscard]] virtual CommandArgs echo_args() const { return {}; }
 };
 
 }  // namespace tamias

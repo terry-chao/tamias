@@ -45,6 +45,10 @@ Result<bool> CreateSlabCommand::on_point(Vec3 point) {
   return true;
 }
 
+CommandArgs CreateSlabCommand::echo_args() const {
+  return {{"points", std::vector<Vec3>{start_, end_}}};
+}
+
 std::vector<Vec3> CreateSlabCommand::preview_polyline(Vec3 cursor) const {
   cursor.y = static_cast<float>(elevation_);
   if (!has_start_ || nearly_same_xz(start_, cursor)) {

@@ -21,6 +21,7 @@ class CreateFoundationCommand final : public Command {
   [[nodiscard]] Result<bool> on_point(Vec3 point) override;
   [[nodiscard]] float work_plane_y() const override { return work_plane_y_; }
 
+  [[nodiscard]] CommandArgs echo_args() const override;
   [[nodiscard]] Result<void> execute() override;
   void undo() override;
   void redo() override;

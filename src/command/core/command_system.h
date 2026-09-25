@@ -1,6 +1,8 @@
 #pragma once
 
 #include "command/core/command.h"
+#include "command/core/command_args.h"
+#include "command/core/command_group.h"
 #include "command/core/command_stack.h"
 #include "engine/math/math.h"
 
@@ -16,10 +18,9 @@ namespace tamias {
 
 class Document;
 
-// 命令参数：异构值（数值 / 整数 id / 向量 / 字符串 / 数组）。
-using CommandArg =
-    std::variant<double, std::int64_t, Vec3, std::string, std::vector<Vec3>, std::vector<double>>;
-using CommandArgs = std::unordered_map<std::string, CommandArg>;
+// 命令执行观察者：命令**真正执行**时回调一次（含交互式命令点齐后那一次）。
+// 宿主用它做命令回显（见 host/command_echo.h）；内核不知道回显长什么样。
+using CommandObserver = std::function<void(const std::string& name, const CommandArgs& args)>;
 
 // 命令注册表：名字 → 工厂。全局单例，启动时加载一次。
 class CommandRegistry {
@@ -47,6 +48,22 @@ class CommandSystem {
 
   [[nodiscard]] Result<void> dispatch(Document& doc, const std::string& name,
                                       const CommandArgs& args);
+
+  // ── 事务 ────────────────────────────────────────────────────────────────
+  // begin 与 commit 之间成功执行的命令合成**一条**撤销记录：脚本批量改参数
+  // 不该在用户面前留下 N 步撤销。
+  //
+  // 不支持嵌套：第二次 begin 直接报错。静默吞掉会让「谁负责 commit」变得含糊。
+  [[nodiscard]] Result<void> begin_transaction(std::string name = {});
+  [[nodiscard]] Result<void> commit_transaction();
+  // 回滚：把事务里已执行的命令逆序撤销并丢弃，文档回到 begin 时的样子，
+  // 撤销栈里**不留**记录。返回回滚的命令条数。
+  [[nodiscard]] Result<std::size_t> abort_transaction();
+  [[nodiscard]] bool in_transaction() const { return transaction_open_; }
+  [[nodiscard]] std::size_t transaction_size() const { return transaction_.size(); }
+
+  // 注册命令执行观察者（每个 CommandSystem 一个；重新设置会覆盖）。
+  void set_observer(CommandObserver observer) { observer_ = std::move(observer); }
   // 给 pending 命令喂一个交互点；返回 true 表示命令已完成。
   [[nodiscard]] Result<bool> feed_point(Vec3 point, std::uint64_t picked_entity_id = 0);
   // 光标悬停：更新门窗等跟墙预览，不提交。
@@ -78,13 +95,25 @@ class CommandSystem {
   void clear();
   [[nodiscard]] bool can_undo() const { return stack_.can_undo(); }
   [[nodiscard]] bool can_redo() const { return stack_.can_redo(); }
-  void push_executed(std::unique_ptr<Command> command) { stack_.push_executed(std::move(command)); }
+  void push_executed(std::unique_ptr<Command> command) { record_executed(std::move(command)); }
 
  private:
+  // 事务开着就进缓冲区，否则直接进撤销栈——所有「命令已执行」的路径都走这里，
+  // 免得某一条漏掉事务语义。
+  void record_executed(std::unique_ptr<Command> command);
+  void notify_executed(const std::string& name, const CommandArgs& args);
+  // 武装参数 + 命令自己报的交互参数（点 / 宿主 id）拼成「等价的一次性调用」。
+  [[nodiscard]] CommandArgs merged_echo_args() const;
+
   const CommandRegistry& registry_;
   CommandStack stack_;
   std::unique_ptr<Command> pending_;
   std::string pending_name_;
+  CommandArgs pending_args_;  // 武装时那份参数，交互完成后与 echo_args() 合并
+  CommandObserver observer_;
+  bool transaction_open_ = false;
+  std::string transaction_name_;
+  CommandGroup transaction_;  // 事务里已执行的命令（提交时整体压栈）
 };
 
 }  // namespace tamias

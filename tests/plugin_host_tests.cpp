@@ -2,6 +2,7 @@
 #include "engine/document/document.h"
 #include "engine/io/mesh_io.h"
 #include "engine/math/math.h"
+#include "engine/modeling/feature/feature.h"
 #include "entity/family/host/architectural/wall_entity.h"
 #include "host/command_arg_text.h"
 #include "plugin/plugin_host.h"
@@ -99,12 +100,20 @@ TEST(PluginHost, DefaultsRibbonPlacementToHomePlugins) {
 TEST(PluginHost, RegisterPluginAssociatesCommands) {
   PluginHost host;
   const HostApi& api = host.native_api();
-  EXPECT_EQ(api.abi_version, 5);
+  EXPECT_EQ(api.abi_version, 7);
   ASSERT_NE(api.register_plugin, nullptr);
   ASSERT_NE(api.begin_point_input, nullptr);
   ASSERT_NE(api.cancel_point_input, nullptr);
   ASSERT_NE(api.set_selection, nullptr);
   ASSERT_NE(api.show_dialog, nullptr);
+  ASSERT_NE(api.entity_feature_count, nullptr);
+  ASSERT_NE(api.entity_feature_at, nullptr);
+  ASSERT_NE(api.feature_input_at, nullptr);
+  ASSERT_NE(api.feature_param_count, nullptr);
+  ASSERT_NE(api.feature_param_at, nullptr);
+  ASSERT_NE(api.begin_transaction, nullptr);
+  ASSERT_NE(api.commit_transaction, nullptr);
+  ASSERT_NE(api.abort_transaction, nullptr);
   ASSERT_EQ(register_test_plugin(api, "demo.plugin", "Demo"), 0);
   ASSERT_EQ(api.register_command(api.context, "demo.hello", "Hello", "tip",
                                  "home", "draw", "demo.svg", 42, 1),
@@ -291,6 +300,127 @@ TEST(PluginHost, HostApiSelectionAndDispatch) {
   EXPECT_TRUE(doc.entities().empty());
 }
 
+// v7 事务：插件批量改参数时，用户按一次撤销就该全部退回。
+TEST(PluginHost, TransactionBatchesDispatches) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+  Document doc("plugin-tx");
+
+  PluginHost host;
+  int edits = 0;
+  host.bind(&doc, &system, [&] { ++edits; });
+  const HostApi& api = host.native_api();
+
+  ASSERT_EQ(api.begin_transaction(api.context, "批量"), 0);
+  for (int i = 0; i < 2; ++i) {
+    const std::string args = "v:origin=" + std::to_string(i) + ",0,0;d:height=3";
+    ASSERT_EQ(api.dispatch(api.context, "create_column", args.c_str()), 0);
+  }
+  EXPECT_EQ(doc.entities().size(), 2u);
+  EXPECT_FALSE(system.can_undo()) << "事务未提交，撤销栈上不该有东西";
+
+  ASSERT_EQ(api.commit_transaction(api.context), 0);
+  EXPECT_TRUE(system.can_undo());
+  system.undo();
+  EXPECT_TRUE(doc.entities().empty()) << "一次撤销退回两条命令";
+  EXPECT_FALSE(system.can_undo());
+
+  // 没开事务就 commit / 嵌套 begin：报错而不是糊过去。
+  EXPECT_EQ(api.commit_transaction(api.context), -1);
+  EXPECT_EQ(api.abort_transaction(api.context), -1);
+  ASSERT_EQ(api.begin_transaction(api.context, nullptr), 0);
+  EXPECT_EQ(api.begin_transaction(api.context, "嵌套"), -1);
+
+  // abort 返回回滚条数，并且不留撤销记录。
+  ASSERT_EQ(api.dispatch(api.context, "create_column", "v:origin=0,0,0"), 0);
+  EXPECT_EQ(api.abort_transaction(api.context), 1);
+  EXPECT_TRUE(doc.entities().empty());
+  EXPECT_FALSE(system.can_undo());
+  EXPECT_GE(edits, 3);  // 每次成功 dispatch 都要让壳刷新
+}
+
+// v6 宽读：特征树 + 参数。以前插件只能猜 feature_id，现在能枚举出来。
+TEST(PluginHost, ReadsFeatureTreeAndParams) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document doc("features");
+  ASSERT_TRUE(system.dispatch(doc, "create_column",
+                              {{"origin", Vec3{1.f, 0.f, 2.f}},
+                               {"width", 0.5},
+                               {"depth", 0.4},
+                               {"height", 3.0}}));
+  ASSERT_EQ(doc.entities().size(), 1u);
+  const std::uint64_t entity_id = doc.entities().begin()->first;
+
+  PluginHost host;
+  host.bind(&doc, &system, {});
+  const HostApi& api = host.native_api();
+
+  ASSERT_EQ(api.entity_feature_count(api.context, entity_id), 2);
+
+  // 第 0 条：矩形轮廓，无输入，两个参数（width / height）。
+  std::uint64_t profile_id = 0;
+  std::int32_t kind = -1;
+  std::int32_t input_count = -1;
+  std::int32_t param_count = -1;
+  ASSERT_EQ(api.entity_feature_at(api.context, entity_id, 0, &profile_id, &kind,
+                                  &input_count, &param_count),
+            0);
+  EXPECT_EQ(kind, static_cast<std::int32_t>(FeatureKind::RectProfile));
+  EXPECT_EQ(input_count, 0);
+  ASSERT_EQ(param_count, 2);
+
+  // 参数按键升序（模型里是无序表，接口必须给出确定的第 N 个）。
+  char name[64];
+  double value = 0.0;
+  ASSERT_GT(api.feature_param_at(api.context, entity_id, profile_id, 0, name, 64, &value), 0);
+  EXPECT_STREQ(name, "height");
+  EXPECT_DOUBLE_EQ(value, 0.4);  // 柱截面的 depth 存在轮廓的 height 参数上
+  ASSERT_GT(api.feature_param_at(api.context, entity_id, profile_id, 1, name, 64, &value), 0);
+  EXPECT_STREQ(name, "width");
+  EXPECT_DOUBLE_EQ(value, 0.5);
+
+  // 只要值可以不给名字缓冲。
+  ASSERT_EQ(api.feature_param_at(api.context, entity_id, profile_id, 1, nullptr, 0, &value), 0);
+  EXPECT_DOUBLE_EQ(value, 0.5);
+
+  // 第 1 条：拉伸，依赖第 0 条。
+  std::uint64_t extrude_id = 0;
+  ASSERT_EQ(api.entity_feature_at(api.context, entity_id, 1, &extrude_id, &kind,
+                                  &input_count, &param_count),
+            0);
+  EXPECT_EQ(kind, static_cast<std::int32_t>(FeatureKind::Extrude));
+  ASSERT_EQ(input_count, 1);
+  EXPECT_EQ(param_count, 1);
+  std::uint64_t input_id = 0;
+  ASSERT_EQ(api.feature_input_at(api.context, entity_id, extrude_id, 0, &input_id), 0);
+  EXPECT_EQ(input_id, profile_id);
+  ASSERT_EQ(api.feature_param_count(api.context, entity_id, extrude_id), 1);
+  ASSERT_GT(api.feature_param_at(api.context, entity_id, extrude_id, 0, name, 64, &value), 0);
+  EXPECT_STREQ(name, "depth");
+  EXPECT_DOUBLE_EQ(value, 3.0);
+
+  // 越界 / 不存在的 id：报错而不是崩。
+  EXPECT_EQ(api.entity_feature_count(api.context, 9999), -1);
+  EXPECT_EQ(api.entity_feature_count(api.context, 0), -1);
+  EXPECT_EQ(api.entity_feature_at(api.context, entity_id, 2, &profile_id, &kind, &input_count,
+                                  &param_count),
+            -1);
+  EXPECT_EQ(api.entity_feature_at(api.context, entity_id, -1, &profile_id, &kind, &input_count,
+                                  &param_count),
+            -1);
+  EXPECT_EQ(api.feature_param_count(api.context, entity_id, 9999), -1);
+  EXPECT_EQ(api.feature_param_at(api.context, entity_id, extrude_id, 5, name, 64, &value), -1);
+  EXPECT_EQ(api.feature_input_at(api.context, entity_id, extrude_id, 5, &input_id), -1);
+
+  // 读不写：枚举完特征树，文档一个字都没变。
+  EXPECT_EQ(api.entity_feature_count(api.context, entity_id), 2);
+  EXPECT_EQ(doc.entities().size(), 1u);
+}
+
 TEST(PluginHost, SetSelectionAndShowDialog) {
   CommandRegistry registry;
   register_commands(registry);
@@ -340,12 +470,39 @@ TEST(PluginPromptSpec, ParsesFormAndValues) {
   EXPECT_EQ(serialize_plugin_form_values(*spec), "n:thickness=0.25;s:name=Wall A;b:snap=0");
 }
 
+// 真托管宿主：加载、命令登记，再跑一次 v6 的宽读。
+// 后者是唯一能证明 C# `HostApi` 结构体与 C++ 表**逐字段对齐**的检查——
+// 版本号对得上只说明第一个字段没错位。
+// 一个进程只在一个用例里拉 CLR：hostfxr 二次初始化会失败，拆成两个用例会静默跳过。
 TEST(PluginHost, LoadsManagedHelloCommands) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document doc("managed-features");
+  std::uint64_t entity_id = 0;
+  {
+    ASSERT_TRUE(system.dispatch(doc, "create_column",
+                                {{"origin", Vec3{0.f, 0.f, 0.f}},
+                                 {"width", 0.5},
+                                 {"depth", 0.4},
+                                 {"height", 3.0}}));
+    ASSERT_EQ(doc.entities().size(), 1u);
+    entity_id = doc.entities().begin()->first;
+    doc.select(entity_id);
+  }
+
   PluginHost host;
+  std::string log;
+  host.set_log_sink([&log](std::string_view message) {
+    log.append(message);
+    log.push_back('\n');
+  });
   auto loaded = host.load();
   if (!loaded) {
     GTEST_SKIP() << loaded.error();
   }
+  host.bind(&doc, &system, {});
   ASSERT_FALSE(host.commands().empty()) << "Tamias.Hello should register Ribbon commands";
   ASSERT_FALSE(host.plugins().empty()) << "Tamias.Hello should register as a loaded plugin";
   bool list_selection = false;
@@ -354,6 +511,8 @@ TEST(PluginHost, LoadsManagedHelloCommands) {
   bool hello_plugin = false;
   bool create_wall = false;
   bool pick_entities = false;
+  bool list_features = false;
+  bool widen_params = false;
   for (const auto& plugin : host.plugins()) {
     if (plugin.id == "tamias.hello") {
       hello_plugin = true;
@@ -369,6 +528,8 @@ TEST(PluginHost, LoadsManagedHelloCommands) {
     delete_selected = delete_selected || cmd.id == "hello.delete_selected";
     create_wall = create_wall || cmd.id == "hello.create_wall";
     pick_entities = pick_entities || cmd.id == "hello.pick_entities";
+    list_features = list_features || cmd.id == "hello.list_features";
+    widen_params = widen_params || cmd.id == "hello.widen_params";
     if (cmd.id == "tamias.nurbs.create") {
       create_nurbs = true;
       EXPECT_EQ(cmd.placement.page_id, "home");
@@ -382,5 +543,80 @@ TEST(PluginHost, LoadsManagedHelloCommands) {
   EXPECT_TRUE(delete_selected);
   EXPECT_TRUE(create_wall);
   EXPECT_TRUE(pick_entities);
+  EXPECT_TRUE(list_features);
+  EXPECT_TRUE(widen_params);
   EXPECT_TRUE(create_nurbs);
+
+  // v6 宽读走一遍托管侧：`hello.list_features` 用 `IHost.Features` 枚举选中实体的特征树。
+  log.clear();
+  auto invoked = host.invoke("hello.list_features");
+  ASSERT_TRUE(invoked) << invoked.error();
+  EXPECT_NE(log.find("RectProfile"), std::string::npos) << log;
+  EXPECT_NE(log.find("Extrude"), std::string::npos) << log;
+  EXPECT_NE(log.find("width=0.5"), std::string::npos) << log;
+  EXPECT_NE(log.find("depth=3"), std::string::npos) << log;
+
+  // v7 事务走一遍托管侧：批量改参数只占**一步**撤销。
+  // 读轮廓的 width（特征 0 的参数按键升序：height, width）。
+  auto profile_width = [&]() -> double {
+    const HostApi& a = host.native_api();
+    std::uint64_t feature_id = 0;
+    std::int32_t kind = 0;
+    std::int32_t input_count = 0;
+    std::int32_t param_count = 0;
+    if (a.entity_feature_at(a.context, entity_id, 0, &feature_id, &kind, &input_count,
+                            &param_count) != 0) {
+      return -1.0;
+    }
+    char param_name[64];
+    double value = 0.0;
+    if (a.feature_param_at(a.context, entity_id, feature_id, 1, param_name, 64, &value) < 0) {
+      return -1.0;
+    }
+    return value;
+  };
+  const double width_before = profile_width();
+  ASSERT_GT(width_before, 0.0) << log;
+  log.clear();
+  auto widened = host.invoke("hello.widen_params");
+  ASSERT_TRUE(widened) << widened.error();
+  EXPECT_NEAR(profile_width(), width_before + 0.1, 1e-9) << log;
+  system.undo();  // 只撤一步
+  EXPECT_NEAR(profile_width(), width_before, 1e-9)
+      << "整批参数应当一起退回，说明它是一条撤销记录";
+
+  // 控制台求值（M4）：最后那个表达式的值要带回来，`host.Log` 落到同一个日志口。
+  log.clear();
+  auto evaluated = host.evaluate("host.Log(\"from script\"); host.Selection.Count");
+  ASSERT_TRUE(evaluated) << evaluated.error();
+  EXPECT_EQ(*evaluated, "1");
+  EXPECT_NE(log.find("from script"), std::string::npos) << log;
+
+  // 脚本里改参数：整段自带一个事务，同样只占一步撤销。
+  const double width_now = profile_width();
+  auto bumped = host.evaluate(
+      "foreach (var f in host.Features(host.Selection[0]))"
+      "  foreach (var p in f.Params)"
+      "    host.Dispatch(\"set_param\", new CommandArgs()"
+      "      .SetInt(\"entity_id\", (long)host.Selection[0])"
+      "      .SetInt(\"feature_id\", (long)f.Id)"
+      "      .SetString(\"param_name\", p.Name)"
+      "      .SetDouble(\"value\", p.Value + 0.2));");
+  ASSERT_TRUE(bumped) << bumped.error();
+  EXPECT_NEAR(profile_width(), width_now + 0.2, 1e-9) << log;
+  system.undo();
+  EXPECT_NEAR(profile_width(), width_now, 1e-9) << "整段脚本应当只占一步撤销";
+
+  // 语法错误：报错文本要带回来（面板上显示成错误行），不能崩。
+  auto broken = host.evaluate("this is not C#");
+  EXPECT_FALSE(broken);
+  EXPECT_FALSE(broken.error().empty());
+}
+
+// 没有 .NET 时控制台不该崩，只是求值不可用。
+TEST(PluginHost, EvaluateWithoutHostIsAnError) {
+  PluginHost host;
+  auto result = host.evaluate("1 + 1");
+  EXPECT_FALSE(result);
+  EXPECT_NE(result.error().find("C# host"), std::string::npos) << result.error();
 }

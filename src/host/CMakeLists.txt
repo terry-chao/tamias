@@ -1,6 +1,7 @@
 add_library(tamias_host STATIC
   camera_controller.cpp
   command_arg_text.cpp
+  command_echo.cpp
   session.cpp
 )
 add_library(tamias::host ALIAS tamias_host)

@@ -32,6 +32,7 @@
 | 20 | 大场景 float 影响渲染 | §20 |
 | 21 | LOD 是每个模型拿还是池子，数据源在哪 | §21 |
 | 22 | sketch 模块 | §22 |
+| 23 | 命令控制台里的 C# 跑在哪、有多安全 | §23 · [SCRIPTING.md](SCRIPTING.md) |
 
 ---
 
@@ -635,6 +636,7 @@ C++ 侧用 `hostfxr` 把 .NET 运行时**装进本进程**，再用 `load_assemb
 ```cpp
 using InitFn  = int (*)(HostApi* api, const char* plugins_dir);
 using InvokeFn = int (*)(const char* command_id);
+using EvaluateFn = int (*)(const char* code_utf8, char* out_utf8, std::int32_t cap);
 using PointInputCompletedFn = int (*)(std::uint64_t request_id, const HostPickPoint* points,
                                       std::int32_t count, std::int32_t status);
 ```
@@ -647,7 +649,7 @@ C# 侧对应的是 `[UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]`
 
 ```c
 struct HostApi {
-  int32_t abi_version;   // = kHostApiVersion，当前 5
+  int32_t abi_version;   // = kHostApiVersion，当前 7
   void* context;
   void (*log)(void*, int32_t level, const char* utf8);
   int32_t (*dispatch)(void*, const char* command, const char* args_utf8);
@@ -655,15 +657,17 @@ struct HostApi {
   int32_t (*begin_point_input)(void*, uint64_t request_id, ...);
   int32_t (*show_dialog)(void*, int32_t kind, int32_t buttons, const char* spec,
                          char* out, int32_t cap);
-  /* 还有 document_name / entity_* / selection_* / register_command
-     / register_plugin / cancel_point_input */
+  /* v6 起还有 feature_*（特征树 + 参数的只读面）；v7 起还有
+     begin|commit|abort_transaction；另有 document_name / entity_* / selection_*
+     / register_command / register_plugin / cancel_point_input */
 };
 ```
 
 纪律（写在注释里，改动时必须守）：
 
 - **只能在末尾追加字段**，中间插入会让老插件按错偏移读函数指针；布局一变就 `kHostApiVersion + 1`；
-- 版本不匹配直接拒签：C# 侧 `if (api.AbiVersion != 5) return -2;`；
+- 版本不匹配直接拒签：C# 侧 `if (api.AbiVersion != HostApiVersion.Current) return -2;`
+  （版本号只在 `HostApiVersion.Current` 写一次——早先 C++ / C# 各写一遍，改一处忘一处就会静默失配）；
 - 字符串统一 `char* + cap` 的 UTF-8 输入 / 输出，不做所有权转移；
 - `HostApi.cs` 里对应的是 `IntPtr` 字段 + `[UnmanagedFunctionPointer(CallingConvention.Cdecl)]` 委托，用 `Marshal.PtrToStructure<HostApi>` 读进来。
 
@@ -1264,6 +1268,35 @@ float32 尾数 24 位，相对精度 ≈ `2⁻²⁴ ≈ 6e-8`。**能表示的�
 
 ---
 
+## 23. 命令控制台里的 C# 跑在哪、有多安全
+
+**跑在本进程里，全信任，没有沙箱。** 这跟插件是同一条路：C++ 侧用 `hostfxr` 把 .NET
+装进进程，再取一组 C 函数指针（§13）；控制台用的是同一张表上的另一个入口
+`Bootstrap.Evaluate`：
+
+```
+ConsolePanel（Ctrl+Enter）
+  → PluginHost::evaluate → CsharpRuntime（EvaluateFn 函数指针）
+    → Tamias.Host.Bootstrap.Evaluate → ScriptEngine（Roslyn scripting）
+      → 脚本里每个 host.Dispatch 走的还是那条命令主线
+```
+
+所以脚本能做的事 = `IHost` 能做的事：读文档、读特征树与参数、发命令、弹宿主对话框。
+**给别人一个 `.cs` 让他跑，等于让他跑一个 exe**——这是有意的取舍（和 FreeCAD 的 Python
+控制台同性质），不是疏漏。
+
+两件容易踩的事：
+
+- **每段求值自带一个事务**（ABI v7）。改错了按一次 `Ctrl+Z` 全退回；所以脚本里
+  **不要**自己再 `BeginTransaction`，不支持嵌套。
+- **Roslyn 的每次求值都编译成独立程序集**，于是 globals 类型必须 `public`，
+  宿主那两份程序集要用 `InteractiveAssemblyLoader.RegisterDependency` 登记，
+  否则脚本加载器会在自己的 ALC 里再加载一份，报 `cannot be cast to ...`。
+
+细节见[脚本与命令控制台](SCRIPTING.md)。
+
+---
+
 ## 源码锚点
 
 想按代码核对上面的结论，从这里进：
@@ -1285,4 +1318,4 @@ float32 尾数 24 位，相对精度 ≈ `2⁻²⁴ ≈ 6e-8`。**能表示的�
 | 性能分析 | [timing_session.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/profile/timing_session.cpp)、[timing_scope.h](https://github.com/terry-chao/tamias/blob/main/src/engine/profile/timing_scope.h)、[timing_event.h](https://github.com/terry-chao/tamias/blob/main/src/engine/profile/timing_event.h) |
 | 插件 | [host_api.h](https://github.com/terry-chao/tamias/blob/main/src/plugin/host_api.h)、[plugin_host.h](https://github.com/terry-chao/tamias/blob/main/src/plugin/plugin_host.h)、[csharp_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/plugin/csharp_runtime.cpp)、[Bootstrap.cs](https://github.com/terry-chao/tamias/blob/main/plugin-sdk/csharp/Tamias.Host/Bootstrap.cs)、[HostApi.cs](https://github.com/terry-chao/tamias/blob/main/plugin-sdk/csharp/Tamias.Api/HostApi.cs) |
 
-相关文档：[超大规模三角](MASSIVE-GEOMETRY.md) · [合批 / Instancing](INSTANCING.md) · [语义树](SCENE-GRAPH.md) · [渲染管线](RENDERING.md) · [OpenGL 后端](OPENGL.md) · [WebGPU 后端](WGPU.md) · [视锥剔除](FRUSTUM-CULLING.md) · [建模内核](MODELING-KERNEL.md) · [特征树求值器](FEATURE-TREE-EVALUATOR.md) · [MCAD 管线](MCAD-PIPELINE.md) · [几何边界](ISHAPE-OPS.md) · [参考图纸](DRAWING.md) · [插件开发](plugin/develop.md) · [性能分析](PROFILING.md) · [测试](TESTING.md) · [路线图](ROADMAP.md)
+相关文档：[超大规模三角](MASSIVE-GEOMETRY.md) · [合批 / Instancing](INSTANCING.md) · [语义树](SCENE-GRAPH.md) · [渲染管线](RENDERING.md) · [OpenGL 后端](OPENGL.md) · [WebGPU 后端](WGPU.md) · [视锥剔除](FRUSTUM-CULLING.md) · [建模内核](MODELING-KERNEL.md) · [特征树求值器](FEATURE-TREE-EVALUATOR.md) · [MCAD 管线](MCAD-PIPELINE.md) · [几何边界](ISHAPE-OPS.md) · [参考图纸](DRAWING.md) · [插件开发](plugin/develop.md) · [脚本与命令控制台](SCRIPTING.md) · [性能分析](PROFILING.md) · [测试](TESTING.md) · [路线图](ROADMAP.md)

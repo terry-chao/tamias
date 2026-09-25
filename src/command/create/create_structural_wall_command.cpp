@@ -30,6 +30,10 @@ Result<bool> CreateStructuralWallCommand::on_point(Vec3 point) {
   return true;
 }
 
+CommandArgs CreateStructuralWallCommand::echo_args() const {
+  return {{"points", std::vector<Vec3>{start_, end_}}};
+}
+
 Result<void> CreateStructuralWallCommand::execute() {
   StructuralWallEntity wall(start_, end_, thickness_, height_);
   document_->assign_active_storey(wall);

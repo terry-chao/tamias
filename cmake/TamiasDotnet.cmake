@@ -115,7 +115,8 @@ function(tamias_publish_csharp target)
     return()
   endif()
 
-  file(GLOB_RECURSE _cs_inputs
+  # CONFIGURE_DEPENDS：新加的 .cs 文件也要被当成依赖，否则改了源码却不 republish。
+  file(GLOB_RECURSE _cs_inputs CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/plugin-sdk/csharp/*.cs"
     "${CMAKE_SOURCE_DIR}/plugin-sdk/csharp/*.csproj"
     "${CMAKE_SOURCE_DIR}/plugins/csharp/*.cs"

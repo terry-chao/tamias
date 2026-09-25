@@ -101,6 +101,9 @@ class Session {
 - `MainWindow`：窗口、Ribbon、属性面板、状态栏、插件宿主（绑定到 `Session` 的 document/command）。
 - `DocumentViewport`：Qt 控件 + 输入事件转发 + 覆盖层（视口立方体/工具条/框选/坐标读出）
   + 渲染表面管理；文档/命令/相机/工具/选择全部委托 `Session`。
+- `ConsolePanel`：命令控制台 / 脚本页。回显半边监听 `Session` 的 `ConsoleMessage` 事件
+  （文本由 `host/command_echo.h` 生成）；求值半边走 `PluginHost::evaluate`——**和插件共用
+  同一个 C# 宿主**，所以脚本看到的 `IHost` 和插件一模一样。见[脚本与命令控制台](SCRIPTING.md)。
 - 刷新链路：Session 事件（DocumentChanged/SelectionChanged/ToolChanged）→ Qt 信号 →
   重绘 + 属性面板刷新。
 
@@ -114,6 +117,9 @@ class Session {
 ## 5. 插件对齐（Phase 4）
 
 `HostApi`（C ABI）的能力面（entities/selection/dispatch/register_command）与 Session 高度重叠：
+
+> v6 起这张表多了只读的**特征树 + 参数**（`feature_*`），v7 起多了**事务**
+> （`begin/commit/abort_transaction`）。写路径始终只有 `dispatch` 一条——「窄写、宽读」。
 
 - 桌面插件宿主继续 `plugin_host_.bind(document*, command_system*, after_edit)`，
   传入的正是 Session 的 document/command_system；

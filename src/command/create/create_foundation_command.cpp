@@ -25,6 +25,10 @@ CreateFoundationCommand::CreateFoundationCommand(Document& document, double leng
   scripted_ = true;
 }
 
+CommandArgs CreateFoundationCommand::echo_args() const {
+  return {{"points", std::vector<Vec3>{position_}}};
+}
+
 Result<bool> CreateFoundationCommand::on_point(Vec3 point) {
   position_ = point;
   return true;

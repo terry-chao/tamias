@@ -45,6 +45,7 @@ class CreatePrimitiveCommand final : public Command {
   [[nodiscard]] std::vector<Vec3> preview_polyline(Vec3 cursor) const override;
   [[nodiscard]] float work_plane_y() const override { return work_plane_y_; }
 
+  [[nodiscard]] CommandArgs echo_args() const override;
   [[nodiscard]] Result<void> execute() override;
   void undo() override;
   void redo() override;

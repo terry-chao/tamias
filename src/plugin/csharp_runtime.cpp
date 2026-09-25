@@ -61,6 +61,7 @@ void CsharpRuntime::shutdown() {
     shutdown_fn_ = nullptr;
   }
   invoke_ = nullptr;
+  evaluate_ = nullptr;
   init_ = nullptr;
   point_input_completed_ = nullptr;
   // CoreCLR cannot be unloaded. hostfxr_close only drops the *context*; the
@@ -156,6 +157,12 @@ Result<void> CsharpRuntime::start(const std::filesystem::path& managed_dir,
 #else
       "PointInputCompleted";
 #endif
+  const char_t* evaluate_name =
+#ifdef _WIN32
+      L"Evaluate";
+#else
+      "Evaluate";
+#endif
 
   rc = load_assembly(assembly_native.c_str(), type_name, init_name, UNMANAGEDCALLERSONLY_METHOD, nullptr,
                      reinterpret_cast<void**>(&init_));
@@ -179,17 +186,42 @@ Result<void> CsharpRuntime::start(const std::filesystem::path& managed_dir,
     return Err("failed to bind Tamias.Host.Bootstrap.PointInputCompleted (" +
                std::to_string(rc) + ")");
   }
+  rc = load_assembly(assembly_native.c_str(), type_name, evaluate_name,
+                     UNMANAGEDCALLERSONLY_METHOD, nullptr,
+                     reinterpret_cast<void**>(&evaluate_));
+  if (rc != 0 || evaluate_ == nullptr) {
+    return Err("failed to bind Tamias.Host.Bootstrap.Evaluate (" + std::to_string(rc) + ")");
+  }
 
   const auto plugins_utf8 = plugins_dir.string();
   const int init_rc = init_(api, plugins_utf8.c_str());
   if (init_rc != 0) {
     point_input_completed_ = nullptr;
+    evaluate_ = nullptr;
     invoke_ = nullptr;
     init_ = nullptr;
     return Err("Tamias.Host.Initialize failed (" + std::to_string(init_rc) + ")");
   }
   return {};
 #endif
+}
+
+Result<std::string> CsharpRuntime::evaluate(std::string_view code) {
+  if (evaluate_ == nullptr) {
+    return Err("C# script engine is not loaded");
+  }
+  // 结果 / 错误文本都走这个缓冲；脚本写多了会被截断，不致命。
+  std::vector<char> buffer(16 * 1024, '\0');
+  const std::string source(code);
+  const int rc = evaluate_(source.c_str(), buffer.data(), static_cast<std::int32_t>(buffer.size()));
+  std::string text(buffer.data());
+  if (rc == 0) {
+    return text;
+  }
+  if (rc == 1) {
+    return Err(text.empty() ? std::string("script failed") : text);
+  }
+  return Err(text.empty() ? std::string("C# host is not available") : text);
 }
 
 Result<void> CsharpRuntime::complete_point_input(std::uint64_t request_id,

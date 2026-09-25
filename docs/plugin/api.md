@@ -15,6 +15,7 @@ public interface IHost
 {
     string DocumentName { get; }
     IReadOnlyList<EntityInfo> Entities { get; }
+    IReadOnlyList<FeatureInfo> Features(ulong entityId);
     IReadOnlyList<ulong> Selection { get; }
     IUi Ui { get; }
     void Log(string message);
@@ -23,6 +24,7 @@ public interface IHost
                     RibbonPlacement? placement = null);
     void SetSelection(IEnumerable<ulong> ids);
     void ClearSelection();
+    ITransaction BeginTransaction(string? name = null);
     ulong BeginPointInput(PointInputOptions options, Action<PointInputResult> completed);
     ulong BeginEntityInput(EntityInputOptions options, Action<EntityInputResult> completed);
     void CancelPointInput(ulong requestId);
@@ -33,8 +35,10 @@ public interface IHost
 |---|---|
 | `DocumentName` | 当前绑定文档的名字；无文档时为空 |
 | `Entities` | 全部实体：`Id` / `Kind` / `Name`。id 升序。种类是字符串解析成 `EntityKind`（`Wall`…`Nurbs`，解析失败为 `Unknown`） |
+| `Features(entityId)` | 该实体的特征树（只读）。每条：`Id` / `Kind`（`FeatureKind`）/ `Inputs`（上游特征 id）/ `Params`（`Name` + `Value`）。实体不存在返回空表。参数按名字升序，顺序稳定 |
 | `Selection` | 当前选中 id 列表（文档选择顺序） |
 | `SetSelection` / `ClearSelection` | 写入选择并刷新属性面板；无效 id 会被跳过 |
+| `BeginTransaction` | 开一次批量编辑：`Commit()` 之前 dispatch 的命令合计**一条**撤销记录；没提交就 `Dispose` = 回滚。不能嵌套 |
 | `Ui` | 宿主 Qt 对话框：消息、字符串/数字、多字段表单、打开/保存文件。窗口由 Tamias 弹出，插件不要自建 HWND |
 | `Log` | UTF-8 日志；主窗口接到后显示状态栏 |
 | `Dispatch` | 把命令名 + 参数文本交给 C++ `CommandSystem`；失败抛 `InvalidOperationException`（宿主会 `Log` 异常消息） |
@@ -45,6 +49,57 @@ public interface IHost
 
 `EntityInfo`：`(ulong Id, EntityKind Kind, string Name)`。  
 `EntityKind`：`Unknown = -1`，其余与 C++ `EntityKind` 同序（Wall=0 … Nurbs=15）。
+
+`FeatureInfo`：`(ulong Id, FeatureKind Kind, IReadOnlyList<ulong> Inputs, IReadOnlyList<FeatureParam> Params)`；
+`FeatureParam`：`(string Name, double Value)`。`FeatureKind` 与 C++ 同序（`RectProfile=0` … `Cylinder=16`，只追加不复用旧值）。
+
+```csharp
+// 以前只能猜 feature_id；v6 之后先枚举，再按名字改参数。
+foreach (var feature in host.Features(entityId))
+{
+    host.Log($"{feature.Kind} #{feature.Id} 依赖 [{string.Join(", ", feature.Inputs)}]");
+    foreach (var param in feature.Params)
+    {
+        host.Log($"  {param.Name} = {param.Value}");
+    }
+}
+```
+
+模型里的参数只有一个 `double`，**没有类型和取值范围**——范围属于界面规格（`param_spec`），不在文档里，别指望 ABI 给你。
+
+### 2.1 事务：批量编辑只留一步撤销
+
+脚本改 20 个参数，用户不该按 20 次 Ctrl+Z。用 `using` 包起来，**显式 `Commit()`** 才落地：
+
+```csharp
+using var tx = host.BeginTransaction("批量改参数");
+foreach (var id in host.Selection.ToList())
+{
+    foreach (var feature in host.Features(id))
+    {
+        foreach (var param in feature.Params)
+        {
+            host.Dispatch("set_param", new CommandArgs()
+                .SetInt("entity_id", (long)id)
+                .SetInt("feature_id", (long)feature.Id)
+                .SetString("param_name", param.Name)
+                .SetDouble("value", param.Value + 0.1));
+        }
+    }
+}
+tx.Commit();  // 这一步之前，撤销栈上一个字都没留下
+```
+
+语义上有意选成**显式提交**：只有 `Commit()` 留撤销记录；没提交就 `Dispose`（包括异常从 `using` 里逃出去）一律回滚。宁可什么都不做，也不要留下半截改动。
+
+| 情况 | 结果 |
+|---|---|
+| `Commit()` | 这一段命令合成一条撤销记录 |
+| 不提交就 `Dispose()` / `Abort()` | 逆序撤销这一段，撤销栈不留记录（文档回到 `Begin` 时的样子） |
+| 事务里没 dispatch 任何命令 | 提交 / 回滚都不产生记录 |
+| 事务里 `dispatch` 交互式命令（点没给全） | 报错。点齐的时刻由鼠标决定，不在事务窗口里 |
+| 第二次 `BeginTransaction` | 报错（不支持嵌套） |
+| 插件命令返回时事务还开着 | 宿主回滚全部并记一条日志，**不会**把用户之后的编辑吞进悬空事务 |
 
 没有活动文档时：实体/选择为空，`Dispatch` / `SetSelection` 失败（「no active document」/ -1）。
 
@@ -132,9 +187,13 @@ host.Wall(result.Points[0], result.Points[1], thickness: 0.2, height: 3);
 
 ## 5. C ABI（给对照实现用）
 
-`HostApi`：`abi_version`（int32，现为 5）+ `context` + 函数指针。x64 上 int32 后有 padding，C# `LayoutKind.Sequential` 与之对齐。**只在表尾追加字段并升版本**，不要在中间插。
+`HostApi`：`abi_version`（int32，现为 7）+ `context` + 函数指针。x64 上 int32 后有 padding，C# `LayoutKind.Sequential` 与之对齐。**只在表尾追加字段并升版本**，不要在中间插。
 
 v5 追加：`begin_point_input` 末尾 `filter_kind`；`set_selection`；`show_dialog`。
+
+v6 追加：`entity_feature_count` / `entity_feature_at` / `feature_input_at` / `feature_param_count` / `feature_param_at`。全部只读；`feature_param_at` 的名字缓冲可以传空（只取值）。
+
+v7 追加：`begin_transaction` / `commit_transaction` / `abort_transaction`。`abort_transaction` 返回回滚的命令条数（0 = 空事务）。
 
 指针约定：字符串 UTF-8；填缓冲的函数写入 `cap-1` 字节并补 `'\0'`，返回写入长度；查询失败返回 -1；`dispatch` / `register_command` / `register_plugin` / `set_selection` 成功 0、失败 -1。`show_dialog`：输入类成功 0、取消 1、失败 -1；消息框返回按钮（1=Ok, 2=Cancel, 3=Yes, 4=No）。
 

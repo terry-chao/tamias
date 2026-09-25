@@ -46,6 +46,8 @@ build/bin/Debug/
 | 按钮 | 命令 id | 做什么 |
 |---|---|---|
 | **列出选择** | `hello.list_selection` | 把当前选择写到状态栏：`#id 种类 名字` |
+| **列出特征** | `hello.list_features` | 把选中实体的特征树与参数写到状态栏（v6 宽读） |
+| **加宽参数** | `hello.widen_params` | 把选中实体的所有特征参数 +0.1；整批只占一步撤销（v7 事务） |
 | **删除所选** | `hello.delete_selected` | 对每个选中 id `dispatch delete_entity`（可撤销） |
 | **关于示例** | `hello.about` | 弹出当前文档摘要对话框 |
 | **创建墙** | `hello.create_wall` | 表单填厚度/高度，视口点两点后建墙 |

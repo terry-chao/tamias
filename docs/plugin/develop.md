@@ -94,7 +94,33 @@ host.AddCommand("my.delete_walls", "删除选中的墙", () =>
 
 - 先 `.ToList()` 再删。边 dispatch 边读 `Selection` 会看到过期列表。
 - 每个 `delete_entity` 是一条可撤销命令（一次按钮可能进栈多条）。
-- 需要改尺寸时用 `set_param`（要知道 `feature_id` 和参数名）。宿主**还不能**枚举特征树；这一版只能你自己约定 id，或先从属性面板/句柄检查对着看。
+- 需要改尺寸时用 `set_param`（要知道 `feature_id` 和参数名）。**v6 起可以枚举**：`host.Features(entityId)` 给出特征 id、种类、依赖的上游 id 和各参数的当前值，不用再自己猜 id 或对着属性面板抄。
+
+```csharp
+// 从枚举到派发走一遍：把选中实体每个特征参数都加宽 0.1。
+foreach (var entityId in host.Selection.ToList())
+{
+    foreach (var feature in host.Features(entityId))
+    {
+        foreach (var param in feature.Params)
+        {
+            host.Dispatch("set_param", new CommandArgs()
+                .SetInt("entity_id", (long)entityId)
+                .SetInt("feature_id", (long)feature.Id)
+                .SetString("param_name", param.Name)
+                .SetDouble("value", param.Value + 0.1));
+        }
+    }
+}
+```
+
+批量改参数要包在事务里，否则每条 `set_param` 都是一步撤销：
+
+```csharp
+using var tx = host.BeginTransaction("批量改参数");
+// …上面那圈 Dispatch…
+tx.Commit();  // 整批只占一步撤销；不 Commit 就是整批回滚
+```
 
 完整可运行样本：[`HelloPlugin.cs`](https://github.com/terry-chao/tamias/blob/main/plugins/csharp/Tamias.Hello/HelloPlugin.cs)。命令与参数表见[宿主功能](api.md)。
 
@@ -147,6 +173,8 @@ host.BeginEntityInput(new EntityInputOptions {
 
 ## 4. 调试
 
+想先试一句再写进插件：**视图 → 面板 → 命令控制台**，直接敲 C#（每段自带一个事务，改错一步撤销）。控制台和插件共用同一套 `IHost`。
+
 - 插件异常会被 `Bootstrap.Invoke` 吃掉并 `Log` 到状态栏，不会崩进程。
 - 可以在 Visual Studio / Rider 里对 `tamias.exe` 附加进程，断点打在插件工程（需 pdb 和 DLL 一起放到 `plugins/`）。
 - 改 C# 后重新 publish 再重启；hostfxr 不会热重载 ALC（加载上下文 `isCollectible: false`）。
@@ -162,11 +190,11 @@ C++ 侧入口：[`PluginHost`](https://github.com/terry-chao/tamias/blob/main/sr
 |---|---|
 | 自建 WinForms/WPF 窗口、Dock | 用 `IUi`（消息/表单/文件框），窗口由宿主 Qt 弹出 |
 | 自己订阅 Qt 鼠标事件 | 使用 `BeginPointInput` / `BeginEntityInput` |
-| 读特征树、网格、变换矩阵 | `EntityInfo` 只有 id / 种类 / 名字 |
+| 读网格、变换矩阵 | 没有。特征树与参数 v6 已可读（`IHost.Features`），几何和矩阵仍不在契约里 |
 | 改相机 | 没有 |
 | 在插件里 new 实体对象 | 必须 `Dispatch` 或 `HostDraw` |
 | 依赖另一份 `Tamias.Api.dll` | ALC 强制用宿主那份；不要把 API 拷进 `plugins/` |
 
-这些要加的话，先扩 `HostApi` 并 **把 `kHostApiVersion` 加一**，C# `HostApi` 结构体同步改。不要在 v5 表中间插字段。
+这些要加的话，先扩 `HostApi` 并 **把 `kHostApiVersion` 加一**，C# `HostApi` 结构体同步改。不要在 v7 表中间插字段。
 
 设计背景见[设计理念](design.md)。
