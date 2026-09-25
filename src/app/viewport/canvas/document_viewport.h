@@ -21,6 +21,7 @@
 #include "engine/document/picking.h"
 #include "app/viewport/overlay/box_select_overlay.h"
 #include "app/viewport/overlay/view_cube_widget.h"
+#include "app/viewport/canvas/armed_placement.h"
 #include "app/viewport/canvas/viewport_floor.h"
 #include "app/viewport/panel/viewport_tool_panel.h"
 #include "entity/core/entity_grip.h"
@@ -319,8 +320,13 @@ class DocumentViewport final : public QWidget {
   void adjust_selected_param(double delta);
   void run_command(const std::string& name, const CommandArgs& args, bool notify = true);
   void dispatch_tool_command(ToolMode mode);
+  // 武装一个构件命令（dispatch）并记下这一刻的楼层放置状态。
+  void dispatch_armed_component(const std::string& command, const CommandArgs& args);
   // 用面板最近一次武装的参数重新武装当前工具（连续绘制同类型构件时用）。
   void rearm_tool();
+  // 当前楼层（或它的标高 / 层高）变了以后，武装中的构件命令要按新楼层重画一遍：
+  // 不然命令还拿着旧楼层的标高执行，归属却写成新楼层（见 armed_placement.h）。
+  void sync_armed_placement();
   void resync_all_meshes();
   void resync_textures();
   void cancel_tool();
@@ -441,6 +447,8 @@ class DocumentViewport final : public QWidget {
   // 绘制面板最近一次武装的参数（连续绘制同类型构件时复用，避免回退到硬编码默认）。
   ToolMode last_arm_mode_ = ToolMode::None;
   CommandArgs last_arm_args_;
+  // 武装那一刻的楼层放置状态；楼层一变就重新武装（见 sync_armed_placement）。
+  ArmedPlacement armed_placement_;
   float persp_yaw_ = 0.785398163f;
   float persp_pitch_ = 0.35f;
   std::optional<Aabb> debug_aabb_;

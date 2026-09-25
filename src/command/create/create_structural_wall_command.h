@@ -32,6 +32,8 @@ class CreateStructuralWallCommand final : public Command {
   double thickness_ = 0.3;
   double height_ = 3.0;
   double elevation_ = 0.0;
+  // 武装这一刻的当前楼层（见 create_wall_command.h）。
+  std::uint64_t placement_storey_ = 0;
   bool has_start_ = false;
   bool scripted_ = false;
   Vec3 start_{};

@@ -5,15 +5,19 @@
 #include "app/base/theme.h"
 
 #include <QComboBox>
+#include <QCursor>
 #include <QFont>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QIcon>
 #include <QLabel>
+#include <QModelIndex>
 #include <QPainter>
 #include <QPixmap>
 #include <QSignalBlocker>
 #include <QStackedWidget>
+#include <QStyle>
+#include <QStyleOptionViewItem>
 #include <QToolButton>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
@@ -308,7 +312,8 @@ void FloorPanel::sync_rows() {
     item->setText(0, label);
     item->setText(1, QStringLiteral("%1 m").arg(static_cast<double>(floor.y_min), 0, 'f', 3));
     item->setText(2, QStringLiteral("%1 m").arg(static_cast<double>(floor.height), 0, 'f', 3));
-    item->setToolTip(0, tr("Click to make this the current floor; untick to hide it."));
+    item->setToolTip(
+        0, tr("Click the row to make it the current floor; the checkbox only shows or hides it."));
     const bool hidden = viewport_->floor_hidden(i);
     item->setCheckState(0, hidden ? Qt::Unchecked : Qt::Checked);
     item->setForeground(0, hidden ? muted : active);
@@ -346,7 +351,27 @@ void FloorPanel::on_item_clicked(QTreeWidgetItem* item, int column) {
   if (storey_id == 0 || viewport_->document().bim().active_storey_id() == storey_id) {
     return;
   }
+  // 点勾选框 = 显隐开关。`itemClicked` 在点勾选框时也会发一次，不挡住的话，
+  // "把上一层藏起来"会顺手把当前楼层换成上一层：接着画的构件就归到了上一层。
+  if (click_hit_check_indicator(item)) {
+    return;
+  }
   viewport_->set_active_storey(storey_id);
+}
+
+bool FloorPanel::click_hit_check_indicator(const QTreeWidgetItem* item) const {
+  const QModelIndex index = tree_->indexFromItem(item);
+  if (!index.isValid()) {
+    return false;
+  }
+  QStyleOptionViewItem option;
+  option.initFrom(tree_);
+  option.rect = tree_->visualRect(index);
+  option.features |= QStyleOptionViewItem::HasCheckIndicator;
+  const QRect indicator =
+      tree_->style()->subElementRect(QStyle::SE_ItemViewItemCheckIndicator, &option, tree_);
+  // itemClicked 就在鼠标释放那一下发出，光标位置就是这一点。
+  return indicator.contains(tree_->viewport()->mapFromGlobal(QCursor::pos()));
 }
 
 void FloorPanel::on_storey_combo_changed(int index) {

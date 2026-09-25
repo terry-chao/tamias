@@ -100,7 +100,19 @@ class Document {
   void apply_storey_plan(std::vector<Storey>& plan);
   // 按 Location 刷新实体造型放置缓存、场景变换及楼层归属。
   bool sync_entity_location(std::uint64_t entity_id);
-  // 将构件当前世界标高换算为当前楼层的相对偏移。
+  // 楼层归属（唯一写入口）：把构件划到 storey_id 这一层。
+  //  - 该层不存在（含 0 = 未指定）→ 未归属：世界位置不动，挂在场景根上；
+  //  - 否则族实体记下楼层、Location 记下同一层与相对偏移（世界标高不变，以后改层
+  //    标高构件跟着走），场景节点挂到该层的分组节点下。
+  void assign_storey(Entity& entity, std::uint64_t storey_id);
+  // 同上，但显式给相对偏移（属性面板改「楼层 / 标高偏移」走这条）。
+  void assign_storey_with_offset(Entity& entity, std::uint64_t storey_id,
+                                 double elevation_offset);
+  // 只改归属、不碰放置：宿主驱动的门窗（位置由宿主墙摆好，不能按 Location 重算）
+  // 跟着宿主换层时用。
+  void retag_storey(Entity& entity, std::uint64_t storey_id);
+  // 按**当前**楼层归属。交互式命令一般不用它——命令在武装那一刻就把楼层记下来了
+  // （点齐前用户可能切了楼层），见各 Create*Command。
   void assign_active_storey(Entity& entity);
 
   MeshAsset& add_mesh(MeshAsset asset) {

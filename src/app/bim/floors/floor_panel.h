@@ -37,6 +37,8 @@ class FloorPanel final : public QWidget {
   void sync_storey_combo();
   void on_item_changed(QTreeWidgetItem* item, int column);
   void on_item_clicked(QTreeWidgetItem* item, int column);
+  // 这一下点的是不是行首的勾选框？（勾选框只管显隐，不该顺手改当前楼层。）
+  [[nodiscard]] bool click_hit_check_indicator(const QTreeWidgetItem* item) const;
   void on_storey_combo_changed(int index);
   void open_floor_settings();
 

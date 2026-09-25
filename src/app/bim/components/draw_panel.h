@@ -8,6 +8,7 @@
 #include <QWidget>
 #include <functional>
 #include <unordered_map>
+#include <unordered_set>
 
 class QButtonGroup;
 class QDoubleSpinBox;
@@ -44,6 +45,12 @@ class DrawPanel final : public QWidget {
   void set_storey_height_provider(std::function<double()> provider);
   [[nodiscard]] bool is_armed() const { return armed_; }
   void set_armed(bool armed);
+  // 当前楼层（或它的层高）变了以后，把还停在自动值的"层高参数"刷新到新楼层：
+  // 板默认画本层顶，层高换了默认偏移就得跟着换——不然重新武装出来的板停在旧楼层的
+  // 标高上（用户手改过的值不动）。返回是否有值真的变了。
+  bool refresh_storey_defaults();
+  // 按当前面板参数再武装一次（默认值跟着楼层变时用，等价于点一次"开始绘制"）。
+  void rearm();
   // 只同步按钮外观、不发 disarmed：切换文档时清掉"武装"假象，
   // 不去动其它视口里已经 dispatch 的 pending 命令。
   void clear_armed();
@@ -81,6 +88,8 @@ class DrawPanel final : public QWidget {
   // 参数 spinbox：key -> spinbox（公共 + 当前子类型专属）。
   // 用 std::string 做 key：QString 无 std::hash 特化。
   std::unordered_map<std::string, QDoubleSpinBox*> param_spins_;
+  // 用户亲手改过的参数：默认值跟着楼层刷新时不能盖掉它们。
+  std::unordered_set<std::string> user_edited_;
   std::function<double()> storey_height_provider_;
   bool armed_ = false;
   bool suppress_rearm_ = false;

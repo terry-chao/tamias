@@ -9,6 +9,7 @@ CreateFoundationCommand::CreateFoundationCommand(Document& document, double leng
     : document_(&document), length_(length), width_(width), height_(height) {
   work_plane_y_ = static_cast<float>(
       document.bim().storey_elevation(document.bim().active_storey_id()));
+  placement_storey_ = document.bim().active_storey_id();
 }
 
 CreateFoundationCommand::CreateFoundationCommand(Document& document, double diameter,
@@ -16,6 +17,7 @@ CreateFoundationCommand::CreateFoundationCommand(Document& document, double diam
     : document_(&document), shape_(FoundationShape::Pile), diameter_(diameter), height_(height) {
   work_plane_y_ = static_cast<float>(
       document.bim().storey_elevation(document.bim().active_storey_id()));
+  placement_storey_ = document.bim().active_storey_id();
 }
 
 CreateFoundationCommand::CreateFoundationCommand(Document& document, double length,
@@ -42,7 +44,7 @@ Result<void> CreateFoundationCommand::execute() {
   } else {
     footing = std::make_unique<FoundationEntity>(position_, length_, width_, height_);
   }
-  document_->assign_active_storey(*footing);
+  document_->assign_storey(*footing, placement_storey_);
   auto geometry = footing->createGeom();
   if (!geometry) {
     return Err(geometry.error());

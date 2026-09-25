@@ -26,7 +26,7 @@ namespace tamias {
 namespace {
 
 constexpr char kMagic[4] = {'T', 'M', 'A', 'S'};
-constexpr std::uint32_t kFormatVersion = 20;
+constexpr std::uint32_t kFormatVersion = 21;
 constexpr std::uint32_t kMinFormatVersion = 5;
 constexpr std::uint32_t kGripsFormatVersion = 7;
 constexpr std::uint32_t kLocationFormatVersion = 8;
@@ -41,6 +41,8 @@ constexpr std::uint32_t kGridFormatVersion = 17;
 constexpr std::uint32_t kXrayFormatVersion = 19;
 // 20：图纸清单从「只存路径」变成「路径 + 显隐 + 摆放」（底图画进视口）。
 constexpr std::uint32_t kDrawingPlacementFormatVersion = 20;
+// 21：楼层归属落到族实体自己身上（FamilyEntity::storey_id）；旧档按 Location 推。
+constexpr std::uint32_t kFamilyStoreyFormatVersion = 21;
 
 constexpr std::uint32_t fourcc(char a, char b, char c, char d) {
   return static_cast<std::uint32_t>(static_cast<std::uint8_t>(a)) |
@@ -638,11 +640,13 @@ Result<void> write_entity(BinaryWriter& w, const Entity& e) {
       return r;
     }
   }
-  return {};
+  // 族实体的楼层归属（21 起）：没有族语义的实体写 0。
+  const auto* family = dynamic_cast<const FamilyEntity*>(&e);
+  return w.write_u64(family != nullptr ? family->storey_id() : 0);
 }
 
 Result<void> read_entity(BinaryReader& r, std::unique_ptr<Entity>& out, bool read_grips,
-                         bool read_location_data) {
+                         bool read_location_data, bool read_family_storey) {
   auto id = r.read_u64();
   if (!id) {
     return Err(id.error());
@@ -698,6 +702,22 @@ Result<void> read_entity(BinaryReader& r, std::unique_ptr<Entity>& out, bool rea
       if (auto res = read_vec3(r, p); !res) {
         return res;
       }
+    }
+  }
+  // 楼层归属：21 起存在族实体自己身上；更早的档按 Location 的楼层补（那时两者同源）。
+  std::uint64_t storey_id = entity->location != nullptr ? entity->location->storey_id() : 0;
+  if (read_family_storey) {
+    auto stored = r.read_u64();
+    if (!stored) {
+      return Err(stored.error());
+    }
+    storey_id = *stored;
+  }
+  if (auto* family = dynamic_cast<FamilyEntity*>(entity.get())) {
+    family->set_storey_id(storey_id);
+    if (entity->location != nullptr) {
+      // 两者必须一致：归族实体所有的是真源，Location 跟着走。
+      entity->location->set_storey_id(storey_id);
     }
   }
   if (entity->grips.empty()) {
@@ -1399,7 +1419,7 @@ Result<Document> read_document_body(BinaryReader& r) {
   }
   for (std::uint64_t i = 0; i < *entity_count; ++i) {
     std::unique_ptr<Entity> entity;
-    if (auto res = read_entity(r, entity, true, true); !res) {
+    if (auto res = read_entity(r, entity, true, true, true); !res) {
       return Err(res.error());
     }
     document.insert_entity(std::move(entity));
@@ -1926,7 +1946,8 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes,
         std::unique_ptr<Entity> entity;
         if (auto res =
                 read_entity(chunk_r, entity, *version >= kGripsFormatVersion,
-                            *version >= kLocationFormatVersion);
+                            *version >= kLocationFormatVersion,
+                            *version >= kFamilyStoreyFormatVersion);
             !res) {
           return Err(res.error());
         }

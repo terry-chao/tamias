@@ -8,7 +8,8 @@ CreateWallCommand::CreateWallCommand(Document& document, double thickness, doubl
     : document_(&document),
       thickness_(thickness),
       height_(height),
-      elevation_(document.bim().storey_elevation(document.bim().active_storey_id())) {}
+      elevation_(document.bim().storey_elevation(document.bim().active_storey_id())),
+      placement_storey_(document.bim().active_storey_id()) {}
 
 CreateWallCommand::CreateWallCommand(Document& document, double thickness, double height,
                                        double leaf)
@@ -47,7 +48,7 @@ Result<void> CreateWallCommand::execute() {
   } else {
     wall = std::make_unique<WallEntity>(start_, end_, thickness_, height_);
   }
-  document_->assign_active_storey(*wall);
+  document_->assign_storey(*wall, placement_storey_);
   auto geometry = wall->createGeom();
   if (!geometry) {
     return Err(geometry.error());

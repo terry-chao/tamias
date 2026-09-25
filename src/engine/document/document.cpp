@@ -8,6 +8,7 @@
 #include "engine/render/resource/builtin_textures.h"
 #include "engine/render/resource/mesh_lod.h"
 #include "entity/core/entity_grip.h"
+#include "entity/core/entity_storey.h"
 #include "entity/core/kind_display_color.h"
 
 #include <algorithm>
@@ -15,6 +16,25 @@
 #include <string>
 
 namespace tamias {
+namespace {
+
+// 楼层归属只认楼层表里真有的那一层：表里没有（含 0 = 未指定）就是"未归属"。
+std::uint64_t resolve_storey_id(const BimModel& bim, std::uint64_t storey_id) {
+  return bim.find_storey(storey_id) != nullptr ? storey_id : 0;
+}
+
+// 归属字段有两份：族实体的 storey_id（BIM 语义，读入口 entity_storey_id）和 Location
+// 的 storey_id（放置锚点）。只能一起写，免得两边漂开。
+void write_storey_id(Entity& entity, std::uint64_t storey_id) {
+  if (auto* family = dynamic_cast<FamilyEntity*>(&entity)) {
+    family->set_storey_id(storey_id);
+  }
+  if (entity.location != nullptr) {
+    entity.location->set_storey_id(storey_id);
+  }
+}
+
+}  // namespace
 
 Document::~Document() {
   TessWorker::instance().cancel_all();
@@ -121,14 +141,17 @@ void Document::remove_storey(std::uint64_t id) {
   const double elevation = bim_.storey_elevation(id);
   for (auto& [entity_id, entity_ptr] : entities_) {
     (void)entity_id;
-    if (entity_ptr->location && entity_ptr->location->storey_id() == id) {
-      entity_ptr->location->set_storey_id(0);
-      entity_ptr->location->set_elevation_offset(
-          entity_ptr->location->elevation_offset() + elevation);
-      entity_ptr->sync_from_location(0.0);
-      scene_.set_parent(entity_ptr->id, 0);
-      scene_.set_transform(entity_ptr->id, entity_ptr->local_transform);
+    if (entity_ptr == nullptr || entity_ptr->location == nullptr ||
+        entity_storey_id(*entity_ptr) != id) {
+      continue;
     }
+    // 楼层没了：构件变未归属、留在原处（相对偏移换算成世界标高）。
+    write_storey_id(*entity_ptr, 0);
+    entity_ptr->location->set_elevation_offset(entity_ptr->location->elevation_offset() +
+                                               elevation);
+    entity_ptr->sync_from_location(0.0);
+    scene_.set_parent(entity_ptr->id, 0);
+    scene_.set_transform(entity_ptr->id, entity_ptr->local_transform);
   }
   bim_.remove_storey(id);
   scene_.remove_node(id);
@@ -195,7 +218,7 @@ void Document::resync_storey_children(std::uint64_t storey_id) {
   for (auto& [unused, entity_ptr] : entities_) {
     (void)unused;
     if (entity_ptr == nullptr || !entity_ptr->location ||
-        entity_ptr->location->storey_id() != storey_id) {
+        entity_storey_id(*entity_ptr) != storey_id) {
       continue;
     }
     entity_ptr->sync_from_location(elevation);
@@ -282,17 +305,34 @@ bool Document::remove_text_annotation(std::uint64_t id) {
   return false;
 }
 
-void Document::assign_active_storey(Entity& entity) {
+void Document::assign_storey(Entity& entity, std::uint64_t storey_id) {
+  if (!entity.location) {
+    return;  // 草图 / 基础体：没有放置锚点，也就没有楼层
+  }
+  const std::uint64_t resolved = resolve_storey_id(bim_, storey_id);
+  // 归属只换"记在哪一层"：世界标高不动，换算成相对该层的偏移。
+  const double world_elevation = static_cast<double>(entity.local_transform(1, 3));
+  assign_storey_with_offset(entity, resolved,
+                            world_elevation - bim_.storey_elevation(resolved));
+}
+
+void Document::assign_storey_with_offset(Entity& entity, std::uint64_t storey_id,
+                                         double elevation_offset) {
   if (!entity.location) {
     return;
   }
-  const std::uint64_t storey_id = bim_.active_storey_id();
-  const double world_elevation =
-      static_cast<double>(entity.local_transform(1, 3));
-  entity.location->set_storey_id(storey_id);
-  entity.location->set_elevation_offset(
-      world_elevation - bim_.storey_elevation(storey_id));
-  entity.sync_from_location(bim_.storey_elevation(storey_id));
+  const std::uint64_t resolved = resolve_storey_id(bim_, storey_id);
+  write_storey_id(entity, resolved);
+  entity.location->set_elevation_offset(elevation_offset);
+  entity.sync_from_location(bim_.storey_elevation(resolved));
+}
+
+void Document::assign_active_storey(Entity& entity) {
+  assign_storey(entity, bim_.active_storey_id());
+}
+
+void Document::retag_storey(Entity& entity, std::uint64_t storey_id) {
+  write_storey_id(entity, resolve_storey_id(bim_, storey_id));
 }
 
 bool Document::sync_entity_location(std::uint64_t entity_id) {
@@ -300,7 +340,9 @@ bool Document::sync_entity_location(std::uint64_t entity_id) {
   if (target == nullptr || !target->location) {
     return false;
   }
-  const std::uint64_t storey_id = target->location->storey_id();
+  // Location 是放置的输入，族实体的楼层变量跟着它走（反之由 assign_storey_* 负责）。
+  const std::uint64_t storey_id = resolve_storey_id(bim_, target->location->storey_id());
+  write_storey_id(*target, storey_id);
   target->sync_from_location(bim_.storey_elevation(storey_id));
   scene_.set_transform(entity_id, target->local_transform);
   scene_.set_parent(entity_id, bim_.find_storey(storey_id) != nullptr ? storey_id : 0);
@@ -521,8 +563,9 @@ Entity* Document::add_entity(std::unique_ptr<Entity> entity, MeshCpu mesh) {
   node.name = entity->name;
   node.mesh_asset_id = entity->mesh_asset_id;
   node.local_transform = entity->local_transform;
-  if (entity->location && bim_.find_storey(entity->location->storey_id()) != nullptr) {
-    node.parent = entity->location->storey_id();
+  const std::uint64_t storey_id = entity_storey_id(*entity);
+  if (bim_.find_storey(storey_id) != nullptr) {
+    node.parent = storey_id;
   }
   SceneNode& stored_node = scene_.add_node(std::move(node));
   entity->id = stored_node.id;  // entity id == scene node id
@@ -609,8 +652,9 @@ void Document::insert_entity(std::unique_ptr<Entity> entity, MeshAsset mesh) {
   node.name = entity->name;
   node.mesh_asset_id = mesh_id;
   node.local_transform = entity->local_transform;
-  if (entity->location && bim_.find_storey(entity->location->storey_id()) != nullptr) {
-    node.parent = entity->location->storey_id();
+  const std::uint64_t storey_id = entity_storey_id(*entity);
+  if (bim_.find_storey(storey_id) != nullptr) {
+    node.parent = storey_id;
   }
   scene_.insert_node(std::move(node));
 

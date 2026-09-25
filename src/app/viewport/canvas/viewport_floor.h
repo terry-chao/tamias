@@ -14,8 +14,8 @@ namespace tamias {
 // 视口里的"楼层带"（Y 轴向上）：**只来自文档的楼层表**（楼层设置里那张表）。
 // 楼层不从几何推——画个东西就冒出一层、删掉又没了，那是错的。
 // 它是**视图过滤**用的，不写回文档。
-// 构件属于哪层优先看 Location 的楼层（BIM 语义），楼层带只给没归属的兜底，
-// 见 viewport_floor_allows。
+// 构件属于哪层看它自己的归属（族实体的 storey_id，见 entity_storey_id），
+// 楼层带只给没归属的兜底，见 viewport_floor_allows。
 struct ViewportFloor {
   std::string label;
   std::uint64_t storey_id = 0;  // 楼层表里的楼层 id
@@ -33,8 +33,8 @@ inline bool viewport_floor_contains(const ViewportFloor& floor, const Aabb& boun
 }
 
 // 按楼层过滤时这个节点算不算可见？hidden = 被隐藏的楼层下标（空 = 全可见）。
-// 归属优先看 BIM 语义：Location 指到某个真实楼层的构件只看自己那层——在 1 楼画的
-// **顶板**压在 2 楼标高上，它仍然是 1 楼的东西，不该掉进 2 楼。
+// 归属优先看 BIM 语义：有楼层归属的构件只看自己那层——在 1 楼画的**顶板**压在
+// 2 楼标高上，它仍然是 1 楼的东西，不该掉进 2 楼。
 // 没有楼层归属的（未归属构件 / 导入网格）退回几何楼层带：碰到任意一个可见的带就还
 // 看得见（跨层构件不会因为少碰一层就消失）。
 inline bool viewport_floor_allows(const std::vector<ViewportFloor>& floors,

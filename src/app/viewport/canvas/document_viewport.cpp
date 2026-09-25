@@ -25,6 +25,7 @@
 #include "engine/profile/timing_scope.h"
 #include "entity/core/entity.h"
 #include "entity/core/entity_grip.h"
+#include "entity/core/entity_storey.h"
 
 #if defined(TAMIAS_HAS_RHI_OPENGL)
 #include "engine/render/rhi/opengl/opengl_backend.h"
@@ -211,6 +212,11 @@ DocumentViewport::DocumentViewport(std::shared_ptr<Document> document,
   view_anim_timer_ = new QTimer(this);
   view_anim_timer_->setInterval(16);
   connect(view_anim_timer_, &QTimer::timeout, this, &DocumentViewport::on_view_anim_tick);
+
+  // 楼层变了（切层 / 改标高 / 改层高 / 撤销回旧楼层）以后，武装中的构件命令必须
+  // 按新楼层重画一遍，见 sync_armed_placement。
+  connect(this, &DocumentViewport::document_changed, this,
+          &DocumentViewport::sync_armed_placement);
 
   coord_label_ = new QLabel(this);
   coord_label_->setObjectName(QStringLiteral("coordReadout"));
@@ -1308,9 +1314,7 @@ void DocumentViewport::arm_create(ToolMode mode, const CommandArgs& args) {
     log_error("arm_create: no component spec for tool");
     return;
   }
-  if (auto r = session_->dispatch(spec->command.toStdString(), args); !r) {
-    log_error(r.error());
-  }
+  dispatch_armed_component(spec->command.toStdString(), args);
   last_arm_mode_ = mode;
   last_arm_args_ = args;
   request_redraw();
@@ -1326,12 +1330,46 @@ void DocumentViewport::rearm_tool() {
     // 面板构件：用上次武装参数重新 dispatch。
     command_system_.cancel();
     const ComponentSpec* spec = find_component_spec(mode);
-    if (auto r = session_->dispatch(spec->command.toStdString(), last_arm_args_); !r) {
-      log_error(r.error());
-    }
+    dispatch_armed_component(spec->command.toStdString(), last_arm_args_);
   } else {
     dispatch_tool_command(mode);
   }
+}
+
+// 武装一个构件命令，并记下"这一刻是照哪一层摆的"（见 armed_placement.h）。
+void DocumentViewport::dispatch_armed_component(const std::string& command,
+                                                const CommandArgs& args) {
+  if (auto r = session_->dispatch(command, args); !r) {
+    log_error(r.error());
+    armed_placement_ = {};
+    return;
+  }
+  // 非交互命令 dispatch 就执行完了，没有"武装着等点"的状态；只有交互式命令
+  // 会留在 pending 里，才有必要记住它的楼层。
+  armed_placement_ = command_system_.has_pending() ? capture_armed_placement(*document_)
+                                                    : ArmedPlacement{};
+}
+
+void DocumentViewport::sync_armed_placement() {
+  if (!command_system_.has_pending()) {
+    armed_placement_ = {};  // 命令已经点齐执行（或取消了）：没有要跟的东西
+    return;
+  }
+  const ToolMode mode = session_->tool_mode();
+  if (find_component_spec(mode) == nullptr || last_arm_mode_ != mode) {
+    return;  // 草图 / 插件点输入不吃楼层，别打断正在画的那一笔
+  }
+  if (!armed_placement_stale(armed_placement_, *document_)) {
+    return;
+  }
+  // 按当前楼层重新武装：标高 / 工作面与楼层归属都从新的楼层重新取一遍，
+  // 画出来的构件才既落在这一层的标高上、又归这一层。
+  command_system_.cancel();
+  const ComponentSpec* spec = find_component_spec(mode);
+  if (spec == nullptr) {
+    return;
+  }
+  dispatch_armed_component(spec->command.toStdString(), last_arm_args_);
 }
 
 void DocumentViewport::dispatch_tool_command(ToolMode mode) {
@@ -3045,8 +3083,9 @@ bool DocumentViewport::node_visible_in_view(std::uint64_t id) const {
       // 归属优先看 Location 的楼层（在 1 楼画的顶板就是 1 楼的），没有归属的
       // （导入网格、未归属构件）才按几何楼层带兜底。
       const Entity* entity = document_->entity(id);
-      const std::uint64_t storey_id =
-          entity != nullptr && entity->location != nullptr ? entity->location->storey_id() : 0;
+      // 族实体自带楼层（entity_storey_id：族实体优先，基础体退回 Location）；
+      // 连 Location 都没有的（导入网格）才是 0 → 按几何楼层带兜底。
+      const std::uint64_t storey_id = entity != nullptr ? entity_storey_id(*entity) : 0;
       if (!viewport_floor_allows(floors_, storey_id, node->world_bounds, hidden_floors_)) {
         return false;
       }

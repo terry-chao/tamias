@@ -1280,6 +1280,21 @@ void MainWindow::sync_draw_panel() {
   }
 }
 
+// 切楼层（楼层管理双击 / 楼层面板换当前楼层 / 改标高 / 改层高）以后，绘制面板上
+// 「标高偏移」这类默认值也要跟着换：板默认画本层顶，默认值是**当前**楼层的层高。
+// 值真变了就按新参数重新武装，视口里那条 pending 命令才不会停在旧楼层的标高上。
+void MainWindow::refresh_draw_panel_storey_defaults() {
+  if (draw_panel_ == nullptr || !draw_panel_->has_component()) {
+    return;
+  }
+  if (!draw_panel_->refresh_storey_defaults()) {
+    return;
+  }
+  if (draw_panel_->is_armed()) {
+    draw_panel_->rearm();
+  }
+}
+
 void MainWindow::sync_create_tool_actions(ToolMode mode) {
   if (!create_group_) {
     return;
@@ -1643,6 +1658,12 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
   connect(vp, &DocumentViewport::document_changed, this, &MainWindow::refresh_handle_inspector);
   connect(vp, &DocumentViewport::document_changed, this,
           &MainWindow::refresh_texture_library_panel);
+  // 楼层默认值只对当前文档生效：后台页签的文档变了不该去动前台这张面板。
+  connect(vp, &DocumentViewport::document_changed, this, [this, vp] {
+    if (current_viewport() == vp) {
+      refresh_draw_panel_storey_defaults();
+    }
+  });
   connect(vp, &DocumentViewport::drawing_open_requested, this,
           [this](const QString& path) { open_drawing_tab(path); });
   connect(vp, &DocumentViewport::selection_changed, this,

@@ -2,6 +2,7 @@
 
 #include "bim/host_geometry.h"
 #include "bim/host_update.h"
+#include "entity/core/entity_storey.h"
 #include "entity/family/host/structural/column_entity.h"
 #include "entity/family/attached/opening/door_entity.h"
 #include "entity/core/entity.h"
@@ -18,6 +19,7 @@ bool is_opening_kind(PrimitiveKind kind) {
 
 CreatePrimitiveCommand::CreatePrimitiveCommand(Document& document, PrimitiveKind kind)
     : document_(&document), kind_(kind) {
+  placement_storey_ = document.bim().active_storey_id();
   if (is_opening_kind(kind_)) {
     opening_sill_ = kind_ == PrimitiveKind::Door ? 0.0 : 0.9;
   }
@@ -136,12 +138,15 @@ std::vector<Vec3> CreatePrimitiveCommand::preview_polyline(Vec3 cursor) const {
 }
 
 Result<void> CreatePrimitiveCommand::execute() {
+  // 门窗的楼层跟着宿主墙走：墙在哪一层，门窗就在哪一层（不是"点它时是哪一层"）。
+  const Entity* host = document_->entity(host_id_);
   if (is_opening_kind(kind_)) {
-    const Entity* host = document_->entity(host_id_);
     if (host == nullptr || !is_wall_host(*host)) {
       return Err("Window and door must be placed on a wall");
     }
   }
+  const std::uint64_t opening_storey =
+      host != nullptr ? entity_storey_id(*host) : placement_storey_;
 
   Entity* added = nullptr;
   switch (kind_) {
@@ -154,7 +159,7 @@ Result<void> CreatePrimitiveCommand::execute() {
         column = std::make_unique<ColumnEntity>(
             position_, column_size_a_, column_size_b_, column_height_);
       }
-      document_->assign_active_storey(*column);
+      document_->assign_storey(*column, placement_storey_);
       auto geometry = column->createGeom();
       if (!geometry) {
         return Err(geometry.error());
@@ -165,6 +170,8 @@ Result<void> CreatePrimitiveCommand::execute() {
     case PrimitiveKind::Door: {
       DoorEntity door(position_, opening_width_, opening_height_, opening_thickness_,
                       opening_sill_);
+      // 门窗的放置由宿主墙决定（下面 bind_opening_to_host 会摆正），这里只认楼层。
+      document_->retag_storey(door, opening_storey);
       auto geometry = door.createGeom();
       if (!geometry) {
         return Err(geometry.error());
@@ -176,6 +183,7 @@ Result<void> CreatePrimitiveCommand::execute() {
     case PrimitiveKind::Window: {
       WindowEntity window(position_, opening_width_, opening_height_, opening_thickness_,
                           opening_sill_);
+      document_->retag_storey(window, opening_storey);
       auto geometry = window.createGeom();
       if (!geometry) {
         return Err(geometry.error());

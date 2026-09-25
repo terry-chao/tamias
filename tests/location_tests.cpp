@@ -7,6 +7,7 @@
 #include "entity/family/host/structural/column_entity.h"
 #include "entity/family/host/structural/slab_entity.h"
 #include "entity/family/host/architectural/wall_entity.h"
+#include "entity/core/entity_storey.h"
 
 #include <gtest/gtest.h>
 
@@ -87,6 +88,8 @@ TEST(Location, StoreyAndPointRoundTrip) {
   EXPECT_EQ(restored->location->kind(), LocationKind::Point);
   EXPECT_EQ(restored->location->storey_id(), storey_id);
   EXPECT_NEAR(restored->location->elevation_offset(), 0.5, 1e-6);
+  // 归属真源在族实体身上，落盘 / 读回都得带着。
+  EXPECT_EQ(entity_storey_id(*restored), storey_id);
 }
 
 TEST(Location, StoreyHeightAndMezzanineRoundTrip) {
@@ -184,6 +187,7 @@ TEST(Location, StoreyPlanMovesHostedComponentsWithElevation) {
   EXPECT_NEAR(moved->local_transform(1, 3), before + 2.5f, 1e-4f);
   ASSERT_NE(moved->location, nullptr);
   EXPECT_EQ(moved->location->storey_id(), storey_id);
+  EXPECT_EQ(entity_storey_id(*moved), storey_id);  // 归属不受"改标高"影响
 }
 
 }  // namespace

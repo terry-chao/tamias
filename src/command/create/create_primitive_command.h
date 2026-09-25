@@ -56,6 +56,8 @@ class CreatePrimitiveCommand final : public Command {
   Document* document_ = nullptr;
   PrimitiveKind kind_ = PrimitiveKind::Column;
   float work_plane_y_ = 0.f;
+  // 武装这一刻的当前楼层（见 create_wall_command.h）；门窗另有规矩——跟着宿主墙走。
+  std::uint64_t placement_storey_ = 0;
   bool scripted_ = false;
   Vec3 position_{};
   std::uint64_t host_id_ = 0;

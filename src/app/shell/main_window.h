@@ -69,6 +69,8 @@ class MainWindow final : public QMainWindow {
   void refresh_handle_inspector();
   void refresh_texture_library_panel();
   void sync_draw_panel();
+  // 当前楼层（或它的层高）变了以后，把绘制面板上"跟着楼层走"的默认值刷新掉。
+  void refresh_draw_panel_storey_defaults();
 
  private:
   void showEvent(QShowEvent* event) override;

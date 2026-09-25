@@ -86,6 +86,7 @@ std::unique_ptr<Entity> Entity::clone() const {
   if (auto* family = dynamic_cast<FamilyEntity*>(e.get())) {
     if (const auto* self_family = dynamic_cast<const FamilyEntity*>(this)) {
       family->set_family_type(self_family->family_type());
+      family->set_storey_id(self_family->storey_id());
     }
   }
   return e;

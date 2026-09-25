@@ -2,6 +2,7 @@
 
 #include "entity/core/entity.h"
 
+#include <cstdint>
 #include <string>
 #include <utility>
 
@@ -19,6 +20,13 @@ class FamilyEntity : public Entity {
   [[nodiscard]] const std::string& family_type() const { return family_type_; }
   void set_family_type(std::string type) { family_type_ = std::move(type); }
 
+  // 楼层归属：构件画在哪一层就属于哪一层（0 = 未归属）。
+  // 这是归属的真源——写入口只有 Document::assign_storey / sync_entity_location，
+  // 读入口统一走 entity_storey_id()（见 entity/core/entity_storey.h）；
+  // Location 上的 storey_id 只是放置锚点，两者由那一处对齐。
+  [[nodiscard]] std::uint64_t storey_id() const { return storey_id_; }
+  void set_storey_id(std::uint64_t value) { storey_id_ = value; }
+
   [[nodiscard]] bool is_family_entity() const final { return true; }
 
  protected:
@@ -29,6 +37,7 @@ class FamilyEntity : public Entity {
 
  private:
   std::string family_type_ = "Generic Model";
+  std::uint64_t storey_id_ = 0;
 };
 
 }  // namespace tamias

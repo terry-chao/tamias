@@ -12,6 +12,8 @@
 #include <QSignalBlocker>
 #include <QVBoxLayout>
 
+#include <cmath>
+
 namespace tamias {
 namespace {
 
@@ -89,6 +91,39 @@ void DrawPanel::clear_armed() {
   update_arm_button();
 }
 
+bool DrawPanel::refresh_storey_defaults() {
+  if (spec_ == nullptr || !storey_height_provider_) {
+    return false;
+  }
+  const double wanted = storey_height_provider_();
+  bool changed = false;
+  for (const ParamSpec& p : spec_->merged_params(current_sub_type_)) {
+    if (!p.default_is_storey_height) {
+      continue;
+    }
+    const std::string key = p.key.toStdString();
+    QDoubleSpinBox* spin = find_spin(param_spins_, key);
+    // 用户自己填过这个参数：那是他的值，不是"本层顶"的默认值，别动。
+    if (spin == nullptr || user_edited_.count(key) != 0) {
+      continue;
+    }
+    if (std::abs(spin->value() - wanted) <= 1e-9) {
+      continue;
+    }
+    const QSignalBlocker blocker(spin);
+    spin->setValue(wanted);
+    changed = true;
+  }
+  return changed;
+}
+
+void DrawPanel::rearm() {
+  if (spec_ == nullptr) {
+    return;
+  }
+  gather_and_emit(true);
+}
+
 void DrawPanel::update_arm_button() {
   if (arm_button_ == nullptr) {
     return;
@@ -113,6 +148,7 @@ void DrawPanel::rebuild_form() {
     content_ = nullptr;
   }
   param_spins_.clear();
+  user_edited_.clear();
   sub_type_group_ = nullptr;
   sub_type_row_ = nullptr;
   section_label_ = nullptr;
@@ -262,7 +298,9 @@ void DrawPanel::rebuild_param_rows() {
                            ? storey_height_provider_()
                            : p.def;
     spin->setValue(def);
-    connect(spin, &QDoubleSpinBox::valueChanged, this, [this](double) {
+    connect(spin, &QDoubleSpinBox::valueChanged, this,
+            [this, key = p.key.toStdString()](double) {
+      user_edited_.insert(key);
       if (armed_ && !suppress_rearm_) {
         gather_and_emit(true);
       }

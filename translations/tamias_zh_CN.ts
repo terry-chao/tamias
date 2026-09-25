@@ -3839,8 +3839,8 @@ Export the drawing to DXF, SVG or an image, or rebuild with Qt6::Pdf available.<
         <translation>[夹层] %1</translation>
     </message>
     <message>
-        <source>Click to make this the current floor; untick to hide it.</source>
-        <translation>单击设为当前楼层；取消勾选即隐藏该层。</translation>
+        <source>Click the row to make it the current floor; the checkbox only shows or hides it.</source>
+        <translation>单击行设为当前楼层；勾选框只控制显隐。</translation>
     </message>
     <message>
         <source>This model has no floors yet. Use Floor Settings to add them.</source>

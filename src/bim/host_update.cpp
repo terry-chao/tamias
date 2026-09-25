@@ -4,6 +4,7 @@
 #include "bim/wall_join.h"
 #include "entity/family/attached/opening/door_entity.h"
 #include "entity/family/attached/opening/opening_entity.h"
+#include "entity/core/entity_storey.h"
 #include "engine/base/log.h"
 #include "engine/document/document.h"
 #include "engine/modeling/feature/feature.h"
@@ -53,6 +54,8 @@ Result<void> reshape_hosted(Document& document, Relation& relation) {
   relation.valid = placement_is_valid(relation.placement, wall, opening);
 
   sync_transform(document, *guest, hosted_transform(*host, relation.placement));
+  // 门窗跟着宿主墙的楼层：墙换层，门窗的归属跟着换（只改归属，不碰刚摆好的放置）。
+  document.retag_storey(*guest, entity_storey_id(*host));
   if (const SceneNode* host_node = document.scene().find(host->id)) {
     document.scene().set_parent(guest->id, host_node->parent);
   }

@@ -9,7 +9,8 @@ CreateStructuralWallCommand::CreateStructuralWallCommand(Document& document, dou
     : document_(&document),
       thickness_(thickness),
       height_(height),
-      elevation_(document.bim().storey_elevation(document.bim().active_storey_id())) {}
+      elevation_(document.bim().storey_elevation(document.bim().active_storey_id())),
+      placement_storey_(document.bim().active_storey_id()) {}
 
 CreateStructuralWallCommand::CreateStructuralWallCommand(Document& document, double thickness,
                                                          double height, Vec3 start, Vec3 end)
@@ -36,7 +37,7 @@ CommandArgs CreateStructuralWallCommand::echo_args() const {
 
 Result<void> CreateStructuralWallCommand::execute() {
   StructuralWallEntity wall(start_, end_, thickness_, height_);
-  document_->assign_active_storey(wall);
+  document_->assign_storey(wall, placement_storey_);
   auto geometry = wall.createGeom();
   if (!geometry) {
     return Err(geometry.error());

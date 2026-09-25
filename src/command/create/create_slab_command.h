@@ -32,6 +32,8 @@ class CreateSlabCommand final : public Command {
   Document* document_ = nullptr;
   double thickness_ = 0.2;
   double elevation_ = kDefaultWallHeight;
+  // 武装这一刻的当前楼层：标高与楼层归属都照它算（见 create_wall_command.h）。
+  std::uint64_t placement_storey_ = 0;
   bool has_start_ = false;
   bool scripted_ = false;
   Vec3 start_{};

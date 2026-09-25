@@ -36,6 +36,8 @@ class CreateFoundationCommand final : public Command {
   double height_ = 0.5;
   double diameter_ = 0.6;  // 桩
   float work_plane_y_ = 0.f;
+  // 武装这一刻的当前楼层（见 create_wall_command.h）。
+  std::uint64_t placement_storey_ = 0;
   bool scripted_ = false;
   Vec3 position_{};
   MeshAsset mesh_{};

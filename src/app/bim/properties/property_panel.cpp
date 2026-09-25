@@ -1,5 +1,6 @@
 #include "app/bim/properties/property_panel.h"
 
+#include "entity/core/entity_storey.h"
 #include "engine/document/document.h"
 #include "engine/modeling/evaluate/edge_fingerprint.h"
 #include "app/texture/texture_image.h"
@@ -317,11 +318,13 @@ void PropertyPanel::show_entity(const Entity* entity, Document* document,
   if (entity->location != nullptr && document != nullptr) {
     auto* storey_combo = new QComboBox(content_);
     storey_combo->addItem(tr("Unassigned"), static_cast<qulonglong>(0));
-    int selected_storey = entity->location->storey_id() == 0 ? 0 : -1;
+    // 楼层归属读族实体（entity_storey_id），不是 Location 上的那份拷贝。
+    const std::uint64_t entity_storey = entity_storey_id(*entity);
+    int selected_storey = entity_storey == 0 ? 0 : -1;
     for (const Storey& storey : document->bim().storeys()) {
       storey_combo->addItem(QString::fromStdString(storey.name),
                             static_cast<qulonglong>(storey.id));
-      if (storey.id == entity->location->storey_id()) {
+      if (storey.id == entity_storey) {
         selected_storey = storey_combo->count() - 1;
       }
     }

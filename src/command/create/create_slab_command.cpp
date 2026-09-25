@@ -18,7 +18,8 @@ CreateSlabCommand::CreateSlabCommand(Document& document, double thickness, doubl
     : document_(&document),
       thickness_(thickness),
       elevation_(document.bim().storey_elevation(document.bim().active_storey_id()) +
-                 elevation) {}
+                 elevation),
+      placement_storey_(document.bim().active_storey_id()) {}
 
 CreateSlabCommand::CreateSlabCommand(Document& document, double thickness, double elevation,
                                      Vec3 start, Vec3 end)
@@ -59,7 +60,7 @@ std::vector<Vec3> CreateSlabCommand::preview_polyline(Vec3 cursor) const {
 
 Result<void> CreateSlabCommand::execute() {
   SlabEntity slab(start_, end_, thickness_);
-  document_->assign_active_storey(slab);
+  document_->assign_storey(slab, placement_storey_);
   auto geometry = slab.createGeom();
   if (!geometry) {
     return Err(geometry.error());

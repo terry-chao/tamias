@@ -1,4 +1,5 @@
 #include "app/viewport/canvas/viewport_floor.h"
+#include "app/viewport/canvas/armed_placement.h"
 #include "bim/host_geometry.h"
 #include "bim/host_update.h"
 #include "command/core/command_system.h"
@@ -15,6 +16,7 @@
 #include "entity/family/host/structural/column_entity.h"
 #include "entity/family/attached/opening/door_entity.h"
 #include "entity/core/entity_grip.h"
+#include "entity/core/entity_storey.h"
 #include "entity/family/family_entity.h"
 #include "entity/sketch/line_entity.h"
 #include "entity/sketch/nurbs_entity.h"
@@ -1153,6 +1155,208 @@ TEST(CommandSystem, DispatchCreateSlabDefaultsToStoreyTop) {
   EXPECT_EQ(slab->location->storey_id(), storey_id);
   EXPECT_FLOAT_EQ(slab->local_transform(1, 3), 3.f);
   EXPECT_NEAR(slab->location->elevation_offset(), 3.0, 1e-6);
+}
+
+// ── 武装中的构件命令是"照哪一层摆的" ────────────────────────────────────────
+// 交互式命令的标高 / 工作面在**武装那一刻**按当时楼层算，归属却在**点齐那一刻**
+// 现取（assign_active_storey）。用户点齐前切了楼层（楼层管理双击开另一层视图最典型），
+// 两者就对不上：在 2 楼武装的板落在 2 楼标高上、却挂到 3 楼——"在当前楼层画的板
+// 归属到了上一个楼层"。视口的做法是发现放置状态变了就按新楼层重新武装
+// （DocumentViewport::sync_armed_placement）。这里把那条判据钉住。
+TEST(ArmedPlacement, StoreySwitchMakesArmedCommandStale) {
+  Document doc("armed-placement");
+  const std::uint64_t second = doc.add_storey("2F", 3.0).id;
+  const std::uint64_t third = doc.add_storey("3F", 6.0).id;
+  doc.set_active_storey(second);
+  const ArmedPlacement armed = capture_armed_placement(doc);
+  EXPECT_FALSE(armed_placement_stale(armed, doc));  // 没动过：别打断正在画的那一笔
+
+  doc.set_active_storey(third);
+  EXPECT_TRUE(armed_placement_stale(armed, doc));  // 换楼层
+}
+
+// 同层改层高 / 改标高同样要重画：板默认画的"本层顶"（偏移 = 本层层高）与构件
+// 跟着层移动都靠这两个数。
+TEST(ArmedPlacement, StoreyHeightOrElevationChangeMakesArmedCommandStale) {
+  Document doc("armed-placement-storey-edit");
+  const std::uint64_t storey_id = doc.add_storey("1F", 0.0).id;
+  doc.set_active_storey(storey_id);
+
+  ArmedPlacement armed = capture_armed_placement(doc);
+  doc.bim().find_storey(storey_id)->height = 3.6;
+  EXPECT_TRUE(armed_placement_stale(armed, doc));
+
+  armed = capture_armed_placement(doc);
+  doc.bim().find_storey(storey_id)->elevation = 0.45;
+  EXPECT_TRUE(armed_placement_stale(armed, doc));
+}
+
+// 重新武装以后的落点：板既落在**新**楼层的标高上，也归**新**楼层——标高与归属同源。
+TEST(ArmedPlacement, RearmAfterStoreySwitchKeepsPlacementWithStorey) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document doc("rearm-slab");
+  const std::uint64_t second = doc.add_storey("2F", 3.0).id;
+  const std::uint64_t third = doc.add_storey("3F", 6.0).id;
+  doc.set_active_storey(second);
+  const ArmedPlacement armed = capture_armed_placement(doc);
+
+  // 在 2 楼武装"本层底"的板（偏移 0，用户画楼面板的常见口径）。
+  const CommandArgs args{{"thickness", 0.2}, {"elevation", 0.0}};
+  ASSERT_TRUE(system.dispatch(doc, "create_slab", args));
+
+  // 用户切到 3 楼视图：视口据此取消旧 pending、按新楼层重新 dispatch。
+  doc.set_active_storey(third);
+  ASSERT_TRUE(armed_placement_stale(armed, doc));
+  system.cancel();
+  ASSERT_TRUE(system.dispatch(doc, "create_slab", args));
+
+  auto p1 = system.feed_point({0.f, 0.f, 0.f});
+  ASSERT_TRUE(p1) << p1.error();
+  EXPECT_FALSE(*p1);
+  auto p2 = system.feed_point({4.f, 0.f, 4.f});
+  ASSERT_TRUE(p2) << p2.error();
+  EXPECT_TRUE(*p2);
+
+  ASSERT_EQ(doc.entities().size(), 1u);
+  const Entity* slab = doc.entities().begin()->second.get();
+  ASSERT_NE(slab, nullptr);
+  ASSERT_NE(slab->location, nullptr);
+  EXPECT_EQ(slab->location->storey_id(), third);  // 归 3 楼
+  EXPECT_FLOAT_EQ(slab->local_transform(1, 3), 6.f);  // 也在 3 楼标高上
+  EXPECT_NEAR(slab->location->elevation_offset(), 0.0, 1e-6);
+}
+
+// 不给偏移时走"本层顶"默认：重新武装取的是**新**楼层的层高（2F 3.0 / 3F 3.2），
+// 不能把 2 楼的层高当 3 楼的顶。
+TEST(ArmedPlacement, RearmUsesCurrentStoreyHeightAsDefaultOffset) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document doc("rearm-slab-top");
+  doc.add_storey("2F", 3.0);
+  const std::uint64_t third = doc.add_storey("3F", 6.0).id;
+  doc.bim().find_storey(third)->height = 3.2;
+  doc.set_active_storey(third);
+
+  ASSERT_TRUE(system.dispatch(doc, "create_slab", {{"thickness", 0.2}}));
+  EXPECT_FLOAT_EQ(system.work_plane_y(), 9.2f);  // 3F 标高 6.0 + 3F 层高 3.2
+  auto p1 = system.feed_point({0.f, 0.f, 0.f});
+  ASSERT_TRUE(p1) << p1.error();
+  auto p2 = system.feed_point({4.f, 0.f, 4.f});
+  ASSERT_TRUE(p2) << p2.error();
+  ASSERT_TRUE(*p2);
+
+  const Entity* slab = doc.entities().begin()->second.get();
+  ASSERT_NE(slab, nullptr);
+  ASSERT_NE(slab->location, nullptr);
+  EXPECT_EQ(slab->location->storey_id(), third);
+  EXPECT_FLOAT_EQ(slab->local_transform(1, 3), 9.2f);
+  EXPECT_NEAR(slab->location->elevation_offset(), 3.2, 1e-6);
+}
+
+// ── 楼层归属是族实体自己的变量 ──────────────────────────────────────────────
+// 墙、板、柱、门窗这些构件在**创建那一刻**就把楼层记在自己身上
+// （`FamilyEntity::storey_id`）；点齐两点之前用户切了楼层，构件也不会跟着漂。
+// 读归属统一走 entity_storey_id()，视图过滤 / 属性面板都读它。
+TEST(FamilyStorey, WallKeepsTheStoreyItWasArmedOn) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document doc("wall-family-storey");
+  const std::uint64_t first = doc.add_storey("1F", 0.0).id;
+  const std::uint64_t third = doc.add_storey("3F", 6.0).id;
+  doc.set_active_storey(first);
+
+  ASSERT_TRUE(system.dispatch(doc, "create_wall", {{"thickness", 0.2}, {"height", 3.0}}));
+  // 用户点第一点之前/之后切到了 3 楼：墙的标高与归属都还是 1 楼那份。
+  doc.set_active_storey(third);
+  ASSERT_TRUE(system.feed_point({0.f, 0.f, 0.f}));
+  auto done = system.feed_point({0.f, 0.f, 4.f});
+  ASSERT_TRUE(done) << done.error();
+  ASSERT_TRUE(*done);
+
+  ASSERT_EQ(doc.entities().size(), 1u);
+  const Entity* wall = doc.entities().begin()->second.get();
+  ASSERT_NE(wall, nullptr);
+  EXPECT_EQ(entity_storey_id(*wall), first);
+  ASSERT_NE(wall->location, nullptr);
+  EXPECT_EQ(wall->location->storey_id(), first);
+  EXPECT_NEAR(wall->location->elevation_offset(), 0.0, 1e-6);
+  EXPECT_FLOAT_EQ(wall->local_transform(1, 3), 0.f);  // 落在 1 楼标高上
+  // 场景树也挂到 1 楼那一层的分组节点下（归属的第三种表达，必须同源）。
+  const SceneNode* node = doc.scene().find(wall->id);
+  ASSERT_NE(node, nullptr);
+  EXPECT_EQ(node->parent, first);
+}
+
+// 撤销 / 重做不换归属：redo 走 clone + insert，clone 得把楼层变量带上。
+TEST(FamilyStorey, UndoRedoKeepsTheStorey) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document doc("family-storey-undo");
+  const std::uint64_t second = doc.add_storey("2F", 3.0).id;
+  doc.set_active_storey(second);
+
+  ASSERT_TRUE(system.dispatch(doc, "create_slab", {{"thickness", 0.2}, {"elevation", 0.0}}));
+  ASSERT_TRUE(system.feed_point({0.f, 0.f, 0.f}));
+  auto done = system.feed_point({4.f, 0.f, 4.f});
+  ASSERT_TRUE(done) << done.error();
+  ASSERT_TRUE(*done);
+  const std::uint64_t slab_id = doc.entities().begin()->first;
+
+  system.undo();
+  EXPECT_EQ(doc.entities().size(), 0u);
+  system.redo();
+  const Entity* restored = doc.entity(slab_id);
+  ASSERT_NE(restored, nullptr);
+  EXPECT_EQ(entity_storey_id(*restored), second);
+  ASSERT_NE(restored->location, nullptr);
+  EXPECT_EQ(restored->location->storey_id(), second);
+}
+
+// 门窗跟着宿主墙的楼层：墙在 2 楼，窗户就是 2 楼的（不是"点它时是哪一层"）。
+TEST(FamilyStorey, OpeningFollowsHostWallStorey) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document doc("opening-family-storey");
+  doc.add_storey("1F", 0.0);
+  const std::uint64_t second = doc.add_storey("2F", 3.0).id;
+  const std::uint64_t third = doc.add_storey("3F", 6.0).id;
+  doc.set_active_storey(second);
+
+  ASSERT_TRUE(system.dispatch(doc, "create_wall",
+                              {{"thickness", 0.2},
+                               {"height", 3.0},
+                               {"points", std::vector<Vec3>{{0.f, 3.f, 0.f}, {0.f, 3.f, 6.f}}}}));
+  const Entity* wall = doc.entities().begin()->second.get();
+  ASSERT_NE(wall, nullptr);
+  ASSERT_EQ(wall->kind(), EntityKind::Wall);
+  const std::uint64_t wall_id = wall->id;
+
+  // 用户先跳到 3 楼再点这扇窗：窗户仍然跟墙走（2 楼）。
+  doc.set_active_storey(third);
+  ASSERT_TRUE(system.dispatch(doc, "create_window", {{"width", 1.2}, {"height", 1.2}}));
+  auto picked = system.feed_point({0.f, 3.f, 3.f}, wall_id);
+  ASSERT_TRUE(picked) << picked.error();
+  ASSERT_TRUE(*picked);
+
+  const Entity* window = nullptr;
+  for (const auto& [id, entity] : doc.entities()) {
+    if (entity != nullptr && entity->kind() == EntityKind::Window) {
+      window = entity.get();
+    }
+  }
+  ASSERT_NE(window, nullptr);
+  EXPECT_EQ(entity_storey_id(*window), second);
 }
 
 TEST(CommandSystem, MoveEntitiesUndoRedo) {
