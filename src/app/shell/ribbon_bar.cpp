@@ -33,6 +33,26 @@
 namespace tamias {
 namespace {
 
+// 页栈：**只按当前页**算高度（sizeHint 与最小高度）。
+//
+// QStackedWidget 默认取所有页的最大值——只要有一个页签到过第二排，别的页签就永远
+// 空出一条（页高 92、栈 184，多出来的 92 就是那条空白）。代价是切页签时 Ribbon 会
+// 跟着变高变矮，这和主流 Ribbon 一致：每页要几排由它自己决定。
+class RibbonPageStack final : public QStackedWidget {
+ public:
+  using QStackedWidget::QStackedWidget;
+
+  [[nodiscard]] QSize sizeHint() const override {
+    const QWidget* page = currentWidget();
+    return page != nullptr ? page->sizeHint() : QStackedWidget::sizeHint();
+  }
+
+  [[nodiscard]] QSize minimumSizeHint() const override {
+    const QWidget* page = currentWidget();
+    return page != nullptr ? page->minimumSizeHint() : QStackedWidget::minimumSizeHint();
+  }
+};
+
 bool is_dark_theme() {
   if (const QStyleHints* hints = QGuiApplication::styleHints()) {
     switch (hints->colorScheme()) {
@@ -213,7 +233,7 @@ RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
   tab_group_ = new QButtonGroup(this);
   tab_group_->setExclusive(true);
 
-  pages_ = new QStackedWidget(this);
+  pages_ = new RibbonPageStack(this);
   pages_->setObjectName(QStringLiteral("ribbonPages"));
 
   root->addWidget(tab_row_);
@@ -222,6 +242,9 @@ RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
   connect(tab_group_, &QButtonGroup::idClicked, this, [this](int id) {
     if (id >= 0) {
       pages_->setCurrentIndex(id);
+      // 页高按页走：切页之后让栈（和整条 Ribbon）立刻按当前页重算高度。
+      pages_->updateGeometry();
+      updateGeometry();
       if (collapsed_) {
         set_collapsed(false);
       }
@@ -265,6 +288,14 @@ RibbonPage* RibbonBar::add_page(const QString& id, const QString& title) {
   const int index = pages_->addWidget(page);
   pages_by_id_.insert(id, page);
   connect(page, &RibbonPage::group_added, this, &RibbonBar::install_group_hooks);
+  // 页高变了要立刻转告外层：RibbonBar 的父窗口是 QMainWindow，
+  // 菜单区高度取的是 RibbonBar 的 sizeHint，不 updateGeometry 就还按旧高度留位置。
+  connect(page, &RibbonPage::rows_changed, this, [this] {
+    if (pages_ != nullptr) {
+      pages_->updateGeometry();
+    }
+    updateGeometry();
+  });
   page->set_display_mode(display_mode_);
 
   auto* tab = new QToolButton(tab_row_);
@@ -537,15 +568,15 @@ void RibbonBar::dragEnterEvent(QDragEnterEvent* event) {
     event->ignore();
     return;
   }
-  // 拖动期间把第二排亮出来当落点：不然空着的第二排没高度，拖不进去。
+  // 拖动期间把末尾的空排亮出来当落点：不然那条排没高度，鼠标进不去。
   page->set_drop_target_visible(true);
   event->acceptProposedAction();
 }
 
 void RibbonBar::dragMoveEvent(QDragMoveEvent* event) {
   RibbonGroup* group = group_for_mime(event->mimeData());
-  // **别用光标位置去认页面**：第二排要先撑高才存在，而撑高要等一次布局；
-  // 光标稍微偏出 pages_ 的当前几何就会认不到页面，第二排永远亮不起来。
+  // **别用光标位置去认页面**：空排要先撑高才存在，而撑高要等一次布局；
+  // 光标稍微偏出 pages_ 的当前几何就会认不到页面，空排永远亮不起来。
   // 拖动的是哪一组，它属于哪一页本来就知道——页面身份由组决定，光标只用来选排和排内位置。
   RibbonPage* page = group != nullptr ? page_of_group(group) : nullptr;
   if (page == nullptr) {
@@ -573,7 +604,7 @@ void RibbonBar::dropEvent(QDropEvent* event) {
     event->ignore();
     return;
   }
-  // 落点要**先算**：hide_drop_indicator() 会把空着的第二排收回去，收完就找不到那一排了。
+  // 落点要**先算**：hide_drop_indicator() 会把空着的落点排收回去，收完就找不到那一排了。
   const QPoint content_pos =
       page->content()->mapFromGlobal(mapToGlobal(event->position().toPoint()));
   const RibbonPage::Slot slot = page->drop_slot_at(content_pos);
@@ -586,7 +617,7 @@ void RibbonBar::hide_drop_indicator() {
   for (RibbonPage* page : pages_by_id_) {
     if (page != nullptr) {
       page->hide_drop_indicator();
-      page->set_drop_target_visible(false);  // 没落下的第二排收回去
+      page->set_drop_target_visible(false);  // 没落下的空排收回去
     }
   }
 }
