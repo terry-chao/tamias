@@ -116,7 +116,7 @@ CMake 用 `gtest_discover_tests(... DISCOVERY_MODE PRE_TEST)`，并给 OCCT DLL 
 | **宿主 Session** | dispatch / undo / 选择 / reset / `HostEvent` 监听、`CameraController` | 与壳的手势对齐（Qt 按钮映射）未测 |
 | **命令系统** | 成组与事务（成组一条撤销记录、回滚、空事务、嵌套被拒）、命令回显文本 | 事务的**多文档 / 多视口**交互未测 |
 | **插件 C++** | HostApi、Ribbon 排序、点选会话、表单 spec、特征树与参数（v6）、事务（v7） | 对话框真正弹出、多视口、失败日志未测 |
-| **插件 C#** | 通过真托管宿主跑通：命令登记、`hello.list_features` 枚举特征树、`hello.widen_params` 整批一步撤销、控制台求值（表达式回值 / 日志 / 语法错误） | **没有** xUnit / NUnit；这些断言只能挤在一条用例里（第二个 `PluginHost::load()` 起不来 CLR），`Tamias.Api` / `Tamias.Host` 仍无托管单测 |
+| **插件 C#** | 通过真托管宿主跑通：命令登记、目录式**源码扩展**（`main.cs` 现编译 + 清单元数据 + `ExtensionContext`）、**自动重载**（装上 → 改内容换命令 → 写坏文件留住旧版本 → 删目录摘干净 → 幂等）、`hello.list_features` / `sample.where`、`hello.widen_params` 整批一步撤销、控制台求值（表达式回值 / 日志 / 语法错误） | **没有** xUnit / NUnit；这些断言只能挤在一条用例里（第二个 `PluginHost::load()` 起不来 CLR），`Tamias.Api` / `Tamias.Host` 仍无托管单测 |
 | **Qt 壳 `src/app`** | `ViewportFloor` 标高聚类（无 Qt） | MainWindow、Ribbon、属性面板、主页、设置、i18n、最近文件、视口立方体、**命令控制台 / 脚本页 / `script_store`**：零测试。控制台只能靠手点 |
 | **WASM / `web/`** | 无。Emscripten 关闭 `TAMIAS_BUILD_TESTS` | `ViewerHost`、embind、React 壳无 vitest / Playwright；打开 `.trscn` 靠人眼 |
 | **打包** | 无 | MSI / `cmake --install` 无自动化 |

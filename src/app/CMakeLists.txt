@@ -31,6 +31,7 @@ add_executable(tamias
   shell/plugin_manager_dialog.cpp
   shell/plugin_prompt_dialog.cpp
   shell/console_panel.cpp
+  shell/extension_watcher.cpp
   # 三维视口：画布本体 / 画布上的浮层 / 右侧工具列 / 录制回放
   viewport/canvas/document_viewport.cpp
   viewport/overlay/view_cube_widget.cpp

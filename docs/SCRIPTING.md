@@ -103,12 +103,13 @@ foreach (var id in host.Selection.ToList())
 
 | | 插件 | 脚本 |
 |---|---|---|
-| 装在哪 | `<exe>/plugins/*.dll` | `<AppData>/scripts/*.cs` |
+| 装在哪 | `<exe>/plugins/`（内置）或 `<AppData>/extensions/`（用户），可以是 `main.cs` 源码或 `.dll` | `<AppData>/scripts/*.cs` |
 | 何时加载 | 启动时扫一遍，重启生效 | 按需求值，改完立刻能跑 |
 | 元数据 | 有 id / 版本 / 作者 / 图标 | 没有 |
 | 入口 | `IPlugin.Load(IHost)` 里 `AddCommand` | 直接是一段代码 |
 | 进 Ribbon | 能（`RibbonPlacement`） | 不能（还没有「钉成按钮」） |
 | 事务 | 手动 `BeginTransaction` | 每段求值自动一个 |
+| 改动怎么生效 | 保存文件即自动重载（见[使用](plugin/usage.md#11-自动重载改完不用重启)） | 改控制台里的脚本，下次按运行就是新的 |
 
 写得顺手的脚本，迟早会想变成插件——那时候把代码搬进 `IPlugin.Load` 即可，API 是同一套。
 

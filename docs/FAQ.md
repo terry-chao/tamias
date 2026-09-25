@@ -649,7 +649,7 @@ C# 侧对应的是 `[UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]`
 
 ```c
 struct HostApi {
-  int32_t abi_version;   // = kHostApiVersion，当前 7
+  int32_t abi_version;   // = kHostApiVersion，当前 8
   void* context;
   void (*log)(void*, int32_t level, const char* utf8);
   int32_t (*dispatch)(void*, const char* command, const char* args_utf8);
@@ -658,8 +658,9 @@ struct HostApi {
   int32_t (*show_dialog)(void*, int32_t kind, int32_t buttons, const char* spec,
                          char* out, int32_t cap);
   /* v6 起还有 feature_*（特征树 + 参数的只读面）；v7 起还有
-     begin|commit|abort_transaction；另有 document_name / entity_* / selection_*
-     / register_command / register_plugin / cancel_point_input */
+     begin|commit|abort_transaction；v8 起还有 unregister_plugin（自动重载用）；
+     另有 document_name / entity_* / selection_* / register_command / register_plugin
+     / cancel_point_input */
 };
 ```
 

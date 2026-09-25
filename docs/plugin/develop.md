@@ -1,6 +1,77 @@
 # 插件：开发
 
-> 一个 class library，实现 `IPlugin`，引用 `Tamias.Api`（不要拷进输出），publish 到 `plugins/`。启动时宿主用独立 `AssemblyLoadContext` 加载，并把 `Tamias.Api` 统一解析到宿主那一份，避免两份接口类型对不上。
+> 两条路，先选一条：
+>
+> - **源码扩展**：一个 `main.cs`（+ 可选 `extension.json`）扔进约定目录，加载时现编译。**不用工程、不用编译**，写工具最快。
+> - **预编译扩展**：一个 class library，实现 `IPlugin`，publish 到 `plugins/`。要打包发布、要第三方依赖时走这条。
+>
+> 两条路进的是同一套东西：同一份 `IHost`、同一张扩展清单、同一个管理界面。
+
+---
+
+## 0. 源码扩展：一个文件就能开工
+
+```
+%APPDATA%/tamias/tamias/extensions/my.tools/
+├── extension.json     清单（可选：删掉就用目录名当 id 和名称）
+└── main.cs            入口
+```
+
+```json
+{
+  "id": "my.tools",
+  "name": "我的工具",
+  "version": "1.0.0",
+  "author": "Me",
+  "releaseDate": "2026-09-25",
+  "description": "把选中构件的拉伸深度改一改。",
+  "icon": "icon.svg"
+}
+```
+
+```csharp
+using Tamias.Api;
+
+// 入口约定：程序集里任意一个类型带 `public static void Load(IHost)`。
+public static class Entry
+{
+    static string source_ = "";
+
+    public static void Load(IHost host)
+    {
+        source_ = ExtensionContext.SourcePath;  // 自己的目录（只在 Load 期间有效，先存下来）
+        host.AddCommand("my.thicken", "加厚", () => Thicken(host), "把所有拉伸深度 +0.1");
+    }
+
+    static void Thicken(IHost host)
+    {
+        using var tx = host.BeginTransaction("加厚");
+        foreach (var id in host.Selection.ToList())
+        {
+            foreach (var f in host.Features(id).Where(f => f.Kind == FeatureKind.Extrude))
+            {
+                if (!f.Params.Any(p => p.Name == "depth")) continue;
+                host.Dispatch("set_param", new CommandArgs()
+                    .SetInt("entity_id", (long)id)
+                    .SetInt("feature_id", (long)f.Id)
+                    .SetString("param_name", "depth")
+                    .SetDouble("value", f.Params.First(p => p.Name == "depth").Value + 0.1));
+            }
+        }
+        tx.Commit();
+    }
+}
+```
+
+约定与坑：
+
+- **元数据来自清单**，所以源码扩展**不要**自己调 `host.RegisterPlugin`（清单已经登记过了，重复会失败）。
+- 入口是 `public static void Load(IHost)`，返回 `void`；一个程序集里有多个也能都跑到。
+- `ExtensionContext.SourcePath` 只在 `Load` 期间有效——命令回调里要用就先存进字段。
+- 加载时现编译，所以启动会慢一点点（一个扩展约 0.1–2 秒，取决定义了多少东西）。编译不过只影响它自己，别的扩展照常。
+- 改完**不用重启**：保存 `main.cs` 就会自动重载（见[使用 §1.1](usage.md)）。编译不过时会留着旧版本继续用，只在状态栏报一行错。
+
+现成例子：[`plugins/extensions/Tamias.Sample.Tools`](https://github.com/terry-chao/tamias/tree/main/plugins/extensions/Tamias.Sample.Tools)（随构建拷进 `<exe>/plugins/`）。
 
 ---
 

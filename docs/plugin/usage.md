@@ -14,22 +14,68 @@ build/bin/Debug/
   nethost.dll
   managed/
     Tamias.Host.dll
-    Tamias.Host.runtimeconfig.json
     Tamias.Api.dll
-  plugins/
-    Tamias.Hello.dll
+  plugins/                    ← 内置根：随版本发布的扩展
+    Tamias.Hello.dll          预编译扩展
     Tamias.Nurbs.dll
     nurbs.svg
+    Tamias.Sample.Tools/      目录式扩展：清单 + 源码
+      extension.json
+      main.cs
+      icon.svg
 ```
 
-加载规则（[`PluginLoader.cs`](https://github.com/terry-chao/tamias/blob/main/plugin-sdk/csharp/Tamias.Host/PluginLoader.cs)）：
+**两个约定位置**，按顺序扫：
 
-- 从 `managed/` 的上一级找 `plugins/`
-- 加载该目录下所有 `.dll`
-- 跳过 `Tamias.Api*`、`Tamias.Host*`、`System.*`、`Microsoft.*`
-- 每个程序集里公开、非抽象、实现 `IPlugin` 的类型都会 `Load(IHost)`
+| 根 | 谁放的 | 说明 |
+|---|---|---|
+| `<exe>/plugins/` | 随版本发布 | 第一个根。这里的东西算**内置**（`built_in = true`） |
+| `<AppData>/tamias/tamias/extensions/` | 用户自己 | 首次启动自动建好；同 id 会**覆盖**内置那份，并记一条日志 |
 
-自己编译的插件：把 DLL 放进 **与 `tamias.exe` 同级的 `plugins/`**，重启软件。`Tamias.Api` 由宿主提供，插件工程不要把 API DLL 拷进 `plugins/`（示例 csproj 已 `ExcludeAssets=runtime`）。
+每个根里两种形态都认：
+
+- **预编译扩展**：`*.dll`（顶层平铺）或 `<名字>/<名字>.dll`（目录形式）
+- **源码扩展**：`<名字>/main.cs`（+ 可选的 `<名字>/extension.json`），加载时用 Roslyn 现编译
+
+扫描与加载规则（[`ExtensionScanner.cs`](https://github.com/terry-chao/tamias/blob/main/plugin-sdk/csharp/Tamias.Host/ExtensionScanner.cs) / [`ExtensionLoader.cs`](https://github.com/terry-chao/tamias/blob/main/plugin-sdk/csharp/Tamias.Host/ExtensionLoader.cs)）：
+
+- **先全扫一遍再加载**，这样 id 冲突能提前发现；后扫的根覆盖先扫的，覆盖时记一条日志（「我改了怎么没生效」能查）
+- 跳过 `Tamias.Api*` / `Tamias.Host*` / `System.*` / `Microsoft.*`
+- 预编译扩展：程序集里公开、非抽象、实现 `IPlugin` 的类型都会 `Load(IHost)`
+- 源码扩展：程序集里任意一个 `public static void Load(IHost)` 就会被调用
+- 目录里既没有 `main.cs`（或清单指定的入口）也没有 `.dll` → 跳过并记一条日志
+- **一个扩展坏了不拖死别的**：编译不过、入口抛异常都只记日志，其余照常加载
+
+### 1.1 自动重载：改完不用重启
+
+宿主盯着这两个约定目录。在编辑器里改 `main.cs` 保存，工具当场就是新的：
+
+```
+保存 main.cs
+  → QFileSystemWatcher："这个目录有动静"（250ms 防抖，编辑器保存是一串写操作）
+    → 托管侧重扫 + 比内容指纹
+      ├─ 指纹没变（临时文件、隔壁文件动了）→ 什么都不做，也不刷日志
+      ├─ 指纹变了 → **先编译**
+      │    ├─ 编译不过 → 留着旧版本继续用，只在状态栏 / 控制台报一行
+      │    └─ 编译通过 → 摘掉旧的（命令 + 加载上下文）→ 装上新的 → 重建 Ribbon
+      └─ 目录被删掉 → 扩展连同它的命令一起摘掉
+```
+
+几条设计上的取舍：
+
+- **监视与判断分开**：C++ 侧（Qt 事件循环里）只负责说"有动静"，"谁真的变了"由托管侧对入口文件（+ 清单）算 SHA-256 说了算。于是编辑器写临时文件、隔壁扩展动一下都不会触发重载风暴。
+- **先编译再摘旧的**：保存到一半就是语法错误，那一下最需要旧工具还在。编译失败不改变任何已装好的扩展。
+- **命令要摘干净**：重载时先把旧扩展登记的命令从原生命令表和托管委托表里拿掉——不然①命令 id 会撞，②那些委托钉着旧程序集，加载上下文卸不掉。
+- **真的会卸载**：加载上下文是 `isCollectible: true`，摘干净后 `Unload()` + 两次 GC。这是能反复重载的前提。
+- **重载完重建 Ribbon**：插件管理里的停用状态与排序照旧生效。
+
+已知限制：
+
+- 预编译扩展的指纹只看那个 `.dll`；它带的依赖 DLL 改了不会被发现（重启才生效）。
+- 预编译扩展如果自报的 `id` 与文件名不一致，装到一半失败时清理不干净（重启即恢复）。
+- **重载会丢静态状态**：每次都是全新的加载上下文，扩展里的 `static` 字段会回到初始值。要跨重载保留，就写进文件或 `QSettings`（走宿主 API）。
+
+放自己的扩展：拷进上面任一目录即可。`Tamias.Api` 由宿主提供，预编译扩展不要把 API DLL 拷进去（示例 csproj 已 `ExcludeAssets=runtime`）。
 
 ---
 

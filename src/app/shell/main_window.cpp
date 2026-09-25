@@ -2,10 +2,12 @@
 
 #include "app/shell/about_dialog.h"
 #include "app/shell/console_panel.h"
+#include "app/shell/extension_watcher.h"
 #include "app/shell/graphics_diagnostics_dialog.h"
 #include "app/base/app_settings.h"
 #include "bim/ifc_spatial_tree.h"
 #include "bim/wall_size.h"
+#include "engine/base/executable_directory.h"
 #include "engine/base/log.h"
 #include "engine/document/document_io.h"
 #include "engine/io/mesh_io.h"
@@ -47,6 +49,7 @@
 #include <QEventLoop>
 #include <QGuiApplication>
 #include <QScreen>
+#include <QStandardPaths>
 #include <QShowEvent>
 #include <QStyle>
 #include <QStatusBar>
@@ -1023,6 +1026,18 @@ MainWindow::MainWindow(QWidget* parent)
       [this](std::int32_t kind, std::int32_t buttons, std::string_view spec, std::string& out) {
         return show_plugin_dialog(this, kind, buttons, spec, out);
       });
+  {
+    // 扩展的约定位置：内置的在 exe 旁边（随版本发布），用户装的在 <AppData>/extensions
+    // ——和脚本目录同一层。先建出来，用户才知道往哪放。
+    const QString app_data = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    const QString user_root = QDir(app_data).filePath(QStringLiteral("extensions"));
+    QDir().mkpath(user_root);
+    std::vector<std::filesystem::path> roots;
+    roots.push_back(executable_directory() / "plugins");
+    roots.push_back(qstring_to_path(user_root));
+    log_info("Extension roots: " + path_to_utf8(roots[0]) + " | " + path_to_utf8(roots[1]));
+    plugin_host_.set_extension_roots(std::move(roots));
+  }
   if (auto loaded = plugin_host_.load(); !loaded) {
     log_warn(loaded.error());
     statusBar()->showMessage(QString::fromStdString(loaded.error()), 8000);
@@ -1039,89 +1054,28 @@ MainWindow::MainWindow(QWidget* parent)
     }
     plugin_manager_.set_command_order(std::move(order));
   }
-  std::vector<const PluginCommand*> plugin_commands;
-  plugin_commands.reserve(plugin_host_.commands().size());
-  for (const auto& cmd : plugin_host_.commands()) {
-    plugin_commands.push_back(&cmd);
-  }
-  std::unordered_map<std::string, std::size_t> command_rank;
-  for (std::size_t i = 0; i < plugin_manager_.command_order().size(); ++i) {
-    command_rank.emplace(plugin_manager_.command_order()[i], i);
-  }
-  std::stable_sort(
-      plugin_commands.begin(), plugin_commands.end(),
-      [&command_rank](const PluginCommand* a, const PluginCommand* b) {
-        const auto ar = command_rank.find(a->id);
-        const auto br = command_rank.find(b->id);
-        if (ar != command_rank.end() || br != command_rank.end()) {
-          if (ar == command_rank.end()) {
-            return false;
-          }
-          if (br == command_rank.end()) {
-            return true;
-          }
-          return ar->second < br->second;
-        }
-        if (a->placement.order != b->placement.order) {
-          return a->placement.order < b->placement.order;
-        }
-        return a->id < b->id;
-      });
-  for (const PluginCommand* command : plugin_commands) {
-    const PluginCommand& cmd = *command;
-    const QString page_id = QString::fromStdString(cmd.placement.page_id);
-    const QString group_id = QString::fromStdString(cmd.placement.group_id);
-    RibbonPage* target_page = ribbon->find_page(page_id);
-    if (target_page == nullptr) {
-      target_page = ribbon->add_page(page_id, page_id);
+  rebuild_plugin_ribbon(ribbon);
+
+  // 扩展目录的文件监视：目录里有动静就重扫，只重载内容真的变了的那些。
+  // 盯盘在 Qt 事件循环里（C++ 侧），重载本身在托管侧跑。
+  extension_watcher_ = new ExtensionWatcher(plugin_host_.extension_roots(), this);
+  connect(extension_watcher_, &ExtensionWatcher::changed, this, [this, ribbon] {
+    const auto summary = plugin_host_.reload_extensions();
+    if (!summary) {
+      log_warn(summary.error());
+      console_panel_->append_line(QString::fromStdString(summary.error()),
+                                  ConsolePanel::LineStyle::Error);
+      return;
     }
-    RibbonGroup* target_group = target_page->find_group(group_id);
-    if (target_group == nullptr) {
-      target_group = target_page->add_group(group_id, group_id);
+    if (summary->empty()) {
+      return;  // 目录里有动静，但扩展本身没变（编辑器临时文件、隔壁文件之类）
     }
-    const QString icon_path = cmd.placement.icon_path.empty()
-                                  ? QStringLiteral(":/icons/inspector.svg")
-                                  : QString::fromStdString(cmd.placement.icon_path);
-    auto* action = new QAction(ribbon_icon(icon_path),
-                               QString::fromUtf8(cmd.title.data(), static_cast<int>(cmd.title.size())),
-                               this);
-    action->setCheckable(cmd.placement.checkable);
-    if (!cmd.tooltip.empty()) {
-      action->setToolTip(
-          QString::fromUtf8(cmd.tooltip.data(), static_cast<int>(cmd.tooltip.size())));
-    }
-    const std::string id = cmd.id;
-    connect(action, &QAction::triggered, this, [this, id, action](bool checked) {
-      if (!plugin_manager_.is_command_enabled(id)) {
-        action->setChecked(false);
-        statusBar()->showMessage(tr("This plugin is disabled."), 4000);
-        return;
-      }
-      bind_plugin_session();
-      if (action->isCheckable() && !checked) {
-        if (auto* vp = current_viewport()) {
-          vp->cancel_plugin_point_input();
-        }
-        return;
-      }
-      if (auto r = plugin_host_.invoke(id); !r) {
-        action->setChecked(false);
-        statusBar()->showMessage(QString::fromStdString(r.error()), 5000);
-        log_error(r.error());
-      }
-    });
-    PluginRibbonButton item;
-    item.command_id = cmd.id;
-    item.plugin_id = cmd.plugin_id;
-    item.page_id = cmd.placement.page_id;
-    item.group_id = cmd.placement.group_id;
-    item.group = target_group;
-    item.button = target_group->add_action(action);
-    item.action = action;
-    plugin_ribbon_buttons_.push_back(item);
-  }
-  apply_plugin_visibility();
-  apply_plugin_order();
+    rebuild_plugin_ribbon(ribbon);  // 命令表变了，按钮跟着重建
+    const QString text = QString::fromStdString(*summary);
+    console_panel_->append_line(text);
+    statusBar()->showMessage(text, 8000);
+    extension_watcher_->rewatch();  // 目录可能新增或消失
+  });
 
   setMenuWidget(ribbon);
 
@@ -1507,6 +1461,101 @@ void MainWindow::apply_plugin_order() {
     }
     group->reorder_buttons(ordered);
   }
+}
+
+// 按当前的插件命令表重建 Ribbon 上的插件按钮。
+// 启动时调一次；扩展重载之后还要再调（命令表变了，旧按钮不能留着）。
+void MainWindow::rebuild_plugin_ribbon(RibbonBar* ribbon) {
+  for (auto& item : plugin_ribbon_buttons_) {
+    // 按钮析构会自己从分组布局里摘掉；动作得单独删。
+    delete item.button;
+    delete item.action;
+  }
+  plugin_ribbon_buttons_.clear();
+
+  std::vector<const PluginCommand*> plugin_commands;
+  plugin_commands.reserve(plugin_host_.commands().size());
+  for (const auto& cmd : plugin_host_.commands()) {
+    plugin_commands.push_back(&cmd);
+  }
+  std::unordered_map<std::string, std::size_t> command_rank;
+  for (std::size_t i = 0; i < plugin_manager_.command_order().size(); ++i) {
+    command_rank.emplace(plugin_manager_.command_order()[i], i);
+  }
+  std::stable_sort(
+      plugin_commands.begin(), plugin_commands.end(),
+      [&command_rank](const PluginCommand* a, const PluginCommand* b) {
+        const auto ar = command_rank.find(a->id);
+        const auto br = command_rank.find(b->id);
+        if (ar != command_rank.end() || br != command_rank.end()) {
+          if (ar == command_rank.end()) {
+            return false;
+          }
+          if (br == command_rank.end()) {
+            return true;
+          }
+          return ar->second < br->second;
+        }
+        if (a->placement.order != b->placement.order) {
+          return a->placement.order < b->placement.order;
+        }
+        return a->id < b->id;
+      });
+  for (const PluginCommand* command : plugin_commands) {
+    const PluginCommand& cmd = *command;
+    const QString page_id = QString::fromStdString(cmd.placement.page_id);
+    const QString group_id = QString::fromStdString(cmd.placement.group_id);
+    RibbonPage* target_page = ribbon->find_page(page_id);
+    if (target_page == nullptr) {
+      target_page = ribbon->add_page(page_id, page_id);
+    }
+    RibbonGroup* target_group = target_page->find_group(group_id);
+    if (target_group == nullptr) {
+      target_group = target_page->add_group(group_id, group_id);
+    }
+    const QString icon_path = cmd.placement.icon_path.empty()
+                                  ? QStringLiteral(":/icons/inspector.svg")
+                                  : QString::fromStdString(cmd.placement.icon_path);
+    auto* action = new QAction(ribbon_icon(icon_path),
+                               QString::fromUtf8(cmd.title.data(), static_cast<int>(cmd.title.size())),
+                               this);
+    action->setCheckable(cmd.placement.checkable);
+    if (!cmd.tooltip.empty()) {
+      action->setToolTip(
+          QString::fromUtf8(cmd.tooltip.data(), static_cast<int>(cmd.tooltip.size())));
+    }
+    const std::string id = cmd.id;
+    connect(action, &QAction::triggered, this, [this, id, action](bool checked) {
+      if (!plugin_manager_.is_command_enabled(id)) {
+        action->setChecked(false);
+        statusBar()->showMessage(tr("This plugin is disabled."), 4000);
+        return;
+      }
+      bind_plugin_session();
+      if (action->isCheckable() && !checked) {
+        if (auto* vp = current_viewport()) {
+          vp->cancel_plugin_point_input();
+        }
+        return;
+      }
+      if (auto r = plugin_host_.invoke(id); !r) {
+        action->setChecked(false);
+        statusBar()->showMessage(QString::fromStdString(r.error()), 5000);
+        log_error(r.error());
+      }
+    });
+    PluginRibbonButton item;
+    item.command_id = cmd.id;
+    item.plugin_id = cmd.plugin_id;
+    item.page_id = cmd.placement.page_id;
+    item.group_id = cmd.placement.group_id;
+    item.group = target_group;
+    item.button = target_group->add_action(action);
+    item.action = action;
+    plugin_ribbon_buttons_.push_back(item);
+  }
+  apply_plugin_visibility();
+  apply_plugin_order();
 }
 
 void MainWindow::add_document_tab(std::shared_ptr<Document> document,

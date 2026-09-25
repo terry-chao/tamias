@@ -35,9 +35,11 @@ class TextureLibraryPanel;
 class TimingPanel;
 class ConsolePanel;
 class PluginManager;
+class RibbonBar;
 class RibbonGroup;
 class DrawPanel;
 class DrawingView;
+class ExtensionWatcher;
 
 class MainWindow final : public QMainWindow {
   Q_OBJECT
@@ -107,6 +109,9 @@ class MainWindow final : public QMainWindow {
   void sync_render_mode_actions();
   void sync_bim_actions();
   void bind_plugin_session();
+  // 按当前插件命令表重建 Ribbon 上的插件按钮（启动时 + 扩展重载之后）。
+  // 显式收 RibbonBar：不依赖成员初始化顺序，也少一处跨模块耦合。
+  void rebuild_plugin_ribbon(RibbonBar* ribbon);
   void apply_plugin_visibility();
   void apply_plugin_order();
   const MeshCpu* selected_mesh(Document& document) const;
@@ -183,6 +188,8 @@ class MainWindow final : public QMainWindow {
     QAction* action = nullptr;
   };
   std::vector<PluginRibbonButton> plugin_ribbon_buttons_;
+  // 只是"目录里有动静"的探子；谁真的变了由托管侧的内容指纹决定。
+  ExtensionWatcher* extension_watcher_ = nullptr;
   bool placed_on_primary_ = false;
 };
 

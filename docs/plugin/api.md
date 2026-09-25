@@ -187,13 +187,15 @@ host.Wall(result.Points[0], result.Points[1], thickness: 0.2, height: 3);
 
 ## 5. C ABI（给对照实现用）
 
-`HostApi`：`abi_version`（int32，现为 7）+ `context` + 函数指针。x64 上 int32 后有 padding，C# `LayoutKind.Sequential` 与之对齐。**只在表尾追加字段并升版本**，不要在中间插。
+`HostApi`：`abi_version`（int32，现为 8）+ `context` + 函数指针。x64 上 int32 后有 padding，C# `LayoutKind.Sequential` 与之对齐。**只在表尾追加字段并升版本**，不要在中间插。
 
 v5 追加：`begin_point_input` 末尾 `filter_kind`；`set_selection`；`show_dialog`。
 
 v6 追加：`entity_feature_count` / `entity_feature_at` / `feature_input_at` / `feature_param_count` / `feature_param_at`。全部只读；`feature_param_at` 的名字缓冲可以传空（只取值）。
 
 v7 追加：`begin_transaction` / `commit_transaction` / `abort_transaction`。`abort_transaction` 返回回滚的命令条数（0 = 空事务）。
+
+v8 追加：`unregister_plugin`。插件侧一般不用直接调——是宿主做自动重载时「先摘旧的」那一步。
 
 指针约定：字符串 UTF-8；填缓冲的函数写入 `cap-1` 字节并补 `'\0'`，返回写入长度；查询失败返回 -1；`dispatch` / `register_command` / `register_plugin` / `set_selection` 成功 0、失败 -1。`show_dialog`：输入类成功 0、取消 1、失败 -1；消息框返回按钮（1=Ok, 2=Cancel, 3=Yes, 4=No）。
 
