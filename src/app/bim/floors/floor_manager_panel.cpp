@@ -21,25 +21,6 @@ constexpr int kFloorIndexRole = Qt::UserRole;  // 楼层下标；-1 = 全局三�
 constexpr int kSignatureRole = Qt::UserRole + 1;  // 判"行要不要重建"的稳定身份
 constexpr int kGlobalRow = -1;
 
-QIcon tinted_mask_icon(const QString& resource, const QColor& color) {
-  const QIcon source(resource);
-  QIcon result;
-  for (int size : {16, 18, 20, 32}) {
-    const QPixmap src = source.pixmap(QSize(size, size));
-    QPixmap tinted(src.size());
-    tinted.setDevicePixelRatio(src.devicePixelRatio());
-    tinted.fill(Qt::transparent);
-    QPainter painter(&tinted);
-    painter.setCompositionMode(QPainter::CompositionMode_Source);
-    painter.drawPixmap(0, 0, src);
-    painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
-    painter.fillRect(tinted.rect(), color);
-    painter.end();
-    result.addPixmap(tinted);
-  }
-  return result;
-}
-
 QString manager_stylesheet(bool dark) {
   const ThemePalette palette = theme_palette(dark);
   QString sheet = QStringLiteral(
@@ -186,8 +167,8 @@ void FloorManagerPanel::sync_rows() {
   }
 
   const ThemePalette palette = theme_palette(dark_);
-  const QIcon global_icon = tinted_mask_icon(QStringLiteral(":/icons/view_3d.svg"), palette.icon);
-  const QIcon floor_icon = tinted_mask_icon(QStringLiteral(":/icons/storey.svg"), palette.icon);
+  const QIcon global_icon(QStringLiteral(":/icons/view_3d.svg"));
+  const QIcon floor_icon(QStringLiteral(":/icons/storey.svg"));
   const QBrush active(palette.text);
   const QBrush muted(palette.text_muted);
   const QColor accent(47, 125, 222);

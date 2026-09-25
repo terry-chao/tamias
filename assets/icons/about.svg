@@ -1,5 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
-  <circle cx="8" cy="8" r="5.4" stroke="#000000" stroke-width="1.25"/>
-  <circle cx="8" cy="5.35" r="0.8" fill="#000000"/>
-  <path stroke="#000000" stroke-width="1.35" stroke-linecap="round" d="M8 7.45v3.5"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="5 5 54 54">
+  <defs>
+    <radialGradient id="disc" cx="0.36" cy="0.3" r="0.85">
+      <stop offset="0" stop-color="#8fbde8"/>
+      <stop offset="1" stop-color="#1f5a96"/>
+    </radialGradient>
+  </defs>
+  <circle cx="32" cy="32" r="22" fill="url(#disc)" stroke="#000000" stroke-width="2.11"/>
+  <path d="M32 29V45" stroke="#ffffff" stroke-width="5.07" stroke-linecap="round"/>
+  <circle cx="32" cy="20.5" r="3.6" fill="#ffffff"/>
 </svg>

@@ -1,5 +1,32 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
-  <rect x="3.5" y="2.5" width="9" height="11" stroke="#000000" stroke-width="1.25"/>
-  <circle cx="11" cy="8" r="0.8" fill="#000000"/>
-  <path stroke="#000000" stroke-width="1.1" d="M3.5 2.5c2.5 1.5 2.5 9.5 0 11"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="16.5 16.74 31 31">
+  <defs>
+    <linearGradient id="top" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#f8f6f1"/>
+      <stop offset="1" stop-color="#e6e1d6"/>
+    </linearGradient>
+    <linearGradient id="left" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#e0dbcf"/>
+      <stop offset="1" stop-color="#c9c3b6"/>
+    </linearGradient>
+    <linearGradient id="right" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#b3ac9e"/>
+      <stop offset="1" stop-color="#968f81"/>
+    </linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#dfb47c"/>
+      <stop offset="1" stop-color="#b8843f"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#000000" stroke-width="1.21">
+    <path d="M24.7 19.8 42.89 30.3 39.25 32.4 21.06 21.9Z" fill="url(#top)"/>
+    <path d="M21.06 21.9 39.25 32.4 39.25 44.3 21.06 33.8Z" fill="url(#left)"/>
+    <path d="M39.25 32.4 42.89 30.3 42.89 42.2 39.25 44.3Z" fill="url(#right)"/>
+  </g>
+  <path d="M26.4 24.98 33.02 28.8 33.02 44.3 26.4 40.48Z" fill="#7c6a52"
+        stroke="#000000" stroke-width="1.06"/>
+  <path d="M26.78 25.2 32.64 28.58 32.64 43.86 26.78 40.48Z" fill="url(#leaf)"
+        stroke="#000000" stroke-width="0.97"/>
+  <path d="M27.6 27.1 31.8 29.5 31.8 34.3 27.6 31.9Z" fill="none"
+        stroke="#000000" stroke-width="0.78"/>
+  <circle cx="31.6" cy="36.2" r="1.5" fill="#000000"/>
 </svg>

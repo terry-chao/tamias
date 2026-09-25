@@ -1,7 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none">
-  <rect x="4" y="5" width="24" height="19" rx="4" stroke="#2F7DDE" stroke-width="2.5"/>
-  <path d="M10 27L15 24H22" stroke="#2F7DDE" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="11" cy="14.5" r="1.7" fill="#2F7DDE"/>
-  <circle cx="16" cy="14.5" r="1.7" fill="#2F7DDE"/>
-  <circle cx="21" cy="14.5" r="1.7" fill="#2F7DDE"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="5 6.5 54 54">
+  <defs>
+    <linearGradient id="bubble" x1="0" y1="0" x2="0.5" y2="1">
+      <stop offset="0" stop-color="#cfe3f7"/>
+      <stop offset="1" stop-color="#8fbde8"/>
+    </linearGradient>
+  </defs>
+  <path d="M10 18a6 6 0 0 1 6-6h32a6 6 0 0 1 6 6v20a6 6 0 0 1-6 6H28l-11 10v-10h-1a6 6
+           0 0 1-6-6z" fill="url(#bubble)" stroke="#000000" stroke-width="2.11"/>
+  <g fill="#1f5a96" stroke="#000000" stroke-width="1.18">
+    <circle cx="23" cy="28" r="3.6"/>
+    <circle cx="32" cy="28" r="3.6"/>
+    <circle cx="41" cy="28" r="3.6"/>
+  </g>
 </svg>

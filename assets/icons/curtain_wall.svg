@@ -1,4 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
-  <rect x="2.5" y="3" width="11" height="10" stroke="#000000" stroke-width="1.25"/>
-  <path stroke="#000000" stroke-width="0.9" d="M2.5 6.33h11M2.5 9.67h11M5.5 3v10M10.5 3v10"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="16.5 16.74 31 31">
+  <defs>
+    <linearGradient id="frame" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#eef2f6"/>
+      <stop offset="1" stop-color="#c8d2dc"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0.75" y2="1">
+      <stop offset="0" stop-color="#eaf5fe"/>
+      <stop offset="0.5" stop-color="#c9e2f7"/>
+      <stop offset="1" stop-color="#a9cdea"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#000000" stroke-width="1.21">
+    <path d="M24.7 19.8 42.89 30.3 39.25 32.4 21.06 21.9Z" fill="url(#frame)"/>
+    <path d="M21.06 21.9 39.25 32.4 39.25 44.3 21.06 33.8Z" fill="url(#glass)"/>
+    <path d="M39.25 32.4 42.89 30.3 42.89 42.2 39.25 44.3Z" fill="url(#frame)"/>
+  </g>
+  <g stroke="#8496aa" stroke-width="1.06" fill="none">
+    <path d="M27.12 25.4V37.3M33.19 28.9V40.8"/>
+    <path d="M21.06 27.26 39.25 37.76"/>
+  </g>
+  <path d="M23.4 24.9 26.1 24.05" stroke="#ffffff" stroke-width="1.06" fill="none"/>
 </svg>

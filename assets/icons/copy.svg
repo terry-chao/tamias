@@ -1,6 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
-  <rect x="1.5" y="1.5" width="8.5" height="8.5" rx="1"
-        stroke="#000000" stroke-width="1.25"/>
-  <rect x="6" y="6" width="8.5" height="8.5" rx="1"
-        stroke="#000000" stroke-width="1.25"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="7 9 46 46">
+  <defs>
+    <linearGradient id="top" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#fbfcfe"/>
+      <stop offset="1" stop-color="#e5eaf1"/>
+    </linearGradient>
+    <linearGradient id="left" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#dee5ed"/>
+      <stop offset="1" stop-color="#c1cbd8"/>
+    </linearGradient>
+    <linearGradient id="right" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#a9b5c4"/>
+      <stop offset="1" stop-color="#8b99a8"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#000000" stroke-width="1.8">
+    <path d="M24 14 35.26 20.5 24 27 12.74 20.5Z" fill="url(#top)"/>
+    <path d="M12.74 20.5 24 27 24 40 12.74 33.5Z" fill="url(#left)"/>
+    <path d="M24 27 35.26 20.5 35.26 33.5 24 40Z" fill="url(#right)"/>
+  </g>
+  <g stroke="#000000" stroke-width="1.8">
+    <path d="M36 24 47.26 30.5 36 37 24.74 30.5Z" fill="#cfe4f8"/>
+    <path d="M24.74 30.5 36 37 36 50 24.74 43.5Z" fill="#b6d4ef"/>
+    <path d="M36 37 47.26 30.5 47.26 43.5 36 50Z" fill="#93bde3"/>
+  </g>
 </svg>

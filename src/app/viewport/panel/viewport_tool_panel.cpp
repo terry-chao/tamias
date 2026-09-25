@@ -25,26 +25,6 @@ constexpr int kGap = 6;
 constexpr int kRailGap = 10;    // 按钮列与功能页之间的空隙（中间画竖分割线）
 constexpr int kPageWidth = 272; // 功能页宽度
 
-QIcon tinted_mask_icon(const QString& resource, const QColor& color) {
-  const QIcon source(resource);
-  QIcon result;
-  const int sizes[] = {16, 18, 20, 32};
-  for (int size : sizes) {
-    const QPixmap src = source.pixmap(QSize(size, size));
-    QPixmap tinted(src.size());
-    tinted.setDevicePixelRatio(src.devicePixelRatio());
-    tinted.fill(Qt::transparent);
-    QPainter painter(&tinted);
-    painter.setCompositionMode(QPainter::CompositionMode_Source);
-    painter.drawPixmap(0, 0, src);
-    painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
-    painter.fillRect(tinted.rect(), color);
-    painter.end();
-    result.addPixmap(tinted);
-  }
-  return result;
-}
-
 }  // namespace
 
 ViewportToolPanel::ViewportToolPanel(QWidget* parent) : QWidget(parent) {
@@ -273,7 +253,8 @@ QToolButton* ViewportToolPanel::add_rail_button(QVBoxLayout* layout, const QIcon
 }
 
 QIcon ViewportToolPanel::load_icon(const QString& resource) const {
-  return tinted_mask_icon(resource, theme_.icon);
+  // 彩色图标按原色显示（FreeCAD 风格），不再按主题色上色。
+  return QIcon(resource);
 }
 
 void ViewportToolPanel::paintEvent(QPaintEvent*) {

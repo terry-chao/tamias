@@ -1,5 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
-  <path stroke="#000000" stroke-width="1.25" stroke-linejoin="round" d="M2.5 6.5h11v4h-11z"/>
-  <path stroke="#000000" stroke-width="1.25" d="M2.5 6.5l2-2h11l-2 2"/>
-  <path stroke="#000000" stroke-width="1.25" d="M13.5 6.5v4l2-2v-4"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="11.5 11.82 41 41">
+  <defs>
+    <linearGradient id="top" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#f6f6f6"/>
+      <stop offset="1" stop-color="#e0e0e0"/>
+    </linearGradient>
+    <linearGradient id="left" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#d2d2d2"/>
+      <stop offset="1" stop-color="#bcbcbc"/>
+    </linearGradient>
+    <linearGradient id="right" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#ababab"/>
+      <stop offset="1" stop-color="#8f8f8f"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#000000" stroke-width="1.6">
+    <path d="M28.4 22 47.8 33.2 35.67 40.2 16.28 29Z" fill="url(#top)"/>
+    <path d="M16.28 29 35.67 40.2 35.67 41.88 16.28 30.68Z" fill="url(#left)"/>
+    <path d="M35.67 40.2 47.8 33.2 47.8 34.88 35.67 41.88Z" fill="url(#right)"/>
+  </g>
 </svg>

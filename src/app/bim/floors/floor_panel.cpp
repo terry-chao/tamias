@@ -32,25 +32,6 @@ constexpr int kFloorIndexRole = Qt::UserRole;
 constexpr int kStoreyIdRole = Qt::UserRole + 1;
 constexpr int kLabelRole = Qt::UserRole + 3;
 
-QIcon tinted_mask_icon(const QString& resource, const QColor& color) {
-  const QIcon source(resource);
-  QIcon result;
-  for (int size : {16, 18, 20, 32}) {
-    const QPixmap src = source.pixmap(QSize(size, size));
-    QPixmap tinted(src.size());
-    tinted.setDevicePixelRatio(src.devicePixelRatio());
-    tinted.fill(Qt::transparent);
-    QPainter painter(&tinted);
-    painter.setCompositionMode(QPainter::CompositionMode_Source);
-    painter.drawPixmap(0, 0, src);
-    painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
-    painter.fillRect(tinted.rect(), color);
-    painter.end();
-    result.addPixmap(tinted);
-  }
-  return result;
-}
-
 QString floor_stylesheet(bool dark) {
   const ThemePalette palette = theme_palette(dark);
   const QColor accent = QColor(47, 125, 222);
@@ -134,8 +115,7 @@ FloorPanel::FloorPanel(QWidget* parent) : QWidget(parent) {
   settings_->setAutoRaise(true);
   settings_->setCursor(Qt::PointingHandCursor);
   settings_->setFocusPolicy(Qt::NoFocus);
-  settings_->setIcon(
-      tinted_mask_icon(QStringLiteral(":/icons/settings.svg"), theme_palette(dark_).icon));
+  settings_->setIcon(QIcon(QStringLiteral(":/icons/settings.svg")));
   settings_->setIconSize(QSize(16, 16));
   settings_->setToolButtonStyle(Qt::ToolButtonIconOnly);
   settings_->setToolTip(tr("Floor Settings"));
@@ -207,8 +187,7 @@ void FloorPanel::set_dark_theme(bool dark) {
     return;
   }
   dark_ = dark;
-  settings_->setIcon(
-      tinted_mask_icon(QStringLiteral(":/icons/settings.svg"), theme_palette(dark_).icon));
+  settings_->setIcon(QIcon(QStringLiteral(":/icons/settings.svg")));
   setStyleSheet(floor_stylesheet(dark_));
   refresh();
 }

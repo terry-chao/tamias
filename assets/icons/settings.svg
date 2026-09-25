@@ -1,5 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
-  <circle cx="8" cy="8" r="2.3" stroke="#000000" stroke-width="1.25"/>
-  <path stroke="#000000" stroke-width="1.25" stroke-linecap="round"
-        d="M8 2.6v1.7M8 11.7v1.7M2.6 8h1.7M11.7 8h1.7M4.15 4.15l1.2 1.2M10.65 10.65l1.2 1.2M11.85 4.15l-1.2 1.2M5.35 10.65l-1.2 1.2"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="4 4 56 56">
+  <defs>
+    <linearGradient id="cog" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#e4e9f0"/>
+      <stop offset="0.45" stop-color="#b3bec9"/>
+      <stop offset="1" stop-color="#7d8996"/>
+    </linearGradient>
+  </defs>
+  <path fill-rule="evenodd" fill="url(#cog)" stroke="#000000" stroke-width="2.19"
+        d="M48.5 32 54.72 35.6 53.76 39.45 46.82 39.26 43.67 43.67 45.52 50.61 42.12 52.65
+           37.34 47.61 32 48.5 28.4 54.72 24.55 53.76 24.74 46.82 20.33 43.67 13.39 45.52
+           11.35 42.12 16.39 37.34 15.5 32 9.28 28.4 10.24 24.55 17.18 24.74 20.33 20.33
+           18.48 13.39 21.88 11.35 26.66 16.39 32 15.5 35.6 9.28 39.45 10.24 39.26 17.18
+           43.67 20.33 50.61 18.48 52.65 21.88 47.61 26.66Z
+           M32 26a6 6 0 1 0 0.01 0Z"/>
 </svg>

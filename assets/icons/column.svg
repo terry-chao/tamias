@@ -1,5 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
-  <path stroke="#000000" stroke-width="1.25" d="M8 2.5v11"/>
-  <path stroke="#000000" stroke-width="1.25" d="M6.5 3.5v9h3v-9z"/>
-  <path stroke="#000000" stroke-width="1.25" d="M5.5 2.5h5M5.5 13.5h5"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="12.5 11.69 39 39">
+  <defs>
+    <linearGradient id="top" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#f7f7f7"/>
+      <stop offset="1" stop-color="#e2e2e2"/>
+    </linearGradient>
+    <linearGradient id="left" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#d8d8d8"/>
+      <stop offset="1" stop-color="#c1c1c1"/>
+    </linearGradient>
+    <linearGradient id="right" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#ababab"/>
+      <stop offset="1" stop-color="#8e8e8e"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#000000" stroke-width="1.52">
+    <path d="M32 32.05 42.91 38.35 32 44.65 21.09 38.35Z" fill="url(#top)"/>
+    <path d="M21.09 38.35 32 44.65 32 46.61 21.09 40.31Z" fill="url(#left)"/>
+    <path d="M32 44.65 42.91 38.35 42.91 40.31 32 46.61Z" fill="url(#right)"/>
+    <path d="M32 15.6 38.67 19.45 32 23.3 25.33 19.45Z" fill="url(#top)"/>
+    <path d="M25.33 19.45 32 23.3 32 42.2 25.33 38.35Z" fill="url(#left)"/>
+    <path d="M32 23.3 38.67 19.45 38.67 38.35 32 42.2Z" fill="url(#right)"/>
+  </g>
 </svg>

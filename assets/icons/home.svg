@@ -1,5 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
-  <path stroke="#000000" stroke-width="1.25" stroke-linejoin="round"
-        d="M3 7.2l5-3.7 5 3.7v.1L8 11 3 7.3z"/>
-  <path stroke="#000000" stroke-width="1.25" d="M8 11v3.2"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="2.5 3.5 59 59">
+  <defs>
+    <linearGradient id="wall" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#f7ecd9"/>
+      <stop offset="1" stop-color="#e2cfad"/>
+    </linearGradient>
+    <linearGradient id="roof" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#d3744a"/>
+      <stop offset="1" stop-color="#a84c28"/>
+    </linearGradient>
+    <linearGradient id="door" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#a9743c"/>
+      <stop offset="1" stop-color="#7c4f22"/>
+    </linearGradient>
+  </defs>
+  <rect x="15" y="30" width="34" height="25" fill="url(#wall)" stroke="#000000"
+        stroke-width="2.3"/>
+  <path d="M9 32 32 11 55 32Z" fill="url(#roof)" stroke="#000000" stroke-width="2.3"/>
+  <rect x="27" y="41" width="10" height="14" fill="url(#door)" stroke="#000000"
+        stroke-width="2.03"/>
+  <circle cx="34.4" cy="48" r="1.5" fill="#f0e2c6"/>
+  <rect x="19" y="36" width="8" height="7" fill="#bcd9f5" stroke="#000000"
+        stroke-width="2.03"/>
 </svg>

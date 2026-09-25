@@ -1,4 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
-  <rect x="2" y="3" width="12" height="10" stroke="#000000" stroke-width="1.25"/>
-  <path stroke="#000000" stroke-width="1" d="M2 8h12"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="16.5 16.74 31 31">
+  <defs>
+    <linearGradient id="top" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#f7ead6"/>
+      <stop offset="1" stop-color="#e6d0ae"/>
+    </linearGradient>
+    <linearGradient id="left" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#ddaa72"/>
+      <stop offset="1" stop-color="#c0874c"/>
+    </linearGradient>
+    <linearGradient id="right" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#b8834c"/>
+      <stop offset="1" stop-color="#96652f"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#000000" stroke-width="1.21">
+    <path d="M24.7 19.8 42.89 30.3 39.25 32.4 21.06 21.9Z" fill="url(#top)"/>
+    <path d="M21.06 21.9 39.25 32.4 39.25 44.3 21.06 33.8Z" fill="url(#left)"/>
+    <path d="M39.25 32.4 42.89 30.3 42.89 42.2 39.25 44.3Z" fill="url(#right)"/>
+  </g>
+  <g stroke="#9c6a37" stroke-width="0.87" fill="none">
+    <path d="M21.06 27.85 39.25 38.35"/>
+    <path d="M30.16 27.15V33.1"/>
+    <path d="M25.61 24.53V30.48M34.7 29.78V35.73"/>
+  </g>
 </svg>

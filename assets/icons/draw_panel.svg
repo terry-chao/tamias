@@ -1,6 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
-  <rect x="2.5" y="2.5" width="11" height="11" stroke="#000000" stroke-width="1.25"/>
-  <path stroke="#000000" stroke-width="1.1" stroke-linecap="round" d="M4.7 6.1h6.6M4.7 9.9h6.6"/>
-  <circle cx="6.5" cy="6.1" r="1.15" fill="#000000"/>
-  <circle cx="9.5" cy="9.9" r="1.15" fill="#000000"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="2.5 2.5 59 59">
+  <defs>
+    <linearGradient id="pencil" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#ffd95e"/>
+      <stop offset="1" stop-color="#e0a92c"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="48" height="48" rx="3.5" fill="#f5f6f8" stroke="#000000"
+        stroke-width="2.3"/>
+  <path d="M21.41 44.93 43.17 23.17 48.83 28.83 27.07 50.59Z" fill="url(#pencil)"
+        stroke="#000000" stroke-width="2.03"/>
+  <path d="M21.41 44.93 27.07 50.59 20 52Z" fill="#d9c8a4" stroke="#000000"
+        stroke-width="1.85"/>
 </svg>

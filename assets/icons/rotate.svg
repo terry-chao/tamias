@@ -1,6 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
-  <path stroke="#000000" stroke-width="1.25" stroke-linecap="round"
-        d="M13.2 8a5.2 5.2 0 1 1-1.7-3.9"/>
-  <path stroke="#000000" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"
-        d="M13.6 2.6v3.4H10.2"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="-3.96 -3.5 71 71">
+  <defs>
+    <linearGradient id="top" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#fbfcfe"/>
+      <stop offset="1" stop-color="#e5eaf1"/>
+    </linearGradient>
+    <linearGradient id="left" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#dee5ed"/>
+      <stop offset="1" stop-color="#c1cbd8"/>
+    </linearGradient>
+    <linearGradient id="right" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#a9b5c4"/>
+      <stop offset="1" stop-color="#8b99a8"/>
+    </linearGradient>
+  </defs>
+  <g fill="none">
+    <path d="M56.4 40.9A26 26 0 1 1 45 9.5" stroke="#000000" stroke-width="8.32"
+          stroke-linecap="round"/>
+    <path d="M56.4 40.9A26 26 0 1 1 45 9.5" stroke="#2a63a8" stroke-width="4.43"
+          stroke-linecap="round"/>
+  </g>
+  <path d="M50 12.5 41.5 12.6 45.6 5.2Z" fill="#2a63a8" stroke="#000000"
+        stroke-width="2.22" stroke-linejoin="round"/>
+  <g stroke="#000000" stroke-width="2.78">
+    <path d="M32 22 40.44 26.88 32 31.75 23.56 26.88Z" fill="url(#top)"/>
+    <path d="M23.56 26.88 32 31.75 32 41.5 23.56 36.63Z" fill="url(#left)"/>
+    <path d="M32 31.75 40.44 26.88 40.44 36.63 32 41.5Z" fill="url(#right)"/>
+  </g>
 </svg>

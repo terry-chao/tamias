@@ -51,27 +51,8 @@ QString tr_dbg(const char* source) {
   return QCoreApplication::translate("tamias::SceneDebuggerWindow", source);
 }
 
-QIcon toolbar_icon(const QString& resource) {
-  const QIcon source(resource);
-  QIcon result;
-  for (int extent : {16, 32}) {
-    for (int scale = 1; scale <= 2; ++scale) {
-      const int px = extent * scale;
-      QPixmap canvas(px, px);
-      canvas.setDevicePixelRatio(scale);
-      canvas.fill(Qt::transparent);
-      {
-        QPainter painter(&canvas);
-        painter.setRenderHint(QPainter::Antialiasing, true);
-        source.paint(&painter, QRect(0, 0, extent, extent));
-        painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
-        painter.fillRect(QRect(0, 0, extent, extent), QColor(47, 125, 222));
-      }
-      result.addPixmap(canvas);
-    }
-  }
-  return result;
-}
+// 彩色图标直接用原色，跟主窗口 Ribbon 保持一致。
+QIcon toolbar_icon(const QString& resource) { return QIcon(resource); }
 
 void reveal_path(const std::filesystem::path& path) {
   QDesktopServices::openUrl(QUrl::fromLocalFile(path_to_qstring(path)));

@@ -96,31 +96,9 @@
 namespace tamias {
 namespace {
 
-QIcon themed_mask_icon(const QString& resource, const QColor& color) {
-  const QIcon source(resource);
-  QIcon result;
-  for (int extent : {16, 32}) {
-    for (int scale = 1; scale <= 2; ++scale) {
-      const int px = extent * scale;
-      QPixmap canvas(px, px);
-      canvas.setDevicePixelRatio(scale);
-      canvas.fill(Qt::transparent);
-      {
-        QPainter painter(&canvas);
-        painter.setRenderHint(QPainter::Antialiasing, true);
-        source.paint(&painter, QRect(0, 0, extent, extent));
-        painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
-        painter.fillRect(QRect(0, 0, extent, extent), color);
-      }
-      result.addPixmap(canvas);
-    }
-  }
-  return result;
-}
-
-QIcon ribbon_icon(const QString& resource) {
-  return themed_mask_icon(resource, QColor(47, 125, 222));
-}
+// Ribbon 图标是彩色的轴测插画（FreeCAD 风格），按原色直接用，不再染成单色；
+// 还走单色的只剩 QSS 里 checkbox 的勾选标记（check.svg / check_partial.svg）。
+QIcon ribbon_icon(const QString& resource) { return QIcon(resource); }
 
 // 选中构件在 XZ 上的中心（环形阵列中心的初值）。
 Vec3 selection_centre_xz(DocumentViewport* viewport) {
