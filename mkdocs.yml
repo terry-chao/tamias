@@ -59,6 +59,7 @@ nav:
   - 客户端:
       - app/index.md
       - Qt 壳: APP.md
+      - 通用编辑（移动/复制/阵列）: EDIT-OPERATIONS.md
       - 脚本与命令控制台: SCRIPTING.md
       - 参考图纸: DRAWING.md
   - 插件:

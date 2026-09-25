@@ -35,7 +35,9 @@ class Command {
 |---|---|---|
 | `CreatePrimitiveCommand` | 构造实体 + 网格，`add_entity` | 从场景移除，恢复 id |
 | `SetFeatureParamCommand` | 改配方参数 + 重算网格 | 改回旧参数 + 重算 |
-| `MoveEntitiesCommand` | 改世界变换 | 改回旧变换 |
+| `TransformEntitiesCommand` | 改世界摆放（移动 / 旋转） | 改回旧摆放 |
+| `CopyEntitiesCommand` | 新增副本（含宿主关系重映射） | 删掉副本 |
+| `MirrorEntitiesCommand` | 镜像烘焙进几何 | 还原快照 |
 
 ## 7.3 命令从哪来：注册表
 

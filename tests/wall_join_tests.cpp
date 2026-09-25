@@ -1,7 +1,8 @@
 #include "bim/host_geometry.h"
 #include "bim/host_update.h"
 #include "bim/wall_join.h"
-#include "command/edit/move_entities_command.h"
+#include "command/edit/entity_transform.h"
+#include "command/edit/transform_entities_command.h"
 #include "engine/document/document.h"
 #include "engine/graphics/mesh.h"
 #include "engine/modeling/evaluate/edge_fingerprint.h"
@@ -288,7 +289,7 @@ TEST(WallJunction, MovingWallNextToNeighborCreatesJoint) {
   item.id = b->id;
   item.from = b->local_transform;
   item.to = translate({-6.f, 0.f, 0.f}) * b->local_transform;
-  MoveEntitiesCommand command(document, {item});
+  TransformEntitiesCommand command(document, {item});
   ASSERT_TRUE(command.execute());
 
   const Entity* moved = document.entity(b->id);

@@ -32,6 +32,7 @@
 #include "app/shell/ribbon_bar.h"
 #include "app/shell/ribbon_group.h"
 #include "app/shell/ribbon_page.h"
+#include "app/edit/array_dialog.h"
 #include "app/debug/scene_debugger_window.h"
 #include "app/shell/settings_dialog.h"
 #include "app/texture/texture_image.h"
@@ -119,6 +120,33 @@ QIcon themed_mask_icon(const QString& resource, const QColor& color) {
 
 QIcon ribbon_icon(const QString& resource) {
   return themed_mask_icon(resource, QColor(47, 125, 222));
+}
+
+// 选中构件在 XZ 上的中心（环形阵列中心的初值）。
+Vec3 selection_centre_xz(DocumentViewport* viewport) {
+  if (viewport == nullptr) {
+    return {};
+  }
+  const Document& document = viewport->session().document();
+  Aabb box{};
+  bool any = false;
+  for (const std::uint64_t id : document.selected_ids()) {
+    const SceneNode* node = document.scene().find(id);
+    if (node == nullptr || !node->world_bounds.valid()) {
+      continue;
+    }
+    if (!any) {
+      box = node->world_bounds;
+      any = true;
+    } else {
+      box.expand(node->world_bounds.min);
+      box.expand(node->world_bounds.max);
+    }
+  }
+  if (!any) {
+    return {};
+  }
+  return {(box.min.x + box.max.x) * 0.5f, 0.f, (box.min.z + box.max.z) * 0.5f};
 }
 
 void center_on_primary_screen(QWidget* widget) {
@@ -473,6 +501,79 @@ MainWindow::MainWindow(QWidget* parent)
     }
   });
   addAction(chamfer_action_);
+
+  // 通用编辑：移动 / 复制 / 旋转 / 镜像 / 阵列（见 command/edit/entity_transform.h）。
+  // 前四个是「点基点 → 点目标点」的交互式工具；阵列收参数后一次落位。
+  auto* move_action = new QAction(ribbon_icon(QStringLiteral(":/icons/move.svg")),
+                                  tr("Move"), this);
+  move_action->setShortcut(QKeySequence(tr("Ctrl+M")));
+  move_action->setToolTip(tr("Move the selection: click a base point, then the target point"));
+  connect(move_action, &QAction::triggered, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->begin_move_selection();
+    }
+  });
+  addAction(move_action);
+
+  auto* copy_action = new QAction(ribbon_icon(QStringLiteral(":/icons/copy.svg")),
+                                  tr("Copy"), this);
+  copy_action->setShortcut(QKeySequence(tr("Ctrl+K")));
+  copy_action->setToolTip(tr("Copy the selection: click a base point, then the target point "
+                             "(walls bring their doors and windows along)"));
+  connect(copy_action, &QAction::triggered, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->begin_copy_selection();
+    }
+  });
+  addAction(copy_action);
+
+  auto* rotate_action = new QAction(ribbon_icon(QStringLiteral(":/icons/rotate.svg")),
+                                    tr("Rotate"), this);
+  rotate_action->setShortcut(QKeySequence(tr("Ctrl+R")));
+  rotate_action->setToolTip(tr("Rotate the selection about a vertical axis: base point, "
+                               "reference direction, target direction"));
+  connect(rotate_action, &QAction::triggered, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->begin_rotate_selection();
+    }
+  });
+  addAction(rotate_action);
+
+  auto* mirror_action = new QAction(ribbon_icon(QStringLiteral(":/icons/mirror.svg")),
+                                    tr("Mirror"), this);
+  mirror_action->setShortcut(QKeySequence(tr("Ctrl+Shift+M")));
+  mirror_action->setToolTip(tr("Mirror the selection: click the two ends of the mirror axis"));
+  connect(mirror_action, &QAction::triggered, this, [this] {
+    if (auto* vp = current_viewport()) {
+      vp->begin_mirror_selection();
+    }
+  });
+  addAction(mirror_action);
+
+  auto* array_action = new QAction(ribbon_icon(QStringLiteral(":/icons/array.svg")),
+                                   tr("Array"), this);
+  array_action->setShortcut(QKeySequence(tr("Ctrl+Shift+A")));
+  array_action->setToolTip(tr("Array the selection: repeat it linearly or around a centre"));
+  connect(array_action, &QAction::triggered, this, [this] {
+    DocumentViewport* vp = current_viewport();
+    if (vp == nullptr) {
+      return;
+    }
+    const Vec3 centre = selection_centre_xz(vp);
+    ArrayDialog dialog(this, centre.x, centre.z);
+    if (dialog.exec() != QDialog::Accepted) {
+      return;
+    }
+    const ArrayDialog::Params params = dialog.params();
+    DocumentViewport::ArrayParams out;
+    out.polar = params.polar;
+    out.count = params.count;
+    out.spacing = params.spacing;
+    out.step_angle = params.step_angle;
+    out.center = {static_cast<float>(params.centre_x), 0.f, static_cast<float>(params.centre_z)};
+    vp->array_selection(out);
+  });
+  addAction(array_action);
 
   auto* settings_action = new QAction(ribbon_icon(QStringLiteral(":/icons/settings.svg")),
                                      tr("Settings"), this);
@@ -949,6 +1050,11 @@ MainWindow::MainWindow(QWidget* parent)
   structural_group->add_action(foundation_action_);
 
   RibbonGroup* modify_group = home_page->add_group(QStringLiteral("modify"), tr("Modify"));
+  modify_group->add_action(move_action);
+  modify_group->add_action(copy_action);
+  modify_group->add_action(rotate_action);
+  modify_group->add_action(mirror_action);
+  modify_group->add_action(array_action);
   modify_group->add_action(fillet_action_);
   modify_group->add_action(chamfer_action_);
 

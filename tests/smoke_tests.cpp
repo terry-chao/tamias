@@ -4,7 +4,8 @@
 #include "bim/host_update.h"
 #include "command/core/command_system.h"
 #include "command/core/history.h"
-#include "command/edit/move_entities_command.h"
+#include "command/edit/entity_transform.h"
+#include "command/edit/transform_entities_command.h"
 #include "command/edit/edit_entity_grip_command.h"
 #include "engine/io/binary_archive.h"
 #include "engine/document/document_io.h"
@@ -1376,7 +1377,7 @@ TEST(CommandSystem, MoveEntitiesUndoRedo) {
   ASSERT_NE(wall, nullptr);
   const Mat4 from = wall->local_transform;
   const Mat4 to = translate({2.f, 0.f, 0.f}) * from;
-  auto command = std::make_unique<MoveEntitiesCommand>(
+  auto command = std::make_unique<TransformEntitiesCommand>(
       doc, std::vector<EntityTransform>{{wall->id, from, to}});
   ASSERT_TRUE(command->execute());
   system.push_executed(std::move(command));

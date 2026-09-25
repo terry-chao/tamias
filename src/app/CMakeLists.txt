@@ -50,6 +50,8 @@ add_executable(tamias
   bim/floors/floor_manager_panel.cpp
   bim/floors/floor_settings_dialog.cpp
   bim/grid/grid_settings_dialog.cpp
+  # 通用编辑对话框：阵列
+  edit/array_dialog.cpp
   # 二维图纸
   drawing/drawing_document.cpp
   drawing/drawing_view.cpp

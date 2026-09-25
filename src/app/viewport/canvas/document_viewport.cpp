@@ -2,6 +2,7 @@
 
 #include "app/base/app_settings.h"
 #include "app/base/qt_path.h"
+#include "app/edit/array_dialog.h"
 #include "bim/host_geometry.h"
 #include "bim/wall_size.h"
 #include "command/edit/edit_entity_grip_command.h"
@@ -34,6 +35,7 @@
 #include <QAction>
 #include <QCoreApplication>
 #include <QCursor>
+#include <QDialog>
 #include <QFileInfo>
 #include <QIcon>
 #include <QInputDialog>
@@ -69,6 +71,39 @@
 namespace tamias {
 
 namespace {
+
+// 环阵列中心初值：选中构件在世界 XZ 上的包围盒中心。
+Vec3 selected_centre_xz(const Document& document) {
+  Aabb box{};
+  bool any = false;
+  for (const std::uint64_t id : document.selected_ids()) {
+    const SceneNode* node = document.scene().find(id);
+    if (node == nullptr || !node->world_bounds.valid()) {
+      continue;
+    }
+    if (!any) {
+      box = node->world_bounds;
+      any = true;
+    } else {
+      box.expand(node->world_bounds.min);
+      box.expand(node->world_bounds.max);
+    }
+  }
+  if (!any) {
+    return {};
+  }
+  return {(box.min.x + box.max.x) * 0.5f, 0.f, (box.min.z + box.max.z) * 0.5f};
+}
+
+// 命令参数里的 id 列表是 double 数组（CommandArg 没有整型数组）。
+std::vector<double> ids_as_args(const std::vector<std::uint64_t>& ids) {
+  std::vector<double> out;
+  out.reserve(ids.size());
+  for (const std::uint64_t id : ids) {
+    out.push_back(static_cast<double>(id));
+  }
+  return out;
+}
 
 // 字体从哪来：仓库里的 assets/fonts（开发）→ exe 旁边的 assets/fonts（部署）→ 系统字体。
 // 一个都没有时返回空，文字通路整体关掉——不崩、不画、在日志里说一声。
@@ -1447,6 +1482,11 @@ bool DocumentViewport::finish_pending_if_done(const Result<bool>& done) {
     resync_all_meshes();
     rebuild_bvh();
     emit document_changed();
+    // 复制类工具跑完：选择换成新建的副本（和 run_creating_command 一个道理）。
+    if (!created_watch_before_.empty()) {
+      select_entities_created_since(created_watch_before_);
+      created_watch_before_.clear();
+    }
     // 画完一个实体后继续同一绘制命令，直到 Esc / 右键退出。
     if (session_->tool_mode() != ToolMode::None) {
       rearm_tool();
@@ -1459,6 +1499,7 @@ bool DocumentViewport::finish_pending_if_done(const Result<bool>& done) {
 
 void DocumentViewport::cancel_tool() {
   unsetCursor();
+  created_watch_before_.clear();  // 取消复制后别再等「跑完换选择」那一步
   if (pending_grid_) {
     cancel_grid_placement();
   } else if (plugin_point_input_.active()) {
@@ -1704,6 +1745,134 @@ void DocumentViewport::delete_selected() {
   emit selection_changed();
 }
 
+// ===== 通用编辑：移动 / 复制 / 旋转 / 镜像 / 阵列 =====
+
+void DocumentViewport::begin_transform_tool(const std::string& command, const QString& hint) {
+  const std::vector<std::uint64_t> ids = document_->selected_ids();
+  if (ids.empty()) {
+    emit status_message(tr("Select an object first"));
+    return;
+  }
+  std::vector<double> arg_ids;
+  arg_ids.reserve(ids.size());
+  for (const std::uint64_t id : ids) {
+    arg_ids.push_back(static_cast<double>(id));
+  }
+  // 不带点 / 位移的调用 = 武装交互式工具，等视口喂「基点 / 目标点」。
+  if (auto r = session_->dispatch(command, {{"ids", std::move(arg_ids)}}); !r) {
+    log_error(r.error());
+    return;
+  }
+  setFocus();
+  request_redraw();
+  emit status_message(hint);
+}
+
+void DocumentViewport::begin_move_selection() {
+  begin_transform_tool("move_entities",
+                       tr("Move: click a base point, then the target point"));
+}
+
+void DocumentViewport::begin_copy_selection() {
+  // 复制完成后选择要落到副本上，先记下复制前的实体清单。
+  created_watch_before_.clear();
+  for (const auto& [id, unused] : document_->entities()) {
+    (void)unused;
+    created_watch_before_.push_back(id);
+  }
+  begin_transform_tool("copy_entities",
+                       tr("Copy: click a base point, then the target point"));
+  if (!command_system_.has_pending()) {
+    created_watch_before_.clear();  // 没武装起来就别等着换选择了
+  }
+}
+
+void DocumentViewport::begin_rotate_selection() {
+  begin_transform_tool(
+      "rotate_entities",
+      tr("Rotate: click the base point, a reference direction, then the target direction"));
+}
+
+void DocumentViewport::begin_mirror_selection() {
+  begin_transform_tool("mirror_entities",
+                       tr("Mirror: click the two ends of the mirror axis"));
+}
+
+void DocumentViewport::move_selection(Vec3 delta) {
+  const std::vector<std::uint64_t> ids = document_->selected_ids();
+  if (ids.empty()) {
+    emit status_message(tr("Select an object first"));
+    return;
+  }
+  run_command("move_entities", {{"ids", ids_as_args(ids)}, {"delta", delta}});
+}
+
+void DocumentViewport::copy_selection(Vec3 delta) {
+  const std::vector<std::uint64_t> ids = document_->selected_ids();
+  if (ids.empty()) {
+    emit status_message(tr("Select an object first"));
+    return;
+  }
+  run_creating_command("copy_entities", {{"ids", ids_as_args(ids)}, {"delta", delta}});
+}
+
+void DocumentViewport::rotate_selection(Vec3 center, double angle_deg) {
+  const std::vector<std::uint64_t> ids = document_->selected_ids();
+  if (ids.empty()) {
+    emit status_message(tr("Select an object first"));
+    return;
+  }
+  run_command("rotate_entities",
+              {{"ids", ids_as_args(ids)}, {"center", center}, {"angle", angle_deg}});
+}
+
+void DocumentViewport::array_selection(const ArrayParams& params) {
+  const std::vector<std::uint64_t> ids = document_->selected_ids();
+  if (ids.empty()) {
+    emit status_message(tr("Select an object first"));
+    return;
+  }
+  CommandArgs args{{"ids", ids_as_args(ids)},
+                   {"mode", std::string(params.polar ? "polar" : "linear")},
+                   {"count", static_cast<std::int64_t>(params.count)}};
+  if (params.polar) {
+    args.emplace("center", params.center);
+    args.emplace("step_angle", params.step_angle);
+  } else {
+    args.emplace("direction", params.direction);
+    args.emplace("spacing", params.spacing);
+  }
+  run_creating_command("array_entities", args);
+}
+
+void DocumentViewport::select_entities_created_since(
+    const std::vector<std::uint64_t>& before_ids) {
+  std::unordered_set<std::uint64_t> before(before_ids.begin(), before_ids.end());
+  std::vector<std::uint64_t> created;
+  for (const auto& [id, unused] : document_->entities()) {
+    (void)unused;
+    if (before.count(id) == 0) {
+      created.push_back(id);
+    }
+  }
+  if (created.empty()) {
+    return;
+  }
+  session_->set_selection(created);
+  emit selection_changed();
+}
+
+void DocumentViewport::run_creating_command(const std::string& name, const CommandArgs& args) {
+  std::vector<std::uint64_t> before;
+  before.reserve(document_->entities().size());
+  for (const auto& [id, unused] : document_->entities()) {
+    (void)unused;
+    before.push_back(id);
+  }
+  run_command(name, args);
+  select_entities_created_since(before);
+}
+
 std::uint64_t DocumentViewport::pick_node_at(const QPoint& pos) const {
   const Ray ray = ray_at(pos);
   if (auto hit = bvh_.closest_hit(ray, *document_, [this](std::uint64_t id) {
@@ -1816,13 +1985,41 @@ void DocumentViewport::show_entity_context_menu(const QPoint& global_pos) {
     return;
   }
   QMenu menu(this);
+  QAction* move_act = menu.addAction(tr("Move"));
+  QAction* copy_act = menu.addAction(tr("Copy"));
+  QAction* rotate_act = menu.addAction(tr("Rotate"));
+  QAction* mirror_act = menu.addAction(tr("Mirror"));
+  QAction* array_act = menu.addAction(tr("Array…"));
+  menu.addSeparator();
   QAction* hide_act = menu.addAction(tr("Hide"));
   QAction* isolate_act = menu.addAction(tr("Isolate"));
   menu.addSeparator();
   QAction* delete_act = menu.addAction(tr("Delete"));
   delete_act->setShortcut(QKeySequence::Delete);
   QAction* chosen = menu.exec(global_pos);
-  if (chosen == hide_act) {
+  if (chosen == move_act) {
+    begin_move_selection();
+  } else if (chosen == copy_act) {
+    begin_copy_selection();
+  } else if (chosen == rotate_act) {
+    begin_rotate_selection();
+  } else if (chosen == mirror_act) {
+    begin_mirror_selection();
+  } else if (chosen == array_act) {
+    const Vec3 centre = selected_centre_xz(*document_);
+    ArrayDialog dialog(this, centre.x, centre.z);
+    if (dialog.exec() == QDialog::Accepted) {
+      const ArrayDialog::Params params = dialog.params();
+      ArrayParams out;
+      out.polar = params.polar;
+      out.count = params.count;
+      out.spacing = params.spacing;
+      out.step_angle = params.step_angle;
+      out.center = {static_cast<float>(params.centre_x), 0.f,
+                    static_cast<float>(params.centre_z)};
+      array_selection(out);
+    }
+  } else if (chosen == hide_act) {
     hide_selected();
   } else if (chosen == isolate_act) {
     isolate_selected();

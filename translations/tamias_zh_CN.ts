@@ -29,6 +29,46 @@
         <translation>隔离</translation>
     </message>
     <message>
+        <source>Move</source>
+        <translation>移动</translation>
+    </message>
+    <message>
+        <source>Copy</source>
+        <translation>复制</translation>
+    </message>
+    <message>
+        <source>Rotate</source>
+        <translation>旋转</translation>
+    </message>
+    <message>
+        <source>Mirror</source>
+        <translation>镜像</translation>
+    </message>
+    <message>
+        <source>Array…</source>
+        <translation>阵列…</translation>
+    </message>
+    <message>
+        <source>Move: click a base point, then the target point</source>
+        <translation>移动：先点基点，再点目标点</translation>
+    </message>
+    <message>
+        <source>Copy: click a base point, then the target point</source>
+        <translation>复制：先点基点，再点目标点</translation>
+    </message>
+    <message>
+        <source>Rotate: click the base point, a reference direction, then the target direction</source>
+        <translation>旋转：依次点基点、参照方向、目标方向</translation>
+    </message>
+    <message>
+        <source>Mirror: click the two ends of the mirror axis</source>
+        <translation>镜像：点镜像轴的两端</translation>
+    </message>
+    <message>
+        <source>Select an object first</source>
+        <translation>请先选中构件</translation>
+    </message>
+    <message>
         <source>Slabs can only be drawn in plan view</source>
         <translation>板只能在平面视图中绘制</translation>
     </message>
@@ -1082,6 +1122,66 @@ Click an object to select it, or use a create tool</source>
     <message>
         <source>&amp;Modify</source>
         <translation>修改(&amp;M)</translation>
+    </message>
+    <message>
+        <source>Move</source>
+        <translation>移动</translation>
+    </message>
+    <message>
+        <source>Copy</source>
+        <translation>复制</translation>
+    </message>
+    <message>
+        <source>Rotate</source>
+        <translation>旋转</translation>
+    </message>
+    <message>
+        <source>Mirror</source>
+        <translation>镜像</translation>
+    </message>
+    <message>
+        <source>Array</source>
+        <translation>阵列</translation>
+    </message>
+    <message>
+        <source>Move the selection: click a base point, then the target point</source>
+        <translation>移动选中构件：先点基点，再点目标点</translation>
+    </message>
+    <message>
+        <source>Copy the selection: click a base point, then the target point (walls bring their doors and windows along)</source>
+        <translation>复制选中构件：先点基点，再点目标点（墙会带着墙上的门窗一起复制）</translation>
+    </message>
+    <message>
+        <source>Rotate the selection about a vertical axis: base point, reference direction, target direction</source>
+        <translation>绕竖直轴旋转选中构件：基点 → 参照方向 → 目标方向</translation>
+    </message>
+    <message>
+        <source>Mirror the selection: click the two ends of the mirror axis</source>
+        <translation>镜像选中构件：点镜像轴的两端</translation>
+    </message>
+    <message>
+        <source>Array the selection: repeat it linearly or around a centre</source>
+        <translation>阵列选中构件：按直线排布，或绕圆心环形排布</translation>
+    </message>
+    <message>
+        <source>Ctrl+M</source>
+        <translation>Ctrl+M</translation>
+    </message>
+    <message>
+        <source>Ctrl+K</source>
+        <translation>Ctrl+K</translation>
+    </message>
+    <message>
+        <source>Ctrl+R</source>
+        <translation>Ctrl+R</translation>
+    </message>
+    <message>
+        <source>Ctrl+Shift+M</source>
+        <translation>Ctrl+Shift+M</translation>
+    </message>
+    <message>
+        <source>Ctrl+Shift+A</source>
+        <translation>Ctrl+Shift+A</translation>
     </message>
     <message>
         <source>Open</source>
@@ -4534,6 +4634,53 @@ Export the drawing to DXF, SVG or an image, or rebuild with Qt6::Pdf available.<
     <message>
         <source>Save Script As</source>
         <translation>脚本另存为</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::ArrayDialog</name>
+    <message>
+        <source>Array</source>
+        <translation>阵列</translation>
+    </message>
+    <message>
+        <source>Mode</source>
+        <translation>模式</translation>
+    </message>
+    <message>
+        <source>Count</source>
+        <translation>数量</translation>
+    </message>
+    <message>
+        <source> items</source>
+        <translation> 份</translation>
+    </message>
+    <message>
+        <source>Spacing</source>
+        <translation>间距</translation>
+    </message>
+    <message>
+        <source>Angle per copy</source>
+        <translation>每份夹角</translation>
+    </message>
+    <message>
+        <source>Centre X / Z</source>
+        <translation>中心 X / Z</translation>
+    </message>
+    <message>
+        <source>Linear (spacing along a direction)</source>
+        <translation>线性（沿方向按间距排布）</translation>
+    </message>
+    <message>
+        <source>Polar (rotate around the selection centre)</source>
+        <translation>环形（绕选中范围中心旋转排布）</translation>
+    </message>
+    <message>
+        <source>Each copy is rotated around the centre below (seeded with the centre of the current selection).</source>
+        <translation>每份副本绕下方的中心旋转（初值 = 当前选中范围的平面中心）。</translation>
+    </message>
+    <message>
+        <source>Copies are laid out along world +X. Select one object and use the Move/Copy tool if you need another direction.</source>
+        <translation>副本沿世界 +X 方向排布；需要别的方向时，用「移动 / 复制」工具交互放置。</translation>
     </message>
 </context>
 </TS>

@@ -211,6 +211,26 @@ class DocumentViewport final : public QWidget {
   void chamfer_selected(double distance = 0.05);
   // 删除当前选中实体（走 delete_entity 命令，可撤销）。
   void delete_selected();
+  // ==== 通用编辑：移动 / 复制 / 旋转 / 镜像 / 阵列 ====
+  // 交互式：武装「点基点 → 点目标点」工具（旋转三点、镜像两点定轴），Esc / 右键取消。
+  void begin_move_selection();
+  void begin_copy_selection();
+  void begin_rotate_selection();
+  void begin_mirror_selection();
+  // 一步到位（脚本 / 菜单带参数时用）。
+  void move_selection(Vec3 delta);
+  void copy_selection(Vec3 delta);
+  void rotate_selection(Vec3 center, double angle_deg);
+  // 阵列参数（对话框收齐后落到这里）。count 含原件，所以副本数是 count-1。
+  struct ArrayParams {
+    bool polar = false;
+    int count = 3;
+    double spacing = 1.0;      // 线性：相邻间距（米）
+    double step_angle = 15.0;  // 环形：每份夹角（度）
+    Vec3 direction{1.f, 0.f, 0.f};
+    Vec3 center{};
+  };
+  void array_selection(const ArrayParams& params);
   [[nodiscard]] CommandSystem& command_system() { return command_system_; }
   // 会话层：文档 / 命令 / 相机 / 工具 / 选择都在这。
   [[nodiscard]] Session& session() { return *session_; }
@@ -319,6 +339,12 @@ class DocumentViewport final : public QWidget {
   void show_entity_context_menu(const QPoint& global_pos);
   void adjust_selected_param(double delta);
   void run_command(const std::string& name, const CommandArgs& args, bool notify = true);
+  // 会新增实体的编辑（复制 / 阵列）：跑完把选择换成新建的副本（CAD 惯例）。
+  void run_creating_command(const std::string& name, const CommandArgs& args);
+  // 武装一个交互式变换工具：命令名 + 提示语（见 command/edit/transform_tool_command.h）。
+  void begin_transform_tool(const std::string& command, const QString& hint);
+  // 跑完复制类工具后，用前后 id 差集把选择换成新建的副本。
+  void select_entities_created_since(const std::vector<std::uint64_t>& before_ids);
   void dispatch_tool_command(ToolMode mode);
   // 武装一个构件命令（dispatch）并记下这一刻的楼层放置状态。
   void dispatch_armed_component(const std::string& command, const CommandArgs& args);
@@ -386,6 +412,8 @@ class DocumentViewport final : public QWidget {
   // 这一下左键已经被轴网消费掉（落位 / 选中轴线），抬起时别再当选择点击处理。
   bool grid_press_consumed_ = false;
   bool gripping_ = false;
+  // 复制类交互工具武装时记下的实体清单：跑完用差集把选择移到副本上。
+  std::vector<std::uint64_t> created_watch_before_;
   EntityGrip active_grip_{};
   FeatureModel grip_from_model_{};
   Mat4 grip_from_transform_ = Mat4::identity();

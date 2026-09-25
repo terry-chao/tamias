@@ -17,19 +17,27 @@
 #include "command/delete/delete_entity_command.h"
 #include "command/delete/delete_grid_axis_command.h"
 #include "command/delete/delete_text_command.h"
+#include "command/edit/copy_entities_command.h"
+#include "command/edit/entity_transform.h"
+#include "command/edit/mirror_entities_command.h"
 #include "command/edit/set_feature_param_command.h"
 #include "command/edit/set_location_command.h"
 #include "command/edit/set_material_command.h"
+#include "command/edit/transform_entities_command.h"
+#include "command/edit/transform_tool_command.h"
 #include "command/edit/update_grid_command.h"
 #include "command/edit/update_text_command.h"
 #include "bim/wall_size.h"
 #include "entity/family/host/structural/column_entity.h"
 
+#include <cmath>
 #include <memory>
 #include <optional>
 
 namespace tamias {
 namespace {
+
+constexpr double kDegToRad = 3.14159265358979323846 / 180.0;
 
 double arg_double(const CommandArgs& args, const std::string& name, double fallback) {
   const auto it = args.find(name);
@@ -107,6 +115,69 @@ CurveKind curve_kind_from_name(const std::string& name) {
     return CurveKind::Nurbs;
   }
   return name == "line" ? CurveKind::Line : CurveKind::Unknown;
+}
+
+// 「对选中集做一次编辑操作」的公共入参：ids（数组）优先，其次单个 entity_id；
+// 都没给就用当前选择集（交互式工具和脚本都走这一处）。
+std::vector<std::uint64_t> arg_target_ids(Document& doc, const CommandArgs& args) {
+  std::vector<std::uint64_t> ids;
+  const auto it = args.find("ids");
+  if (it != args.end() && std::holds_alternative<std::vector<double>>(it->second)) {
+    for (const double value : std::get<std::vector<double>>(it->second)) {
+      if (value > 0.0) {
+        ids.push_back(static_cast<std::uint64_t>(value));
+      }
+    }
+  }
+  if (ids.empty()) {
+    const auto single = static_cast<std::uint64_t>(arg_int(args, "entity_id", 0));
+    if (single != 0) {
+      ids.push_back(single);
+    }
+  }
+  if (ids.empty()) {
+    ids = doc.selected_ids();
+  }
+  return ids;
+}
+
+// 把「当前摆放 → 目标摆放」的变换列表打包成一条可撤销命令。
+std::unique_ptr<Command> make_transform(Document& doc, const std::vector<std::uint64_t>& ids,
+                                       const Mat4& placement) {
+  std::vector<EntityTransform> items;
+  items.reserve(ids.size());
+  for (const std::uint64_t id : ids) {
+    const Entity* entity = doc.entity(id);
+    if (entity == nullptr) {
+      continue;
+    }
+    EntityTransform item;
+    item.id = id;
+    item.from = entity_world_transform(*entity);
+    item.to = placement * item.from;
+    items.push_back(item);
+  }
+  return std::make_unique<TransformEntitiesCommand>(doc, std::move(items));
+}
+
+// 阵列的摆放序列：linear 用 direction + spacing，polar 用 center + step_angle。
+Result<std::vector<Mat4>> array_placements(const CommandArgs& args) {
+  const int count = static_cast<int>(arg_int(args, "count", 3));
+  if (arg_string(args, "mode", "linear") == "polar") {
+    const Vec3 center = arg_vec3(args, "center").value_or(Vec3{});
+    double step = arg_double(args, "step_angle", 0.0);
+    if (std::fabs(step) < 1e-9) {
+      // 没给每份夹角就按总角度推。count 含原件：整圈（360°）按 count 均分，否则
+      // 最后一份会和原件叠在一起；非整圈按 count-1 份均分（首末都要）。
+      const double total = arg_double(args, "total_angle", 360.0);
+      const bool full_circle = std::fabs(total) >= 359.999 || std::fabs(total) <= 1e-9;
+      const int pieces = full_circle ? count : count - 1;
+      step = pieces > 0 ? total / static_cast<double>(pieces) : 0.0;
+    }
+    return polar_array_placements(center, step, count);
+  }
+  const Vec3 direction = arg_vec3(args, "direction").value_or(Vec3{1.f, 0.f, 0.f});
+  return linear_array_placements(direction, arg_double(args, "spacing", 1.0), count);
 }
 
 }  // namespace
@@ -331,6 +402,72 @@ void register_commands(CommandRegistry& registry) {
   registry.register_command("delete_entity", [](Document& doc, const CommandArgs& args) {
     return std::make_unique<DeleteEntityCommand>(
         doc, static_cast<std::uint64_t>(arg_int(args, "entity_id", 0)));
+  });
+
+  // ---- 通用编辑：移动 / 复制 / 旋转 / 镜像 / 阵列 ----
+  // 全部按「选择集 → 一组摆放 → 一条可撤销命令」走；给了点或 delta 就直接做，
+  // 没给就武装成交互式工具（视口里点基点 / 目标点，见 transform_tool_command.h）。
+  registry.register_command("move_entities", [](Document& doc, const CommandArgs& args) {
+    const std::vector<std::uint64_t> ids = arg_target_ids(doc, args);
+    if (std::optional<Vec3> delta = arg_vec3(args, "delta")) {
+      return make_transform(doc, ids, translation_transform(*delta));
+    }
+    const std::vector<Vec3> points = arg_points(args, "points");
+    if (points.size() >= 2) {
+      return make_transform(doc, ids, translation_transform(points[1] - points[0]));
+    }
+    return std::unique_ptr<Command>{std::make_unique<TransformToolCommand>(
+        doc, TransformToolCommand::Mode::Move, ids)};
+  });
+
+  registry.register_command("copy_entities", [](Document& doc, const CommandArgs& args) {
+    const std::vector<std::uint64_t> ids = arg_target_ids(doc, args);
+    std::vector<Mat4> placements;
+    if (std::optional<Vec3> delta = arg_vec3(args, "delta")) {
+      placements.push_back(translation_transform(*delta));
+    } else {
+      const std::vector<Vec3> points = arg_points(args, "points");
+      if (points.size() >= 2) {
+        placements.push_back(translation_transform(points[1] - points[0]));
+      }
+    }
+    if (placements.empty()) {
+      return std::unique_ptr<Command>{std::make_unique<TransformToolCommand>(
+          doc, TransformToolCommand::Mode::Copy, ids)};
+    }
+    return std::unique_ptr<Command>{
+        std::make_unique<CopyEntitiesCommand>(doc, ids, std::move(placements))};
+  });
+
+  registry.register_command("rotate_entities", [](Document& doc, const CommandArgs& args) {
+    const std::vector<std::uint64_t> ids = arg_target_ids(doc, args);
+    if (const auto angle = args.find("angle");
+        angle != args.end() && std::holds_alternative<double>(angle->second)) {
+      const Vec3 center = arg_vec3(args, "center").value_or(Vec3{});
+      return make_transform(doc, ids,
+                            yaw_rotation_about(center, std::get<double>(angle->second) * kDegToRad));
+    }
+    return std::unique_ptr<Command>{std::make_unique<TransformToolCommand>(
+        doc, TransformToolCommand::Mode::Rotate, ids)};
+  });
+
+  registry.register_command("mirror_entities", [](Document& doc, const CommandArgs& args) {
+    const std::vector<std::uint64_t> ids = arg_target_ids(doc, args);
+    const std::vector<Vec3> points = arg_points(args, "points");
+    if (points.size() >= 2) {
+      return std::unique_ptr<Command>{
+          std::make_unique<MirrorEntitiesCommand>(doc, ids, points[0], points[1])};
+    }
+    return std::unique_ptr<Command>{std::make_unique<TransformToolCommand>(
+        doc, TransformToolCommand::Mode::Mirror, ids)};
+  });
+
+  // 阵列 = 先算出一串摆放，再走复制那条路（门窗 / 墙交接 / 网格 intern 全都复用）。
+  registry.register_command("array_entities", [](Document& doc, const CommandArgs& args) {
+    const std::vector<std::uint64_t> ids = arg_target_ids(doc, args);
+    std::vector<Mat4> placements = array_placements(args).value_or(std::vector<Mat4>{});
+    return std::unique_ptr<Command>{
+        std::make_unique<CopyEntitiesCommand>(doc, ids, std::move(placements))};
   });
 
   registry.register_command("set_material", [](Document& doc, const CommandArgs& args) {

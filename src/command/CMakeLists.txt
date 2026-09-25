@@ -15,11 +15,15 @@ add_library(tamias_command STATIC
   create/create_grid_axis_command.cpp
   create/create_storey_command.cpp
   create/create_text_command.cpp
-  # 编辑：改特征参数 / 夹点 / 移动 / 定位 / 布尔 / 材质 / 贴图 / 轴网 / 楼层
+  # 编辑：改特征参数 / 夹点 / 变换（移动·旋转·镜像）/ 复制·阵列 / 定位 / 布尔 / 材质 / 贴图 / 轴网 / 楼层
   edit/add_feature_command.cpp
   edit/set_feature_param_command.cpp
   edit/edit_entity_grip_command.cpp
-  edit/move_entities_command.cpp
+  edit/entity_transform.cpp
+  edit/transform_entities_command.cpp
+  edit/transform_tool_command.cpp
+  edit/copy_entities_command.cpp
+  edit/mirror_entities_command.cpp
   edit/set_location_command.cpp
   edit/boolean_command.cpp
   edit/set_material_command.cpp
