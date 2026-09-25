@@ -1,0 +1,12 @@
+{
+  // 清单整个可选：删掉这个文件，宿主就用目录名当 id 和名称，入口默认找 main.cs。
+  // 手写的清单允许注释和尾逗号。
+  "id": "tamias.sample.tools",
+  "name": "示例扩展（源码）",
+  "version": "1.0.0",
+  "author": "Tamias",
+  "releaseDate": "2026-09-25",
+  "description": "演示目录式扩展：一个 main.cs + extension.json，放进约定目录就能用。",
+  "homepage": "https://github.com/terry-chao/tamias",
+  "icon": "icon.svg"
+}

@@ -121,6 +121,9 @@ function(tamias_publish_csharp target)
     "${CMAKE_SOURCE_DIR}/plugin-sdk/csharp/*.csproj"
     "${CMAKE_SOURCE_DIR}/plugins/csharp/*.cs"
     "${CMAKE_SOURCE_DIR}/plugins/csharp/*.csproj"
+    "${CMAKE_SOURCE_DIR}/plugins/extensions/*.cs"
+    "${CMAKE_SOURCE_DIR}/plugins/extensions/*.json"
+    "${CMAKE_SOURCE_DIR}/plugins/extensions/*.svg"
   )
   set(_csharp_stamp "${CMAKE_CURRENT_BINARY_DIR}/tamias_csharp-$<CONFIG>.stamp")
   add_custom_command(
@@ -139,6 +142,10 @@ function(tamias_publish_csharp target)
             -c $<IF:$<CONFIG:Debug>,Debug,Release>
             --nologo
             -o $<TARGET_FILE_DIR:${target}>/plugins
+    # 目录式扩展示例：源码 + 清单直接摆进约定目录，加载时现编译。
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/plugins/extensions/Tamias.Sample.Tools"
+            $<TARGET_FILE_DIR:${target}>/plugins/Tamias.Sample.Tools
     COMMAND ${CMAKE_COMMAND} -E touch "${_csharp_stamp}"
     DEPENDS ${_cs_inputs}
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/plugin-sdk/csharp"

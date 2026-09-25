@@ -7,6 +7,8 @@ sealed class Host : IHost, IUi
 {
     readonly HostApi api_;
     readonly Dictionary<string, Action> actions_ = new(StringComparer.Ordinal);
+    // 命令 id → 属于哪个扩展。重载要把旧扩展的命令一起摘掉，靠它知道摘哪些。
+    readonly Dictionary<string, string> actionOwners_ = new(StringComparer.Ordinal);
     readonly Dictionary<ulong, Action<PointInputResult>> pointInputCallbacks_ = [];
     readonly object pointInputLock_ = new();
     ulong nextPointInputRequestId_;
@@ -23,6 +25,10 @@ sealed class Host : IHost, IUi
     {
         alive_ = false;
     }
+
+    // 当前正在加载 / 注册的扩展。RegisterPlugin 会把它设成该扩展的 id，
+    // 之后的 AddCommand 就算在这个扩展名下——重载时好一并摘掉。
+    string currentPlugin_ = "";
 
     public void RegisterPlugin(PluginMetadata metadata)
     {
@@ -43,7 +49,7 @@ sealed class Host : IHost, IUi
         var iconPathPtr = Utf8(metadata.IconPath);
         try
         {
-            var flags = metadata.IsBuiltIn ? 1 : 0;
+        var flags = metadata.IsBuiltIn ? 1 : 0;
             if (fn(
                     api_.Context,
                     idPtr,
@@ -58,6 +64,7 @@ sealed class Host : IHost, IUi
             {
                 throw new InvalidOperationException("Failed to register plugin '" + metadata.Id + "'");
             }
+            currentPlugin_ = metadata.Id;
         }
         finally
         {
@@ -286,6 +293,37 @@ sealed class Host : IHost, IUi
             Marshal.FreeCoTaskMem(iconPtr);
         }
         actions_[id] = action;
+        actionOwners_[id] = currentPlugin_;
+    }
+
+    // 摘掉一个扩展：它的命令入口 + 它自己。重载时先摘旧的再装新的，否则命令 id 会撞。
+    internal void RemovePlugin(string pluginId)
+    {
+        if (string.IsNullOrEmpty(pluginId))
+        {
+            return;
+        }
+        foreach (var id in actionOwners_
+                     .Where(entry => entry.Value == pluginId)
+                     .Select(entry => entry.Key)
+                     .ToList())
+        {
+            actions_.Remove(id);
+            actionOwners_.Remove(id);
+        }
+        if (alive_)
+        {
+            var fn = As<HostUnregisterPluginFn>(api_.UnregisterPlugin);
+            var idPtr = Utf8(pluginId);
+            try
+            {
+                fn(api_.Context, idPtr);  // 原生侧的命令表也要跟着变短
+            }
+            finally
+            {
+                Marshal.FreeCoTaskMem(idPtr);
+            }
+        }
     }
 
     public void SetSelection(IEnumerable<ulong> ids)

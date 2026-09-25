@@ -1,6 +1,7 @@
 #include "plugin/plugin_host.h"
 
 #include "engine/base/executable_directory.h"
+#include "engine/base/fs_utf8.h"
 #include "engine/base/log.h"
 #include "entity/core/entity.h"
 #include "host/command_arg_text.h"
@@ -84,6 +85,7 @@ PluginHost::PluginHost() : csharp_(std::make_unique<CsharpRuntime>()) {
   api_.begin_transaction = &PluginHost::host_begin_transaction;
   api_.commit_transaction = &PluginHost::host_commit_transaction;
   api_.abort_transaction = &PluginHost::host_abort_transaction;
+  api_.unregister_plugin = &PluginHost::host_unregister_plugin;
 }
 
 PluginHost::~PluginHost() { shutdown(); }
@@ -112,8 +114,19 @@ Result<void> PluginHost::load() {
   current_plugin_id_.clear();
   const auto exe = executable_directory();
   const auto managed = exe / "managed";
-  const auto plugins = exe / "plugins";
-  auto started = csharp_->start(managed, plugins, &api_);
+  // 根目录按顺序排：内置在前、用户在后——用户装的同 id 扩展盖掉内置的。
+  auto roots = extension_roots_;
+  if (roots.empty()) {
+    roots.push_back(exe / "plugins");
+  }
+  std::string joined;
+  for (const auto& root : roots) {
+    if (!joined.empty()) {
+      joined += '\n';  // 路径里不会出现换行，比分号安全
+    }
+    joined += path_to_utf8(root);  // 用户名里有中文也不能乱码
+  }
+  auto started = csharp_->start(managed, joined, &api_);
   if (!started) {
     return started;
   }
@@ -128,6 +141,17 @@ Result<void> PluginHost::invoke(std::string_view command_id) {
   auto result = csharp_->invoke(std::string(command_id));
   close_dangling_transaction();
   return result;
+}
+
+Result<std::string> PluginHost::reload_extensions() {
+  if (!csharp_ || !csharp_->started()) {
+    return Err("C# host is not loaded (the .NET runtime is required)");
+  }
+  auto summary = csharp_->reload();
+  if (!summary) {
+    return Err(summary.error());
+  }
+  return *summary;
 }
 
 Result<std::string> PluginHost::evaluate(std::string_view code) {
@@ -412,6 +436,22 @@ std::int32_t PluginHost::host_abort_transaction(void* context) {
     self->after_edit_();
   }
   return static_cast<std::int32_t>(*r);
+}
+
+// 摘掉一个扩展：它的命令 + 它的元数据。返回摘掉了几条（命令 + 插件记录）。
+std::int32_t PluginHost::host_unregister_plugin(void* context, const char* plugin_id) {
+  auto* self = static_cast<PluginHost*>(context);
+  if (self == nullptr || plugin_id == nullptr || *plugin_id == '\0') {
+    return -1;
+  }
+  const std::string id(plugin_id);
+  const auto commands = std::erase_if(self->registered_, [&id](const PluginCommand& command) {
+    return command.plugin_id == id;
+  });
+  const auto plugins = std::erase_if(self->plugins_, [&id](const PluginInfo& info) {
+    return info.id == id;
+  });
+  return static_cast<std::int32_t>(commands + plugins);
 }
 
 std::int32_t PluginHost::host_selection_count(void* context) {

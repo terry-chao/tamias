@@ -56,21 +56,7 @@ static class ScriptEngine
             {
                 return (options_, loader_!);
             }
-            var references = new List<MetadataReference>();
-            // 运行时里的程序集全给上：脚本要能随手用 List<> / Linq / Task / IO。
-            // 建一次缓存住——每次求值都重新解析两百个引用太浪费。
-            var trusted = (string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES");
-            if (!string.IsNullOrEmpty(trusted))
-            {
-                foreach (var path in trusted.Split(Path.PathSeparator))
-                {
-                    if (!string.IsNullOrWhiteSpace(path))
-                    {
-                        references.Add(MetadataReference.CreateFromFile(path));
-                    }
-                }
-            }
-            references.Add(MetadataReference.CreateFromFile(typeof(IHost).Assembly.Location));
+            var references = CompilationReferences.All();
 
             // 关键：把宿主**已经在用**的那两份程序集登记给脚本加载器。
             // 不登记的话 Roslyn 会在自己的加载上下文里再加载一份 Tamias.Host / Tamias.Api，

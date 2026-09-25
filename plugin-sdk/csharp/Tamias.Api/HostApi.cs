@@ -6,7 +6,7 @@ namespace Tamias.Api;
 // Bootstrap.Initialize 对不上就拒绝加载（宁可没有插件，也不要按错位的表调用）。
 public static class HostApiVersion
 {
-    public const int Current = 7;
+    public const int Current = 8;
 }
 
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -122,6 +122,9 @@ public delegate int HostCommitTransactionFn(IntPtr context);
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 public delegate int HostAbortTransactionFn(IntPtr context);
 
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+public delegate int HostUnregisterPluginFn(IntPtr context, IntPtr pluginIdUtf8);
+
 [StructLayout(LayoutKind.Sequential)]
 public struct HostApi
 {
@@ -152,4 +155,6 @@ public struct HostApi
     public IntPtr BeginTransaction;
     public IntPtr CommitTransaction;
     public IntPtr AbortTransaction;
+    // v8：摘掉一个扩展（重载时先把旧的摘下来）。
+    public IntPtr UnregisterPlugin;
 }

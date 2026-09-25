@@ -151,6 +151,28 @@ public static class Bootstrap
         }
     }
 
+    // 扩展重载：文件监视发现约定目录变了之后走这里。
+    // 0 = 成功（缓冲里是摘要；**空串表示什么都没变**）、-1 = 失败（缓冲里是错误文本）。
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int Reload(IntPtr outUtf8, int cap)
+    {
+        if (host_ == null)
+        {
+            WriteUtf8("host is not initialized", outUtf8, cap);
+            return -1;
+        }
+        try
+        {
+            WriteUtf8(PluginLoader.ReloadChanged(host_), outUtf8, cap);
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            WriteUtf8(ex.Message, outUtf8, cap);
+            return -1;
+        }
+    }
+
     static void WriteUtf8(string text, IntPtr buffer, int cap)
     {
         if (buffer == IntPtr.Zero || cap <= 0)

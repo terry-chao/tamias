@@ -61,6 +61,7 @@ void CsharpRuntime::shutdown() {
     shutdown_fn_ = nullptr;
   }
   invoke_ = nullptr;
+  reload_ = nullptr;
   evaluate_ = nullptr;
   init_ = nullptr;
   point_input_completed_ = nullptr;
@@ -75,13 +76,13 @@ void CsharpRuntime::shutdown() {
 }
 
 Result<void> CsharpRuntime::start(const std::filesystem::path& managed_dir,
-                                 const std::filesystem::path& plugins_dir, HostApi* api) {
+                                  std::string_view extension_roots, HostApi* api) {
   if (invoke_ != nullptr) {
     return {};
   }
 #ifndef TAMIAS_HAS_NETHOST
   (void)managed_dir;
-  (void)plugins_dir;
+  (void)extension_roots;
   (void)api;
   return Err("C# plugin host was not built (nethost not found)");
 #else
@@ -163,6 +164,12 @@ Result<void> CsharpRuntime::start(const std::filesystem::path& managed_dir,
 #else
       "Evaluate";
 #endif
+  const char_t* reload_name =
+#ifdef _WIN32
+      L"Reload";
+#else
+      "Reload";
+#endif
 
   rc = load_assembly(assembly_native.c_str(), type_name, init_name, UNMANAGEDCALLERSONLY_METHOD, nullptr,
                      reinterpret_cast<void**>(&init_));
@@ -192,11 +199,18 @@ Result<void> CsharpRuntime::start(const std::filesystem::path& managed_dir,
   if (rc != 0 || evaluate_ == nullptr) {
     return Err("failed to bind Tamias.Host.Bootstrap.Evaluate (" + std::to_string(rc) + ")");
   }
+  rc = load_assembly(assembly_native.c_str(), type_name, reload_name,
+                     UNMANAGEDCALLERSONLY_METHOD, nullptr,
+                     reinterpret_cast<void**>(&reload_));
+  if (rc != 0 || reload_ == nullptr) {
+    return Err("failed to bind Tamias.Host.Bootstrap.Reload (" + std::to_string(rc) + ")");
+  }
 
-  const auto plugins_utf8 = plugins_dir.string();
-  const int init_rc = init_(api, plugins_utf8.c_str());
+  const std::string roots_utf8(extension_roots);
+  const int init_rc = init_(api, roots_utf8.c_str());
   if (init_rc != 0) {
     point_input_completed_ = nullptr;
+    reload_ = nullptr;
     evaluate_ = nullptr;
     invoke_ = nullptr;
     init_ = nullptr;
@@ -222,6 +236,19 @@ Result<std::string> CsharpRuntime::evaluate(std::string_view code) {
     return Err(text.empty() ? std::string("script failed") : text);
   }
   return Err(text.empty() ? std::string("C# host is not available") : text);
+}
+
+Result<std::string> CsharpRuntime::reload() {
+  if (reload_ == nullptr) {
+    return Err("C# extension loader is not loaded");
+  }
+  std::vector<char> buffer(16 * 1024, '\0');
+  const int rc = reload_(buffer.data(), static_cast<std::int32_t>(buffer.size()));
+  std::string text(buffer.data());
+  if (rc != 0) {
+    return Err(text.empty() ? std::string("extension reload failed") : text);
+  }
+  return text;
 }
 
 Result<void> CsharpRuntime::complete_point_input(std::uint64_t request_id,

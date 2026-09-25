@@ -4,7 +4,7 @@
 
 namespace tamias {
 
-inline constexpr int kHostApiVersion = 7;
+inline constexpr int kHostApiVersion = 8;
 
 // C ABI for C# / native plugins. Layout must match plugin-sdk/csharp/Tamias.Api/HostApi.cs.
 // Append fields only; bump kHostApiVersion when the layout changes.
@@ -77,6 +77,11 @@ struct HostApi {
   std::int32_t (*commit_transaction)(void* context) = nullptr;
   // 返回回滚的命令条数（0 = 空事务）；失败 -1。
   std::int32_t (*abort_transaction)(void* context) = nullptr;
+
+  // ── v8：扩展重载 ──────────────────────────────────────────────────────────
+  // 把一个扩展连同它登记的命令一起摘掉（命令列表变短了，壳会重建 Ribbon）。
+  // 重载就是「先摘旧的、再装新的」——不摘的话命令 id 会撞。
+  std::int32_t (*unregister_plugin)(void* context, const char* plugin_id) = nullptr;
 };
 
 }  // namespace tamias

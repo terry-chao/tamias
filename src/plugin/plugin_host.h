@@ -10,6 +10,7 @@
 #include "plugin/plugin_point_input_request.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <string>
@@ -50,10 +51,21 @@ class PluginHost {
   }
   void set_selection_changed(AfterEdit changed) { selection_changed_ = std::move(changed); }
   void set_dialog_handler(ShowDialog handler) { show_dialog_ = std::move(handler); }
+  // 扩展的约定目录，按顺序扫：**后面的根同 id 覆盖前面的**（用户的盖内置的）。
+  // 缺省 = 只扫 <exe>/plugins（随版本发布的那份）。
+  void set_extension_roots(std::vector<std::filesystem::path> roots) {
+    extension_roots_ = std::move(roots);
+  }
+  [[nodiscard]] const std::vector<std::filesystem::path>& extension_roots() const {
+    return extension_roots_;
+  }
 
   // Load Tamias.Host.dll from <exe>/managed and plugins from <exe>/plugins.
   Result<void> load();
   Result<void> invoke(std::string_view command_id);
+  // 文件监视发现扩展目录变了之后调它：重扫，只重载内容真的变了的那些。
+  // Ok(摘要文本) / Err(错误文本)；**没有任何变化时摘要为空**（壳据此决定要不要重建 Ribbon）。
+  [[nodiscard]] Result<std::string> reload_extensions();
   // 命令控制台的输入面：求值一段 C# 片段（见 Tamias.Host/ScriptEngine.cs）。
   // Ok(结果文本) / Err(错误文本)——两种都要显示，所以错误也带文本。
   [[nodiscard]] Result<std::string> evaluate(std::string_view code);
@@ -109,6 +121,7 @@ class PluginHost {
   static std::int32_t host_begin_transaction(void* context, const char* name_utf8);
   static std::int32_t host_commit_transaction(void* context);
   static std::int32_t host_abort_transaction(void* context);
+  static std::int32_t host_unregister_plugin(void* context, const char* plugin_id);
 
   void emit_log(std::int32_t level, std::string_view message);
   // 插件忘了 commit：回滚并留一条日志。不能让一条悬着的事务把用户之后的每次编辑
@@ -128,6 +141,7 @@ class PluginHost {
   std::vector<PluginCommand> registered_;
   std::vector<PluginInfo> plugins_;
   std::string current_plugin_id_;
+  std::vector<std::filesystem::path> extension_roots_;
   std::unique_ptr<CsharpRuntime> csharp_;
 };
 

@@ -1,4 +1,5 @@
 #include "command/core/command_system.h"
+#include "engine/base/executable_directory.h"
 #include "engine/document/document.h"
 #include "engine/io/mesh_io.h"
 #include "engine/math/math.h"
@@ -13,6 +14,8 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -100,7 +103,7 @@ TEST(PluginHost, DefaultsRibbonPlacementToHomePlugins) {
 TEST(PluginHost, RegisterPluginAssociatesCommands) {
   PluginHost host;
   const HostApi& api = host.native_api();
-  EXPECT_EQ(api.abi_version, 7);
+  EXPECT_EQ(api.abi_version, 8);
   ASSERT_NE(api.register_plugin, nullptr);
   ASSERT_NE(api.begin_point_input, nullptr);
   ASSERT_NE(api.cancel_point_input, nullptr);
@@ -114,6 +117,7 @@ TEST(PluginHost, RegisterPluginAssociatesCommands) {
   ASSERT_NE(api.begin_transaction, nullptr);
   ASSERT_NE(api.commit_transaction, nullptr);
   ASSERT_NE(api.abort_transaction, nullptr);
+  ASSERT_NE(api.unregister_plugin, nullptr);
   ASSERT_EQ(register_test_plugin(api, "demo.plugin", "Demo"), 0);
   ASSERT_EQ(api.register_command(api.context, "demo.hello", "Hello", "tip",
                                  "home", "draw", "demo.svg", 42, 1),
@@ -474,7 +478,7 @@ TEST(PluginPromptSpec, ParsesFormAndValues) {
 // 后者是唯一能证明 C# `HostApi` 结构体与 C++ 表**逐字段对齐**的检查——
 // 版本号对得上只说明第一个字段没错位。
 // 一个进程只在一个用例里拉 CLR：hostfxr 二次初始化会失败，拆成两个用例会静默跳过。
-TEST(PluginHost, LoadsManagedHelloCommands) {
+TEST(PluginHost, ManagedHostEndToEnd) {
   CommandRegistry registry;
   register_commands(registry);
   CommandSystem system(registry);
@@ -513,6 +517,10 @@ TEST(PluginHost, LoadsManagedHelloCommands) {
   bool pick_entities = false;
   bool list_features = false;
   bool widen_params = false;
+  bool sample_plugin = false;
+  bool sample_features = false;
+  bool sample_set_depth = false;
+  bool sample_where = false;
   for (const auto& plugin : host.plugins()) {
     if (plugin.id == "tamias.hello") {
       hello_plugin = true;
@@ -522,6 +530,16 @@ TEST(PluginHost, LoadsManagedHelloCommands) {
       EXPECT_TRUE(plugin.built_in);
       EXPECT_FALSE(plugin.homepage_url.empty());
     }
+    // 目录式扩展：plugins/Tamias.Sample.Tools（main.cs + extension.json，加载时现编译）。
+    if (plugin.id == "tamias.sample.tools") {
+      sample_plugin = true;
+      EXPECT_EQ(plugin.title, "示例扩展（源码）");  // 清单里的 UTF-8 要原样过来
+      EXPECT_EQ(plugin.author, "Tamias");
+      EXPECT_EQ(plugin.version, "1.0.0");
+      EXPECT_EQ(plugin.release_date, "2026-09-25");
+      EXPECT_TRUE(plugin.built_in) << "来自第一个根（随 exe 发布的 plugins/）";
+      EXPECT_FALSE(plugin.icon_path.empty()) << "清单里的 icon 应当解析成绝对路径";
+    }
   }
   for (const auto& cmd : host.commands()) {
     list_selection = list_selection || cmd.id == "hello.list_selection";
@@ -530,6 +548,9 @@ TEST(PluginHost, LoadsManagedHelloCommands) {
     pick_entities = pick_entities || cmd.id == "hello.pick_entities";
     list_features = list_features || cmd.id == "hello.list_features";
     widen_params = widen_params || cmd.id == "hello.widen_params";
+    sample_features = sample_features || cmd.id == "sample.features";
+    sample_set_depth = sample_set_depth || cmd.id == "sample.set_depth";
+    sample_where = sample_where || cmd.id == "sample.where";
     if (cmd.id == "tamias.nurbs.create") {
       create_nurbs = true;
       EXPECT_EQ(cmd.placement.page_id, "home");
@@ -546,6 +567,18 @@ TEST(PluginHost, LoadsManagedHelloCommands) {
   EXPECT_TRUE(list_features);
   EXPECT_TRUE(widen_params);
   EXPECT_TRUE(create_nurbs);
+  EXPECT_TRUE(sample_plugin) << "目录式扩展应当被扫到并加载";
+  EXPECT_TRUE(sample_features);
+  EXPECT_TRUE(sample_set_depth);
+  EXPECT_TRUE(sample_where);
+
+  // 跑一下源码扩展：这一步同时证明三件事——main.cs 真的被编译了、
+  // Tamias.Api 解析到了宿主那一份（否则 Entry.Load 收到的 IHost 是另一个类型）、
+  // ExtensionContext.SourcePath 能告诉扩展自己从哪来。
+  log.clear();
+  auto where = host.invoke("sample.where");
+  ASSERT_TRUE(where) << where.error();
+  EXPECT_NE(log.find("Tamias.Sample.Tools"), std::string::npos) << log;
 
   // v6 宽读走一遍托管侧：`hello.list_features` 用 `IHost.Features` 枚举选中实体的特征树。
   log.clear();
@@ -611,6 +644,80 @@ TEST(PluginHost, LoadsManagedHelloCommands) {
   auto broken = host.evaluate("this is not C#");
   EXPECT_FALSE(broken);
   EXPECT_FALSE(broken.error().empty());
+
+  // ── 扩展重载 ──────────────────────────────────────────────────────────
+  // 文件监视那条路最终走的就是 reload_extensions()，这里直接在约定目录里
+  // 现场造一个源码扩展，走一遍：装上 → 改内容 → 写坏 → 删掉 → 幂等。
+  const auto reload_dir = executable_directory() / "plugins" / "Tamias.Test.Reload";
+  const auto cleanup = [&reload_dir] {
+    std::error_code ec;
+    std::filesystem::remove_all(reload_dir, ec);
+  };
+  cleanup();
+  std::filesystem::create_directories(reload_dir);
+
+  const auto write_extension = [&reload_dir](const std::string& body) {
+    {
+      std::ofstream manifest(reload_dir / "extension.json",
+                             std::ios::binary | std::ios::trunc);
+      manifest << R"({"id":"tamias.test.reload","name":"Reload Test","version":"1.0.0"})";
+    }
+    std::ofstream entry(reload_dir / "main.cs", std::ios::binary | std::ios::trunc);
+    entry << "using Tamias.Api;\npublic static class Entry {\n  public static void Load(IHost host) {\n"
+          << body << "\n  }\n}\n";
+  };
+  const auto has_command = [&host](const char* id) {
+    for (const auto& cmd : host.commands()) {
+      if (cmd.id == id) {
+        return true;
+      }
+    }
+    return false;
+  };
+  const auto has_plugin = [&host](const char* id) {
+    for (const auto& plugin : host.plugins()) {
+      if (plugin.id == id) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  write_extension(R"(host.AddCommand("reloadtest.one", "One", () => host.Log("one"));)");
+  auto first = host.reload_extensions();
+  ASSERT_TRUE(first) << first.error();
+  EXPECT_FALSE(first->empty());
+  EXPECT_TRUE(has_command("reloadtest.one")) << *first;
+  EXPECT_TRUE(has_plugin("tamias.test.reload")) << *first;
+
+  // 改内容：旧命令必须消失（说明旧登记摘干净了），新命令出现。
+  write_extension(R"(host.AddCommand("reloadtest.two", "Two", () => host.Log("two"));)");
+  auto second = host.reload_extensions();
+  ASSERT_TRUE(second) << second.error();
+  EXPECT_TRUE(has_command("reloadtest.two")) << *second;
+  EXPECT_FALSE(has_command("reloadtest.one")) << "旧登记没摘干净：" << *second;
+
+  // 写坏：编译不过时**旧版本继续用**——保存到一半最需要这个。
+  {
+    std::ofstream entry(reload_dir / "main.cs", std::ios::binary | std::ios::trunc);
+    entry << "this is not C#\n";
+  }
+  auto failed = host.reload_extensions();
+  ASSERT_TRUE(failed) << failed.error();
+  EXPECT_NE(failed->find("failed"), std::string::npos) << *failed;
+  EXPECT_TRUE(has_command("reloadtest.two")) << "编译失败不该把还在跑的旧版本干掉：" << *failed;
+
+  // 目录删掉：扩展连同它的命令一起消失。
+  cleanup();
+  auto removed = host.reload_extensions();
+  ASSERT_TRUE(removed) << removed.error();
+  EXPECT_FALSE(has_command("reloadtest.two")) << *removed;
+  EXPECT_FALSE(has_plugin("tamias.test.reload")) << *removed;
+
+  // 幂等：什么都没变就不该有摘要（壳据此决定要不要重建 Ribbon）。
+  auto idle = host.reload_extensions();
+  ASSERT_TRUE(idle) << idle.error();
+  EXPECT_TRUE(idle->empty()) << "没变化却报了：" << *idle;
 }
 
 // 没有 .NET 时控制台不该崩，只是求值不可用。
