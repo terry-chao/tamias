@@ -34,9 +34,10 @@ nav:
       - MCAD 与 BIM: DECISION-MCAD-BIM.md
       - 内嵌浏览器（决策）: DECISION-EMBEDDED-BROWSER.md
       - 架构: ARCHITECTURE.md
-  - 答疑（Q&A）: FAQ.md
-  - 测试: TESTING.md
-  - 性能分析（Tracy）: PROFILING.md
+  - 答疑、测试与性能分析:
+      - 答疑（Q&A）: FAQ.md
+      - 测试: TESTING.md
+      - 性能分析（Tracy）: PROFILING.md
   - 入门教程:
       - tutorial/index.md
       - 1. 认识 Tamias: tutorial/01-what-is-tamias.md
