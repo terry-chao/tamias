@@ -17,6 +17,9 @@
 namespace tamias {
 namespace {
 
+constexpr char kTamiasWebsite[] = "https://terry-chao.github.io/tamias/";
+constexpr char kAuthorEmail[] = "terrychao.me@gmail.com";
+
 bool is_dark_theme() {
   if (const QStyleHints* hints = QGuiApplication::styleHints()) {
     if (hints->colorScheme() == Qt::ColorScheme::Dark) {
@@ -44,6 +47,13 @@ QString dialog_stylesheet(bool dark) {
              "#aboutHeading { font-size: 12px; font-weight: 600; color: %2; }"
              "QDialogButtonBox QPushButton { min-width: 80px; padding: 5px 14px; }")
       .arg(bg, text, muted);
+}
+
+void make_link_label(QLabel* label) {
+  label->setObjectName(QStringLiteral("aboutBody"));
+  label->setTextFormat(Qt::RichText);
+  label->setTextInteractionFlags(Qt::TextBrowserInteraction);
+  label->setOpenExternalLinks(true);
 }
 
 }  // namespace
@@ -88,6 +98,25 @@ AboutDialog::AboutDialog(QWidget* parent) : QDialog(parent) {
   auto* author = new QLabel(tr("Author: %1").arg(QStringLiteral("Terry")), this);
   author->setObjectName(QStringLiteral("aboutBody"));
   titles->addWidget(author);
+
+  const QString email = QString::fromLatin1(kAuthorEmail);
+  auto* email_label = new QLabel(
+      tr("Email: %1")
+          .arg(QStringLiteral("<a href=\"mailto:%1\">%2</a>")
+                   .arg(email.toHtmlEscaped(), email.toHtmlEscaped())),
+      this);
+  make_link_label(email_label);
+  titles->addWidget(email_label);
+
+  const QString website = QString::fromLatin1(kTamiasWebsite);
+  auto* website_label = new QLabel(
+      tr("Website: %1")
+          .arg(QStringLiteral("<a href=\"%1\">%2</a>")
+                   .arg(website.toHtmlEscaped(), website.toHtmlEscaped())),
+      this);
+  make_link_label(website_label);
+  titles->addWidget(website_label);
+
   header->addLayout(titles, 1);
   root->addLayout(header);
 

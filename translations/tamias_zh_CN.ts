@@ -3569,6 +3569,14 @@ Plugin ID: %4</source>
         <translation>作者：%1</translation>
     </message>
     <message>
+        <source>Email: %1</source>
+        <translation>邮箱：%1</translation>
+    </message>
+    <message>
+        <source>Website: %1</source>
+        <translation>官网：%1</translation>
+    </message>
+    <message>
         <source>A geometry viewer and parametric modeling kernel spanning MCAD and BIM.</source>
         <translation>跨 MCAD / BIM 的几何查看与参数化编辑内核。</translation>
     </message>
