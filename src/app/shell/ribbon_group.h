@@ -66,6 +66,8 @@ class RibbonGroup final : public QWidget {
 
  private:
   void apply_display_mode();
+  // 一个按钮的图标 / 文字形态（含 ribbonIconOnly 这个单按钮例外）。
+  void apply_style_to(QToolButton* button) const;
   [[nodiscard]] std::vector<QToolButton*> buttons() const;
 
   RibbonDisplayMode mode_ = RibbonDisplayMode::IconWithText;

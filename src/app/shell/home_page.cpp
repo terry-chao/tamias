@@ -8,7 +8,6 @@
 #include <QDateTime>
 #include <QEvent>
 #include <QFileInfo>
-#include <QFrame>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QIcon>
@@ -22,7 +21,6 @@
 #include <QPixmap>
 #include <QPushButton>
 #include <QSize>
-#include <QStyle>
 #include <QStyleHints>
 #include <QVBoxLayout>
 
@@ -55,27 +53,6 @@ QString home_page_stylesheet(bool dark) {
   if (dark) {
     return QStringLiteral(
         "#homePage { background: #1e1f22; }"
-        "#homeHeader {"
-        "  background: #2b2d30; border-bottom: 1px solid #3c3f41;"
-        "}"
-        "#homeBrandTitle {"
-        "  color: #efefef; font-size: 16px; font-weight: 700;"
-        "  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;"
-        "}"
-        "#homeBrandSub {"
-        "  color: #8c8c8c; font-size: 11px;"
-        "  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;"
-        "}"
-        "QPushButton#homeAction {"
-        "  background: #3d8bd4; color: #ffffff; border: 1px solid #3477b8;"
-        "  padding: 6px 14px; border-radius: 2px; font-size: 12px; font-weight: 600;"
-        "}"
-        "QPushButton#homeAction:hover { background: #4a97db; }"
-        "QPushButton#homeActionSecondary {"
-        "  background: #3c3f41; color: #dcdcdc; border: 1px solid #4e5254;"
-        "  padding: 6px 14px; border-radius: 2px; font-size: 12px;"
-        "}"
-        "QPushButton#homeActionSecondary:hover { background: #45494b; }"
         "#homeBody { background: #1e1f22; }"
         "#homeSection {"
         "  color: #cfcfcf; font-size: 12px; font-weight: 700;"
@@ -101,33 +78,11 @@ QString home_page_stylesheet(bool dark) {
         "  border-color: #3d8bd4; background: #2a3848; color: #ffffff;"
         "}"
         "#homeEmptyTitle { color: #b0b0b0; font-size: 13px; font-weight: 600; }"
-        "#homeEmpty { color: #808080; font-size: 12px; }"
-        "#homeVersion { color: #6e6e6e; font-size: 10px; }");
+        "#homeEmpty { color: #808080; font-size: 12px; }");
   }
 
   return QStringLiteral(
       "#homePage { background: #f2f2f2; }"
-      "#homeHeader {"
-      "  background: #ffffff; border-bottom: 1px solid #c8c8c8;"
-      "}"
-      "#homeBrandTitle {"
-      "  color: #1f1f1f; font-size: 16px; font-weight: 700;"
-      "  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;"
-      "}"
-      "#homeBrandSub {"
-      "  color: #6a6a6a; font-size: 11px;"
-      "  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;"
-      "}"
-      "QPushButton#homeAction {"
-      "  background: #2a6fb0; color: #ffffff; border: 1px solid #235f96;"
-      "  padding: 6px 14px; border-radius: 2px; font-size: 12px; font-weight: 600;"
-      "}"
-      "QPushButton#homeAction:hover { background: #3480c4; }"
-      "QPushButton#homeActionSecondary {"
-      "  background: #ffffff; color: #2a2a2a; border: 1px solid #bdbdbd;"
-      "  padding: 6px 14px; border-radius: 2px; font-size: 12px;"
-      "}"
-      "QPushButton#homeActionSecondary:hover { background: #f7f7f7; }"
       "#homeBody { background: #f2f2f2; }"
       "#homeSection {"
       "  color: #2a2a2a; font-size: 12px; font-weight: 700;"
@@ -153,8 +108,7 @@ QString home_page_stylesheet(bool dark) {
       "  border-color: #2a6fb0; background: #e8f2fb; color: #1f1f1f;"
       "}"
       "#homeEmptyTitle { color: #3a3a3a; font-size: 13px; font-weight: 600; }"
-      "#homeEmpty { color: #6a6a6a; font-size: 12px; }"
-      "#homeVersion { color: #7a7a7a; font-size: 10px; }");
+      "#homeEmpty { color: #6a6a6a; font-size: 12px; }");
 }
 
 QString format_opened_time(const QDateTime& dt) {
@@ -216,64 +170,6 @@ HomePage::HomePage(QWidget* parent) : QWidget(parent) {
   auto* root = new QVBoxLayout(this);
   root->setContentsMargins(0, 0, 0, 0);
   root->setSpacing(0);
-
-  header_ = new QFrame(this);
-  header_->setObjectName(QStringLiteral("homeHeader"));
-  header_->setFixedHeight(64);
-  auto* header_layout = new QHBoxLayout(header_);
-  header_layout->setContentsMargins(16, 10, 16, 10);
-  header_layout->setSpacing(12);
-
-  auto* logo = new QLabel(header_);
-  logo->setFixedSize(36, 36);
-  logo->setAlignment(Qt::AlignCenter);
-  const QPixmap brand(QStringLiteral(":/branding/logo.png"));
-  if (!brand.isNull()) {
-    logo->setPixmap(brand.scaled(36, 36, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-  }
-  header_layout->addWidget(logo, 0, Qt::AlignVCenter);
-
-  auto* brand_text = new QVBoxLayout();
-  brand_text->setSpacing(0);
-  brand_text->setContentsMargins(0, 0, 0, 0);
-  auto* brand_title = new QLabel(QStringLiteral("Tamias"), header_);
-  brand_title->setObjectName(QStringLiteral("homeBrandTitle"));
-  brand_text->addWidget(brand_title);
-  auto* brand_sub = new QLabel(tr("CAD Viewer"), header_);
-  brand_sub->setObjectName(QStringLiteral("homeBrandSub"));
-  brand_text->addWidget(brand_sub);
-  header_layout->addLayout(brand_text);
-  header_layout->addSpacing(20);
-
-  // FreeCAD 的 Start 页也是「新建 / 打开」这两件事摆在最顺手的位置。
-  auto* new_btn = new QPushButton(tr("New"), header_);
-  new_btn->setObjectName(QStringLiteral("homeAction"));
-  new_btn->setCursor(Qt::PointingHandCursor);
-  new_btn->setIcon(QIcon(QStringLiteral(":/icons/new.svg")));
-  new_btn->setToolTip(tr("New document"));
-  connect(new_btn, &QPushButton::clicked, this, &HomePage::newRequested);
-  header_layout->addWidget(new_btn, 0, Qt::AlignVCenter);
-
-  auto* open_btn = new QPushButton(tr("Open…"), header_);
-  open_btn->setObjectName(QStringLiteral("homeAction"));
-  open_btn->setCursor(Qt::PointingHandCursor);
-  open_btn->setIcon(style()->standardIcon(QStyle::SP_DialogOpenButton));
-  connect(open_btn, &QPushButton::clicked, this, &HomePage::openRequested);
-  header_layout->addWidget(open_btn, 0, Qt::AlignVCenter);
-
-  auto* settings_btn = new QPushButton(tr("Settings"), header_);
-  settings_btn->setObjectName(QStringLiteral("homeActionSecondary"));
-  settings_btn->setCursor(Qt::PointingHandCursor);
-  settings_btn->setIcon(style()->standardIcon(QStyle::SP_FileDialogDetailedView));
-  connect(settings_btn, &QPushButton::clicked, this, &HomePage::settingsRequested);
-  header_layout->addWidget(settings_btn, 0, Qt::AlignVCenter);
-
-  header_layout->addStretch(1);
-  version_label_ = new QLabel(
-      tr("Version %1").arg(QCoreApplication::applicationVersion()), header_);
-  version_label_->setObjectName(QStringLiteral("homeVersion"));
-  header_layout->addWidget(version_label_, 0, Qt::AlignVCenter);
-  root->addWidget(header_);
 
   auto* body = new QWidget(this);
   body->setObjectName(QStringLiteral("homeBody"));

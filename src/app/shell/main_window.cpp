@@ -999,6 +999,14 @@ MainWindow::MainWindow(QWidget* parent)
   // 那一排小图标——新建 / 打开 / 保存 在「文件」组里本来就有，撤销 / 重做 归下边的
   // 「编辑」组（见 build_menu_bar 里那条 编辑 菜单，命令是同一批 QAction）。
   RibbonPage* home_page = ribbon->add_page(QStringLiteral("home"), tr("Home"));
+
+  // 这几个按钮上不写字：图标本身已经说清楚它是什么（新建 = 一页纸、打开 = 文件夹、
+  // 设置 = 齿轮），少一行字、组也窄一点。名字仍在悬浮提示和菜单里。
+  // 想再加几个，就在这里多写一行 setProperty（见 RibbonGroup::apply_style_to）。
+  new_action_->setProperty("ribbonIconOnly", true);
+  open_action_->setProperty("ribbonIconOnly", true);
+  settings_action_->setProperty("ribbonIconOnly", true);
+
   RibbonGroup* file_group = home_page->add_group(QStringLiteral("file"), tr("File"));
   file_group->add_action(new_action_);
   file_group->add_action(open_action_);

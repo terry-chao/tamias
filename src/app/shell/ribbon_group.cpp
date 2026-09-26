@@ -95,20 +95,27 @@ QToolButton* RibbonGroup::add_action(QAction* action) {
   auto* button = new QToolButton(this);
   button->setObjectName(QStringLiteral("ribbonButton"));
   button->setDefaultAction(action);
-  button->setToolButtonStyle(mode_ == RibbonDisplayMode::IconOnly ? Qt::ToolButtonIconOnly
-                                                                  : Qt::ToolButtonTextUnderIcon);
   button->setIconSize(QSize(kIconSize, kIconSize));
   button->setAutoRaise(true);
   button->setFocusPolicy(Qt::NoFocus);
   button->setCursor(Qt::PointingHandCursor);
-  button->setMinimumWidth(mode_ == RibbonDisplayMode::IconOnly ? kIconButtonMinWidth
-                                                              : kTextButtonMinWidth);
-  if (mode_ == RibbonDisplayMode::IconOnly) {
-    button->setMaximumWidth(kIconButtonMaxWidth);
-  }
   button->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
   buttons_layout_->addWidget(button, 0, Qt::AlignTop);
+  apply_style_to(button);
   return button;
+}
+
+// 一个按钮的图标 / 文字形态：整条带子的大形态（mode_），或者**这一个**按钮自己的
+// 例外——action 上挂 ribbonIconOnly 的只画图标（图标本身已经说清楚它是什么，
+// 名字留在悬浮提示与菜单里；见 MainWindow 里那几个 action）。
+void RibbonGroup::apply_style_to(QToolButton* button) const {
+  const QAction* action = button->defaultAction();
+  const bool per_button = action != nullptr && action->property("ribbonIconOnly").toBool();
+  const bool icon_only = mode_ == RibbonDisplayMode::IconOnly || per_button;
+  button->setToolButtonStyle(icon_only ? Qt::ToolButtonIconOnly : Qt::ToolButtonTextUnderIcon);
+  button->setIconSize(QSize(kIconSize, kIconSize));
+  button->setMinimumWidth(icon_only ? kIconButtonMinWidth : kTextButtonMinWidth);
+  button->setMaximumWidth(icon_only ? kIconButtonMaxWidth : QWIDGETSIZE_MAX);
 }
 
 void RibbonGroup::reorder_buttons(const std::vector<QToolButton*>& ordered) {
@@ -169,11 +176,7 @@ void RibbonGroup::apply_display_mode() {
   // 浮起来以后标题挂在浮窗的标题栏上，分组自己就不再重复一个字。
   title_->setVisible(!floating_ && !icon_only);
   for (QToolButton* button : buttons()) {
-    button->setToolButtonStyle(icon_only ? Qt::ToolButtonIconOnly
-                                         : Qt::ToolButtonTextUnderIcon);
-    button->setIconSize(QSize(kIconSize, kIconSize));
-    button->setMinimumWidth(icon_only ? kIconButtonMinWidth : kTextButtonMinWidth);
-    button->setMaximumWidth(icon_only ? kIconButtonMaxWidth : QWIDGETSIZE_MAX);
+    apply_style_to(button);
   }
 }
 

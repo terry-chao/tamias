@@ -46,13 +46,11 @@ class HomePage final : public QWidget {
 
   bool applying_theme_ = false;
   QVector<OpenDocumentItem> open_docs_;
-  QWidget* header_ = nullptr;
   QWidget* open_section_ = nullptr;
   QWidget* open_host_ = nullptr;
   QListWidget* recent_list_ = nullptr;
   QWidget* empty_panel_ = nullptr;
   QLabel* empty_label_ = nullptr;
-  QLabel* version_label_ = nullptr;
 };
 
 }  // namespace tamias
