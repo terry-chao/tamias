@@ -2706,6 +2706,10 @@ void MainWindow::sync_render_mode_actions() {
   const QSignalBlocker b0(wireframe_action_);
   const QSignalBlocker b1(shaded_action_);
   const QSignalBlocker b2(realistic_action_);
+  // 没有活跃文档时显示模式无处可设：和 X-Ray 一样灰掉，别让它点了没反应。
+  wireframe_action_->setEnabled(vp != nullptr);
+  shaded_action_->setEnabled(vp != nullptr);
+  realistic_action_->setEnabled(vp != nullptr);
   wireframe_action_->setChecked(mode == RenderMode::Wireframe);
   shaded_action_->setChecked(mode == RenderMode::Shaded);
   realistic_action_->setChecked(mode == RenderMode::Realistic);

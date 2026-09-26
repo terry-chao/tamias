@@ -15,6 +15,7 @@
 #include "app/shell/ribbon_bar.h"
 
 #include <QAction>
+#include <QActionGroup>
 #include <QDesktopServices>
 #include <QFileInfo>
 #include <QKeySequence>
@@ -246,17 +247,27 @@ void MainWindow::sync_document_actions() {
 
   // 只对文档有意义的命令：没有文档就灰掉。这是主流 CAD / 办公软件的做法
   // （FreeCAD 里没有文档时 Save / Undo 也是灰的），比"点了才弹提示"更早把话说清楚。
-  // 注意构件工具（墙 / 线 / 注释…）不在此列：它们的处理函数会给出"先打开一个模型"的
-  // 提示，是有意留给大家点的（见 MainWindow::set_create_tool）。
-  const std::array<QAction*, 16> document_actions = {
-      save_action_,      save_as_action_,     export_scene_action_, move_action_,
-      copy_action_,      rotate_action_,      mirror_action_,       array_action_,
-      frame_all_action_, pin_render_action_,  debug_scene_action_,  components_action_,
-      floors_action_,    floor_views_action_, drawings_action_,     close_tab_action_,
+  // 倒角 / 圆角 / 文字注记也在此列：它们没文档时点下去是静默无效。
+  const std::array<QAction*, 19> document_actions = {
+      save_action_,       save_as_action_,     export_scene_action_, move_action_,
+      copy_action_,       rotate_action_,      mirror_action_,       array_action_,
+      fillet_action_,     chamfer_action_,     text_action_,         frame_all_action_,
+      pin_render_action_, debug_scene_action_, components_action_,   floors_action_,
+      floor_views_action_, drawings_action_,   close_tab_action_,
   };
   for (QAction* action : document_actions) {
     if (action != nullptr) {
       action->setEnabled(has_document);
+    }
+  }
+  // 构件 / 草图工具整组一起灰：没有文档时它们无处落地。原先是靠 set_create_tool
+  // 那句"请先打开文档"的提示，但图标一直是亮的，看着像可用。create_group_ 里就是
+  // 功能区「绘制 / 建筑 / 结构」三组的全部工具，以后加新构件也自动跟着走。
+  if (create_group_ != nullptr) {
+    for (QAction* action : create_group_->actions()) {
+      if (action != nullptr) {
+        action->setEnabled(has_document);
+      }
     }
   }
   // 首页永远可点：它就是回到欢迎页，和有没有文档无关。
@@ -273,6 +284,12 @@ void MainWindow::sync_document_actions() {
   if (redo_action_ != nullptr) {
     redo_action_->setEnabled(can_redo);
   }
+  // 显示模式 / 轴网 / 标注这些开关也有各自的同步函数（它们要按活跃文档回填勾选态），
+  // 但那些函数原来只在"切标签页 / 新建标签页"时被调用。"关掉最后一个文档 → 回首页"
+  // 走的是 sync_document_actions（见 close_tab → show_home），所以在这里补一次：
+  // 否则最后一份文档关掉以后，显示模式和轴网 / 标注按钮会留在可点状态。
+  sync_render_mode_actions();
+  sync_bim_actions();
 }
 
 }  // namespace tamias
