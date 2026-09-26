@@ -12,6 +12,7 @@
 #include <QPainter>
 #include <QSize>
 #include <QSizePolicy>
+#include <QStyle>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <algorithm>
@@ -19,12 +20,19 @@
 namespace tamias {
 namespace {
 
-constexpr int kIconSize = 28;
+// 图标画小一点：贴着视口的时候，工具带上的图标太大会显得头重脚轻（图标本身是
+// 彩色轴测插画，缩到 24 还看得清细节）。
+constexpr int kIconSize = 24;
 // 抓手挪到分组左侧：一条竖着的窄把手，高度跟着分组走。
 constexpr int kGripWidth = 8;
 constexpr int kTextButtonMinWidth = 52;
-constexpr int kIconButtonMinWidth = 28;
-constexpr int kIconButtonMaxWidth = 44;
+// 只有图标的按钮：左右各 4px 内边距（见 RibbonBar 的两份 QSS），最小宽度得把
+// 「图标 + 这 8px」都留出来。只写 24 的话，一排挤不下时布局会先压它（带字的按钮
+// 最小 52，压不动），压到 24 再扣掉内边距，内容区只剩 16px——比图标还窄，Qt 就把
+// 图标缩到 16px 画。结果是一排大按钮里只有「新建 / 打开」两个图标明显小一圈。
+constexpr int kIconButtonSidePadding = 4;
+constexpr int kIconButtonMinWidth = kIconSize + 2 * kIconButtonSidePadding;
+constexpr int kIconButtonMaxWidth = 38;
 
 }  // namespace
 
@@ -112,6 +120,21 @@ void RibbonGroup::apply_style_to(QToolButton* button) const {
   const QAction* action = button->defaultAction();
   const bool per_button = action != nullptr && action->property("ribbonIconOnly").toBool();
   const bool icon_only = mode_ == RibbonDisplayMode::IconOnly || per_button;
+  // 按钮外框（内边距）也得跟着形态走：只有图标的按钮留一圈小边，不然图标缩了、
+  // 外框还是原来那么大，一排看过去宽度没变，图标反而显得空荡荡的。
+  // 样式表里按这个属性选更紧的内边距，见 RibbonBar 的两份 QSS。
+  // 「不写字、旁边却有带字按钮」是另一种情形（比如「设置」那颗挨着一排带字的）。
+  // 这时候外框要撑到和带字按钮一样高，矮一截会显得这个图标异常小；图标仍和旁边
+  // 那排图标齐平，只是下面空着标签的位置（QSS 里那条 ribbonLabelLess）。
+  // 整条带子都是图标时才用紧凑的小外框。
+  const bool label_less_with_neighbours = per_button && mode_ == RibbonDisplayMode::IconWithText;
+  if (button->property("ribbonIconOnly").toBool() != icon_only ||
+      button->property("ribbonLabelLess").toBool() != label_less_with_neighbours) {
+    button->setProperty("ribbonIconOnly", icon_only);
+    button->setProperty("ribbonLabelLess", label_less_with_neighbours);
+    button->style()->unpolish(button);
+    button->style()->polish(button);
+  }
   button->setToolButtonStyle(icon_only ? Qt::ToolButtonIconOnly : Qt::ToolButtonTextUnderIcon);
   button->setIconSize(QSize(kIconSize, kIconSize));
   button->setMinimumWidth(icon_only ? kIconButtonMinWidth : kTextButtonMinWidth);

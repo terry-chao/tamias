@@ -86,6 +86,11 @@ QString ribbon_stylesheet(bool dark) {
         "QToolButton#ribbonButton:checked, QToolButton#ribbonButton:pressed {"
         "  background: #45494b;"
         "}"
+        // 只有图标的按钮用紧内边距；后面那条 ribbonLabelLess 管「不写字、旁边却有
+        // 带字按钮」的情形——外框撑到和带字按钮一样高（4 + 图标 24 + 17 = 45，
+        // 加样式表自带的 3px 正好 48），图标留在顶上那一排，和旁边的图标齐平。
+        "QToolButton#ribbonButton[ribbonIconOnly=\"true\"] { padding: 2px 4px; }"
+        "QToolButton#ribbonButton[ribbonLabelLess=\"true\"] { padding: 4px 4px 17px 4px; }"
         "#ribbonGroup:hover { background: #3a3d41; border-radius: 4px; }"
         "#ribbonDropIndicator { background: #6cb6ff; }"
         "#ribbonGroupTitle {"
@@ -131,6 +136,8 @@ QString ribbon_stylesheet(bool dark) {
       "QToolButton#ribbonButton:checked, QToolButton#ribbonButton:pressed {"
       "  background: #dadada;"
       "}"
+      "QToolButton#ribbonButton[ribbonIconOnly=\"true\"] { padding: 2px 4px; }"
+      "QToolButton#ribbonButton[ribbonLabelLess=\"true\"] { padding: 4px 4px 17px 4px; }"
       "#ribbonGroup:hover { background: #ececec; border-radius: 4px; }"
       "#ribbonDropIndicator { background: #1a73e8; }"
       "#ribbonGroupTitle {"

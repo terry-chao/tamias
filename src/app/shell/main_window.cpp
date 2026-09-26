@@ -1000,11 +1000,12 @@ MainWindow::MainWindow(QWidget* parent)
   // 「编辑」组（见 build_menu_bar 里那条 编辑 菜单，命令是同一批 QAction）。
   RibbonPage* home_page = ribbon->add_page(QStringLiteral("home"), tr("Home"));
 
-  // 这几个按钮上不写字：图标本身已经说清楚它是什么（新建 = 一页纸、打开 = 文件夹、
-  // 设置 = 齿轮），少一行字、组也窄一点。名字仍在悬浮提示和菜单里。
-  // 想再加几个，就在这里多写一行 setProperty（见 RibbonGroup::apply_style_to）。
-  new_action_->setProperty("ribbonIconOnly", true);
-  open_action_->setProperty("ribbonIconOnly", true);
+  // 「设置」那颗只画图标：图标本身已经说清楚它是什么（齿轮），而且它自己就是一组，
+  // 组名就叫「设置」，不缺名字。
+  // 文件名那排相反——新建 / 打开 夹在「打开图纸 / 描图 / 保存 / 另存为」这些带字的按钮
+  // 中间，独独缺了名字那一行，看着像少画了一块，所以它们照常带字（"图标 + 文字" 模式下
+  // 每个按钮都该有名字）。
+  // 想再加几个只画图标的按钮，就在这里多写一行 setProperty（见 RibbonGroup::apply_style_to）。
   settings_action_->setProperty("ribbonIconOnly", true);
 
   RibbonGroup* file_group = home_page->add_group(QStringLiteral("file"), tr("File"));

@@ -220,6 +220,12 @@
         <source>Edit Text…</source>
         <translation>编辑文字…</translation>
     </message>
+    <message>
+        <source>
+draw %1  tri %2  gpu %3MB  tess %4</source>
+        <translation>
+绘制 %1  三角面 %2  显存 %3MB  细分 %4</translation>
+    </message>
 </context>
 <context>
     <name>tamias::ViewportToolPanel</name>
@@ -1578,6 +1584,66 @@ Meshes / textures: %2
         <source>Open the online manual</source>
         <translation>打开在线手册</translation>
     </message>
+    <message>
+        <source>Edit</source>
+        <translation>编辑</translation>
+    </message>
+    <message>
+        <source>B-spline</source>
+        <translation>B 样条</translation>
+    </message>
+    <message>
+        <source>Create a B-spline: click control points, Enter or double-click to finish</source>
+        <translation>创建 B 样条：点击控制点，Enter 或双击结束</translation>
+    </message>
+    <message>
+        <source>Create a door: click a wall to host it</source>
+        <translation>创建门：点击墙面作为宿主</translation>
+    </message>
+    <message>
+        <source>Create a window: click a wall to host it</source>
+        <translation>创建窗：点击墙面作为宿主</translation>
+    </message>
+    <message>
+        <source>Fillet the selected entity's first edge</source>
+        <translation>对选中实体的第一条边倒圆角</translation>
+    </message>
+    <message>
+        <source>Chamfer the selected entity's first edge</source>
+        <translation>对选中实体的第一条边倒斜角</translation>
+    </message>
+    <message>
+        <source>Manage reference drawings (DWF / DWFx / DXF / PDF…): add, show/hide, place, or open in a 2D page</source>
+        <translation>管理参考图纸（DWF / DWFx / DXF / PDF…）：添加、显隐、摆放，或开成二维页</translation>
+    </message>
+    <message>
+        <source>IFC spatial structure</source>
+        <translation>IFC 空间结构</translation>
+    </message>
+    <message>
+        <source>Parsed %1 (geometry import not yet)</source>
+        <translation>已解析 %1（暂未导入几何）</translation>
+    </message>
+    <message>
+        <source>Failed to add imported geometry.</source>
+        <translation>导入的几何添加失败。</translation>
+    </message>
+    <message>
+        <source>Ctrl+D</source>
+        <translation>Ctrl+D</translation>
+    </message>
+    <message>
+        <source>Ctrl+L</source>
+        <translation>Ctrl+L</translation>
+    </message>
+    <message>
+        <source>Ctrl+Shift+L</source>
+        <translation>Ctrl+Shift+L</translation>
+    </message>
+    <message>
+        <source>Ctrl+Shift+T</source>
+        <translation>Ctrl+Shift+T</translation>
+    </message>
 </context>
 <context>
     <name>tamias::DrawingSettingsDialog</name>
@@ -2475,6 +2541,10 @@ zfar %5
         <source>X:%1</source>
         <translation>精细:%1</translation>
     </message>
+    <message>
+        <source>Source</source>
+        <translation>来源</translation>
+    </message>
 </context>
 <context>
     <name>tamias::PluginManagerDialog</name>
@@ -3077,6 +3147,18 @@ Plugin ID: %4</source>
         <source>No selection</source>
         <translation>未选择对象</translation>
     </message>
+    <message>
+        <source>Curtain Wall</source>
+        <translation>幕墙</translation>
+    </message>
+    <message>
+        <source>Structural Wall</source>
+        <translation>结构墙</translation>
+    </message>
+    <message>
+        <source>Foundation</source>
+        <translation>基础</translation>
+    </message>
 </context>
 <context>
     <name>tamias::HandleInspector</name>
@@ -3255,6 +3337,18 @@ Plugin ID: %4</source>
     <message>
         <source>Relation #%1&#10;  Type: %2&#10;  Dependent: %3&#10;  Host: %4&#10;  Along wall: %5&#10;  Sill height: %6&#10;  Status: %7</source>
         <translation>关联 #%1&#10;  类型：%2&#10;  从属构件：%3&#10;  宿主构件：%4&#10;  沿墙位置：%5&#10;  离地高度：%6&#10;  状态：%7</translation>
+    </message>
+    <message>
+        <source>Curtain Wall</source>
+        <translation>幕墙</translation>
+    </message>
+    <message>
+        <source>Structural Wall</source>
+        <translation>结构墙</translation>
+    </message>
+    <message>
+        <source>Foundation</source>
+        <translation>基础</translation>
     </message>
 </context>
 <context>
@@ -3782,6 +3876,66 @@ Wheel zooms, drag pans, double-click a bar to focus.</source>
 Export the drawing to DXF, SVG or an image, or rebuild with Qt6::Pdf available.</source>
         <translation>查看 PDF 需要 Qt PDF 模块（Qt6::Pdf），当前构建未包含。
 可以把图纸另存为 DXF、SVG 或图片，或在装上 Qt6::Pdf 后重新构建。</translation>
+    </message>
+    <message>
+        <source>
+build failed (exit %1)
+</source>
+        <translation>
+构建失败（退出码 %1）
+</translation>
+    </message>
+    <message>
+        <source>
+build finished but tamias_tests.exe still missing
+</source>
+        <translation>
+构建结束了，但仍不见 tamias_tests.exe
+</translation>
+    </message>
+    <message>
+        <source>
+tests failed (exit %1)
+</source>
+        <translation>
+测试失败（退出码 %1）
+</translation>
+    </message>
+    <message>
+        <source>Building tamias_tests (%1)...</source>
+        <translation>正在构建 tamias_tests（%1）…</translation>
+    </message>
+    <message>
+        <source>built via scripts/build-tests.ps1 -Preset %1
+</source>
+        <translation>已用 scripts/build-tests.ps1 -Preset %1 构建
+</translation>
+    </message>
+    <message>
+        <source>Running %1 --gtest_filter=%2</source>
+        <translation>正在运行 %1 --gtest_filter=%2</translation>
+    </message>
+    <message>
+        <source>Running RenderSceneGolden*...</source>
+        <translation>正在运行 RenderSceneGolden*…</translation>
+    </message>
+    <message>
+        <source>tamias_tests not found next to the app or under build/bin/.
+</source>
+        <translation>程序旁边和 build/bin/ 下都没有 tamias_tests。
+</translation>
+    </message>
+    <message>
+        <source>tamias_tests.exe not found, and missing build script:
+%1
+</source>
+        <translation>找不到 tamias_tests.exe，构建脚本也不在：
+%1
+</translation>
+    </message>
+    <message>
+        <source>Drawings (*.pdf *.dxf *.dwf *.dwfx *.svg *.png *.jpg *.jpeg *.bmp *.tif *.tiff *.gif *.webp);;PDF (*.pdf);;DXF (*.dxf);;DWF / DWFx (*.dwf *.dwfx);;Vector (*.svg);;Images (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.gif *.webp)</source>
+        <translation>图纸 (*.pdf *.dxf *.dwf *.dwfx *.svg *.png *.jpg *.jpeg *.bmp *.tif *.tiff *.gif *.webp);;PDF (*.pdf);;DXF (*.dxf);;DWF / DWFx (*.dwf *.dwfx);;矢量图 (*.svg);;图片 (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.gif *.webp)</translation>
     </message>
 </context>
 <context>

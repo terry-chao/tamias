@@ -19,8 +19,11 @@
 namespace tamias {
 namespace {
 
-constexpr int kRowHeightText = 92;
-constexpr int kRowHeightIconOnly = 54;
+// 行高按「最高的一颗按钮 + 分组标题」来给，不留富余：按钮 24px 图标 + 一行字
+// 大约 48px，加分组标题 15px、上下边距 6px，74 刚好贴住。以前按图标 28px、两行
+// 文字留到 92，图标缩下来以后底下就空出一大块，看着像还留着文字的位置。
+constexpr int kRowHeightText = 74;
+constexpr int kRowHeightIconOnly = 40;
 constexpr int kEdgeMargin = 4;
 // 分区标记的宽度：3px 主色竖线 + 7px 淡淡的同色底。名字不画在带上（太占地方，
 // 也开始 / 视图 这种名字看菜单就知道），改成悬浮提示。
@@ -221,13 +224,15 @@ void RibbonPage::set_drop_target_visible(bool visible) {
 
 QSize RibbonPage::sizeHint() const {
   QSize hint = QWidget::sizeHint();
-  hint.setHeight(visible_rows_ * row_height_);
+  // 行高只是下限：贴住「24px 图标 + 一行字 + 分组标题」那点内容。系统字体放大时
+  // 按钮会比这个常数更高，按内容的自然高度兜底，别把按钮压扁裁掉。
+  hint.setHeight((std::max)(visible_rows_ * row_height_, hint.height()));
   return hint;
 }
 
 QSize RibbonPage::minimumSizeHint() const {
   QSize hint = QWidget::minimumSizeHint();
-  hint.setHeight(visible_rows_ * row_height_);
+  hint.setHeight((std::max)(visible_rows_ * row_height_, hint.height()));
   return hint;
 }
 

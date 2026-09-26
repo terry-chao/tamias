@@ -353,7 +353,7 @@ Tally fill_scene_table(PinResultDialog& dlg, QTableWidget* table, const RenderSc
     const SceneDrawItem& item = live.items[i];
     const SceneDrawItem* fitem =
         (file && i < file->items.size()) ? &file->items[i] : nullptr;
-    const QString prefix = dlg.tr("Draw %1").arg(i + 1);
+    const QString prefix = dlg.tr("绘制 %1").arg(i + 1);
 
     {
       const QString live_v = QString::number(item.mesh_asset_id);
