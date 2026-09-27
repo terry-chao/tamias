@@ -13,14 +13,13 @@ namespace tamias {
 
 class DocumentViewport;
 class DrawingManagerPanel;
-class FloorManagerPanel;
 class FloorPanel;
 class VisibilityPanel;
 
 // 视口右侧的一整列工具面板（不是浮层）：视口在它左边，它从上到下占满视口高度，
-// 再往右才是停靠面板区。列内左侧一排按钮（2D/3D、构件显隐、楼层、楼层管理、
-// 适应窗口），点开带功能页的按钮后，右侧展开对应页面（构件显隐树、楼层表、
-// 楼层视图清单）；收起时整列只有按钮宽。
+// 再往右才是停靠面板区。列内左侧一排按钮（2D/3D、构件显隐、楼层、图纸、适应
+// 窗口），点开带功能页的按钮后，右侧展开对应页面（构件显隐树、楼层清单、图纸
+// 清单）；收起时整列只有按钮宽。
 class ViewportToolPanel final : public QWidget {
   Q_OBJECT
  public:
@@ -34,7 +33,6 @@ class ViewportToolPanel final : public QWidget {
   [[nodiscard]] int preferred_width() const;
   void toggle_visibility_page();
   void toggle_floor_page();
-  void toggle_floor_manager_page();
   void toggle_drawing_page();
   // 直接开/关「图纸管理」页（挂上新图纸时主窗口把它翻出来）。
   void set_drawing_page_open(bool open);
@@ -52,8 +50,7 @@ class ViewportToolPanel final : public QWidget {
   enum Page {
     kVisibilityPage = 0,
     kFloorPage = 1,
-    kFloorManagerPage = 2,
-    kDrawingPage = 3,
+    kDrawingPage = 2,
   };
 
   void set_active_page(int page);
@@ -65,12 +62,10 @@ class ViewportToolPanel final : public QWidget {
   QStackedWidget* pages_ = nullptr;
   VisibilityPanel* visibility_page_ = nullptr;
   FloorPanel* floor_page_ = nullptr;
-  FloorManagerPanel* floor_manager_page_ = nullptr;
   DrawingManagerPanel* drawing_page_ = nullptr;
   QToolButton* plan_button_ = nullptr;
   QToolButton* visibility_button_ = nullptr;
   QToolButton* floor_button_ = nullptr;
-  QToolButton* floor_manager_button_ = nullptr;
   QToolButton* drawing_button_ = nullptr;
   ThemePalette theme_;
   QIcon icon_2d_;

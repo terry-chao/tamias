@@ -422,7 +422,7 @@ else if (transmissive) return;
 | 类别 | 例子 | 走哪条路 |
 |---|---|---|
 | **模型**（留存） | 墙、板、导入网格 | GPU 网格留存 + 每帧清单 + `BatchKey` 实例化 |
-| **临时 / overlay**（每帧重建） | 拖墙预览线、草图曲线、贝塞尔控制多边形与控制点、夹点、捕捉点、轴网、网格线、框选、调试段 | 独立 overlay 通道，每帧重传，`depth_test = false` |
+| **临时 / overlay**（每帧重建） | 拖墙预览线、草图曲线、贝塞尔控制多边形与控制点、夹点、捕捉点、轴网、框选、调试段 | 独立 overlay 通道，每帧重传，`depth_test = false` |
 | **二维图纸** | DXF / DWF 的曲线与文字 | 完全另一条路：Qt `QPainter`（[DRAWING.md](DRAWING.md)） |
 
 临时图元的数据都在 `FrameSubmission` 里，每帧现填（见 [render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.h)）：
@@ -1152,7 +1152,7 @@ float32 尾数 24 位，相对精度 ≈ `2⁻²⁴ ≈ 6e-8`。**能表示的�
 
 1. **顶点抖动（vertex jitter）**：`view` 矩阵是「先把世界坐标平移到相机原点」，可是**平移之前**精度已经丢了。相机一动，同一个顶点落在不同位置上。
 2. **Z 冲突**：深度缓冲精度随 `zfar / znear` 恶化。本仓库的 `set_distance` 把 `znear = distance * 0.001`、`zfar = distance * 50` —— 拉远之后可能是 `0.05 / 500` 这种比例，深度的有效位基本用完了。
-3. **地面网格断**：`grid.frag.hlsl` 用 `frac(world_pos.xz / spacing)` 画线。坐标到 1e6 时，`frac` 的输入已经只剩 0.06 的量化步长，`fwidth(coord)` 也一起失效 —— 网格会在远处碎成噪声，而不是「模糊」。**这是 float 精度问题，不是网格参数问题。**
+3. **网格线断**（历史）：旧的地面网格 shader 用 `frac(world_pos.xz / spacing)` 画线，坐标到 1e6 时 `frac` 的输入只剩 0.06 的量化步长、`fwidth` 一起失效，线会在远处碎成噪声。**这是 float 精度问题，不是网格参数问题。** 教训对任何「在世界坐标上做 `frac` / `fwidth`」的画法都成立。后来那块独立 shader 被删掉过一轮（地面参考一度只剩轴网），现在的做法是：背景 shader（`sky.frag.hlsl`）里把「坐标精度」也算进每像素世界尺度（`|world| * 1e-6`），网格会自动升到还画得出来的间距，而不是碎成噪声。
 4. **拾取退化**：CPU 的射线求交也是 float，远距离三角形的重心判定会掉精度（`|det| < 1e-6` 直接判退化）。
 
 ### 已经在用的对策：图纸模块的原点重定基
@@ -1171,7 +1171,7 @@ float32 尾数 24 位，相对精度 ≈ `2⁻²⁴ ≈ 6e-8`。**能表示的�
 | **相机相对渲染** | view / model 用 double 乘完再转 float 送 shader；shader 里只有相机相对坐标 | 每帧多几十次 double 矩阵乘，可忽略 |
 | **反向 Z + float 深度** | `znear / zfar` 交换、深度比较反着来；或直接上 `D32_SFLOAT` + reverse-Z | 要改所有管线与投影矩阵 |
 | **固定 znear** | 别让 `znear` 跟着 `distance` 变（现在是 `distance * 0.001`） | 近处裁剪会变，需要权衡 |
-| **网格 shader 用相机相对坐标** | 去掉 `world_pos` 绝对值，改传「相对原点坐标 + 原点在 shader 里的偏移」 | 会改 `grid.frag.hlsl` |
+| **shader 用相机相对坐标** | 去掉 `world_pos` 绝对值，改传「相对原点坐标 + 原点在 shader 里的偏移」 | 要改相关 shader |
 
 **顺序建议**：先做「固定 znear + 反向 Z」（局部改、收益大、不动数据结构），再做相机相对渲染与 floating origin（要动拾取和包围盒，必须一起做）。
 

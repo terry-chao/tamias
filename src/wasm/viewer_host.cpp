@@ -409,6 +409,7 @@ void ViewerHost::render() {
   frame.eye_position = cam.eye_position();
   frame.view_distance = cam.distance();
   frame.fovy = cam.fovy();
+  frame.orthographic = cam.orthographic();
   frame.mode = mode_;
   frame.xray = xray_ ? kXrayOpacity : 0.f;
   frame.items = session_->document().render_items();

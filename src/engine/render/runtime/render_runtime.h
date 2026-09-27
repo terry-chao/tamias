@@ -51,6 +51,9 @@ struct FrameSubmission {
   // X 光（X-Ray）：>0 时所有有面的构件都按这个 alpha 画成半透明，0 = 关。
   // 与 mode 正交（可叠在着色 / 真实感上），见 docs/RENDERING.md §8。
   float xray = 0.f;
+  // 正交投影（平面视图 / 立面视图）。背景要按它决定射线怎么从像素反推：
+  // 透视是「一个眼睛 + 一束方向」，正交是「一束平行方向 + 每条像素自己的起点」。
+  bool orthographic = false;
   std::vector<SceneDrawItem> items;
   // 语义侧增量同步：scene_generation 变化时，渲染线程按 scene_dirty_ids
   // 增量更新留存场景图（空列表 = 整树重建兜底）。
@@ -81,7 +84,10 @@ struct FrameSubmission {
   std::optional<DebugVertexOverlay> debug_vertex;  // 检查器点选的网格顶点
   float fovy = 0.8f;
   std::unordered_map<std::uint64_t, LodMeshSet> lod_sets;
-  float clear_color[4] = {0.14f, 0.18f, 0.24f, 1.f};
+  // 和背景的中段同色（#3A4A5E，见 shaders/sky.frag.hlsl 的调色板）：背景三角没画到时
+  // （比如 sky 管线还没建好）也不会闪一块黑。这里是**线性**值——渲染目标是 sRGB，
+  // 硬件写回时会再编一次（shader 里的调色板同理）。
+  float clear_color[4] = {0.042f, 0.068f, 0.112f, 1.f};
 };
 
 // Shared execution config: Vulkan views with matching validation can share a device/thread.
@@ -184,9 +190,6 @@ class RenderThread {
   std::unique_ptr<ShaderModule> sky_vs_;
   std::unique_ptr<ShaderModule> sky_fs_;
   std::unique_ptr<PipelineState> sky_pipeline_;
-  std::unique_ptr<ShaderModule> grid_vs_;
-  std::unique_ptr<ShaderModule> grid_fs_;
-  std::unique_ptr<PipelineState> grid_pipeline_;
   // 图纸底图：无光照贴图管线（桌面后端；WebGL / WebGPU 暂不画底图）。
   std::unique_ptr<ShaderModule> overlay_vs_;
   std::unique_ptr<ShaderModule> overlay_fs_;
@@ -198,7 +201,6 @@ class RenderThread {
   std::unique_ptr<PipelineState> text_pipeline_;
   GpuMesh text_unit_quad_mesh_;
   GpuMesh sky_mesh_;
-  GpuMesh grid_mesh_;
   GpuMesh preview_line_mesh_;
   std::unordered_map<std::uint64_t, GpuMesh> meshes_;
   std::unordered_map<std::uint64_t, std::uint64_t> asset_to_gpu_;  // asset id -> gpu mesh id

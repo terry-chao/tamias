@@ -1,6 +1,7 @@
 #include "app/bim/floors/floor_panel.h"
 
 #include "app/viewport/canvas/document_viewport.h"
+#include "app/bim/floors/copy_floor_dialog.h"
 #include "app/bim/floors/floor_settings_dialog.h"
 #include "app/base/theme.h"
 
@@ -12,6 +13,7 @@
 #include <QIcon>
 #include <QLabel>
 #include <QModelIndex>
+#include <QMessageBox>
 #include <QPainter>
 #include <QPixmap>
 #include <QSignalBlocker>
@@ -31,6 +33,7 @@ namespace {
 constexpr int kFloorIndexRole = Qt::UserRole;
 constexpr int kStoreyIdRole = Qt::UserRole + 1;
 constexpr int kLabelRole = Qt::UserRole + 3;
+constexpr int kGlobalRow = -1;  // 第 0 行：全局三维视图
 
 QString floor_stylesheet(bool dark) {
   const ThemePalette palette = theme_palette(dark);
@@ -155,6 +158,16 @@ FloorPanel::FloorPanel(QWidget* parent) : QWidget(parent) {
   auto* footer_bar = new QHBoxLayout(footer);
   footer_bar->setContentsMargins(10, 6, 10, 6);
   footer_bar->setSpacing(6);
+  copy_ = new QToolButton(footer);
+  copy_->setObjectName(QStringLiteral("floorToolButton"));
+  copy_->setAutoRaise(true);
+  copy_->setCursor(Qt::PointingHandCursor);
+  copy_->setFocusPolicy(Qt::NoFocus);
+  copy_->setToolButtonStyle(Qt::ToolButtonTextOnly);
+  copy_->setText(tr("Copy Floor…"));
+  copy_->setToolTip(
+      tr("Copy every component on one floor to another floor as new components"));
+  footer_bar->addWidget(copy_);
   show_all_ = new QToolButton(footer);
   show_all_->setObjectName(QStringLiteral("floorToolButton"));
   show_all_->setAutoRaise(true);
@@ -168,6 +181,7 @@ FloorPanel::FloorPanel(QWidget* parent) : QWidget(parent) {
   root->addWidget(footer);
 
   connect(settings_, &QToolButton::clicked, this, &FloorPanel::open_floor_settings);
+  connect(copy_, &QToolButton::clicked, this, &FloorPanel::open_copy_floor);
   connect(show_all_, &QToolButton::clicked, this, [this] {
     if (viewport_ != nullptr) {
       viewport_->show_all_visible();
@@ -203,6 +217,8 @@ void FloorPanel::set_viewport(DocumentViewport* viewport) {
       viewport_connections_.push_back(connect(viewport_, &DocumentViewport::visibility_changed,
                                               this, &FloorPanel::refresh));
       viewport_connections_.push_back(
+          connect(viewport_, &DocumentViewport::view_changed, this, &FloorPanel::refresh));
+      viewport_connections_.push_back(
           connect(viewport_, &DocumentViewport::document_changed, this, &FloorPanel::refresh));
       viewport_connections_.push_back(connect(viewport_, &QObject::destroyed, this, [this] {
         viewport_ = nullptr;
@@ -222,10 +238,12 @@ void FloorPanel::showEvent(QShowEvent* event) {
 void FloorPanel::refresh() {
   const bool has_viewport = viewport_ != nullptr;
   settings_->setEnabled(has_viewport);
+  copy_->setEnabled(has_viewport && viewport_->document().bim().storeys().size() >= 2);
   show_all_->setEnabled(has_viewport && viewport_->has_active_filter());
   storey_combo_->setEnabled(has_viewport);
   if (!has_viewport) {
-    hint_->setText(tr("Open a model document to show or hide its floors here."));
+    hint_->setText(tr("Open a model document to show or hide its floors and open floor views "
+                      "here."));
     pages_->setCurrentWidget(hint_);
     tree_->clear();
     const QSignalBlocker blocker(storey_combo_);
@@ -254,10 +272,11 @@ void FloorPanel::sync_storey_combo() {
 
 void FloorPanel::sync_rows() {
   const std::vector<ViewportFloor> floors = viewport_->floors();
-  // 行只在楼层表变了以后重建；否则原地改勾选。避免在 itemClicked 里删掉正被用的项。
-  bool rebuild = tree_->topLevelItemCount() != static_cast<int>(floors.size());
-  for (int i = 0; !rebuild && i < tree_->topLevelItemCount(); ++i) {
-    const QTreeWidgetItem* item = tree_->topLevelItem(i);
+  // 行只在楼层表变了以后重建（第 0 行恒为「全局三维」）；否则原地改勾选与高亮，
+  // 避免在 itemChanged / itemClicked 里删掉正被用的项。
+  bool rebuild = tree_->topLevelItemCount() != static_cast<int>(floors.size()) + 1;
+  for (int i = 0; !rebuild && i < static_cast<int>(floors.size()); ++i) {
+    const QTreeWidgetItem* item = tree_->topLevelItem(i + 1);
     const ViewportFloor& floor = floors[static_cast<std::size_t>(i)];
     rebuild = item->data(0, kStoreyIdRole).toULongLong() != floor.storey_id ||
               item->data(0, kLabelRole).toString() != QString::fromStdString(floor.label);
@@ -266,9 +285,16 @@ void FloorPanel::sync_rows() {
   const ThemePalette palette = theme_palette(dark_);
   const QBrush active(palette.text);
   const QBrush muted(palette.text_muted);
+  const QColor accent(47, 125, 222);
+  const QIcon global_icon(QStringLiteral(":/icons/view_3d.svg"));
+  const QIcon floor_icon(QStringLiteral(":/icons/storey.svg"));
   syncing_ = true;
   if (rebuild) {
     tree_->clear();
+    auto* global_item = new QTreeWidgetItem(tree_);
+    global_item->setData(0, kFloorIndexRole, kGlobalRow);
+    global_item->setTextAlignment(1, Qt::AlignRight | Qt::AlignVCenter);
+    global_item->setTextAlignment(2, Qt::AlignRight | Qt::AlignVCenter);
     for (std::size_t i = 0; i < floors.size(); ++i) {
       auto* item = new QTreeWidgetItem(tree_);
       item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
@@ -281,9 +307,30 @@ void FloorPanel::sync_rows() {
     }
   }
 
+  // 当前打开的是哪张视图：全局三维（第 0 行），或者某一层。
+  const int active_row =
+      viewport_->floor_view_open() ? static_cast<int>(viewport_->floor_view_index()) + 1 : 0;
+
+  QTreeWidgetItem* global_item = tree_->topLevelItem(0);
+  global_item->setText(0, tr("Global 3D"));
+  global_item->setText(1, QString());
+  global_item->setText(2, QString());
+  global_item->setIcon(0, global_icon);
+  global_item->setToolTip(0, tr("Click to go back to the global 3D view"));
+  {
+    const bool is_active = active_row == 0;
+    global_item->setForeground(0, is_active ? QBrush(accent) : active);
+    global_item->setForeground(1, muted);
+    global_item->setForeground(2, muted);
+    QFont font = global_item->font(0);
+    font.setBold(is_active);
+    font.setItalic(false);
+    global_item->setFont(0, font);
+  }
+
   for (std::size_t i = 0; i < floors.size(); ++i) {
     const ViewportFloor& floor = floors[i];
-    QTreeWidgetItem* item = tree_->topLevelItem(static_cast<int>(i));
+    QTreeWidgetItem* item = tree_->topLevelItem(static_cast<int>(i) + 1);
     QString label = QString::fromStdString(floor.label);
     if (floor.mezzanine) {
       label = tr("[Mezzanine] %1").arg(label);
@@ -291,25 +338,24 @@ void FloorPanel::sync_rows() {
     item->setText(0, label);
     item->setText(1, QStringLiteral("%1 m").arg(static_cast<double>(floor.y_min), 0, 'f', 3));
     item->setText(2, QStringLiteral("%1 m").arg(static_cast<double>(floor.height), 0, 'f', 3));
-    item->setToolTip(
-        0, tr("Click the row to make it the current floor; the checkbox only shows or hides it."));
+    item->setIcon(0, floor_icon);
+    item->setToolTip(0,
+                     tr("Click to open this floor's view; the checkbox only shows or hides it"));
     const bool hidden = viewport_->floor_hidden(i);
     item->setCheckState(0, hidden ? Qt::Unchecked : Qt::Checked);
-    item->setForeground(0, hidden ? muted : active);
+    const bool is_active = static_cast<int>(i) + 1 == active_row;
+    item->setForeground(0, hidden ? muted : (is_active ? QBrush(accent) : active));
     item->setForeground(1, muted);
     item->setForeground(2, muted);
     QFont font = item->font(0);
+    font.setBold(is_active);
     font.setItalic(floor.mezzanine);
     item->setFont(0, font);
   }
+  tree_->setCurrentItem(tree_->topLevelItem(active_row));
   syncing_ = false;
 
-  const bool has_floors = !floors.empty();
-  if (!has_floors) {
-    hint_->setText(tr("This model has no floors yet. Use Floor Settings to add them."));
-  }
-  pages_->setCurrentWidget(has_floors ? static_cast<QWidget*>(tree_)
-                                      : static_cast<QWidget*>(hint_));
+  pages_->setCurrentWidget(tree_);
 }
 
 void FloorPanel::on_item_changed(QTreeWidgetItem* item, int column) {
@@ -326,16 +372,21 @@ void FloorPanel::on_item_clicked(QTreeWidgetItem* item, int column) {
   if (syncing_ || item == nullptr || viewport_ == nullptr) {
     return;
   }
-  const auto storey_id = static_cast<std::uint64_t>(item->data(0, kStoreyIdRole).toULongLong());
-  if (storey_id == 0 || viewport_->document().bim().active_storey_id() == storey_id) {
-    return;
-  }
-  // 点勾选框 = 显隐开关。`itemClicked` 在点勾选框时也会发一次，不挡住的话，
-  // "把上一层藏起来"会顺手把当前楼层换成上一层：接着画的构件就归到了上一层。
+  // 点勾选框 = 显隐开关，不顺手切视图。`itemClicked` 在点勾选框时也会发一次，得挡住。
   if (click_hit_check_indicator(item)) {
     return;
   }
-  viewport_->set_active_storey(storey_id);
+  // 点一行 = 打开这一层的视图（顺手把该层设为当前楼层）。
+  open_view_for(item);
+}
+
+void FloorPanel::open_view_for(QTreeWidgetItem* item) {
+  const int index = item->data(0, kFloorIndexRole).toInt();
+  if (index == kGlobalRow) {
+    viewport_->open_global_view();
+    return;
+  }
+  viewport_->open_floor_view(static_cast<std::size_t>(index));
 }
 
 bool FloorPanel::click_hit_check_indicator(const QTreeWidgetItem* item) const {
@@ -391,6 +442,24 @@ void FloorPanel::open_floor_settings() {
     return;  // 没改就不往撤销栈里塞空命令
   }
   viewport_->apply_storey_settings(plan, next_active);
+}
+
+void FloorPanel::open_copy_floor() {
+  if (viewport_ == nullptr) {
+    return;
+  }
+  const BimModel& bim = viewport_->document().bim();
+  if (bim.storeys().size() < 2) {
+    QMessageBox::information(this, tr("Copy Floor"),
+                             tr("This model needs at least two floors. Add one in Floor "
+                                "Settings first."));
+    return;
+  }
+  CopyFloorDialog dialog(bim.storeys(), bim.active_storey_id(), this);
+  if (dialog.exec() != QDialog::Accepted) {
+    return;
+  }
+  viewport_->copy_storey(dialog.source_storey_id(), dialog.target_storey_id());
 }
 
 }  // namespace tamias

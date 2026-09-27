@@ -171,8 +171,7 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 | 文件 | 干什么 |
 |---|---|
 | `mesh.vert.hlsl` / `mesh.frag.hlsl` | 模型：变换 + 光照 + 贴图 + 选中 |
-| `sky.vert.hlsl` / `sky.frag.hlsl` | 天空上下渐变 |
-| `grid.vert.hlsl` / `grid.frag.hlsl` | 地面无限网格线 |
+| `sky.vert.hlsl` / `sky.frag.hlsl` | 视口背景：天空渐变 + 地面 + 工作平面网格 |
 
 每套编出两份：`mesh.vert.spv` 和 `mesh.vert.gl.spv`（见 [TamiasShaders.cmake](https://github.com/terry-chao/tamias/blob/main/cmake/TamiasShaders.cmake)）。运行时按后端加载。
 
@@ -181,7 +180,6 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 | 管线 | 用途 |
 |---|---|
 | `sky_pipeline_` | 全屏三角，不测深度（当背景） |
-| `grid_pipeline_` | 测深度、不写深度（网格不挡住埋在地下的东西） |
 | `shaded_pipeline_` | 实心三角 |
 | `wire_pipeline_` | 同一套 mesh shader，只把光栅变成线框 |
 | `line_pipeline_` | 线段，不测深度（轴和预览线永远在最前） |
@@ -197,14 +195,31 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 
 ```
 1. 清屏
-2. 天空      全屏大三角，上蓝下亮，不写深度
-3. 地面网格  一块跟着相机 XZ 平移的大四边形，线是 shader 算的，不是真建了几千条线
-4. 模型      清单里每一项一次 draw_indexed（没有合批；屏外叶子已在展平时丢掉，见 [视锥剔除](FRUSTUM-CULLING.md)）
-5. 图纸底图  每张参考图纸一次 draw_indexed（无光照 + 贴图平面，挡在它前面的构件遮住它，见 [参考图纸](DRAWING.md)）
-6. 世界坐标轴  X 红 Y 绿 Z 蓝，不测深度
-7. 预览线    拖墙时起点→光标
-8. 把这张图画到窗口（swap / present）
+2. 背景      全屏大三角：天空渐变 + 地面 + 工作平面网格，不写深度
+3. 模型      清单里每一项一次 draw_indexed（没有合批；屏外叶子已在展平时丢掉，见 [视锥剔除](FRUSTUM-CULLING.md)）
+4. 图纸底图  每张参考图纸一次 draw_indexed（无光照 + 贴图平面，挡在它前面的构件遮住它，见 [参考图纸](DRAWING.md)）
+5. 世界坐标轴  X 红 Y 绿 Z 蓝，不测深度
+6. 预览线    拖墙时起点→光标
+7. 把这张图画到窗口（swap / present）
 ```
+
+背景（`sky.frag.hlsl`）负责视口最底下的一层，一块全屏三角画完三件事，配色写成 sRGB
+再转线性（渲染目标是 sRGB 编码的，硬件写回时再编一次，屏幕上一比一还原）：
+
+| 层 | 内容 | 取色 |
+|---|---|---|
+| 天空 | 按**视线仰角**从天顶渐变到地平线，地平线压一道柔亮 | 天顶 #20304A、地平线 #6E86A3 |
+| 地面 | 视线与 y = 0 平面求交，近处深、远处融进地平线色（空气透视） | 近处 #1E2630 |
+| 工作平面网格 | 1 m 次网格 / 5 m 主网格，随视距升到 10 / 100…米，远景淡出；原点两条世界轴 X 红 Z 蓝 | #4A5870 / #6B7FA3 |
+
+网格和**吸附**用的是同一套间距（`kGridMinorSpacing` / `kGridMajorSpacing`，见
+[引擎数学](https://github.com/terry-chao/tamias/blob/main/src/engine/math/grid.h)）：
+1:1 时看到的格子就是落位会咬住的格子。它只是背景，不参与拾取；**轴网**（`grid_line_segments`，
+见 [BIM](BIM.md)）是另一回事，画在它上面。
+
+相机射线在片元里重建：`pc.color.xy` 传的是 `1/|proj(0,0)|`、`1/|proj(1,1)|`，透视下是
+tan(半视角)，正交下是半宽 / 半高——所以平面视图（正交顶视）里地面照样铺满整屏、网格照常出现，
+立面视图（射线与地面平行）退化成一层没有细节的地面填充。
 
 模型那一圈对每个 `SceneDrawItem`：
 
@@ -382,7 +397,7 @@ IBL 是 split-sum：CPU 烘焙工作室环境立方体 → irradiance / GGX pref
                                                  ▼
                               RenderThread.draw_channel
                                                  │
-                    天空 → 网格 → 每个 item 一次 draw → 轴
+                    背景（天空 + 地面 + 网格）→ 每个 item 一次 draw → 轴
                                                  │
                               RHI：桌面 Vulkan / OpenGL；浏览器 WebGPU
                                                  ▼

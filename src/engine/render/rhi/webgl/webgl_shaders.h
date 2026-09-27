@@ -268,72 +268,107 @@ void main() {
 inline std::string_view sky_frag() {
   static const std::string src = std::string("#version 300 es\nprecision highp float;\n") +
                                  std::string(kPushBlock) + R"GLSL(
-uniform samplerCube prefilter_tex;
 in vec2 v_uv;
 out vec4 frag_color;
-void main() {
-  vec2 ndc = v_uv * 2.0 - 1.0;
-  vec3 view_dir = normalize(vec3(ndc.x * pc.color.x, ndc.y * pc.color.y, -1.0));
-  vec3 world_dir = mat3(pc.model) * view_dir;
-  vec3 env = textureLod(prefilter_tex, world_dir, 1.2).rgb;
-  env *= pc.lighting.x;
-  env = env / (env + vec3(0.85));
-  frag_color = vec4(env, 1.0);
-}
-)GLSL";
-  return src;
-}
 
-inline std::string_view grid_vert() {
-  static const std::string src = std::string("#version 300 es\n") + std::string(kPushBlock) + R"GLSL(
-layout(location = 0) in vec3 a_position;
-out vec3 v_world_pos;
-void main() {
-  vec4 world = pc.model * vec4(a_position, 1.0);
-  v_world_pos = world.xyz;
-  gl_Position = pc.mvp * vec4(a_position, 1.0);
-}
-)GLSL";
-  return src;
-}
+// 视口背景：天空 + 地面 + 工作平面网格。和桌面端 shaders/sky.frag.hlsl 同一套算法
+// 与配色（那边有逐段注释），改动要三份一起改。调色板按 sRGB 写，最后转线性。
+const vec3 kSkyZenith = vec3(0.125, 0.188, 0.290);
+const vec3 kSkyHorizon = vec3(0.431, 0.525, 0.639);
+const vec3 kHorizonGlow = vec3(0.663, 0.737, 0.824);
+const vec3 kGroundNear = vec3(0.118, 0.149, 0.188);
+const vec3 kGridMinor = vec3(0.290, 0.345, 0.439);
+const vec3 kGridMajor = vec3(0.420, 0.498, 0.639);
+const vec3 kAxisXColor = vec3(0.690, 0.376, 0.376);
+const vec3 kAxisZColor = vec3(0.376, 0.533, 0.784);
+const float kGroundY = 0.0;
+const float kGridBaseSpacing = 1.0;
+const float kGridMajorEvery = 5.0;
+const float kGridMinPixels = 8.0;
+const float kLog10 = 0.30102999566;
 
-inline std::string_view grid_frag() {
-  static const std::string src = std::string("#version 300 es\nprecision highp float;\n") +
-                                 std::string(kPushBlock) + R"GLSL(
-in vec3 v_world_pos;
-out vec4 frag_color;
 float grid_line(vec2 coord, float spacing, vec2 deriv) {
-  vec2 cell = min(fract(coord / spacing), 1.0 - fract(coord / spacing));
+  vec2 cell = abs(fract(coord / spacing + 0.5) - 0.5);
   vec2 px = cell * spacing / max(deriv, vec2(1e-5));
   return 1.0 - clamp(min(px.x, px.y), 0.0, 1.0);
 }
+
+float axis_line(float distance_world, float deriv) {
+  return 1.0 - clamp(abs(distance_world) / max(deriv, 1e-5), 0.0, 1.0);
+}
+
+vec3 srgb_to_linear(vec3 c) {
+  return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
+}
+
 void main() {
-  vec2 coord = v_world_pos.xz;
-  vec2 deriv = fwidth(coord);
-  float world_per_pixel = max(max(deriv.x, deriv.y), 1e-5);
-  float lod = log(max(world_per_pixel * 8.0, 1.0)) / log(10.0);
+  vec2 ndc = v_uv * 2.0 - 1.0;
+  mat3 cam = mat3(pc.model);
+  vec3 cam_right = cam * vec3(1.0, 0.0, 0.0);
+  vec3 cam_up = cam * vec3(0.0, 1.0, 0.0);
+  vec3 cam_fwd = cam * vec3(0.0, 0.0, -1.0);
+  vec3 eye = pc.eye_pos_mode.xyz;
+  vec2 ray_scale = pc.color.xy;
+
+  vec3 ray_dir;
+  vec3 ray_origin;
+  if (pc.material.x > 0.5) {  // 正交：平面视图 / 立面视图
+    ray_dir = cam_fwd;
+    ray_origin = eye + cam_right * (ndc.x * ray_scale.x) + cam_up * (ndc.y * ray_scale.y);
+  } else {  // 透视
+    ray_dir = normalize(cam_fwd + cam_right * (ndc.x * ray_scale.x) +
+                        cam_up * (ndc.y * ray_scale.y));
+    ray_origin = eye;
+  }
+
+  float denom = min(ray_dir.y, -1e-6);
+  float t_raw = (kGroundY - ray_origin.y) / denom;
+  float hit = (ray_dir.y < -1e-6 && t_raw > 0.0) ? 1.0 : 0.0;
+  vec3 ground_point = ray_origin + ray_dir * max(t_raw, 0.0);
+  vec2 coord = ground_point.xz;
+  vec2 deriv = vec2(fwidth(coord.x), fwidth(coord.y));
+
+  float elevation = clamp(ray_dir.y, 0.0, 1.0);
+  vec3 sky = mix(kSkyHorizon, kSkyZenith, pow(elevation, 0.55));
+
+  float view_scale = max(pc.eye_pos_mode.w, 1.0);
+  float dist = length(ground_point - eye);
+  float grid_fade = 1.0 - smoothstep(5.0 * view_scale, 28.0 * view_scale, dist);
+  float haze = smoothstep(2.0 * view_scale, 26.0 * view_scale, dist);
+  haze = haze * hit + (1.0 - hit) * 0.55;
+  vec3 ground = mix(kGroundNear, kSkyHorizon, haze * 0.78);
+
+  float precision_step = max(abs(coord.x), abs(coord.y)) * 1e-6;
+  float world_per_pixel = max(max(deriv.x, deriv.y), precision_step);
+  float lod = max(log2(max(world_per_pixel * kGridMinPixels / kGridBaseSpacing, 1.0)) *
+                      kLog10,
+                  0.0);
   float lod_base = floor(lod);
   float lod_frac = clamp(lod - lod_base, 0.0, 1.0);
-  float minor_lo = pow(10.0, lod_base);
+  float minor_lo = kGridBaseSpacing * pow(10.0, lod_base);
   float minor_hi = minor_lo * 10.0;
-  float minor_strength = mix(grid_line(coord, minor_lo, deriv),
-                             grid_line(coord, minor_hi, deriv), lod_frac);
-  float major_strength = mix(grid_line(coord, minor_lo * 5.0, deriv),
-                             grid_line(coord, minor_hi * 5.0, deriv), lod_frac);
-  float view_scale = max(pc.eye_pos_mode.w, 1.0);
-  float dist = length(v_world_pos.xz - pc.eye_pos_mode.xz);
-  float fade = 1.0 - smoothstep(8.0 * view_scale, 32.0 * view_scale, dist);
-  fade *= smoothstep(0.0, 0.4 * view_scale, dist);
-  vec3 fill = vec3(0.22, 0.24, 0.28);
-  vec3 color = fill;
-  color = mix(color, vec3(0.38, 0.41, 0.46), clamp(minor_strength * 0.50, 0.0, 1.0));
-  color = mix(color, vec3(0.50, 0.54, 0.60), clamp(major_strength * 0.75, 0.0, 1.0));
-  float axis_x = 1.0 - clamp(abs(coord.y) / max(deriv.y, 1e-5), 0.0, 1.0);
-  float axis_z = 1.0 - clamp(abs(coord.x) / max(deriv.x, 1e-5), 0.0, 1.0);
-  color = mix(color, vec3(0.78, 0.28, 0.28), clamp(axis_x, 0.0, 1.0));
-  color = mix(color, vec3(0.28, 0.52, 0.88), clamp(axis_z, 0.0, 1.0));
-  color = mix(fill, color, fade);
-  frag_color = vec4(color, 1.0);
+  float minor = mix(grid_line(coord, minor_lo, deriv), grid_line(coord, minor_hi, deriv),
+                    lod_frac);
+  float major = mix(grid_line(coord, minor_lo * kGridMajorEvery, deriv),
+                    grid_line(coord, minor_hi * kGridMajorEvery, deriv), lod_frac);
+  ground = mix(ground, kGridMinor, clamp(minor * 0.55, 0.0, 1.0) * grid_fade * hit);
+  ground = mix(ground, kGridMajor, clamp(major * 0.80, 0.0, 1.0) * grid_fade * hit);
+
+  float axis_x = axis_line(coord.y, deriv.y) * grid_fade * hit;
+  float axis_z = axis_line(coord.x, deriv.x) * grid_fade * hit;
+  ground = mix(ground, kAxisXColor, clamp(axis_x, 0.0, 1.0) * 0.70);
+  ground = mix(ground, kAxisZColor, clamp(axis_z, 0.0, 1.0) * 0.70);
+
+  float on_ground = 0.0;
+  if (ray_dir.y < -1e-6) {
+    on_ground = 1.0;
+  } else if (ray_dir.y <= 1e-6 && ray_origin.y <= kGroundY) {
+    on_ground = 1.0;
+  }
+  vec3 color = mix(sky, ground, on_ground);
+  float band = pow(1.0 - clamp(abs(ray_dir.y) / 0.05, 0.0, 1.0), 3.0);
+  color = mix(color, kHorizonGlow, band * 0.30);
+  frag_color = vec4(srgb_to_linear(color), 1.0);
 }
 )GLSL";
   return src;

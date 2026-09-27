@@ -512,4 +512,138 @@ TEST(GridIntersections, IgnoresDegenerateAxes) {
   EXPECT_TRUE(grid_intersections(axes).empty());
 }
 
+// 放置吸附：优先咬交点，没有交点时退回单条轴线。
+TEST(GridSnapToGrid, IntersectionWinsOverSingleAxis) {
+  const std::vector<GridAxis> axes =
+      make_orthogonal_grid(0.0, 0.0, {6.0, 6.0}, {5.0}, 1.0);  // x = 0/6/12, z = 0/5
+
+  // 靠近 (6, 5) 的交点：x、z 一起贴过去。
+  const GridSnap hit = snap_plan_to_grid(axes, {6.1f, 5.1f}, 0.3);
+  ASSERT_TRUE(hit.snapped);
+  EXPECT_TRUE(hit.on_intersection);
+  EXPECT_FLOAT_EQ(hit.point.x, 6.f);
+  EXPECT_FLOAT_EQ(hit.point.y, 5.f);
+}
+
+TEST(GridSnapToGrid, FallsBackToSingleAxisWhenNoIntersectionInRange) {
+  // 只有一根竖轴（x = 4，z 从 0 到 10）：没有交点，但 x 还是能贴上去。
+  std::vector<GridAxis> axes;
+  GridAxis numbered;
+  numbered.name = "1";
+  numbered.direction = GridAxisDirection::AlongZ;
+  numbered.position = 4.0;
+  numbered.start = 0.0;
+  numbered.end = 10.0;
+  axes.push_back(numbered);
+
+  const GridSnap hit = snap_plan_to_grid(axes, {4.05f, 7.0f}, 0.3);
+  ASSERT_TRUE(hit.snapped);
+  EXPECT_FALSE(hit.on_intersection);
+  EXPECT_FLOAT_EQ(hit.point.x, 4.f);
+  EXPECT_FLOAT_EQ(hit.point.y, 7.f);  // z 不动（没有横轴）
+}
+
+TEST(GridSnapToGrid, LeavesPointAloneWhenNothingInRange) {
+  const std::vector<GridAxis> axes = make_orthogonal_grid(0.0, 0.0, {6.0}, {5.0}, 1.0);
+  const GridSnap miss = snap_plan_to_grid(axes, {2.5f, 2.5f}, 0.3);
+  EXPECT_FALSE(miss.snapped);
+  EXPECT_FALSE(miss.on_intersection);
+  EXPECT_FLOAT_EQ(miss.point.x, 2.5f);
+  EXPECT_FLOAT_EQ(miss.point.y, 2.5f);
+}
+
+// 轴号命名：竖轴按数字、横轴按字母，超过 26 根进位。
+TEST(GridAxisLetterName, RollsOverPastZ) {
+  EXPECT_EQ(grid_axis_letter_name(0), "A");
+  EXPECT_EQ(grid_axis_letter_name(25), "Z");
+  EXPECT_EQ(grid_axis_letter_name(26), "AA");
+  EXPECT_EQ(grid_axis_letter_name(27), "AB");
+}
+
+// 拉成一张网：每根轴跨到轴网范围两端，竖轴 × 横轴两两都真的相交。
+TEST(FitGridAxesToExtent, MakesEveryAxisCross) {
+  std::vector<GridAxis> axes;
+  for (const double x : {0.0, 6.0, 12.0}) {  // 三根竖轴
+    GridAxis axis;
+    axis.direction = GridAxisDirection::AlongZ;
+    axis.position = x;
+    axis.start = -10.0;  // 起点终点故意填得又短又乱
+    axis.end = 10.0;
+    axes.push_back(axis);
+  }
+  for (const double z : {0.0, 5.0}) {  // 两根横轴
+    GridAxis axis;
+    axis.direction = GridAxisDirection::AlongX;
+    axis.position = z;
+    axis.start = -3.0;
+    axis.end = 3.0;
+    axes.push_back(axis);
+  }
+
+  fit_grid_axes_to_extent(axes, 1.0);
+
+  // 竖轴跨整个 z 范围（0…5）± margin；横轴跨整个 x 范围（0…12）± margin。
+  for (const GridAxis& axis : axes) {
+    if (axis.direction == GridAxisDirection::AlongZ) {
+      EXPECT_DOUBLE_EQ(axis.start, -1.0);
+      EXPECT_DOUBLE_EQ(axis.end, 6.0);
+    } else {
+      EXPECT_DOUBLE_EQ(axis.start, -1.0);
+      EXPECT_DOUBLE_EQ(axis.end, 13.0);
+    }
+  }
+  EXPECT_EQ(grid_intersections(axes).size(), 6u);  // 3 × 2，全部相交
+}
+
+// 只有一根轴的方向范围退化成点，按 min_span 撑开，别把轴线拉成零长。
+TEST(FitGridAxesToExtent, WidensDegenerateRange) {
+  std::vector<GridAxis> axes;
+  GridAxis vertical;
+  vertical.direction = GridAxisDirection::AlongZ;
+  vertical.position = 0.0;
+  axes.push_back(vertical);
+  for (const double z : {0.0, 5.0, 10.0}) {
+    GridAxis axis;
+    axis.direction = GridAxisDirection::AlongX;
+    axis.position = z;
+    axes.push_back(axis);
+  }
+
+  fit_grid_axes_to_extent(axes, /*margin=*/0.0, /*min_span=*/20.0);
+
+  // 竖轴跨 z 范围 [0, 10]；横轴跨 x 范围——x 那边只有一根竖轴，撑到 [-10, 10]。
+  EXPECT_DOUBLE_EQ(axes[0].start, 0.0);
+  EXPECT_DOUBLE_EQ(axes[0].end, 10.0);
+  for (std::size_t i = 1; i < axes.size(); ++i) {
+    EXPECT_DOUBLE_EQ(axes[i].start, -10.0);
+    EXPECT_DOUBLE_EQ(axes[i].end, 10.0);
+  }
+}
+
+// 铺得很开的轴网也一样成网（以前每根轴只有固定长度，远处就散成一根根短线）。
+TEST(FitGridAxesToExtent, SpreadAxesStillMesh) {
+  std::vector<GridAxis> axes;
+  for (int i = 0; i < 8; ++i) {  // 竖轴 x = 0, 6, …, 42
+    GridAxis axis;
+    axis.direction = GridAxisDirection::AlongZ;
+    axis.position = i * 6.0;
+    axis.start = -10.0;
+    axis.end = 10.0;  // 只有 ±10，够不到远处的横轴
+    axes.push_back(axis);
+  }
+  for (int i = 0; i < 8; ++i) {  // 横轴 z = 0, 5, …, 35
+    GridAxis axis;
+    axis.direction = GridAxisDirection::AlongX;
+    axis.position = i * 5.0;
+    axis.start = -10.0;
+    axis.end = 10.0;
+    axes.push_back(axis);
+  }
+  // 修之前：每根轴只有 ±10 长，远处的竖轴 × 横轴根本不相遇，只有中间一小块成网。
+  EXPECT_LT(grid_intersections(axes).size(), 64u);
+
+  fit_grid_axes_to_extent(axes, 0.0);
+  EXPECT_EQ(grid_intersections(axes).size(), 64u);  // 修之后：8 × 8 全相交
+}
+
 }  // namespace tamias

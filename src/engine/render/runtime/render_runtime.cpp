@@ -101,26 +101,6 @@ MeshCpu make_fullscreen_triangle() {
   return mesh;
 }
 
-// 地面网格四边形（XZ 平面 y=-0.01 的大四边形，相机锚定；网格线由 shader 程序化生成）。
-MeshCpu make_grid_quad(float extent = 2000.f) {
-  MeshCpu mesh;
-  const Vec3 verts[4] = {
-      {-extent, 0.f, -extent},
-      {extent, 0.f, -extent},
-      {extent, 0.f, extent},
-      {-extent, 0.f, extent},
-  };
-  for (const auto& p : verts) {
-    Vertex v{};
-    v.position = p;
-    v.normal = {0.f, 1.f, 0.f};
-    mesh.vertices.push_back(v);
-  }
-  mesh.indices = {0, 1, 2, 0, 2, 3};
-  recompute_bounds(mesh);
-  return mesh;
-}
-
 // 预览线（单元线：原点 → +Z，白色顶点色；实际颜色由 push constant 决定）。
 MeshCpu make_preview_line_mesh() {
   MeshCpu mesh;
@@ -328,12 +308,10 @@ void RenderThread::stop() {
   entity_line_pipeline_.reset();
   blend_pipeline_.reset();
   sky_pipeline_.reset();
-  grid_pipeline_.reset();
   overlay_pipeline_.reset();
   text_pipeline_.reset();
   axes_mesh_ = GpuMesh{};
   sky_mesh_ = GpuMesh{};
-  grid_mesh_ = GpuMesh{};
   overlay_quad_mesh_ = GpuMesh{};
   text_unit_quad_mesh_ = GpuMesh{};
   preview_line_mesh_ = GpuMesh{};
@@ -341,8 +319,6 @@ void RenderThread::stop() {
   fs_.reset();
   sky_vs_.reset();
   sky_fs_.reset();
-  grid_vs_.reset();
-  grid_fs_.reset();
   overlay_vs_.reset();
   overlay_fs_.reset();
   text_vs_.reset();
@@ -646,8 +622,8 @@ void RenderThread::resize_surface(std::uint64_t channel_id, NativeWindowHandle w
 
 Result<void> RenderThread::ensure_pipelines() {
   if (shaded_pipeline_ && wire_pipeline_ && line_pipeline_ && entity_line_pipeline_ &&
-      blend_pipeline_ && sky_pipeline_ && grid_pipeline_ &&
-      axes_mesh_.index_buffer && sky_mesh_.index_buffer && grid_mesh_.index_buffer &&
+      blend_pipeline_ && sky_pipeline_ &&
+      axes_mesh_.index_buffer && sky_mesh_.index_buffer &&
       preview_line_mesh_.index_buffer && lod_box_mesh_.index_buffer && default_texture_ && default_normal_ &&
       default_orm_ &&
       ibl_irradiance_ && ibl_prefilter_ && ibl_brdf_lut_) {
@@ -821,87 +797,15 @@ Result<void> RenderThread::ensure_pipelines() {
   sky.vertex_shader = sky_vs_.get();
   sky.fragment_shader = sky_fs_.get();
   sky.depth_test = false;
+  // 深度写要显式关掉：Vulkan / GL 在「不测深度」时本来就不写，但 WebGPU 的
+  // depthWriteEnabled 是独立的——不关的话背景会在整屏写下 z = 0（近平面），
+  // 后面的模型全被挡掉。
+  sky.depth_write = false;
   auto psky = device_->create_pipeline(sky);
   if (!psky) {
     return Err(psky.error());
   }
   sky_pipeline_ = std::move(*psky);
-
-  // 地面网格管线（网格 shader；测深度但不写深度，不遮挡地下的模型）。
-  std::vector<std::uint32_t> grid_vs_spirv;
-  std::vector<std::uint32_t> grid_fs_spirv;
-  std::string grid_vs_glsl;
-  std::string grid_fs_glsl;
-  std::string grid_vs_wgsl;
-  std::string grid_fs_wgsl;
-  ShaderModuleDesc grid_vs_desc{};
-  grid_vs_desc.stage = ShaderStage::Vertex;
-  grid_vs_desc.entry = "main";
-  ShaderModuleDesc grid_fs_desc{};
-  grid_fs_desc.stage = ShaderStage::Fragment;
-  grid_fs_desc.entry = "main";
-  if (webgl) {
-#if defined(TAMIAS_HAS_RHI_WEBGL)
-    grid_vs_glsl.assign(webgl_shaders::grid_vert());
-    grid_fs_glsl.assign(webgl_shaders::grid_frag());
-    grid_vs_desc.language = ShaderLanguage::Glsl;
-    grid_vs_desc.glsl = std::span<const char>(grid_vs_glsl.data(), grid_vs_glsl.size());
-    grid_fs_desc.language = ShaderLanguage::Glsl;
-    grid_fs_desc.glsl = std::span<const char>(grid_fs_glsl.data(), grid_fs_glsl.size());
-#else
-    return Err("WebGL shaders were not compiled into this binary");
-#endif
-  } else if (webgpu) {
-#if defined(TAMIAS_HAS_RHI_WEBGPU)
-    grid_vs_wgsl.assign(webgpu_shaders::grid_vert());
-    grid_fs_wgsl.assign(webgpu_shaders::grid_frag());
-    grid_vs_desc.language = ShaderLanguage::Wgsl;
-    grid_vs_desc.wgsl = std::span<const char>(grid_vs_wgsl.data(), grid_vs_wgsl.size());
-    grid_fs_desc.language = ShaderLanguage::Wgsl;
-    grid_fs_desc.wgsl = std::span<const char>(grid_fs_wgsl.data(), grid_fs_wgsl.size());
-#else
-    return Err("WebGPU shaders were not compiled into this binary");
-#endif
-  } else {
-    const char* grid_vs_name = opengl ? "grid.vert.gl.spv" : "grid.vert.spv";
-    const char* grid_fs_name = opengl ? "grid.frag.gl.spv" : "grid.frag.spv";
-    auto grid_vs_words = load_spirv_file(resolve_shader_path(grid_vs_name).string());
-    if (!grid_vs_words) {
-      return Err(grid_vs_words.error());
-    }
-    auto grid_fs_words = load_spirv_file(resolve_shader_path(grid_fs_name).string());
-    if (!grid_fs_words) {
-      return Err(grid_fs_words.error());
-    }
-    grid_vs_spirv = std::move(*grid_vs_words);
-    grid_fs_spirv = std::move(*grid_fs_words);
-    grid_vs_desc.language = ShaderLanguage::Spirv;
-    grid_vs_desc.spirv = grid_vs_spirv;
-    grid_fs_desc.language = ShaderLanguage::Spirv;
-    grid_fs_desc.spirv = grid_fs_spirv;
-  }
-
-  auto grid_vs = device_->create_shader_module(grid_vs_desc);
-  if (!grid_vs) {
-    return Err(grid_vs.error());
-  }
-  auto grid_fs = device_->create_shader_module(grid_fs_desc);
-  if (!grid_fs) {
-    return Err(grid_fs.error());
-  }
-  grid_vs_ = std::move(*grid_vs);
-  grid_fs_ = std::move(*grid_fs);
-
-  PipelineDesc grid{};
-  grid.vertex_shader = grid_vs_.get();
-  grid.fragment_shader = grid_fs_.get();
-  grid.depth_test = true;
-  grid.depth_write = false;
-  auto pgrid = device_->create_pipeline(grid);
-  if (!pgrid) {
-    return Err(pgrid.error());
-  }
-  grid_pipeline_ = std::move(*pgrid);
 
   // 屏幕空间文字管线：无光照、不测深度（标注永远看得见）、预乘混合。
   // 和底图一样，WebGL / WebGPU 还没写这两条 shader，那两个后端不建管线、不画文字。
@@ -1031,12 +935,6 @@ Result<void> RenderThread::ensure_pipelines() {
     return Err(sky_mesh.error());
   }
   sky_mesh_ = std::move(*sky_mesh);
-
-  auto grid_mesh = create_gpu_mesh(*device_, make_grid_quad());
-  if (!grid_mesh) {
-    return Err(grid_mesh.error());
-  }
-  grid_mesh_ = std::move(*grid_mesh);
 
   auto overlay_quad = create_gpu_mesh(*device_, make_overlay_quad());
   if (!overlay_quad) {
@@ -1311,8 +1209,13 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
         make_gpu_instance(Mat4::identity(), Vec3{1.f, 1.f, 1.f}, 1.f, 0.6f, 0.f, false);
     upload_instances(std::span<const GpuInstance>{&inst, 1});
   };
-  // 天空：采样 IBL cubemap，与模型环境倒影同源。
-  if (sky_pipeline_ && sky_mesh_.index_buffer && ibl_prefilter_) {
+  // 背景：天空 + 地面 + 工作平面网格，一块全屏三角画完（见 shaders/sky.frag.hlsl）。
+  // 它不采样 IBL——背景是设计过的配色，不再由环境立方体决定；模型自己的 IBL
+  // 反射照旧。push constant 的复用约定：
+  //   color.xy = 1/|proj(0,0)|、1/|proj(1,1)|：透视是 tan(半视角)，正交是半宽 / 半高
+  //   material.x = 1 表示正交
+  //   eye_pos_mode.xyz = 眼睛世界坐标，w = 视距（网格 / 空气透视按它缩放）
+  if (sky_pipeline_ && sky_mesh_.index_buffer) {
     TAMIAS_GPU_ZONE(*channel.command_list, "gpu.sky");
     PushConstants pc{};
     Mat4 cam_to_world = invert_affine(frame.view);
@@ -1320,9 +1223,12 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     pc.model = cam_to_world;
     pc.color[0] = 1.f / std::max(std::fabs(frame.proj(0, 0)), 1e-4f);
     pc.color[1] = 1.f / std::max(std::fabs(frame.proj(1, 1)), 1e-4f);
-    pc.lighting[0] = 1.f;
+    pc.material[0] = frame.orthographic ? 1.f : 0.f;
+    pc.eye_pos_mode[0] = frame.eye_position.x;
+    pc.eye_pos_mode[1] = frame.eye_position.y;
+    pc.eye_pos_mode[2] = frame.eye_position.z;
+    pc.eye_pos_mode[3] = std::max(frame.view_distance, 1.f);
     channel.command_list->set_pipeline(*sky_pipeline_);
-    channel.command_list->set_texture(*ibl_prefilter_, kTextureSlotIblPrefilter);
     channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
     channel.command_list->set_vertex_buffer(*sky_mesh_.vertex_buffer);
     channel.command_list->set_index_buffer(*sky_mesh_.index_buffer);
@@ -1349,32 +1255,6 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     d.index_count = mesh.index_count;
     channel.command_list->draw_indexed(d);
   };
-
-  // 地面网格（相机锚定四边形 + 网格 shader；测深度不写深度）。
-  if (grid_pipeline_ && grid_mesh_.index_buffer) {
-    TAMIAS_GPU_ZONE(*channel.command_list, "gpu.grid");
-    constexpr float kGridQuadExtent = 2000.f;
-    const float view_scale = std::max(frame.view_distance, 1.f);
-    // Fade ends at 32× view distance; grow the camera-anchored quad so it still covers it.
-    const float extent_scale = std::max(view_scale * 32.f / kGridQuadExtent, 1.f);
-    const Mat4 grid_model =
-        translate({frame.eye_position.x, 0.0f, frame.eye_position.z}) *
-        scale({extent_scale, 1.f, extent_scale});
-    PushConstants pc{};
-    pc.mvp = view_proj * grid_model;
-    pc.model = grid_model;
-    pc.eye_pos_mode[0] = frame.eye_position.x;
-    pc.eye_pos_mode[1] = frame.eye_position.y;
-    pc.eye_pos_mode[2] = frame.eye_position.z;
-    pc.eye_pos_mode[3] = view_scale;
-    channel.command_list->set_pipeline(*grid_pipeline_);
-    channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
-    channel.command_list->set_vertex_buffer(*grid_mesh_.vertex_buffer);
-    channel.command_list->set_index_buffer(*grid_mesh_.index_buffer);
-    DrawIndexedDesc d{};
-    d.index_count = grid_mesh_.index_count;
-    channel.command_list->draw_indexed(d);
-  }
 
   // 模型：留存渲染场景图 + 脏标记增量同步。代次未变时不重建树，
   // 只让 RecordCommands 访问者从留存树录制 draw 命令（视锥剔除 / 隐藏集

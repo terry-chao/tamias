@@ -52,6 +52,7 @@ Result<std::vector<std::uint8_t>> capture_document_rgba(RenderThread& thread,
   frame.eye_position = camera.eye_position();
   frame.view_distance = camera.distance();
   frame.fovy = camera.fovy();
+  frame.orthographic = camera.orthographic();
   frame.mode = request.mode;
   frame.xray = request.xray;
   frame.show_axes = false;  // 导出图里不要世界坐标轴

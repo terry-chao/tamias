@@ -101,8 +101,28 @@ TEST(CommandDispatch, CreateColumnsOnGridSkipsOccupiedIntersections) {
   EXPECT_EQ(cmd.doc.entities().size(), 4u);  // 全部跳过，不再加
 }
 
-// 脚本式：axis_ids 只在框到的轴线之间求交，柱底标高取当前楼层。
-TEST(CommandDispatch, CreateColumnsOnGridHonoursAxisIdsAndStorey) {
+// 换了当前楼层再布置一次也不会叠出第二层柱：柱都在轴网平面上，同一个三维点只认一根。
+TEST(CommandDispatch, CreateColumnsOnGridDedupsAcrossActiveStorey) {
+  Cmd cmd("columns-on-grid-restack");
+  ASSERT_TRUE(cmd.system.dispatch(cmd.doc, "auto_grid",
+                                  {{"x_spacings", std::vector<double>{6.0}},
+                                   {"z_spacings", std::vector<double>{5.0}}}));
+  ASSERT_TRUE(cmd.system.dispatch(cmd.doc, "create_columns_on_grid", {}));
+  ASSERT_EQ(cmd.doc.entities().size(), 4u);  // 2 × 2
+
+  // 换到二层（3 m）再来一次：轴交柱还在轴网平面上，不改标高、不重复。
+  const std::uint64_t upper_id = cmd.doc.add_storey("2F", 3.0).id;
+  cmd.doc.set_active_storey(upper_id);
+  ASSERT_TRUE(cmd.system.dispatch(cmd.doc, "create_columns_on_grid", {}));
+  EXPECT_EQ(cmd.doc.entities().size(), 4u);
+  for (const auto& [id, entity] : cmd.doc.entities()) {
+    (void)id;
+    EXPECT_NEAR(entity->local_transform(1, 3), 0.0, 1e-6);  // 都还立在地面
+  }
+}
+
+// 脚本式：axis_ids 只在框到的轴线之间求交；柱立**轴网平面**（y = 0）上，不跟楼层抬。
+TEST(CommandDispatch, CreateColumnsOnGridHonoursAxisIdsAndGridPlane) {
   Cmd cmd("columns-on-grid-ids");
   ASSERT_TRUE(cmd.system.dispatch(cmd.doc, "auto_grid",
                                   {{"x_spacings", std::vector<double>{6.0, 6.0}},
@@ -113,8 +133,10 @@ TEST(CommandDispatch, CreateColumnsOnGridHonoursAxisIdsAndStorey) {
   const std::uint64_t numbered_id = axes[1].id;  // x = 6
   const std::uint64_t lettered_id = axes[3].id;  // z = 0
 
-  const std::uint64_t storey_id = cmd.doc.add_storey("2F", 3.0).id;
-  cmd.doc.set_active_storey(storey_id);
+  // 地面层 + 二层，当前楼层是二层（3 m）：柱还是立在地面（轴网平面），归到地面层。
+  const std::uint64_t ground_id = cmd.doc.add_storey("1F", 0.0).id;
+  const std::uint64_t upper_id = cmd.doc.add_storey("2F", 3.0).id;
+  cmd.doc.set_active_storey(upper_id);
 
   auto r = cmd.system.dispatch(
       cmd.doc, "create_columns_on_grid",
@@ -128,9 +150,9 @@ TEST(CommandDispatch, CreateColumnsOnGridHonoursAxisIdsAndStorey) {
   const Entity& column = *cmd.doc.entities().begin()->second;
   EXPECT_EQ(column.kind(), EntityKind::Column);
   EXPECT_NEAR(column.local_transform(0, 3), 6.0, 1e-6);  // 交点 (6, 0)
-  EXPECT_NEAR(column.local_transform(1, 3), 3.0, 1e-6);  // 本层标高
+  EXPECT_NEAR(column.local_transform(1, 3), 0.0, 1e-6);  // 轴网平面：不抬到 3 m 层高
   EXPECT_NEAR(column.local_transform(2, 3), 0.0, 1e-6);
-  EXPECT_EQ(entity_storey_id(column), storey_id);
+  EXPECT_EQ(entity_storey_id(column), ground_id);  // 归属到标高 0 的地面层
 }
 
 TEST(CommandDispatch, CreateArcAndRectangleFromPoints) {

@@ -157,8 +157,8 @@
         <translation>矩形</translation>
     </message>
     <message>
-        <source>Click in the viewport to place the grid (Esc or right-click cancels)</source>
-        <translation>在视口中点击放置轴网（Esc 或右键取消）</translation>
+        <source>Click to place the grid — the origin snaps to grid intersections (Esc or right-click cancels)</source>
+        <translation>点击放置轴网——原点吸附到网格 / 轴网的交点（Esc 或右键取消）</translation>
     </message>
     <message>
         <source>Grid placement cancelled — nothing changed</source>
@@ -226,16 +226,24 @@ draw %1  tri %2  gpu %3MB  tess %4</source>
         <translation>
 绘制 %1  三角面 %2  显存 %3MB  细分 %4</translation>
     </message>
+    <message>
+        <source>Copy floor: pick two different floors</source>
+        <translation>复制楼层：请选两个不同的楼层。</translation>
+    </message>
+    <message>
+        <source>Copy floor: %1</source>
+        <translation>复制楼层：%1</translation>
+    </message>
+    <message>
+        <source>Copied %1 component(s) to %2</source>
+        <translation>已复制 %1 个构件到 %2</translation>
+    </message>
 </context>
 <context>
     <name>tamias::ViewportToolPanel</name>
     <message>
-        <source>Show or hide floors, and set floor heights</source>
-        <translation>按楼层显隐，并设置层高</translation>
-    </message>
-    <message>
-        <source>Open a view per floor (global 3D is the default)</source>
-        <translation>按楼层打开视图（默认是全局三维）</translation>
+        <source>Floors: show/hide, open a view, set heights</source>
+        <translation>楼层：显隐、打开视图、设置层高</translation>
     </message>
     <message>
         <source>Reference drawings (DWF / DXF / PDF…): attach, show/hide, place</source>
@@ -1496,16 +1504,8 @@ Meshes / textures: %2
         <translation>楼层</translation>
     </message>
     <message>
-        <source>Show or hide floors, and set floor heights</source>
-        <translation>按楼层显隐，并设置层高</translation>
-    </message>
-    <message>
-        <source>Floor Views</source>
-        <translation>楼层视图</translation>
-    </message>
-    <message>
-        <source>List the global 3D view and every floor; double-click one to open it</source>
-        <translation>列出全局三维与各楼层视图，双击即可打开</translation>
+        <source>Show or hide floors, open each floor's view, and set floor heights</source>
+        <translation>按楼层显隐，打开各层视图，并设置层高</translation>
     </message>
     <message>
         <source>Drawings</source>
@@ -4184,8 +4184,8 @@ tests failed (exit %1)
         <translation>清除全部可见性过滤（隐藏、隔离、楼层）</translation>
     </message>
     <message>
-        <source>Open a model document to show or hide its floors here.</source>
-        <translation>打开模型文档后，可在这里按楼层显隐。</translation>
+        <source>Open a model document to show or hide its floors and open floor views here.</source>
+        <translation>打开模型文档后，可在这里按楼层显隐、打开楼层视图。</translation>
     </message>
     <message>
         <source>Unassigned</source>
@@ -4196,12 +4196,59 @@ tests failed (exit %1)
         <translation>[夹层] %1</translation>
     </message>
     <message>
-        <source>Click the row to make it the current floor; the checkbox only shows or hides it.</source>
-        <translation>单击行设为当前楼层；勾选框只控制显隐。</translation>
+        <source>Global 3D</source>
+        <translation>全局三维</translation>
     </message>
     <message>
-        <source>This model has no floors yet. Use Floor Settings to add them.</source>
-        <translation>当前模型还没有楼层，点「楼层设置」新建。</translation>
+        <source>Click to go back to the global 3D view</source>
+        <translation>点击回到全局三维视图</translation>
+    </message>
+    <message>
+        <source>Click to open this floor's view; the checkbox only shows or hides it</source>
+        <translation>点击打开该层视图；勾选框只控制显隐。</translation>
+    </message>
+    <message>
+        <source>Copy Floor…</source>
+        <translation>复制楼层…</translation>
+    </message>
+    <message>
+        <source>Copy every component on one floor to another floor as new components</source>
+        <translation>把一层上的构件整体复制到另一层（副本都是新建构件）</translation>
+    </message>
+    <message>
+        <source>Copy Floor</source>
+        <translation>复制楼层</translation>
+    </message>
+    <message>
+        <source>This model needs at least two floors. Add one in Floor Settings first.</source>
+        <translation>至少要有两层才能复制。先在「楼层设置」里加一层。</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::CopyFloorDialog</name>
+    <message>
+        <source>Copy Floor</source>
+        <translation>复制楼层</translation>
+    </message>
+    <message>
+        <source>Copy from</source>
+        <translation>复制自</translation>
+    </message>
+    <message>
+        <source>Copy to</source>
+        <translation>复制到</translation>
+    </message>
+    <message>
+        <source>Every component on the source floor is copied to the target floor as a new component. Doors and windows come with their walls; heights keep their offset relative to the floor.</source>
+        <translation>源楼层上的构件会整体复制到目标楼层（都是新建构件）。门窗跟着墙一起复制；高度保持相对本层的偏移。</translation>
+    </message>
+    <message>
+        <source>Pick two different floors.</source>
+        <translation>请选两个不同的楼层。</translation>
+    </message>
+    <message>
+        <source>[Mezzanine] %1</source>
+        <translation>[夹层] %1</translation>
     </message>
 </context>
 <context>
@@ -4322,6 +4369,38 @@ tests failed (exit %1)
         <translation>终点</translation>
     </message>
     <message>
+        <source>Add Vertical Axis</source>
+        <translation>添加纵轴</translation>
+    </message>
+    <message>
+        <source>Add a numbered axis running along Z (1, 2, 3 …)</source>
+        <translation>添加一根沿 Z 方向的编号轴（1、2、3…）</translation>
+    </message>
+    <message>
+        <source>Add Horizontal Axis</source>
+        <translation>添加横轴</translation>
+    </message>
+    <message>
+        <source>Add a lettered axis running along X (A, B, C …)</source>
+        <translation>添加一根沿 X 方向的字母轴（A、B、C…）</translation>
+    </message>
+    <message>
+        <source>Auto-fit axis lengths so the grid stays a mesh</source>
+        <translation>自动适配轴长，保持成网</translation>
+    </message>
+    <message>
+        <source>Keep every axis long enough to cross the others: verticals span the grid&apos;s depth, horizontals span its width. Uncheck to type each axis&apos;s start / end.</source>
+        <translation>让每根轴都长到能穿过其它轴：竖轴跨满轴网进深、横轴跨满轴网面宽。取消勾选才逐根手填起点 / 终点。</translation>
+    </message>
+    <message>
+        <source>Fit to grid</source>
+        <translation>适配范围</translation>
+    </message>
+    <message>
+        <source>Re-span every axis to the current grid extent</source>
+        <translation>把所有轴线重新拉到当前轴网范围</translation>
+    </message>
+    <message>
         <source>Add Axis</source>
         <translation>添加轴线</translation>
     </message>
@@ -4374,8 +4453,8 @@ tests failed (exit %1)
         <translation>确定后轴网跟着光标走，点一下就落位；取消勾选则按表内坐标直接落位。</translation>
     </message>
     <message>
-        <source>Placement: the origin lands where you click. Esc cancels, and the whole grid is one undo step.</source>
-        <translation>放置：点在哪儿，原点就落在哪儿。Esc 取消，整张轴网一步撤销。</translation>
+        <source>Placement: the origin lands where you click and snaps to grid intersections. Esc cancels, and the whole grid is one undo step.</source>
+        <translation>放置：点在哪儿原点就落在哪儿，并吸附到网格 / 轴网的交点。Esc 取消，整张轴网一步撤销。</translation>
     </message>
     <message>
         <source>OK and Place</source>
@@ -4682,49 +4761,6 @@ tests failed (exit %1)
     <message>
         <source>Add Drawings</source>
         <translation>添加图纸</translation>
-    </message>
-</context>
-<context>
-    <name>tamias::FloorManagerPanel</name>
-    <message>
-        <source>Views</source>
-        <translation>楼层视图</translation>
-    </message>
-    <message>
-        <source>Double-click a floor to open its view</source>
-        <translation>双击某个楼层，即可打开该层的视图</translation>
-    </message>
-    <message>
-        <source>View</source>
-        <translation>视图</translation>
-    </message>
-    <message>
-        <source>Elevation</source>
-        <translation>标高</translation>
-    </message>
-    <message>
-        <source>Global 3D</source>
-        <translation>全局三维</translation>
-    </message>
-    <message>
-        <source>Double-click to open the global 3D view</source>
-        <translation>双击打开全局三维视图</translation>
-    </message>
-    <message>
-        <source>Double-click to open this floor's view</source>
-        <translation>双击打开该楼层的视图</translation>
-    </message>
-    <message>
-        <source>[Mezzanine] %1</source>
-        <translation>[夹层] %1</translation>
-    </message>
-    <message>
-        <source>This model has no floors yet. Use Floor Settings to add them.</source>
-        <translation>当前模型还没有楼层，点「楼层设置」新建。</translation>
-    </message>
-    <message>
-        <source>Open a model document to open its floor views here.</source>
-        <translation>打开模型文档后，可在这里打开楼层视图。</translation>
     </message>
 </context>
 <context>

@@ -1,7 +1,5 @@
 #include "command/create/create_columns_on_grid_command.h"
 
-#include "entity/core/entity_storey.h"
-
 #include <cmath>
 #include <utility>
 
@@ -11,24 +9,35 @@ namespace {
 // 同一个平面点的判定容差（米）：1 mm 以内就算「这里已经有一根柱了」。
 constexpr double kSameColumnTolerance = 1e-3;
 
-// 这一层、这个平面点上是不是已经站着柱了？看柱的世界平面位置（local_transform 的
-// x / z），不看标高——同一层里的柱标高都一样，分不分楼层由调用方先比过。
-bool column_exists_at(const Document& document, Vec3 plan, std::uint64_t storey_id) {
+// 柱子已经站在这个点了？按**柱底的三维位置**比（local_transform 的 x / y / z）：
+// 轴交柱都在轴网平面上，同一个平面点再放一次就是重叠；而不同标高上的柱（比如上层
+// 也有一根对着的柱）不算重复。
+bool column_exists_at(const Document& document, Vec3 base) {
   for (const auto& [id, entity] : document.entities()) {
     (void)id;
     if (entity == nullptr || entity->kind() != EntityKind::Column) {
       continue;
     }
-    if (entity_storey_id(*entity) != storey_id) {
-      continue;
-    }
-    const double dx = std::fabs(static_cast<double>(entity->local_transform(0, 3)) - plan.x);
-    const double dz = std::fabs(static_cast<double>(entity->local_transform(2, 3)) - plan.z);
-    if (dx <= kSameColumnTolerance && dz <= kSameColumnTolerance) {
+    const double dx = std::fabs(static_cast<double>(entity->local_transform(0, 3)) - base.x);
+    const double dy = std::fabs(static_cast<double>(entity->local_transform(1, 3)) - base.y);
+    const double dz = std::fabs(static_cast<double>(entity->local_transform(2, 3)) - base.z);
+    if (dx <= kSameColumnTolerance && dy <= kSameColumnTolerance &&
+        dz <= kSameColumnTolerance) {
       return true;
     }
   }
   return false;
+}
+
+// 站在这个标高上的是哪一层？找不到就一直未归属（0）。轴交柱都落在轴网平面（y = 0），
+// 所以通常落到地面层。
+std::uint64_t storey_id_at_elevation(const Document& document, double elevation) {
+  for (const Storey& storey : document.bim().storeys()) {
+    if (std::fabs(storey.elevation - elevation) <= kSameColumnTolerance) {
+      return storey.id;
+    }
+  }
+  return 0;
 }
 
 }  // namespace
@@ -64,9 +73,11 @@ Result<void> CreateColumnsOnGridCommand::build() {
   created_.clear();
   skipped_ = 0;
 
-  // 楼层归属取「执行这一刻」的当前楼层；柱底标高就是这一层的标高。
-  const std::uint64_t storey_id = document_->bim().active_storey_id();
-  const double elevation = document_->bim().storey_elevation(storey_id);
+  // 柱立在**轴网平面**上（轴网是地面 / 平面参考，数据恒在 y = 0，见 bim/grid.h）：
+  // 不再抬到当前楼层标高——轴网在 y = 0、柱却按楼层标高立的话，柱会飘在轴网上方。
+  // 楼层归属跟着柱底走：标高等于轴网平面的那一层（通常是地面层）；没有就一直未归属。
+  const double elevation = kGridPlaneY;
+  const std::uint64_t storey_id = storey_id_at_elevation(*document_, elevation);
   const std::vector<Vec3> points =
       grid_intersections(document_->bim().grid().axes(), axis_ids_);
   if (points.empty()) {
@@ -75,11 +86,11 @@ Result<void> CreateColumnsOnGridCommand::build() {
   }
 
   for (const Vec3& point : points) {
-    if (column_exists_at(*document_, point, storey_id)) {
+    const Vec3 position{point.x, static_cast<float>(elevation), point.z};
+    if (column_exists_at(*document_, position)) {
       ++skipped_;
       continue;
     }
-    const Vec3 position{point.x, static_cast<float>(elevation), point.z};
     std::unique_ptr<ColumnEntity> column;
     if (shape_ == ColumnShape::Circular) {
       column = std::make_unique<ColumnEntity>(

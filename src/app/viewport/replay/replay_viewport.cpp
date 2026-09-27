@@ -68,7 +68,8 @@ ReplayViewport::ReplayViewport(std::shared_ptr<RenderThread> render_thread, QWid
   setFocusPolicy(Qt::StrongFocus);
   setAutoFillBackground(true);
   QPalette pal = palette();
-  pal.setColor(QPalette::Window, QColor(36, 46, 61));
+  // 和背景 / 清屏色同族（见 shaders/sky.frag.hlsl 的调色板）。
+  pal.setColor(QPalette::Window, QColor(58, 74, 94));
   setPalette(pal);
 
   surface_ = new NativeSurface(this);

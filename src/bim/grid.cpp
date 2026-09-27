@@ -159,10 +159,7 @@ Vec2 Grid::snap_plan(Vec2 plan, double tolerance, bool* snapped) const {
   return out;
 }
 
-namespace {
-
-// 0 → A、25 → Z、26 → AA（超过 26 根字母轴时的进位）。
-std::string grid_axis_letter(int index) {
+std::string grid_axis_letter_name(int index) {
   std::string name;
   int n = index;
   do {
@@ -171,8 +168,6 @@ std::string grid_axis_letter(int index) {
   } while (n >= 0);
   return name;
 }
-
-}  // namespace
 
 std::vector<GridAxis> make_orthogonal_grid(double origin_x, double origin_z,
                                            const std::vector<double>& x_spacings,
@@ -193,12 +188,6 @@ std::vector<GridAxis> make_orthogonal_grid(double origin_x, double origin_z,
     }
   }
 
-  // 轴线范围：某一侧没有轴就用另一侧的跨度兜住，保证轴线是完整网格而不是一根点。
-  const double x_lo = xs.empty() ? origin_x : xs.front();
-  const double x_hi = xs.empty() ? origin_x : xs.back();
-  const double z_lo = zs.empty() ? origin_z : zs.front();
-  const double z_hi = zs.empty() ? origin_z : zs.back();
-
   std::vector<GridAxis> axes;
   axes.reserve(xs.size() + zs.size());
   int number = 1;
@@ -207,20 +196,18 @@ std::vector<GridAxis> make_orthogonal_grid(double origin_x, double origin_z,
     axis.name = std::to_string(number++);
     axis.direction = GridAxisDirection::AlongZ;
     axis.position = x;
-    axis.start = z_lo - margin;
-    axis.end = z_hi + margin;
     axes.push_back(std::move(axis));
   }
   int letter = 0;
   for (const double z : zs) {
     GridAxis axis;
-    axis.name = grid_axis_letter(letter++);
+    axis.name = grid_axis_letter_name(letter++);
     axis.direction = GridAxisDirection::AlongX;
     axis.position = z;
-    axis.start = x_lo - margin;
-    axis.end = x_hi + margin;
     axes.push_back(std::move(axis));
   }
+  // 端点交给同一套「拉成一张网」的逻辑：竖轴跨整个 z 范围、横轴跨整个 x 范围。
+  fit_grid_axes_to_extent(axes, margin);
   return axes;
 }
 
@@ -282,6 +269,67 @@ std::vector<Vec3> grid_intersections(const std::vector<GridAxis>& axes,
   return points;
 }
 
+GridSnap snap_plan_to_grid(const std::vector<GridAxis>& axes, Vec2 plan, double tolerance) {
+  GridSnap result;
+  result.point = plan;
+  const double tol = std::max(tolerance, 0.0);
+  if (tol <= 0.0) {
+    return result;
+  }
+
+  // 1) 先找交点：最近的那个在容差内就整体贴过去（x、z 一起动 = 落在交点上）。
+  double best = tol;
+  bool hit_intersection = false;
+  Vec2 intersection{};
+  for (const Vec3& point : grid_intersections(axes)) {
+    const double dx = static_cast<double>(plan.x) - point.x;
+    const double dz = static_cast<double>(plan.y) - point.z;
+    const double d = std::sqrt(dx * dx + dz * dz);
+    if (d <= best) {
+      best = d;
+      intersection = {point.x, point.z};
+      hit_intersection = true;
+    }
+  }
+  if (hit_intersection) {
+    result.point = intersection;
+    result.snapped = true;
+    result.on_intersection = true;
+    return result;
+  }
+
+  // 2) 没有交点：x 贴最近的竖轴、z 贴最近的横轴，两个方向互不干扰。
+  double best_x = tol;
+  double best_z = tol;
+  bool hit_axis = false;
+  Vec2 out = plan;
+  for (const GridAxis& axis : axes) {
+    if (axis.length() <= 0.0) {
+      continue;
+    }
+    if (axis.direction == GridAxisDirection::AlongZ) {
+      const double d = std::fabs(static_cast<double>(plan.x) - axis.position);
+      if (d <= best_x) {
+        out.x = static_cast<float>(axis.position);
+        best_x = d;
+        hit_axis = true;
+      }
+    } else {
+      const double d = std::fabs(static_cast<double>(plan.y) - axis.position);
+      if (d <= best_z) {
+        out.y = static_cast<float>(axis.position);
+        best_z = d;
+        hit_axis = true;
+      }
+    }
+  }
+  if (hit_axis) {
+    result.point = out;
+    result.snapped = true;
+  }
+  return result;
+}
+
 void translate_grid(std::vector<GridAxis>& axes, double dx, double dz) {
   for (GridAxis& axis : axes) {
     if (axis.direction == GridAxisDirection::AlongZ) {
@@ -292,6 +340,63 @@ void translate_grid(std::vector<GridAxis>& axes, double dx, double dz) {
       axis.position += dz;
       axis.start += dx;
       axis.end += dx;
+    }
+  }
+}
+
+void fit_grid_axes_to_extent(std::vector<GridAxis>& axes, double margin, double min_span) {
+  const double m = std::max(margin, 0.0);
+  const double span_min = std::max(min_span, 0.0);
+
+  // 轴网的 x 范围由竖轴位置定、z 范围由横轴位置定（位置就是它们在平面上的固定坐标）。
+  const auto positions_of = [&axes](GridAxisDirection direction, bool* any, double* lo,
+                                    double* hi) {
+    *any = false;
+    *lo = 0.0;
+    *hi = 0.0;
+    for (const GridAxis& axis : axes) {
+      if (axis.direction != direction) {
+        continue;
+      }
+      if (!*any) {
+        *lo = axis.position;
+        *hi = axis.position;
+        *any = true;
+      } else {
+        *lo = std::min(*lo, axis.position);
+        *hi = std::max(*hi, axis.position);
+      }
+    }
+  };
+  // 范围退化成一个点（单根轴 / 没有轴 / 重叠轴）才在中心两侧撑到 min_span：两条以上
+  // 不同位置的轴已经定出了真正的跨度，按它走就好，别把小的轴网也撑大。
+  const auto widen = [span_min](bool any, double* lo, double* hi) {
+    if (*hi - *lo > 1e-9) {
+      return;
+    }
+    const double center = any ? (*lo + *hi) * 0.5 : 0.0;
+    *lo = center - span_min * 0.5;
+    *hi = center + span_min * 0.5;
+  };
+
+  bool any_x = false;
+  bool any_z = false;
+  double x_lo = 0.0;
+  double x_hi = 0.0;
+  double z_lo = 0.0;
+  double z_hi = 0.0;
+  positions_of(GridAxisDirection::AlongZ, &any_x, &x_lo, &x_hi);
+  positions_of(GridAxisDirection::AlongX, &any_z, &z_lo, &z_hi);
+  widen(any_x, &x_lo, &x_hi);
+  widen(any_z, &z_lo, &z_hi);
+
+  for (GridAxis& axis : axes) {
+    if (axis.direction == GridAxisDirection::AlongZ) {
+      axis.start = z_lo - m;  // 竖轴沿 z 走，跨整个 z 范围
+      axis.end = z_hi + m;
+    } else {
+      axis.start = x_lo - m;  // 横轴沿 x 走，跨整个 x 范围
+      axis.end = x_hi + m;
     }
   }
 }

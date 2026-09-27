@@ -142,7 +142,6 @@ void MainWindow::build_menu_bar() {
   panels_menu->addSeparator();
   panels_menu->addAction(components_action_);
   panels_menu->addAction(floors_action_);
-  panels_menu->addAction(floor_views_action_);
   panels_menu->addAction(drawings_action_);
   view_menu->addSeparator();
   view_menu->addAction(home_action_);  // 回欢迎页（首页）
@@ -248,12 +247,12 @@ void MainWindow::sync_document_actions() {
   // 只对文档有意义的命令：没有文档就灰掉。这是主流 CAD / 办公软件的做法
   // （FreeCAD 里没有文档时 Save / Undo 也是灰的），比"点了才弹提示"更早把话说清楚。
   // 倒角 / 圆角 / 文字注记也在此列：它们没文档时点下去是静默无效。
-  const std::array<QAction*, 19> document_actions = {
+  const std::array<QAction*, 18> document_actions = {
       save_action_,       save_as_action_,     export_scene_action_, move_action_,
       copy_action_,       rotate_action_,      mirror_action_,       array_action_,
       fillet_action_,     chamfer_action_,     text_action_,         frame_all_action_,
       pin_render_action_, debug_scene_action_, components_action_,   floors_action_,
-      floor_views_action_, drawings_action_,   close_tab_action_,
+      drawings_action_,   close_tab_action_,
   };
   for (QAction* action : document_actions) {
     if (action != nullptr) {

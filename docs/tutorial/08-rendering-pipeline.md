@@ -37,7 +37,7 @@ Scene（语义树）
     → SceneDrawItem 列表
       → 视口填 FrameSubmission（窗口、相机、清单、显示模式）
         → RenderThread.draw_channel
-          → 顺序画：清屏→天空→地面网格→每个 item 一次 draw→坐标轴→预览线
+          → 顺序画：清屏→背景（天空 + 地面 + 工作平面网格）→每个 item 一次 draw→坐标轴→预览线
             → RHI：Vulkan 或 OpenGL
               → 窗口像素
 ```

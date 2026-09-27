@@ -7,7 +7,8 @@
 
 namespace tamias {
 
-// 与 shaders/grid.frag.hlsl 一致：次网格 1、主网格 5。
+// 捕捉用的网格间距：次网格 1 m、主网格 5 m。场景里不画这张地面网格线了，
+// 常量留着给画墙 / 画板 / 轴网落位的整米吸附用（见 snap_to_grid_xz）。
 inline constexpr float kGridMinorSpacing = 1.f;
 inline constexpr float kGridMajorSpacing = 5.f;
 // 屏幕空间捕捉半径（逻辑像素）；世界半径不超过间距的该比例，避免格子中心也被吸走。

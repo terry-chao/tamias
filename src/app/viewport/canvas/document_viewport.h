@@ -108,10 +108,8 @@ class DocumentViewport final : public QWidget {
   [[nodiscard]] bool has_floor_filter() const { return !hidden_floors_.empty(); }
   // 开合视口右上角工具面板里的"构件显隐"页（Ribbon / 快捷键走这里）。
   void toggle_visibility_panel();
-  // 开合同一列的"楼层"页（Ribbon / 快捷键走这里）。
+  // 开合同一列的"楼层"页（Ribbon / 快捷键走这里）；显隐与楼层视图都在这张清单里。
   void toggle_floor_panel();
-  // 开合同一列的"楼层管理"页（楼层视图清单）。
-  void toggle_floor_manager_panel();
   // 开合同一列的"图纸管理"页（参考图纸清单）。
   void toggle_drawing_panel();
   // 直接开/关"图纸管理"页（刚挂上图纸时把它翻出来）。
@@ -143,15 +141,16 @@ class DocumentViewport final : public QWidget {
   [[nodiscard]] std::optional<DrawingInfo> drawing_info(const std::string& path);
   [[nodiscard]] std::optional<DrawingPlacement> suggested_drawing_placement(
       const std::string& path, int page);
-  // ==== 楼层视图（楼层管理页用；默认打开的是全局三维）====
+  // ==== 楼层视图（楼层面板用；默认打开的是全局三维）====
   // 当前打开的是不是"某一层的视图"；没打开时就是全局三维。
   [[nodiscard]] bool floor_view_open() const { return floor_view_.has_value(); }
   [[nodiscard]] std::size_t floor_view_index() const { return floor_view_.value_or(0); }
-  // 打开全局三维：所有楼层可见 + 透视 + 框住整个模型。
+  // 打开全局三维：透视 + 框住整个模型（不动楼层显隐）。
   void open_global_view();
-  // 打开某一层的视图：只显示该层、把它设为当前楼层、切到平面（2D）并框到这一层。
+  // 打开某一层的视图：把它设为当前楼层、切到平面（2D）并框到这一层。**不动楼层显隐**：
+  // 想只显示这一层就用楼层面板的勾选框，两件事各管各的。
   // 打开的是"这一层"而不是"这一层的平面"：2D/3D 只是同一张视图的两种看法，
-  // 切回三维（set_plan_view(false)）仍然是该层的三维，只留这一层的过滤照旧。
+  // 切回三维（set_plan_view(false)）仍然是该层的三维。
   void open_floor_view(std::size_t floor_index);
   [[nodiscard]] ViewportState capture_viewport_state() const;
   [[nodiscard]] RenderScene::View capture_render_scene_view() const;
@@ -176,6 +175,8 @@ class DocumentViewport final : public QWidget {
   void update_library_material(const Material& material);
   void create_storey(const std::string& name, double elevation);
   void set_active_storey(std::uint64_t storey_id);
+  // 整层复制：把 source 层上的构件全部复制到 target 层（可撤销；副本换成选中）。
+  void copy_storey(std::uint64_t source_storey_id, std::uint64_t target_storey_id);
   // 楼层设置对话框的落点：整表替换楼层（可撤销）。
   void apply_storey_settings(std::vector<Storey> storeys, std::uint64_t active_storey_id);
   // 轴网设置对话框的落点：整表替换轴网（可撤销）。
@@ -256,7 +257,7 @@ class DocumentViewport final : public QWidget {
   void console_message(const QString& text);
   void plugin_point_input_changed(bool active);
   void visibility_changed();               // 隐藏/隔离/楼层过滤变化，面板据此刷新
-  void view_changed();  // 打开的视图变了（全局三维 ↔ 某楼层），楼层管理页据此换高亮
+  void view_changed();  // 打开的视图变了（全局三维 ↔ 某楼层），楼层面板据此换高亮
   // 轴网显示开关变了：Ribbon 上的「显示轴网」要跟着勾（视口也会自己打开它——
   // 轴网布柱看不见轴就没得框）。
   void grid_visible_changed(bool visible);
@@ -329,13 +330,16 @@ class DocumentViewport final : public QWidget {
   [[nodiscard]] std::vector<std::uint64_t> imported_node_ids() const;
   [[nodiscard]] Vec3 cursor_world_position(const QPoint& pos) const;
   [[nodiscard]] Vec3 cursor_ground_position(const QPoint& pos) const;
-  // 轴网放置用：射线与当前楼层标高求交。轴网预览画在那个高度上，透视下才点得准。
-  [[nodiscard]] Vec3 plan_position_at_storey(const QPoint& pos) const;
+  // 轴网放置用：射线与轴网所在平面求交。轴网预览画在那个高度上，透视下才点得准。
+  [[nodiscard]] Vec3 plan_position_at_grid_plane(const QPoint& pos) const;
   // 绘制实体时吸附到地面网格交点（门/窗贴墙拾取除外）。
   [[nodiscard]] bool grid_snap_active() const;
   [[nodiscard]] std::uint64_t pick_node_at(const QPoint& pos) const;
-  // 轴网显示所在标高（数据恒在 y = 0，画/点都抬到当前楼层）。
+  // 轴网所在标高：轴网是**地面 / 平面参考**，数据恒在 y = 0，显示 / 点选 / 放置都在这张平面上，
+  // 不跟楼层走（不然切到高层时轴网会飘在半空）。楼层标高见 storey_plane_y。
   [[nodiscard]] float grid_plane_y() const;
+  // 当前楼层标高：参考图纸这类贴在楼层工作面上的东西用它，轴网不用。
+  [[nodiscard]] float storey_plane_y() const;
   // 点选轴线（屏幕距离，容差见 kGridPickPixels）；没命中返回 0。
   [[nodiscard]] std::uint64_t pick_grid_axis_at(const QPoint& pos) const;
   void select_grid_axis(std::uint64_t axis_id, bool additive);
@@ -367,8 +371,17 @@ class DocumentViewport final : public QWidget {
   // 丢弃放置会话（不重绘、不提示）；落位 / 取消 / 被别的工具顶掉都走它。
   void clear_grid_placement();
   void commit_grid_placement(const QPoint& pos);
+  // 轴网放置落点：射线交当前楼层标高，再吸附到已有轴网的交点（或单条轴线）。
+  // on_intersection 回传咬到的是不是交点（不是交点就是贴到了单条轴线上）。
+  struct GridPlacePoint {
+    Vec3 point;                   // 落点（已吸附；没有可吸附对象时 = 原始交点）
+    bool snapped = false;
+    bool on_intersection = false;
+  };
+  [[nodiscard]] GridPlacePoint grid_placement_point(const QPoint& pos) const;
   // 放置预览用的表：整张轴网按光标位置平移后的副本。
   [[nodiscard]] std::vector<GridAxis> ghost_grid_axes(const QPoint& pos) const;
+  [[nodiscard]] std::vector<GridAxis> ghost_grid_axes_at(Vec3 drop) const;
   // ==== 轴网布柱（柱 → 轴网布置）====
   // 进入框选会话（参数是绘制面板那一份），落框时按框到的轴线布柱。
   void begin_column_grid_placement(const CommandArgs& args);

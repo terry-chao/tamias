@@ -127,6 +127,8 @@ std::vector<std::filesystem::path> app_font_dirs() {
 
 // 轴线点选的屏幕容差：轴是细线，得给点手抖的余量；比这个远就不算点中。
 constexpr float kGridPickPixels = 8.f;
+// 轴网放置时吸附到已有交点的屏幕容差：比点选宽一点，落位时容易咬住交点。
+constexpr float kGridPlaceSnapPixels = 14.f;
 // 底图光栅化最长边（像素）：4096 够看清平面图上的墙线，又不会把显存吃满
 //（DrawingDocument::render_page_rgba 里还会按总像素数再收一次）。
 constexpr int kDrawingRasterEdge = 4096;
@@ -190,10 +192,11 @@ DocumentViewport::DocumentViewport(std::shared_ptr<Document> document,
       render_thread_(std::move(render_thread)) {
   setMouseTracking(true);
   setFocusPolicy(Qt::StrongFocus);
-  // Match Vulkan clear so any uncovered edge never flashes pure black.
+  // 和背景 / 清屏色同族（见 shaders/sky.frag.hlsl 的调色板）：背景还没画到的边角
+  // 也不会闪一块黑。
   setAutoFillBackground(true);
   QPalette pal = palette();
-  pal.setColor(QPalette::Window, QColor(36, 46, 61));
+  pal.setColor(QPalette::Window, QColor(58, 74, 94));
   setPalette(pal);
 
   // 命令回显：内核执行完一条命令就发一行等价 C# 调用（见 host/command_echo.h）。
@@ -781,6 +784,7 @@ void DocumentViewport::submit_current_frame() {
   frame.eye_position = camera_.eye_position();
   frame.view_distance = camera_.distance();
   frame.fovy = camera_.fovy();
+  frame.orthographic = camera_.orthographic();
   frame.mode = mode_;
   frame.xray = xray_ ? kXrayOpacity : 0.f;
   refresh_floors();
@@ -891,13 +895,17 @@ void DocumentViewport::submit_current_frame() {
   // 派生标注（轴号 / 标高 / 尺寸链）：按类别开关逐条决定，见 docs/TEXT.md §4.4。
   append_text_annotations(frame);
   if (pending_grid_ && has_cursor_) {
-    const Vec3 drop = plan_position_at_storey(last_mouse_);
-    append_axis_segments(ghost_grid_axes(last_mouse_), frame.grid_preview_segments);
+    const GridPlacePoint pick = grid_placement_point(last_mouse_);
+    append_axis_segments(ghost_grid_axes_at(pick.point), frame.grid_preview_segments);
     for (Vec3& point : frame.grid_preview_segments) {
       point.y = grid_y;
     }
     // 锚点（生成行里的原点）画个方块：落位后它正好压在鼠标下。
-    frame.preview_points.push_back(Vec3{drop.x, grid_y, drop.z});
+    frame.preview_points.push_back(Vec3{pick.point.x, grid_y, pick.point.z});
+    // 吸附到已有轴网时叠一个捕捉标记：一眼看出落位基准咬在了哪儿。
+    if (pick.snapped) {
+      frame.snap_point = Vec3{pick.point.x, grid_y, pick.point.z};
+    }
   }
   // 参考图纸底图：贴在标高上的线稿，挡在它前面的构件会遮住它。
   submit_drawing_overlays(frame);
@@ -1715,6 +1723,39 @@ void DocumentViewport::create_storey(const std::string& name, double elevation) 
   run_command("create_storey", {{"name", name}, {"elevation", elevation}});
 }
 
+void DocumentViewport::copy_storey(std::uint64_t source_storey_id,
+                                   std::uint64_t target_storey_id) {
+  const BimModel& bim = document_->bim();
+  const Storey* source = bim.find_storey(source_storey_id);
+  const Storey* target = bim.find_storey(target_storey_id);
+  if (source == nullptr || target == nullptr || source_storey_id == target_storey_id) {
+    emit status_message(tr("Copy floor: pick two different floors"));
+    return;
+  }
+  // 复制完成后选择要落到副本上：先记下复制前的实体清单。
+  std::vector<std::uint64_t> before;
+  before.reserve(document_->entities().size());
+  for (const auto& [id, unused] : document_->entities()) {
+    (void)unused;
+    before.push_back(id);
+  }
+  const CommandArgs args{{"source_storey_id", static_cast<std::int64_t>(source_storey_id)},
+                         {"target_storey_id", static_cast<std::int64_t>(target_storey_id)}};
+  if (auto r = session_->dispatch("copy_storey", args); !r) {
+    emit status_message(tr("Copy floor: %1").arg(QString::fromStdString(r.error())));
+    return;
+  }
+  resync_all_meshes();
+  document_->recompute_scene();
+  rebuild_bvh();
+  request_redraw();
+  emit document_changed();
+  select_entities_created_since(before);
+  emit status_message(tr("Copied %1 component(s) to %2")
+                          .arg(static_cast<int>(session_->selection().size()))
+                          .arg(QString::fromStdString(target->name)));
+}
+
 void DocumentViewport::set_active_storey(std::uint64_t storey_id) {
   document_->set_active_storey(storey_id);
   request_redraw();
@@ -1917,6 +1958,12 @@ std::uint64_t DocumentViewport::pick_node_at(const QPoint& pos) const {
 }
 
 float DocumentViewport::grid_plane_y() const {
+  // 轴网是地面 / 平面参考：数据恒在 y = 0，画 / 点也都在这一层。挂到楼层标高上的话，
+  // 一切到高层轴网就飘在半空（见 docs/BIM.md）。
+  return static_cast<float>(kGridPlaneY);
+}
+
+float DocumentViewport::storey_plane_y() const {
   return static_cast<float>(
       document_->bim().storey_elevation(document_->bim().active_storey_id()));
 }
@@ -2244,21 +2291,17 @@ void DocumentViewport::finish_box_select(const QPoint& pos, bool additive) {
 
 void DocumentViewport::set_plan_view(bool plan, bool restore_perspective) {
   const bool had_floor_view = floor_view_.has_value();
-  const bool had_floor_filter = !hidden_floors_.empty();
   apply_plan_view(plan, restore_perspective, /*animate=*/true);
-  // 在某一层的视图里 2D ⇄ 3D 换的只是看法，不是"离开这一层"：楼层过滤、楼层的
-  // 高亮都留在原地。回到全局三维走 open_global_view（楼层管理页第一行）/ 全部显示。
+  // 在某一层的视图里 2D ⇄ 3D 换的只是看法，不是"离开这一层"：楼层视图、当前楼层
+  // 都留在原地。回到全局三维走 open_global_view（楼层面板第一行）。
   if (had_floor_view && !floor_view_.has_value()) {
     emit view_changed();
-  }
-  if (had_floor_filter && hidden_floors_.empty()) {
-    emit visibility_changed();
   }
 }
 
 void DocumentViewport::apply_plan_view(bool plan, bool restore_perspective, bool animate) {
-  // 三维不吃掉楼层视图：当前打开的是某一层时，这里是"这一层的三维"——只留这一层的
-  // 过滤照旧，相机的目标点 / 距离也是 open_floor_view 框这一层时定下的。
+  // 三维不吃掉楼层视图：当前打开的是某一层时，这里是"这一层的三维"，相机的目标点 /
+  // 距离也是 open_floor_view 框这一层时定下的。
   if (plan_view_ != plan) {
     if (plan) {
       persp_yaw_ = camera_.yaw();
@@ -2294,50 +2337,36 @@ void DocumentViewport::apply_plan_view(bool plan, bool restore_perspective, bool
   request_redraw();
 }
 
-// 全局三维：所有楼层都在、透视、框住整个模型。楼层管理页的第一行双击走这里。
+// 全局三维：透视、框住整个模型。楼层面板的第一行走这里。**不动楼层显隐**——显隐是
+// 楼层面板勾选框的事，要复位走「全部显示」。
 void DocumentViewport::open_global_view() {
   refresh_floors();
   const bool had_view = floor_view_.has_value();
-  const bool had_filter = !hidden_floors_.empty();
   floor_view_.reset();
-  hidden_floors_.clear();
   apply_plan_view(false, /*restore_perspective=*/true, /*animate=*/false);
   frame_scene();
-  if (had_filter) {
-    emit visibility_changed();
-  }
   if (had_view) {
     emit view_changed();
   }
 }
 
-// 某一层的视图：只留这一层 + 把它设为当前楼层 + 切到平面（2D）+ 相机框到这一层。
-// 楼层管理页里双击某个楼层走这里。
+// 某一层的视图：把它设为当前楼层 + 切到平面（2D）+ 相机框到这一层。楼层面板里点某个
+// 楼层走这里。**不动楼层显隐**：想只留这一层就自己勾——"看哪一层"和"显隐"是两件事。
 void DocumentViewport::open_floor_view(std::size_t floor_index) {
   refresh_floors();
   if (floor_index >= floors_.size()) {
     return;
   }
   const std::optional<std::size_t> before = floor_view_;
-  const bool had_filter = !hidden_floors_.empty();
   stop_view_animation();
   floor_view_ = floor_index;
-  // 当前楼层跟着视图走；按几何临时分出来的层没有楼层记录，就保持当前楼层不动。
+  // 当前楼层跟着视图走。
   const std::uint64_t storey_id = floors_[floor_index].storey_id;
   const bool storey_changed =
       storey_id != 0 && document_->bim().active_storey_id() != storey_id;
   if (storey_changed) {
     document_->set_active_storey(storey_id);
   }
-  // 只留这一层：跨层构件碰到任意一个可见楼层就还看得见，和楼层面板一个口径。
-  std::unordered_set<int> hidden;
-  for (std::size_t i = 0; i < floors_.size(); ++i) {
-    if (i != floor_index) {
-      hidden.insert(static_cast<int>(i));
-    }
-  }
-  const bool filter_changed = hidden != hidden_floors_;
-  hidden_floors_ = std::move(hidden);
   apply_plan_view(true, /*restore_perspective=*/false, /*animate=*/false);
   const Aabb box = floor_view_box(floor_index);
   if (box.valid()) {
@@ -2346,9 +2375,6 @@ void DocumentViewport::open_floor_view(std::size_t floor_index) {
   request_redraw();
   if (storey_changed) {
     emit document_changed();
-  }
-  if (filter_changed || (had_filter && hidden_floors_.empty())) {
-    emit visibility_changed();
   }
   if (floor_view_ != before) {
     emit view_changed();
@@ -2554,12 +2580,6 @@ void DocumentViewport::toggle_floor_panel() {
   }
 }
 
-void DocumentViewport::toggle_floor_manager_panel() {
-  if (tool_panel_ != nullptr) {
-    tool_panel_->toggle_floor_manager_page();
-  }
-}
-
 void DocumentViewport::toggle_drawing_panel() {
   if (tool_panel_ != nullptr) {
     tool_panel_->toggle_drawing_page();
@@ -2621,7 +2641,8 @@ Aabb2 DocumentViewport::drawing_footprint() const {
 
 DrawingPlacement DocumentViewport::default_drawing_placement_for(const std::string& path) {
   DrawingPlacement placement;
-  placement.elevation = static_cast<double>(grid_plane_y());
+  // 参考图纸贴在**当前楼层**的工作面上（不是轴网的地面平面），见 docs/DRAWING.md。
+  placement.elevation = static_cast<double>(storey_plane_y());
   QString error;
   std::unique_ptr<DrawingDocument> document =
       DrawingDocument::open(QString::fromStdString(path), error);
@@ -2685,7 +2706,7 @@ void DocumentViewport::fit_drawing_to_model(const std::string& path) {
   if (!page.valid()) {
     return;
   }
-  ref->placement = default_drawing_placement(page, drawing_footprint(), grid_plane_y(),
+  ref->placement = default_drawing_placement(page, drawing_footprint(), storey_plane_y(),
                                              it->second.document->declared_unit_scale());
   document_->mark_dirty();
   request_redraw();
@@ -2749,7 +2770,7 @@ std::optional<DrawingPlacement> DocumentViewport::suggested_drawing_placement(
   if (!bounds.valid()) {
     return std::nullopt;
   }
-  return default_drawing_placement(bounds, drawing_footprint(), grid_plane_y(),
+  return default_drawing_placement(bounds, drawing_footprint(), storey_plane_y(),
                                    it->second.document->declared_unit_scale());
 }
 
@@ -3269,31 +3290,18 @@ void DocumentViewport::set_floor_hidden(std::size_t index, bool hidden) {
   if (!changed) {
     return;
   }
-  // 手动调楼层显隐 = 离开"某一层的视图"（那张视图只留一层，动了就不再是它）。
-  const bool had_view = floor_view_.has_value();
-  floor_view_.reset();
+  // 显隐只改可见性：不动"当前打开的是哪一层视图"，也不动当前楼层——两件事各管各的。
   request_redraw();
   emit visibility_changed();
-  if (had_view) {
-    emit view_changed();
-  }
 }
 
 void DocumentViewport::clear_floor_filter() {
-  const bool had_view = floor_view_.has_value();
-  floor_view_.reset();
   if (hidden_floors_.empty()) {
-    if (had_view) {
-      emit view_changed();
-    }
     return;
   }
   hidden_floors_.clear();
   request_redraw();
   emit visibility_changed();
-  if (had_view) {
-    emit view_changed();
-  }
 }
 
 bool DocumentViewport::node_visible_in_view(std::uint64_t id) const {
@@ -3367,7 +3375,8 @@ void DocumentViewport::begin_grid_placement(std::vector<GridAxis> axes, Vec2 anc
   setFocus();
   request_redraw();
   emit status_message(
-      tr("Click in the viewport to place the grid (Esc or right-click cancels)"));
+      tr("Click to place the grid — the origin snaps to grid intersections "
+         "(Esc or right-click cancels)"));
 }
 
 void DocumentViewport::cancel_grid_placement() {
@@ -3496,7 +3505,7 @@ void DocumentViewport::finish_column_grid_box_select(const QPoint& pos) {
           : tr("Columns on grid: %1 placed").arg(static_cast<int>(placed)));
 }
 
-Vec3 DocumentViewport::plan_position_at_storey(const QPoint& pos) const {
+Vec3 DocumentViewport::plan_position_at_grid_plane(const QPoint& pos) const {
   const Ray ray = ray_at(pos);
   Vec3 hit = ray.origin + ray.direction * camera_.distance();
   const float plane_y = grid_plane_y();
@@ -3509,15 +3518,60 @@ Vec3 DocumentViewport::plan_position_at_storey(const QPoint& pos) const {
   return hit;
 }
 
-std::vector<GridAxis> DocumentViewport::ghost_grid_axes(const QPoint& pos) const {
+DocumentViewport::GridPlacePoint DocumentViewport::grid_placement_point(
+    const QPoint& pos) const {
+  const Vec3 raw = plan_position_at_grid_plane(pos);
+  GridPlacePoint out;
+  out.point = raw;
+  // 屏幕容差 → 世界半径：和地面网格捕捉同一套换算，吸附半径随视距 / 视场走。
+  const float dist = length(raw - camera_.eye_position());
+  const float height = static_cast<float>(std::max(scene_area_size().height(), 1));
+  const float world_per_pixel =
+      2.f * std::tan(camera_.fovy() * 0.5f) * std::max(dist, 0.01f) / height;
+
+  // 1) 已有轴网：先咬它的交点，两块轴网接得上。
+  const Grid& grid = document_->bim().grid();
+  if (!grid.empty()) {
+    const GridSnap snap = snap_plan_to_grid(
+        grid.axes(), Vec2{raw.x, raw.z},
+        static_cast<double>(kGridPlaceSnapPixels * world_per_pixel));
+    if (snap.snapped) {
+      out.point.x = snap.point.x;
+      out.point.z = snap.point.y;
+      out.snapped = true;
+      out.on_intersection = snap.on_intersection;
+      return out;
+    }
+  }
+
+  // 2) 没有轴网交点可咬（第一次放置 / 光标不在交点附近）：退到**地面网格**的交点——
+  //    和画墙 / 画板同一套 1 m 吸附，落位基准落在整米上。这样"网格交叉点"总是吸得住。
+  const float radius = grid_snap_world_radius(dist, camera_.fovy(), height);
+  if (radius > 0.f) {
+    const Vec3 mesh = snap_to_grid_xz(raw);
+    const float dx = raw.x - mesh.x;
+    const float dz = raw.z - mesh.z;
+    if (dx * dx + dz * dz <= radius * radius) {
+      out.point = mesh;
+      out.snapped = true;
+      out.on_intersection = true;
+    }
+  }
+  return out;
+}
+
+std::vector<GridAxis> DocumentViewport::ghost_grid_axes_at(Vec3 drop) const {
   if (!pending_grid_) {
     return {};
   }
-  const Vec3 drop = plan_position_at_storey(pos);
   std::vector<GridAxis> ghost = pending_grid_->axes;
   translate_grid(ghost, static_cast<double>(drop.x - pending_grid_->anchor.x),
                  static_cast<double>(drop.z - pending_grid_->anchor.y));
   return ghost;
+}
+
+std::vector<GridAxis> DocumentViewport::ghost_grid_axes(const QPoint& pos) const {
+  return ghost_grid_axes_at(grid_placement_point(pos).point);
 }
 
 void DocumentViewport::commit_grid_placement(const QPoint& pos) {

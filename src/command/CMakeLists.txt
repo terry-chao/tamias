@@ -32,6 +32,7 @@ add_library(tamias_command STATIC
   edit/replace_texture_command.cpp
   edit/update_grid_command.cpp
   edit/update_storeys_command.cpp
+  edit/copy_storey_command.cpp
   edit/update_text_command.cpp
   # 删除
   delete/delete_entity_command.cpp

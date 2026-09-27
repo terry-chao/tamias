@@ -139,6 +139,7 @@ FrameSubmission SceneDebugPlayer::make_frame(NativeWindowHandle window, std::uin
   frame.eye_position = camera.eye_position();
   frame.view_distance = camera.distance();
   frame.fovy = camera.fovy();
+  frame.orthographic = camera.orthographic();
   frame.mode = mode;
   frame.xray = xray;
   frame.items = filtered_items();

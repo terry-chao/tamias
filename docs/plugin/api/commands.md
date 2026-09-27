@@ -145,6 +145,7 @@ host.Dispatch("create_curve", new CommandArgs()
 | `rotate_entities` | `ids`/`entity_id`、`angle`(`d`，**度**)、`center`(`v`，默认原点) | 绕 Y 轴转 |
 | `mirror_entities` | `ids`/`entity_id`、`points`（2 点 = 镜面线） | 镜像 |
 | `array_entities` | `ids`/`entity_id`、`mode`(`s`：`linear`/`polar`)、`count`(`i`，默认 3，**含原件**) | 阵列 |
+| `copy_storey` | `source_storey_id`(`i`)、`target_storey_id`(`i`) | 整层复制：源层构件全复制到目标层（新实体；见 [BIM §5](../../BIM.md)） |
 
 `array_entities` 的分支参数：
 

@@ -179,7 +179,6 @@ class MainWindow final : public QMainWindow {
   // 视口右侧工具列的入口（构件显隐 / 楼层 / 楼层视图 / 图纸管理）。
   QAction* components_action_ = nullptr;
   QAction* floors_action_ = nullptr;
-  QAction* floor_views_action_ = nullptr;
   QAction* drawings_action_ = nullptr;
   // 停靠面板的显隐开关（属性 / 贴图库 / 句柄 / 计时 / 控制台）。
   QAction* property_toggle_ = nullptr;

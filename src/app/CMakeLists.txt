@@ -48,8 +48,8 @@ add_executable(tamias
   bim/visibility/visibility_panel.cpp
   bim/visibility/entity_kind_catalog.cpp
   bim/floors/floor_panel.cpp
-  bim/floors/floor_manager_panel.cpp
   bim/floors/floor_settings_dialog.cpp
+  bim/floors/copy_floor_dialog.cpp
   bim/grid/grid_settings_dialog.cpp
   # 通用编辑对话框：阵列
   edit/array_dialog.cpp
@@ -171,8 +171,6 @@ tamias_compile_hlsl(tamias mesh.vert.hlsl vs_6_0 mesh.vert)
 tamias_compile_hlsl(tamias mesh.frag.hlsl ps_6_0 mesh.frag)
 tamias_compile_hlsl(tamias sky.vert.hlsl vs_6_0 sky.vert)
 tamias_compile_hlsl(tamias sky.frag.hlsl ps_6_0 sky.frag)
-tamias_compile_hlsl(tamias grid.vert.hlsl vs_6_0 grid.vert)
-tamias_compile_hlsl(tamias grid.frag.hlsl ps_6_0 grid.frag)
 tamias_compile_hlsl(tamias overlay.vert.hlsl vs_6_0 overlay.vert)
 tamias_compile_hlsl(tamias overlay.frag.hlsl ps_6_0 overlay.frag)
 tamias_compile_hlsl(tamias text.vert.hlsl vs_6_0 text.vert)

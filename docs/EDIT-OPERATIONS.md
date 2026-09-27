@@ -35,6 +35,7 @@
 | 旋转 | `rotate_entities` | 基点 → 参照方向 → 目标方向 | 写回 from 变换 |
 | 镜像 | `mirror_entities` | 点镜像轴两端 | 还原快照 |
 | 阵列 | `array_entities` | 对话框（线性 / 环形） | 删掉全部副本 |
+| 整层复制 | `copy_storey` | 楼层面板「复制楼层」对话框 | 删掉该批新实体（含新关系） |
 
 ## 3. 三个关键决策
 
@@ -67,7 +68,9 @@
    `bind_opening_to_host` 重算沿墙参数、墙上的洞；
 4. 墙复制的收尾重算墙-墙交接（`remesh_wall_neighborhood`）。
 
-楼层归属沿用源件：副本跟着源件落在同一层，相对标高不变。
+楼层归属沿用源件：副本跟着源件落在同一层，相对标高不变。要「把一层整体搬到另一层」得用
+`copy_storey`（`CopyStoreyCommand`，见 [BIM 楼层](BIM.md) §5）——那是**换层**而不是「平移到位」，
+副本改挂目标层、按相对本层的偏移重摆，宿主关系也要指向同一批里的新墙。
 
 ### 3.3 门窗的位置真源是「宿主墙 + 沿墙参数」，不是坐标
 
@@ -130,6 +133,7 @@ Dispatch("mirror_entities", "a:ids=3; p:points=0,0,0|0,0,1");
 | [src/command/edit/entity_transform.h](../src/command/edit/entity_transform.h) | 变换构造（平移 / 绕竖直轴旋转 / 镜像）、阵列摆放序列、世界摆放读写 |
 | [src/command/edit/transform_entities_command.cpp](../src/command/edit/transform_entities_command.cpp) | 移动 / 旋转：改现有实体 + 门窗联动 + 交接重算 |
 | [src/command/edit/copy_entities_command.cpp](../src/command/edit/copy_entities_command.cpp) | 复制 / 阵列：克隆 + 宿主关系重映射 + undo/redo |
+| [src/command/edit/copy_storey_command.cpp](../src/command/edit/copy_storey_command.cpp) | 整层复制：克隆 + 换层 + 关系重映射 + undo/redo |
 | [src/command/edit/mirror_entities_command.cpp](../src/command/edit/mirror_entities_command.cpp) | 镜像：烘焙进几何 + 快照回滚 |
 | [src/command/edit/transform_tool_command.cpp](../src/command/edit/transform_tool_command.cpp) | 交互式工具：凑齐点 → 构造上面三条命令 |
 | [src/app/edit/array_dialog.cpp](../src/app/edit/array_dialog.cpp) | 阵列参数对话框 |

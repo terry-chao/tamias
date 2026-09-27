@@ -297,82 +297,108 @@ fn main(input: VsIn) -> VsOut {
 
 inline std::string_view sky_frag() {
   static const std::string src = std::string(kPushAndMeshBindings) + R"WGSL(
+// 视口背景：天空 + 地面 + 工作平面网格。和桌面端 shaders/sky.frag.hlsl 同一套算法
+// 与配色（那边有逐段注释），改动要三份一起改。调色板按 sRGB 写，最后转线性。
+const kSkyZenith = vec3<f32>(0.125, 0.188, 0.290);
+const kSkyHorizon = vec3<f32>(0.431, 0.525, 0.639);
+const kHorizonGlow = vec3<f32>(0.663, 0.737, 0.824);
+const kGroundNear = vec3<f32>(0.118, 0.149, 0.188);
+const kGridMinor = vec3<f32>(0.290, 0.345, 0.439);
+const kGridMajor = vec3<f32>(0.420, 0.498, 0.639);
+const kAxisXColor = vec3<f32>(0.690, 0.376, 0.376);
+const kAxisZColor = vec3<f32>(0.376, 0.533, 0.784);
+const kGroundY = 0.0;
+const kGridBaseSpacing = 1.0;
+const kGridMajorEvery = 5.0;
+const kGridMinPixels = 8.0;
+const kLog10 = 0.30102999566;
+
+fn grid_line(coord: vec2<f32>, spacing: f32, deriv: vec2<f32>) -> f32 {
+  let cell = abs(fract(coord / spacing + vec2<f32>(0.5)) - vec2<f32>(0.5));
+  let px = cell * spacing / max(deriv, vec2<f32>(1e-5));
+  return 1.0 - clamp(min(px.x, px.y), 0.0, 1.0);
+}
+
+fn axis_line(distance_world: f32, deriv: f32) -> f32 {
+  return 1.0 - clamp(abs(distance_world) / max(deriv, 1e-5), 0.0, 1.0);
+}
+
+fn srgb_to_linear(c: vec3<f32>) -> vec3<f32> {
+  let lo = c / 12.92;
+  let hi = pow((c + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4));
+  return mix(lo, hi, step(vec3<f32>(0.04045), c));
+}
+
 @fragment
 fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
   // NDC 的 Y 向上（见 webgpu_device.cpp 的说明），uv 已经是「上 = 1」，
   // 所以这里不需要再翻一次；翻了会让天空采样方向上下颠倒。
   var ndc = uv * 2.0 - 1.0;
-  let view_dir = normalize(vec3<f32>(ndc.x * pc.color.x, ndc.y * pc.color.y, -1.0));
   let model3 = mat3x3<f32>(pc.model[0].xyz, pc.model[1].xyz, pc.model[2].xyz);
-  let world_dir = model3 * view_dir;
-  var env = textureSampleLevel(prefilter_tex, cube_samp, world_dir, 1.2).rgb;
-  env *= pc.lighting.x;
-  env = env / (env + vec3<f32>(0.85));
-  return vec4<f32>(env, 1.0);
-}
-)WGSL";
-  return src;
-}
+  let cam_right = model3 * vec3<f32>(1.0, 0.0, 0.0);
+  let cam_up = model3 * vec3<f32>(0.0, 1.0, 0.0);
+  let cam_fwd = model3 * vec3<f32>(0.0, 0.0, -1.0);
+  let eye = pc.eye_pos_mode.xyz;
+  let ray_scale = pc.color.xy;
 
-inline std::string_view grid_vert() {
-  static const std::string src = std::string(kPushAndMeshBindings) + R"WGSL(
-struct VsIn {
-  @location(0) position: vec3<f32>,
-  @location(1) normal: vec3<f32>,
-  @location(2) uv: vec2<f32>,
-  @location(3) color: vec3<f32>,
-};
-struct VsOut {
-  @builtin(position) position: vec4<f32>,
-  @location(0) world_pos: vec3<f32>,
-};
-@vertex
-fn main(input: VsIn) -> VsOut {
-  var o: VsOut;
-  let world = pc.model * vec4<f32>(input.position, 1.0);
-  o.world_pos = world.xyz;
-  o.position = pc.mvp * vec4<f32>(input.position, 1.0);
-  return o;
-}
-)WGSL";
-  return src;
-}
+  var ray_dir: vec3<f32>;
+  var ray_origin: vec3<f32>;
+  if (pc.material.x > 0.5) {  // 正交：平面视图 / 立面视图
+    ray_dir = cam_fwd;
+    ray_origin = eye + cam_right * (ndc.x * ray_scale.x) + cam_up * (ndc.y * ray_scale.y);
+  } else {  // 透视
+    ray_dir = normalize(cam_fwd + cam_right * (ndc.x * ray_scale.x) +
+                        cam_up * (ndc.y * ray_scale.y));
+    ray_origin = eye;
+  }
 
-inline std::string_view grid_frag() {
-  static const std::string src = std::string(kPushAndMeshBindings) + R"WGSL(
-fn grid_line(coord: vec2<f32>, spacing: f32, deriv: vec2<f32>) -> f32 {
-  let cell = min(fract(coord / spacing), 1.0 - fract(coord / spacing));
-  let px = cell * spacing / max(deriv, vec2<f32>(1e-5));
-  return 1.0 - clamp(min(px.x, px.y), 0.0, 1.0);
-}
-@fragment
-fn main(@location(0) world_pos: vec3<f32>) -> @location(0) vec4<f32> {
-  let coord = world_pos.xz;
-  let deriv = fwidth(coord);
-  let world_per_pixel = max(max(deriv.x, deriv.y), 1e-5);
-  let lod = log(max(world_per_pixel * 8.0, 1.0)) / log(10.0);
+  let denom = min(ray_dir.y, -1e-6);
+  let t_raw = (kGroundY - ray_origin.y) / denom;
+  let hit = select(0.0, 1.0, ray_dir.y < -1e-6 && t_raw > 0.0);
+  let ground_point = ray_origin + ray_dir * max(t_raw, 0.0);
+  let coord = ground_point.xz;
+  let deriv = vec2<f32>(fwidth(coord.x), fwidth(coord.y));
+
+  let elevation = clamp(ray_dir.y, 0.0, 1.0);
+  let sky = mix(kSkyHorizon, kSkyZenith, pow(elevation, 0.55));
+
+  let view_scale = max(pc.eye_pos_mode.w, 1.0);
+  let dist = length(ground_point - eye);
+  let grid_fade = 1.0 - smoothstep(5.0 * view_scale, 28.0 * view_scale, dist);
+  var haze = smoothstep(2.0 * view_scale, 26.0 * view_scale, dist);
+  haze = haze * hit + (1.0 - hit) * 0.55;
+  var ground = mix(kGroundNear, kSkyHorizon, haze * 0.78);
+
+  let precision_step = max(abs(coord.x), abs(coord.y)) * 1e-6;
+  let world_per_pixel = max(max(deriv.x, deriv.y), precision_step);
+  let lod = max(log2(max(world_per_pixel * kGridMinPixels / kGridBaseSpacing, 1.0)) * kLog10,
+                0.0);
   let lod_base = floor(lod);
   let lod_frac = clamp(lod - lod_base, 0.0, 1.0);
-  let minor_lo = pow(10.0, lod_base);
+  let minor_lo = kGridBaseSpacing * pow(10.0, lod_base);
   let minor_hi = minor_lo * 10.0;
-  let minor_strength = mix(grid_line(coord, minor_lo, deriv),
-                           grid_line(coord, minor_hi, deriv), lod_frac);
-  let major_strength = mix(grid_line(coord, minor_lo * 5.0, deriv),
-                           grid_line(coord, minor_hi * 5.0, deriv), lod_frac);
-  let view_scale = max(pc.eye_pos_mode.w, 1.0);
-  let dist = length(world_pos.xz - pc.eye_pos_mode.xz);
-  var fade = 1.0 - smoothstep(8.0 * view_scale, 32.0 * view_scale, dist);
-  fade *= smoothstep(0.0, 0.4 * view_scale, dist);
-  let fill = vec3<f32>(0.22, 0.24, 0.28);
-  var color = fill;
-  color = mix(color, vec3<f32>(0.38, 0.41, 0.46), clamp(minor_strength * 0.50, 0.0, 1.0));
-  color = mix(color, vec3<f32>(0.50, 0.54, 0.60), clamp(major_strength * 0.75, 0.0, 1.0));
-  let axis_x = 1.0 - clamp(abs(coord.y) / max(deriv.y, 1e-5), 0.0, 1.0);
-  let axis_z = 1.0 - clamp(abs(coord.x) / max(deriv.x, 1e-5), 0.0, 1.0);
-  color = mix(color, vec3<f32>(0.78, 0.28, 0.28), clamp(axis_x, 0.0, 1.0));
-  color = mix(color, vec3<f32>(0.28, 0.52, 0.88), clamp(axis_z, 0.0, 1.0));
-  color = mix(fill, color, fade);
-  return vec4<f32>(color, 1.0);
+  let minor = mix(grid_line(coord, minor_lo, deriv), grid_line(coord, minor_hi, deriv),
+                  lod_frac);
+  let major = mix(grid_line(coord, minor_lo * kGridMajorEvery, deriv),
+                  grid_line(coord, minor_hi * kGridMajorEvery, deriv), lod_frac);
+  ground = mix(ground, kGridMinor, clamp(minor * 0.55, 0.0, 1.0) * grid_fade * hit);
+  ground = mix(ground, kGridMajor, clamp(major * 0.80, 0.0, 1.0) * grid_fade * hit);
+
+  let axis_x = axis_line(coord.y, deriv.y) * grid_fade * hit;
+  let axis_z = axis_line(coord.x, deriv.x) * grid_fade * hit;
+  ground = mix(ground, kAxisXColor, clamp(axis_x, 0.0, 1.0) * 0.70);
+  ground = mix(ground, kAxisZColor, clamp(axis_z, 0.0, 1.0) * 0.70);
+
+  var on_ground = 0.0;
+  if (ray_dir.y < -1e-6) {
+    on_ground = 1.0;
+  } else if (ray_dir.y <= 1e-6 && ray_origin.y <= kGroundY) {
+    on_ground = 1.0;
+  }
+  var color = mix(sky, ground, on_ground);
+  let band = pow(1.0 - clamp(abs(ray_dir.y) / 0.05, 0.0, 1.0), 3.0);
+  color = mix(color, kHorizonGlow, band * 0.30);
+  return vec4<f32>(srgb_to_linear(color), 1.0);
 }
 )WGSL";
   return src;

@@ -19,6 +19,7 @@
 #include "command/delete/delete_grid_axis_command.h"
 #include "command/delete/delete_text_command.h"
 #include "command/edit/copy_entities_command.h"
+#include "command/edit/copy_storey_command.h"
 #include "command/edit/entity_transform.h"
 #include "command/edit/mirror_entities_command.h"
 #include "command/edit/set_feature_param_command.h"
@@ -491,6 +492,13 @@ void register_commands(CommandRegistry& registry) {
     std::vector<Mat4> placements = array_placements(args).value_or(std::vector<Mat4>{});
     return std::unique_ptr<Command>{
         std::make_unique<CopyEntitiesCommand>(doc, ids, std::move(placements))};
+  });
+
+  // 整层复制：把一层上的构件全搬到另一层（新实体 + 关系重映射 + 保留相对标高）。
+  registry.register_command("copy_storey", [](Document& doc, const CommandArgs& args) {
+    return std::make_unique<CopyStoreyCommand>(
+        doc, static_cast<std::uint64_t>(arg_int(args, "source_storey_id", 0)),
+        static_cast<std::uint64_t>(arg_int(args, "target_storey_id", 0)));
   });
 
   registry.register_command("set_material", [](Document& doc, const CommandArgs& args) {

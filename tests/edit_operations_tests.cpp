@@ -4,6 +4,7 @@
 #include "bim/wall_join.h"
 #include "command/core/command_system.h"
 #include "command/edit/copy_entities_command.h"
+#include "command/edit/copy_storey_command.h"
 #include "command/edit/entity_transform.h"
 #include "command/edit/mirror_entities_command.h"
 #include "command/edit/transform_tool_command.h"
@@ -11,6 +12,7 @@
 #include "engine/graphics/mesh.h"
 #include "engine/modeling/feature/curve_geom.h"
 #include "entity/core/entity_grip.h"
+#include "entity/core/entity_storey.h"
 #include "entity/family/attached/opening/door_entity.h"
 #include "entity/family/host/architectural/wall_entity.h"
 #include "entity/sketch/line_entity.h"
@@ -232,6 +234,115 @@ TEST(EditOperations, CopyWallBringsItsOpenings) {
   EXPECT_EQ(document.entities().size(), 4u);
   EXPECT_EQ(document.bim().relations().size(), 2u);
   EXPECT_EQ(opening_cut_count(document, wall->id), 1);
+}
+
+// 整层复制：一层上的构件全搬到另一层，副本是新实体，门窗跟着新墙走，高度按层标高抬。
+TEST(EditOperations, CopyStoreyClonesComponentsOntoAnotherFloor) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document document("copy-storey");
+  const std::uint64_t ground = document.add_storey("1F", 0.0).id;
+  const std::uint64_t upper = document.add_storey("2F", 3.0).id;
+  document.set_active_storey(ground);
+  Entity* wall = add_wall(document, {0.f, 0.f, 0.f}, {6.f, 0.f, 0.f});
+  ASSERT_NE(wall, nullptr);
+  Entity* door = add_door(document, wall->id, {2.f, 0.f, 0.f});
+  ASSERT_NE(door, nullptr);
+  ASSERT_EQ(document.entities().size(), 2u);
+  ASSERT_EQ(document.bim().relations().size(), 1u);
+  const std::size_t meshes_before = document.meshes().size();
+
+  ASSERT_TRUE(system.dispatch(document, "copy_storey",
+                              {{"source_storey_id", static_cast<std::int64_t>(ground)},
+                               {"target_storey_id", static_cast<std::int64_t>(upper)}}));
+  EXPECT_EQ(document.entities().size(), 4u);
+  EXPECT_EQ(document.bim().relations().size(), 2u);
+  // 几何一样的副本走 intern：不多占网格资产。
+  EXPECT_EQ(document.meshes().size(), meshes_before);
+
+  std::uint64_t new_wall = 0;
+  std::uint64_t new_door = 0;
+  for (const auto& [id, entity] : document.entities()) {
+    if (id == wall->id || id == door->id) {
+      continue;
+    }
+    if (entity->kind() == EntityKind::Wall) {
+      new_wall = id;
+    } else if (entity->kind() == EntityKind::Door) {
+      new_door = id;
+    }
+  }
+  ASSERT_NE(new_wall, 0u);
+  ASSERT_NE(new_door, 0u);
+
+  // 副本实体是新建的（id 不复用源件），而且归属落在 2 楼。
+  EXPECT_EQ(entity_storey_id(*document.entity(new_wall)), upper);
+  EXPECT_EQ(entity_storey_id(*document.entity(new_door)), upper);
+  const SceneNode* new_wall_node = document.scene().find(new_wall);
+  ASSERT_NE(new_wall_node, nullptr);
+  EXPECT_EQ(new_wall_node->parent, upper);
+
+  // 关联：副本门挂到**新的**墙上，新墙上照样开洞。
+  const Relation* relation = document.bim().host_of(new_door);
+  ASSERT_NE(relation, nullptr);
+  EXPECT_EQ(relation->to, new_wall);
+  EXPECT_TRUE(relation->valid);
+  EXPECT_EQ(opening_cut_count(document, wall->id), 1);
+  EXPECT_EQ(opening_cut_count(document, new_wall), 1);
+
+  // 高度：整层抬高 = 两层层标高差（0 → 3）。
+  EXPECT_NEAR(document.entity(new_wall)->local_transform(1, 3),
+              document.entity(wall->id)->local_transform(1, 3) + 3.f, 1e-3f);
+  EXPECT_NEAR(document.entity(new_door)->local_transform(1, 3),
+              document.entity(door->id)->local_transform(1, 3) + 3.f, 1e-3f);
+
+  system.undo();
+  EXPECT_EQ(document.entities().size(), 2u);
+  EXPECT_EQ(document.bim().relations().size(), 1u);
+  EXPECT_EQ(opening_cut_count(document, wall->id), 1);
+  ASSERT_NE(document.bim().host_of(door->id), nullptr);
+  EXPECT_EQ(document.bim().host_of(door->id)->to, wall->id);
+
+  system.redo();
+  EXPECT_EQ(document.entities().size(), 4u);
+  EXPECT_EQ(document.bim().relations().size(), 2u);
+}
+
+// 高度：副本按构件相对源楼层的偏移摆放，不是「一律贴到目标层标高」。
+TEST(EditOperations, CopyStoreyKeepsOffsetRelativeToFloor) {
+  Document document("copy-storey-offset");
+  const std::uint64_t ground = document.add_storey("1F", 0.0).id;
+  const std::uint64_t upper = document.add_storey("2F", 3.5).id;
+  document.set_active_storey(ground);
+  Entity* wall = add_wall(document, {0.f, 0.f, 0.f}, {4.f, 0.f, 0.f});
+  ASSERT_NE(wall, nullptr);
+  // 墙底抬到本层标高 + 0.5 处（相对偏移 0.5），副本应落在 3.5 + 0.5 = 4.0。
+  document.assign_storey_with_offset(*wall, ground, 0.5);
+  EXPECT_NEAR(wall->local_transform(1, 3), 0.5f, 1e-4f);
+
+  CopyStoreyCommand copy(document, ground, upper);
+  auto executed = copy.execute();
+  ASSERT_TRUE(executed) << executed.error();
+  ASSERT_EQ(copy.created_ids().size(), 1u);
+  const Entity* made = document.entity(copy.created_ids().front());
+  ASSERT_NE(made, nullptr);
+  EXPECT_EQ(entity_storey_id(*made), upper);
+  EXPECT_NEAR(made->local_transform(1, 3), 4.0f, 1e-4f);
+}
+
+TEST(EditOperations, CopyStoreyRejectsDegenerateRequests) {
+  Document document("copy-storey-guard");
+  const std::uint64_t ground = document.add_storey("1F", 0.0).id;
+  const std::uint64_t upper = document.add_storey("2F", 3.0).id;
+
+  CopyStoreyCommand same(document, ground, ground);
+  EXPECT_FALSE(same.execute());
+  CopyStoreyCommand missing(document, ground, 9999);
+  EXPECT_FALSE(missing.execute());
+  CopyStoreyCommand empty(document, ground, upper);
+  EXPECT_FALSE(empty.execute());  // 源层没有构件
 }
 
 TEST(EditOperations, CopySketchCurveKeepsPlacement) {

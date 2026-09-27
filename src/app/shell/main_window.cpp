@@ -1106,11 +1106,13 @@ MainWindow::MainWindow(QWidget* parent)
   });
   addAction(components_action_);
   panels_group->add_action(components_action_);
-  // 楼层面板同样住在视口右侧的工具列里（同一列的第二个功能页）。
+  // 楼层面板同样住在视口右侧的工具列里（同一列的第二个功能页）：显隐 + 打开楼层视图
+  // 合在一张清单里，一层一行，双击某层就是打开该层的视图。
   floors_action_ =
       new QAction(ribbon_icon(QStringLiteral(":/icons/storey.svg")), tr("Floors"), this);
   floors_action_->setShortcut(QKeySequence(tr("Ctrl+Shift+L")));
-  floors_action_->setToolTip(tr("Show or hide floors, and set floor heights"));
+  floors_action_->setToolTip(
+      tr("Show or hide floors, open each floor's view, and set floor heights"));
   connect(floors_action_, &QAction::triggered, this, [this] {
     if (auto* vp = current_viewport()) {
       vp->toggle_floor_panel();
@@ -1118,19 +1120,6 @@ MainWindow::MainWindow(QWidget* parent)
   });
   addAction(floors_action_);
   panels_group->add_action(floors_action_);
-  // 楼层管理：同一列里的第三个功能页，把楼层当视图清单用（双击打开某层视图）。
-  floor_views_action_ =
-      new QAction(ribbon_icon(QStringLiteral(":/icons/floor_manager.svg")), tr("Floor Views"),
-                  this);
-  floor_views_action_->setToolTip(
-      tr("List the global 3D view and every floor; double-click one to open it"));
-  connect(floor_views_action_, &QAction::triggered, this, [this] {
-    if (auto* vp = current_viewport()) {
-      vp->toggle_floor_manager_panel();
-    }
-  });
-  addAction(floor_views_action_);
-  panels_group->add_action(floor_views_action_);
   // 图纸管理：住在视口右侧工具列里的功能页（和构件显隐 / 楼层同一列）。
   drawings_action_ =
       new QAction(ribbon_icon(QStringLiteral(":/icons/drawing.svg")), tr("Drawings"), this);
@@ -1440,7 +1429,7 @@ void MainWindow::sync_draw_panel() {
   }
 }
 
-// 切楼层（楼层管理双击 / 楼层面板换当前楼层 / 改标高 / 改层高）以后，绘制面板上
+// 切楼层（楼层面板双击开另一层视图 / 换当前楼层 / 改标高 / 改层高）以后，绘制面板上
 // 「标高偏移」这类默认值也要跟着换：板默认画本层顶，默认值是**当前**楼层的层高。
 // 值真变了就按新参数重新武装，视口里那条 pending 命令才不会停在旧楼层的标高上。
 void MainWindow::refresh_draw_panel_storey_defaults() {

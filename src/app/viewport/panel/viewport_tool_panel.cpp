@@ -1,7 +1,6 @@
 #include "app/viewport/panel/viewport_tool_panel.h"
 
 #include "app/drawing/drawing_manager_panel.h"
-#include "app/bim/floors/floor_manager_panel.h"
 #include "app/bim/floors/floor_panel.h"
 #include "app/bim/visibility/visibility_panel.h"
 
@@ -65,21 +64,13 @@ ViewportToolPanel::ViewportToolPanel(QWidget* parent) : QWidget(parent) {
     set_active_page(open ? kVisibilityPage : -1);
   });
 
-  // 按楼层显隐：和构件显隐一样是同一列里的功能页（勾选 = 显示）。
+  // 楼层：和构件显隐一样是同一列里的功能页。一层一行，勾选 = 显隐，
+  // 双击 = 打开该层视图（第一行「全局三维」双击回到默认视图）。
   floor_button_ = add_rail_button(rail_layout, load_icon(QStringLiteral(":/icons/storey.svg")),
-                                  tr("Show or hide floors, and set floor heights"));
+                                  tr("Floors: show/hide, open a view, set heights"));
   floor_button_->setCheckable(true);
   connect(floor_button_, &QToolButton::toggled, this, [this](bool open) {
     set_active_page(open ? kFloorPage : -1);
-  });
-
-  // 楼层管理：把楼层当成视图清单（第一行全局三维，下面一层一行，双击打开）。
-  floor_manager_button_ = add_rail_button(rail_layout,
-                                          load_icon(QStringLiteral(":/icons/floor_manager.svg")),
-                                          tr("Open a view per floor (global 3D is the default)"));
-  floor_manager_button_->setCheckable(true);
-  connect(floor_manager_button_, &QToolButton::toggled, this, [this](bool open) {
-    set_active_page(open ? kFloorManagerPage : -1);
   });
 
   // 图纸管理：把参考图纸挂在文档下（添加 / 删除 / 双击打开查看）。
@@ -114,9 +105,6 @@ ViewportToolPanel::ViewportToolPanel(QWidget* parent) : QWidget(parent) {
   floor_page_ = new FloorPanel(pages_);
   floor_page_->set_dark_theme(is_dark_theme());
   pages_->addWidget(floor_page_);
-  floor_manager_page_ = new FloorManagerPanel(pages_);
-  floor_manager_page_->set_dark_theme(is_dark_theme());
-  pages_->addWidget(floor_manager_page_);
   drawing_page_ = new DrawingManagerPanel(pages_);
   drawing_page_->set_dark_theme(is_dark_theme());
   pages_->addWidget(drawing_page_);
@@ -149,9 +137,6 @@ void ViewportToolPanel::set_viewport(DocumentViewport* viewport) {
   if (floor_page_ != nullptr) {
     floor_page_->set_viewport(viewport);
   }
-  if (floor_manager_page_ != nullptr) {
-    floor_manager_page_->set_viewport(viewport);
-  }
   if (drawing_page_ != nullptr) {
     drawing_page_->set_viewport(viewport);
   }
@@ -163,10 +148,6 @@ void ViewportToolPanel::toggle_visibility_page() {
 
 void ViewportToolPanel::toggle_floor_page() {
   set_active_page(panel_open() ? -1 : kFloorPage);
-}
-
-void ViewportToolPanel::toggle_floor_manager_page() {
-  set_active_page(panel_open() ? -1 : kFloorManagerPage);
 }
 
 void ViewportToolPanel::toggle_drawing_page() {
@@ -193,8 +174,6 @@ void ViewportToolPanel::set_active_page(int page) {
       visibility_page_->refresh();
     } else if (page == kFloorPage) {
       floor_page_->refresh();
-    } else if (page == kFloorManagerPage) {
-      floor_manager_page_->refresh();
     } else if (page == kDrawingPage) {
       drawing_page_->refresh();
     }
@@ -207,10 +186,6 @@ void ViewportToolPanel::set_active_page(int page) {
   {
     const QSignalBlocker blocker(floor_button_);
     floor_button_->setChecked(page == kFloorPage);
-  }
-  {
-    const QSignalBlocker blocker(floor_manager_button_);
-    floor_manager_button_->setChecked(page == kFloorManagerPage);
   }
   {
     const QSignalBlocker blocker(drawing_button_);

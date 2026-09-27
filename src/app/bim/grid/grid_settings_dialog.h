@@ -33,7 +33,19 @@ class GridSettingsDialog final : public QDialog {
  private:
   QComboBox* make_direction_combo(GridAxisDirection direction);
   void add_row(const GridAxis& axis);
-  void add_empty_axis();
+  // 新增一根空轴：direction 决定方向，名字按方向取第一个没被占用的（竖轴 1/2/3…、
+  // 横轴 A/B/C…）。
+  void add_empty_axis(GridAxisDirection direction);
+  // 该方向下一个没被占用的轴号（竖轴 = 数字，横轴 = 字母）。
+  [[nodiscard]] QString next_axis_name(GridAxisDirection direction) const;
+  // 新轴默认落在同方向最后一根轴外侧一个间距处（没有就落在原点），别和已有的重叠。
+  [[nodiscard]] double next_axis_position(GridAxisDirection direction) const;
+  // 把表里的轴线重新拉成一张完整的正交网（端点按轴网范围算）。勾了自动适配时，
+  // 加轴 / 改位置 / 改外扩都会顺手走一遍。
+  void fit_axis_extents();
+  void maybe_auto_fit();
+  // 勾着自动适配时起点 / 终点由轴网范围算出来，就把它俩置灰（不勾才让手填）。
+  void update_extent_editability();
   void remove_selected();
   void generate_orthogonal();
   void reload(const std::vector<GridAxis>& axes);
@@ -45,6 +57,7 @@ class GridSettingsDialog final : public QDialog {
   QDoubleSpinBox* origin_z_ = nullptr;
   QDoubleSpinBox* margin_ = nullptr;
   QCheckBox* place_with_click_ = nullptr;
+  QCheckBox* auto_fit_ = nullptr;
   QLabel* place_hint_ = nullptr;
 };
 
