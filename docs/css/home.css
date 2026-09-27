@@ -185,24 +185,12 @@ body.homepage > .container {
   pointer-events: none;
 }
 
-.tm-shot {
+.tm-hero-shot {
   position: relative;
-  border: 1px solid rgba(255, 255, 255, .16);
-  border-radius: 14px;
-  background: #fff;
-  overflow: hidden;
-  box-shadow: 0 48px 90px -46px rgba(0, 0, 0, .95), 0 2px 0 rgba(255, 255, 255, .08) inset;
-}
-
-.tm-shot-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  background: #f1f5fa;
-  border-bottom: 1px solid #dfe6f0;
-  font-size: 12.5px;
-  color: #6c7a8d;
+  display: block;
+  width: 100%;
+  height: auto;
+  box-shadow: 0 48px 90px -46px rgba(0, 0, 0, .95);
 }
 
 .tm-shot-dots {
@@ -227,12 +215,6 @@ body.homepage > .container {
 
 .tm-shot-dots i:nth-child(3) {
   background: #28c840;
-}
-
-.tm-shot img {
-  display: block;
-  width: 100%;
-  height: auto;
 }
 
 /* Hero 数据条 */
