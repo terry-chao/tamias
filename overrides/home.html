@@ -1,0 +1,399 @@
+{# 官网首页（落地页）。纯模板渲染，不改 docs/index.md 的正文。
+   改文案直接改这里；docs/index.md 只保留一份简短的文字版说明（给搜索引擎 / GitHub 看）。 #}
+<div class="tm-home">
+
+  {# cinder 主题的 scrollspy 会找 .bs-sidebar，首页没有目录，放一个占位避免报错 #}
+  <div class="bs-sidebar tm-toc-placeholder" aria-hidden="true"></div>
+
+  <!-- ============================ Hero ============================ -->
+  <section class="tm-hero">
+    <div class="tm-hero-bg" aria-hidden="true"></div>
+    <div class="tm-wrap tm-hero-inner">
+      <div class="tm-hero-copy">
+        <p class="tm-pill"><span class="tm-pill-dot" aria-hidden="true"></span>开源 · MIT · 跨 MCAD / BIM</p>
+        <h1 class="tm-hero-title">Tamias</h1>
+        <p class="tm-hero-tagline">大模型看得动，几何改得动。</p>
+        <p class="tm-hero-lead">
+          一个把 <strong>BIM 大模型查看</strong> 与 <strong>参数化几何编辑</strong> 放进同一个桌面应用的几何内核：
+          Qt 做壳，自研 RHI 跑 Vulkan / OpenGL，OCCT 提供 BRep，IfcOpenShell 提供 IFC 语义，
+          中间用 <strong>特征树</strong> 与 <strong>分层场景图</strong> 串成一条链路。
+        </p>
+        <p class="tm-cta">
+          <a class="tm-btn tm-btn-primary tm-btn-lg" href="{{ 'tutorial/02-build-and-run/'|url }}">开始构建 <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
+          <a class="tm-btn tm-btn-ghost tm-btn-lg" href="#features">功能一览</a>
+          <a class="tm-btn tm-btn-ghost tm-btn-lg" href="{{ config.repo_url }}" target="_blank" rel="noopener"><i class="fab fa-github" aria-hidden="true"></i> 源码</a>
+        </p>
+        <ul class="tm-hero-facts">
+          <li>Windows x64 / Linux x64</li>
+          <li>桌面 Qt 壳 + 浏览器 WASM 查看器</li>
+          <li>C++23 · CMake Presets</li>
+        </ul>
+      </div>
+
+      <div class="tm-hero-visual">
+        <div class="tm-shot">
+          <div class="tm-shot-bar" aria-hidden="true">
+            <span class="tm-shot-dots"><i></i><i></i><i></i></span>
+            <span class="tm-shot-title">Tamias — 轴网 · 墙梁板柱 · 特征树</span>
+          </div>
+          <img src="{{ 'image.png'|url }}" width="2400" height="1543"
+               alt="Tamias 桌面客户端界面：三维视口、属性面板与命令入口">
+        </div>
+      </div>
+    </div>
+
+    <div class="tm-wrap">
+      <ul class="tm-stats">
+        <li>
+          <b>3</b>
+          <span><strong>渲染后端</strong>Vulkan 主 · OpenGL 副 · 浏览器 WebGPU</span>
+        </li>
+        <li>
+          <b>6</b>
+          <span><strong>交换格式</strong>IFC / STEP / IGES / BREP / OBJ / GLB</span>
+        </li>
+        <li>
+          <b>10 章</b>
+          <span><strong>入门教程</strong>把 Tamias 当成 C++ 3D 开发的教学样例</span>
+        </li>
+        <li>
+          <b>M0–M6</b>
+          <span><strong>里程碑</strong>已完成，主线 = 参数化编辑内核（P1–P4）</span>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============================ 功能 ============================ -->
+  <section class="tm-section" id="features">
+    <div class="tm-wrap">
+      <header class="tm-section-head">
+        <p class="tm-eyebrow">功能</p>
+        <h2 class="tm-section-title">从「看得懂」到「改得动」的八件事</h2>
+        <p class="tm-section-sub">
+          查看、编辑、业务语义、渲染、扩展各自分层，互相之间只走稳定的边界：语义树与渲染场景图用 ID 关联，
+          几何统一走几何边界（IShapeOps），编辑一律是可撤销命令。
+        </p>
+      </header>
+
+      <div class="tm-cards">
+        <article class="tm-card">
+          <div class="tm-card-icon"><img src="{{ 'img/icons/nurbs.svg'|url }}" alt="" width="32" height="32"></div>
+          <h3 class="tm-card-title">参数化编辑内核</h3>
+          <p class="tm-card-text">
+            几何的源头是「参数 + 依赖」的特征树：改参数 → 求值重算 → 重新渲染。
+            BRep 与三角网都只是可重算的缓存，不是真相。
+          </p>
+          <a class="tm-card-link" href="{{ 'FEATURE-TREE-EVALUATOR/'|url }}">特征树求值器 <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
+        </article>
+
+        <article class="tm-card">
+          <div class="tm-card-icon"><img src="{{ 'img/icons/wall.svg'|url }}" alt="" width="32" height="32"></div>
+          <h3 class="tm-card-title">BIM 业务层</h3>
+          <p class="tm-card-text">
+            墙梁板柱、轴网、楼层与门窗宿主单独一层：墙-墙转角自动斜接，开窗改洞会通知墙体重造型，
+            语义树本身只记父子关系。
+          </p>
+          <a class="tm-card-link" href="{{ 'BIM/'|url }}">BIM 业务层 <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
+        </article>
+
+        <article class="tm-card">
+          <div class="tm-card-icon"><img src="{{ 'img/icons/view_3d.svg'|url }}" alt="" width="32" height="32"></div>
+          <h3 class="tm-card-title">大模型查看</h3>
+          <p class="tm-card-text">
+            语义树与渲染场景图分离：空间索引做点选 / 框选，视锥剔除、LOD 与合批 / instancing
+            让超大模型也能流畅转、选、剖切。
+          </p>
+          <a class="tm-card-link" href="{{ 'SPATIAL-INDEX/'|url }}">空间索引 <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
+        </article>
+
+        <article class="tm-card">
+          <div class="tm-card-icon"><img src="{{ 'img/icons/gpu.svg'|url }}" alt="" width="32" height="32"></div>
+          <h3 class="tm-card-title">自研 RHI 双后端</h3>
+          <p class="tm-card-text">
+            自己的渲染硬件接口：Vulkan 为主、OpenGL 为副并在独立线程跑文档；启动探测、失败降级、
+            驱动块名单，GPU 不合适也不会打不开软件。
+          </p>
+          <a class="tm-card-link" href="{{ 'RHI-STARTUP/'|url }}">RHI 启动与降级 <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
+        </article>
+
+        <article class="tm-card">
+          <div class="tm-card-icon"><img src="{{ 'img/icons/drawing.svg'|url }}" alt="" width="32" height="32"></div>
+          <h3 class="tm-card-title">参考图纸与翻模</h3>
+          <p class="tm-card-text">
+            PDF / DXF / DWF / SVG / 位图当底图贴进三维视口，对着平面图翻模、对齐轴网、核对构件位置，
+            另有只读二维图纸页看线宽与图层。
+          </p>
+          <a class="tm-card-link" href="{{ 'DRAWING/'|url }}">参考图纸 <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
+        </article>
+
+        <article class="tm-card">
+          <div class="tm-card-icon"><img src="{{ 'img/icons/console.svg'|url }}" alt="" width="32" height="32"></div>
+          <h3 class="tm-card-title">C# 插件与脚本</h3>
+          <p class="tm-card-text">
+            C++ 内核不动，扩展写在托管侧：约定目录里放 <code>main.cs</code> 或 <code>.dll</code> 即热加载，
+            可挂 Ribbon 命令、弹宿主对话框、在视口取输入；控制台能直接敲 C#。
+          </p>
+          <a class="tm-card-link" href="{{ 'plugin/'|url }}">插件与 SDK <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
+        </article>
+
+        <article class="tm-card">
+          <div class="tm-card-icon"><img src="{{ 'img/icons/move.svg'|url }}" alt="" width="32" height="32"></div>
+          <h3 class="tm-card-title">通用编辑与撤销</h3>
+          <p class="tm-card-text">
+            移动 / 复制 / 旋转 / 镜像 / 阵列都是「选择集 → 一条命令」，全部进撤销栈；
+            批量阵列按轴线框选，落点多也能一次算完。
+          </p>
+          <a class="tm-card-link" href="{{ 'EDIT-OPERATIONS/'|url }}">通用编辑 <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
+        </article>
+
+        <article class="tm-card">
+          <div class="tm-card-icon"><img src="{{ 'img/icons/components.svg'|url }}" alt="" width="32" height="32"></div>
+          <h3 class="tm-card-title">工作格式与交换格式分开</h3>
+          <p class="tm-card-text">
+            <code>.tdoc</code> 存语义树 + 特征树，是编辑态；IFC / STEP / glTF 只是进出口。
+            <code>.trscn</code> 是烤好的渲染快照，用来复现问题与跑渲染测试。
+          </p>
+          <a class="tm-card-link" href="{{ 'RENDER-SCENE/'|url }}">渲染快照 <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ 工作流 ============================ -->
+  <section class="tm-section tm-section-alt" id="workflow">
+    <div class="tm-wrap">
+      <header class="tm-section-head">
+        <p class="tm-eyebrow">工作流</p>
+        <h2 class="tm-section-title">一条链路：进得来、看得清、改得动、交得出</h2>
+        <p class="tm-section-sub">
+          外部格式只是端口，编辑永远发生在内部 <code>Document</code> 上——打开 IFC 翻译进内部结构后，
+          原文件就可以放下了。
+        </p>
+      </header>
+
+      <ol class="tm-steps">
+        <li class="tm-step">
+          <div class="tm-step-badge"><img src="{{ 'img/icons/open.svg'|url }}" alt="" width="28" height="28"></div>
+          <h3 class="tm-step-title">1 · 导入</h3>
+          <p class="tm-step-text">打开 IFC / STEP / IGES / BREP / OBJ / GLB，或把 PDF / DXF / DWF 图纸铺进视口当底图。</p>
+        </li>
+        <li class="tm-step">
+          <div class="tm-step-badge"><img src="{{ 'img/icons/visibility.svg'|url }}" alt="" width="28" height="28"></div>
+          <h3 class="tm-step-title">2 · 查看</h3>
+          <p class="tm-step-text">语义树看层级，属性面板看 Pset，空间索引做点选 / 框选，超大模型靠剔除与 LOD 保持帧率。</p>
+        </li>
+        <li class="tm-step">
+          <div class="tm-step-badge"><img src="{{ 'img/icons/fillet.svg'|url }}" alt="" width="28" height="28"></div>
+          <h3 class="tm-step-title">3 · 编辑</h3>
+          <p class="tm-step-text">参数化改特征树（改参数 → 重算 → 渲染），或对选择集做移动 / 复制 / 镜像 / 阵列；都是可撤销命令。</p>
+        </li>
+        <li class="tm-step">
+          <div class="tm-step-badge"><img src="{{ 'img/icons/save_as.svg'|url }}" alt="" width="28" height="28"></div>
+          <h3 class="tm-step-title">4 · 交付</h3>
+          <p class="tm-step-text">导出 IFC / STEP / glTF，或继续存 <code>.tdoc</code>；要复现问题就存一份 <code>.trscn</code> 快照。</p>
+        </li>
+      </ol>
+
+      <ul class="tm-format-flow">
+        <li class="tm-chip-group">
+          <span class="tm-chip-label">进</span>
+          <span class="tm-chip">IFC</span><span class="tm-chip">STEP</span><span class="tm-chip">IGES</span><span class="tm-chip">BREP</span><span class="tm-chip">OBJ</span><span class="tm-chip">GLB</span>
+        </li>
+        <li class="tm-flow-arrow"><i class="fas fa-arrow-right" aria-hidden="true"></i></li>
+        <li class="tm-chip-group">
+          <span class="tm-chip-label">编辑态</span>
+          <span class="tm-chip tm-chip-strong">.tdoc</span>
+        </li>
+        <li class="tm-flow-arrow"><i class="fas fa-arrow-right" aria-hidden="true"></i></li>
+        <li class="tm-chip-group">
+          <span class="tm-chip-label">出</span>
+          <span class="tm-chip">IFC</span><span class="tm-chip">STEP</span><span class="tm-chip">glTF</span><span class="tm-chip tm-chip-ghost">.trscn 快照</span>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============================ 架构 ============================ -->
+  <section class="tm-section" id="architecture">
+    <div class="tm-wrap">
+      <header class="tm-section-head">
+        <p class="tm-eyebrow">架构</p>
+        <h2 class="tm-section-title">六层，各管一件事</h2>
+        <p class="tm-section-sub">
+          每一层都有独立的文档与测试。想深挖哪一层，直接点进去。
+        </p>
+      </header>
+
+      <div class="tm-arch">
+        <a class="tm-arch-row" href="{{ 'APP/'|url }}">
+          <span class="tm-arch-idx">01</span>
+          <span class="tm-arch-name">Qt 客户端<em>src/app</em></span>
+          <span class="tm-arch-desc">窗口、三维视口、属性面板、大纲树与工具带；几何真相不在这层。</span>
+          <span class="tm-arch-go"><i class="fas fa-arrow-right" aria-hidden="true"></i></span>
+        </a>
+        <a class="tm-arch-row" href="{{ 'plugin/'|url }}">
+          <span class="tm-arch-idx">02</span>
+          <span class="tm-arch-name">插件 / 脚本宿主<em>src/plugin</em></span>
+          <span class="tm-arch-desc">C# 扩展与命令控制台，挂在壳上；编辑仍走已有命令。</span>
+          <span class="tm-arch-go"><i class="fas fa-arrow-right" aria-hidden="true"></i></span>
+        </a>
+        <a class="tm-arch-row" href="{{ 'BIM/'|url }}">
+          <span class="tm-arch-idx">03</span>
+          <span class="tm-arch-name">BIM 业务层<em>src/bim</em></span>
+          <span class="tm-arch-desc">楼层、轴网、墙梁板柱、门窗宿主与关联关系 —— 建筑规则都在这。</span>
+          <span class="tm-arch-go"><i class="fas fa-arrow-right" aria-hidden="true"></i></span>
+        </a>
+        <a class="tm-arch-row" href="{{ 'SCENE-GRAPH/'|url }}">
+          <span class="tm-arch-idx">04</span>
+          <span class="tm-arch-name">场景图<em>src/engine/document</em></span>
+          <span class="tm-arch-desc">语义树：层级、变换、包围盒缓存、IFC 属性与材质引用。</span>
+          <span class="tm-arch-go"><i class="fas fa-arrow-right" aria-hidden="true"></i></span>
+        </a>
+        <a class="tm-arch-row" href="{{ 'MCAD-PIPELINE/'|url }}">
+          <span class="tm-arch-idx">05</span>
+          <span class="tm-arch-name">造型<em>src/engine/modeling</em></span>
+          <span class="tm-arch-desc">特征树 · 求值器 · 几何边界（IShapeOps）：OCCT 与 IfcOpenShell。</span>
+          <span class="tm-arch-go"><i class="fas fa-arrow-right" aria-hidden="true"></i></span>
+        </a>
+        <a class="tm-arch-row" href="{{ 'RENDERING/'|url }}">
+          <span class="tm-arch-idx">06</span>
+          <span class="tm-arch-name">渲染<em>src/engine/render</em></span>
+          <span class="tm-arch-desc">draw list、RHI（Vulkan / OpenGL / WebGPU）、视锥剔除、合批与 LOD。</span>
+          <span class="tm-arch-go"><i class="fas fa-arrow-right" aria-hidden="true"></i></span>
+        </a>
+      </div>
+
+      <div class="tm-notes">
+        <div class="tm-note">
+          <h3>为什么查看看得动</h3>
+          <p>语义树与渲染场景图分离，用稳定 ID 关联：一侧管撤销、序列化、属性面板，另一侧管合批、LOD、裁剪与实例化。</p>
+        </div>
+        <div class="tm-note">
+          <h3>为什么编辑敢下手</h3>
+          <p>几何的真相是特征树（参数 + 依赖）；BRep 与三角网是缓存。任何编辑都封装成一条可撤销命令。</p>
+        </div>
+        <div class="tm-note">
+          <h3>为什么能扩展</h3>
+          <p>C++ 内核保持不动，扩展写托管侧；宿主 API 是一份稳定的面，插件可以随版本升级而不重写内核。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ 文档 ============================ -->
+  <section class="tm-section tm-section-alt" id="docs">
+    <div class="tm-wrap">
+      <header class="tm-section-head">
+        <p class="tm-eyebrow">文档</p>
+        <h2 class="tm-section-title">文档是官网的一部分</h2>
+        <p class="tm-section-sub">
+          这一站和文档是同一套构建：每个功能都能点进对应的设计文档、模块说明与教程。
+        </p>
+      </header>
+
+      <div class="tm-doc-cards">
+        <a class="tm-doc-card" href="{{ 'tutorial/'|url }}">
+          <img src="{{ 'img/icons/box.svg'|url }}" alt="" width="28" height="28">
+          <h3>入门教程</h3>
+          <p>10 章 + 术语表：从构建运行到渲染管线，把 Tamias 当 C++ 3D 开发的教学样例。</p>
+          <span class="tm-doc-card-go">开始学习 <i class="fas fa-arrow-right" aria-hidden="true"></i></span>
+        </a>
+        <a class="tm-doc-card" href="{{ 'plugin/'|url }}">
+          <img src="{{ 'img/icons/console.svg'|url }}" alt="" width="28" height="28">
+          <h3>插件 SDK</h3>
+          <p>五章教程 + API 参考：第一个扩展、读文档、改文档、视口输入、打包发布。</p>
+          <span class="tm-doc-card-go">写插件 <i class="fas fa-arrow-right" aria-hidden="true"></i></span>
+        </a>
+        <a class="tm-doc-card" href="{{ 'BIM/'|url }}">
+          <img src="{{ 'img/icons/storey.svg'|url }}" alt="" width="28" height="28">
+          <h3>BIM 业务层</h3>
+          <p>楼层、轴网、墙梁板柱宿主、关联关系与墙-墙交接的判据与算法。</p>
+          <span class="tm-doc-card-go">读 BIM <i class="fas fa-arrow-right" aria-hidden="true"></i></span>
+        </a>
+        <a class="tm-doc-card" href="{{ 'RENDERING/'|url }}">
+          <img src="{{ 'img/icons/gpu.svg'|url }}" alt="" width="28" height="28">
+          <h3>渲染与 RHI</h3>
+          <p>一帧怎么画：网格 → GPU → 像素，RHI 抽象、后端选择、视锥剔除与超大规模三角。</p>
+          <span class="tm-doc-card-go">看渲染 <i class="fas fa-arrow-right" aria-hidden="true"></i></span>
+        </a>
+        <a class="tm-doc-card" href="{{ 'APP/'|url }}">
+          <img src="{{ 'img/icons/inspector.svg'|url }}" alt="" width="28" height="28">
+          <h3>客户端（Qt 壳）</h3>
+          <p>窗口与视口怎么搭、工具带怎么组织、通用编辑与命令控制台怎么落地。</p>
+          <span class="tm-doc-card-go">看客户端 <i class="fas fa-arrow-right" aria-hidden="true"></i></span>
+        </a>
+        <a class="tm-doc-card" href="{{ 'TESTING/'|url }}">
+          <img src="{{ 'img/icons/timing.svg'|url }}" alt="" width="28" height="28">
+          <h3>测试与性能</h3>
+          <p><code>ctest</code> 覆盖了哪些层、还缺哪些；Tracy 性能分析怎么接、看什么。</p>
+          <span class="tm-doc-card-go">看测试 <i class="fas fa-arrow-right" aria-hidden="true"></i></span>
+        </a>
+      </div>
+
+      <p class="tm-docs-more">
+        侧栏里的每篇文档都是设计决策的第一手记录 —— 包括
+        <a href="{{ 'ROADMAP/'|url }}">路线图</a>、
+        <a href="{{ 'DECISION-MCAD-BIM/'|url }}">MCAD 与 BIM 的取舍</a> 与
+        <a href="{{ 'FAQ/'|url }}">答疑（Q&amp;A）</a>。
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================ 快速开始 ============================ -->
+  <section class="tm-section" id="quickstart">
+    <div class="tm-wrap">
+      <header class="tm-section-head">
+        <p class="tm-eyebrow">快速开始</p>
+        <h2 class="tm-section-title">三条命令，把源码跑起来</h2>
+        <p class="tm-section-sub">
+          Windows 需要 Visual Studio 2022/2026、Qt 6、Vulkan SDK、vcpkg 与 CMake 3.24+；
+          首次配置会从源码编译 OCCT，等 1–2 小时是正常的。
+        </p>
+      </header>
+
+      <div class="tm-quickstart">
+        <div class="tm-code">
+          <div class="tm-code-head" aria-hidden="true">
+            <span class="tm-shot-dots"><i></i><i></i><i></i></span>
+            <span>PowerShell</span>
+          </div>
+<pre><code class="language-powershell">$env:VCPKG_ROOT = 'C:\dev\vcpkg'
+$env:VULKAN_SDK = 'C:\VulkanSDK\&lt;version&gt;'
+
+cmake --preset msvc
+cmake --build --preset relwithdebinfo --parallel
+&amp; .\build\bin\RelWithDebInfo\tamias.exe</code></pre>
+        </div>
+
+        <div class="tm-quickstart-side">
+          <h3>接着去哪</h3>
+          <ul class="tm-links">
+            <li><a href="{{ 'tutorial/02-build-and-run/'|url }}">第 2 章：构建与运行</a> —— 前置依赖与常见坑</li>
+            <li><a href="{{ 'tutorial/'|url }}">入门教程总览</a> —— 10 章学习路径</li>
+            <li><a href="{{ 'WEB/'|url }}">浏览器（WASM）查看器</a> —— 引擎交叉编译到 WebAssembly（施工中）</li>
+            <li><a href="{{ 'TESTING/'|url }}">测试</a> —— <code>ctest --test-dir build -C RelWithDebInfo</code></li>
+          </ul>
+          <p class="tm-quickstart-cta">
+            <a class="tm-btn tm-btn-primary" href="{{ 'tutorial/'|url }}">从教程开始 <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ CTA ============================ -->
+  <section class="tm-cta-band">
+    <div class="tm-wrap tm-cta-band-inner">
+      <div>
+        <h2>Tamias 是开源的（MIT）</h2>
+        <p>参数化编辑内核还在往前推，欢迎来 GitHub 提 Issue、看路线图，或者直接读源码。</p>
+      </div>
+      <p class="tm-cta-band-btns">
+        <a class="tm-btn tm-btn-primary tm-btn-lg" href="{{ config.repo_url }}" target="_blank" rel="noopener"><i class="fab fa-github" aria-hidden="true"></i> GitHub 仓库</a>
+        <a class="tm-btn tm-btn-ghost tm-btn-lg" href="{{ 'ROADMAP/'|url }}">路线图</a>
+      </p>
+    </div>
+  </section>
+
+</div>

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{# 404 用绝对地址（GitHub Pages 会在任意路径上返回这一页，相对链接会算错） #}
+{%- set tm_site = config.site_url or '/' -%}
+
+{% block htmltitle %}
+<title>页面没找到 - {{ config.site_name }}</title>
+{% endblock %}
+
+{% block content %}
+<div class="tm-404">
+  <p class="tm-404-code">404</p>
+  <h1>这个页面不在了</h1>
+  <p class="tm-404-text">
+    链接可能改过名，或者文档结构调整了。从下面这些入口继续。
+  </p>
+  <p class="tm-cta">
+    <a class="tm-btn tm-btn-primary" href="{{ tm_site }}">回到首页</a>
+    <a class="tm-btn tm-btn-ghost" href="{{ tm_site }}tutorial/">入门教程</a>
+    <a class="tm-btn tm-btn-ghost" href="{{ tm_site }}ROADMAP/">路线图</a>
+    <a class="tm-btn tm-btn-ghost" href="{{ tm_site }}FAQ/">答疑（Q&amp;A）</a>
+  </p>
+</div>
+{% endblock %}
+
+{% block footer %}
+  {% include "footer.html" %}
+{% endblock %}

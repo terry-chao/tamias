@@ -21,9 +21,23 @@ theme:
     - csharp
     - cmake
     - bash
+    - powershell
 
 extra_css:
   - css/brand.css
+  - css/home.css
+
+extra_javascript:
+  - js/site.js
+
+copyright: © 2026 Terry · MIT License
+
+# 官网用到的外链（顶栏「下载」、页脚「项目」列）
+extra:
+  external:
+    releases: https://github.com/terry-chao/tamias/releases
+    issues: https://github.com/terry-chao/tamias/issues
+    build_guide: https://github.com/terry-chao/tamias/blob/main/BUILD.md
 
 markdown_extensions:
   - admonition
@@ -31,7 +45,9 @@ markdown_extensions:
   - toc:
       permalink: true
 
-# 导航：总览定坐标，再按路线图分层（见 ROADMAP §2）；BIM 夹在客户端与场景图之间
+# 导航：首页 = 产品落地页（overrides/home.html 渲染），其余是文档。
+# 文档导航会渲染成文档页左侧的目录树（overrides/nav-tree.html），
+# 所以这里的分组名就是侧栏里看到的小标题。分组标题改了不影响页面 URL。
 nav:
   - 首页: index.md
   - 总览:
@@ -39,12 +55,8 @@ nav:
       - MCAD 与 BIM: DECISION-MCAD-BIM.md
       - 内嵌浏览器（决策）: DECISION-EMBEDDED-BROWSER.md
       - 架构: ARCHITECTURE.md
-  - 其他:
-      - 答疑（Q&A）: FAQ.md
-      - 测试: TESTING.md
-      - 性能分析（Tracy）: PROFILING.md
   - 入门教程:
-      - tutorial/index.md
+      - 教程总览: tutorial/index.md
       - 1. 认识 Tamias: tutorial/01-what-is-tamias.md
       - 2. 构建与运行: tutorial/02-build-and-run.md
       - 3. 界面与交互: tutorial/03-ui-and-interaction.md
@@ -57,24 +69,24 @@ nav:
       - 10. Web 与路线图: tutorial/10-web-and-roadmap.md
       - 术语速查: tutorial/glossary.md
   - 客户端:
-      - app/index.md
+      - 客户端总览: app/index.md
       - Qt 壳: APP.md
       - 通用编辑（移动/复制/阵列）: EDIT-OPERATIONS.md
       - 脚本与命令控制台: SCRIPTING.md
       - 参考图纸: DRAWING.md
   - 插件:
-      - plugin/index.md
+      - 插件总览: plugin/index.md
       - 设计理念: plugin/design.md
       - 使用: plugin/usage.md
       - 教程（Tutorial）:
-          - plugin/tutorial.md
+          - 教程总览: plugin/tutorial.md
           - 1. 第一个扩展: plugin/tutorial/01-first-extension.md
           - 2. 读文档: plugin/tutorial/02-read-document.md
           - 3. 改文档: plugin/tutorial/03-edit-and-undo.md
           - 4. 对话框与视口输入: plugin/tutorial/04-dialogs-and-input.md
           - 5. 工程、元数据与发布: plugin/tutorial/05-project-and-ship.md
       - API 参考（API Reference）:
-          - plugin/api.md
+          - API 总览: plugin/api.md
           - IHost: plugin/api/host.md
           - 文档快照与枚举: plugin/api/document.md
           - 宿主对话框: plugin/api/ui.md
@@ -82,24 +94,24 @@ nav:
           - 命令与参数: plugin/api/commands.md
           - C ABI: plugin/api/abi.md
   - BIM:
-      - bim/index.md
+      - BIM 总览: bim/index.md
       - BIM 业务层: BIM.md
       - 图纸 → BIM（翻模）: DRAWING-TO-BIM.md
       - 关联关系: bim/relations.md
       - 墙-墙交接: bim/junctions.md
   - 场景图:
-      - scene/index.md
+      - 场景图总览: scene/index.md
       - 语义树: SCENE-GRAPH.md
       - 空间索引（点选 / 框选）: SPATIAL-INDEX.md
   - 造型:
-      - modeling/index.md
+      - 造型总览: modeling/index.md
       - 建模内核（Kernel）: MODELING-KERNEL.md
       - 特征树求值器: FEATURE-TREE-EVALUATOR.md
       - MCAD 管线: MCAD-PIPELINE.md
       - 几何边界: ISHAPE-OPS.md
       - 几何边界入口: kernel/index.md
   - 渲染:
-      - render/index.md
+      - 渲染总览: render/index.md
       - 超大规模三角: MASSIVE-GEOMETRY.md
       - 管线与 RHI: RENDERING.md
       - RHI 启动（探测/降级/块名单）: RHI-STARTUP.md
@@ -111,3 +123,7 @@ nav:
       - 合批 / Instancing: INSTANCING.md
       - 场景文字: TEXT.md
       - 渲染场景快照: RENDER-SCENE.md
+  - 工程实践:
+      - 答疑（Q&A）: FAQ.md
+      - 测试: TESTING.md
+      - 性能分析（Tracy）: PROFILING.md

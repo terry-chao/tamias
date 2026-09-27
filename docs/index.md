@@ -1,43 +1,46 @@
 # Tamias
 
-跨 MCAD / BIM 的**几何查看 + 参数化编辑内核**。
+跨 MCAD / BIM 的**几何查看 + 参数化编辑内核**：把「大模型 BIM 查看」和「参数化几何编辑」放进同一个桌面应用。
+Qt 做壳，自研 RHI 跑 Vulkan / OpenGL，OCCT 提供 BRep，IfcOpenShell 提供 IFC 语义，
+中间用**特征树**与**分层场景图**串成一条链路。
 
-- **Qt** 做桌面壳，自研 RHI（Vulkan 主 / OpenGL 副）；浏览器查看器走 [引擎 WASM + WebGPU](WEB.md)（[WebGPU 后端](WGPU.md)）；[WebGL2](WEB.md) 仍可作 WASM 可选回退
-- **OCCT** 提供 BRep 几何内核
-- **特征树 + 求值器** 做参数化编辑：改参数 → 重算 → 渲染
+> 站点首页由模板渲染，见 [`overrides/home.html`](https://github.com/terry-chao/tamias/blob/main/overrides/home.html)；
+> 样式在 `docs/css/home.css`。这一页保留一份文字版说明，供搜索与 GitHub 浏览用。
 
-文档按路线图里的分层排，不再平铺。先读侧栏 **总览** 这三篇定坐标，再下到各层：
+## 这个软件能做什么
+
+| 能力 | 说明 | 文档 |
+|---|---|---|
+| **参数化编辑** | 几何的源头是特征树（参数 + 依赖）：改参数 → 求值重算 → 渲染；BRep / 三角网只是缓存 | [特征树求值器](FEATURE-TREE-EVALUATOR.md) |
+| **BIM 业务层** | 楼层、轴网、墙梁板柱、门窗宿主与关联关系；墙-墙转角自动斜接 | [BIM 业务层](BIM.md) |
+| **大模型查看** | 语义树与渲染场景图分离，空间索引点选 / 框选，视锥剔除 + LOD + 合批 | [空间索引](SPATIAL-INDEX.md) |
+| **自研 RHI** | Vulkan 主 / OpenGL 副（独立线程），启动探测、失败降级、驱动块名单；浏览器走 WASM + WebGPU | [RHI 启动](RHI-STARTUP.md) |
+| **参考图纸** | PDF / DXF / DWF / SVG / 位图贴进三维视口当底图，另有只读二维图纸页 | [参考图纸](DRAWING.md) |
+| **插件与脚本** | C# 扩展：约定目录热加载 `main.cs` / `.dll`，Ribbon 命令、视口输入、宿主对话框 | [插件](plugin/index.md) |
+| **通用编辑** | 移动 / 复制 / 旋转 / 镜像 / 阵列 = 选择集 → 一条可撤销命令 | [通用编辑](EDIT-OPERATIONS.md) |
+| **格式分工** | 编辑态 `.tdoc`（语义树 + 特征树），交换态 IFC / STEP / IGES / BREP / OBJ / GLB | [路线图](ROADMAP.md) |
+
+## 先读这三篇定坐标
 
 - [路线图](ROADMAP.md) —— 一句话定位、分层关系、里程碑
 - [MCAD 与 BIM](DECISION-MCAD-BIM.md) —— 为什么做一个 app、编辑深度怎么分层
 - [架构](ARCHITECTURE.md) —— 引擎 / 宿主 / 胶水 / 界面
 
----
+## 想学 C++ 3D 开发
 
-## 新手从这里开始
+[**Tamias 入门教程**](tutorial/index.md) 把它当成一个完整的教学样例：先跑起来、再读骨架、再按兴趣深入。
 
-想学 **C++ 3D 开发**？把 Tamias 当成一部真实的三维软件来拆：先跑起来、再读骨架、再按兴趣深入。完整的入门教程在这里：
+- 第 1 章 认识 Tamias：软件由哪些部件组成
+- 第 2 章 构建与运行：从源码编译并启动
+- 第 3 章 界面与交互：先当用户：放盒子、改参数
+- 第 4 章 代码骨架 ★：`main()` 到一帧的分层与数据流
+- 第 5–7 章：几何与造型 / 文档与场景 / 命令与撤销
+- 第 8 章 渲染管线 ★：网格 → GPU → 像素
+- 第 9–10 章：BIM 业务层 / Web 与路线图
 
-👉 [**Tamias 入门教程**](tutorial/index.md)
+每章都是「学什么 + 正文 + 动手练习 + 延伸阅读」，看不懂模块文档时先回到教程对应章节。
 
-```
-第 1 章 认识 Tamias ──────── 软件由哪些部件组成
-第 2 章 构建与运行 ───────── 从源码编译并启动
-第 3 章 界面与交互 ───────── 先当用户：放盒子、改参数
-第 4 章 代码骨架 ★ ───────── main() 到一帧：分层与数据流
-第 5 章 几何与造型 ───────── 三角网 / BRep / 特征树
-第 6 章 文档与场景 ───────── Document / Scene / Entity
-第 7 章 命令与撤销 ───────── 一切编辑都是命令
-第 8 章 渲染管线 ★ ───────── 网格 → GPU → 像素
-第 9 章 BIM 业务层 ───────── 建筑语义与门窗宿主
-第 10 章 Web 与路线图 ────── WASM、浏览器 WebGPU、进阶路径
-```
-
-每章都写了「学什么 + 正文 + 动手练习 + 延伸阅读」，并直接链到下面的模块文档。看不懂模块文档时，先回到教程对应章节。
-
----
-
-## 按模块读
+## 按模块查文档
 
 ```
 ┌────────────── Qt 客户端 (app) ──────────────┐
@@ -51,17 +54,5 @@
 └───────────────────────────────────────────────┘
 ```
 
-| 层 | 管什么 | 读这些 |
-|---|---|---|
-| **客户端** | 窗口、视口、属性面板、命令入口 | [Qt 壳](APP.md)、[通用编辑（移动/复制/阵列）](EDIT-OPERATIONS.md)、[参考图纸](DRAWING.md) |
-| **插件** | C# 扩展：Ribbon 命令、只读查询、dispatch 内核命令 | [插件系列](plugin/index.md) |
-| **BIM** | 楼层、轴网、墙梁板柱宿主、关联关系、当前标高 | [BIM 业务层](BIM.md)、[关联关系](bim/relations.md) |
-| **场景图** | 语义树、变换、包围盒、展平 draw list | [总述](scene/index.md)、[语义树](SCENE-GRAPH.md)、[空间索引（点选 / 框选）](SPATIAL-INDEX.md) |
-| **造型** | 特征树、求值、MCAD 深路径；内核插件口 | [特征树求值器](FEATURE-TREE-EVALUATOR.md)、[MCAD 管线](MCAD-PIPELINE.md)、[几何边界](ISHAPE-OPS.md) |
-| **渲染** | 一帧怎么画、Vulkan/OpenGL/WebGPU、屏外不画 | [管线与 RHI](RENDERING.md)、[视锥、NDC 与屏幕](NDC.md)、[OpenGL 后端](OPENGL.md)、[浏览器 WebGPU](WGPU.md)、[Web 查看器](WEB.md)、[视锥剔除](FRUSTUM-CULLING.md)、[合批 / Instancing](INSTANCING.md)、[渲染场景快照](RENDER-SCENE.md)、[超大规模三角](MASSIVE-GEOMETRY.md) |
-
-RHI 抽象写在 [渲染管线](RENDERING.md) 第 5 节；OpenGL 落地见 [OpenGL 后端](OPENGL.md)；浏览器 WebGPU 见 [WebGPU 后端](WGPU.md)。产品定位见 [MCAD 与 BIM](DECISION-MCAD-BIM.md)；客户端要不要嵌浏览器见 [嵌浏览器决策](DECISION-EMBEDDED-BROWSER.md)。
-
-散落的「为什么」（场景规模、BRep、mipmap、UE / OSG / VSG、RHI、插件 C#、拾取容差、相机旋转中心、绘制流程、计时工具、文字、浮点精度、LOD）集中回答在 [答疑（Q&A）](FAQ.md)。
-
-怎么验证改动有没有把内核弄坏：[测试](TESTING.md)（`tamias_tests` / `ctest`、覆盖了什么、缺什么）。
+侧栏的分组就是上图的层：总览 / 入门教程 / 客户端 / 插件 / BIM / 场景图 / 造型 / 渲染 / 工程实践。
+散落的「为什么」（场景规模、BRep、mipmap、RHI、插件、拾取、文字、浮点、LOD）集中在 [答疑（Q&A）](FAQ.md)。

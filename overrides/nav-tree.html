@@ -1,0 +1,18 @@
+{# 递归渲染 MkDocs nav 树（文档左侧栏用）。
+   有子项的分组用 <details> 折叠，默认展开当前页所在的分支。 #}
+{%- if nav_item.children -%}
+<li class="tm-tree-group">
+  <details{% if nav_item.active %} open{% endif %}>
+    <summary class="tm-tree-summary">{{ nav_item.title }}</summary>
+    <ul class="tm-tree-children">
+      {%- for nav_item in nav_item.children -%}
+        {%- include "nav-tree.html" -%}
+      {%- endfor -%}
+    </ul>
+  </details>
+</li>
+{%- else -%}
+<li class="tm-tree-leaf{% if nav_item.active %} is-active{% endif %}">
+  <a href="{{ nav_item.url|url }}">{{ nav_item.title }}</a>
+</li>
+{%- endif -%}

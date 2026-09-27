@@ -1,0 +1,70 @@
+{# 文档页布局：左（全站文档目录）/ 中（正文）/ 右（本页目录）。
+   首页不套这个模板。 #}
+{%- set tm_show_toc = page.toc and not page.meta.disable_toc -%}
+<div class="tm-doc">
+
+  <aside class="tm-doc-side" aria-label="文档目录">
+    <p class="tm-doc-label">文档</p>
+    <button type="button" class="tm-doc-side-toggle" data-tm-toggle="tree" aria-expanded="false" aria-controls="tm-doc-tree">
+      <i class="fas fa-list-ul" aria-hidden="true"></i> 全部文档
+      <i class="fas fa-chevron-down tm-doc-side-caret" aria-hidden="true"></i>
+    </button>
+    <div class="tm-doc-tree" id="tm-doc-tree">
+      <ul class="tm-tree tm-tree-root">
+        {%- for nav_item in nav -%}
+          {# 首页在顶栏，不进文档目录 #}
+          {%- if not loop.first -%}
+            {%- include "nav-tree.html" -%}
+          {%- endif -%}
+        {%- endfor -%}
+      </ul>
+    </div>
+  </aside>
+
+  <main class="tm-doc-body" role="main">
+    {{ page.content }}
+
+    {%- if page.previous_page or page.next_page %}
+    <nav class="tm-pager" aria-label="翻页">
+      {%- if page.previous_page %}
+      <a class="tm-pager-item tm-pager-prev" rel="prev" href="{{ page.previous_page.url|url }}">
+        <span class="tm-pager-dir"><i class="fas fa-arrow-left" aria-hidden="true"></i> 上一篇</span>
+        <span class="tm-pager-title">{{ page.previous_page.title }}</span>
+      </a>
+      {%- endif %}
+      {%- if page.next_page %}
+      <a class="tm-pager-item tm-pager-next" rel="next" href="{{ page.next_page.url|url }}">
+        <span class="tm-pager-dir">下一篇 <i class="fas fa-arrow-right" aria-hidden="true"></i></span>
+        <span class="tm-pager-title">{{ page.next_page.title }}</span>
+      </a>
+      {%- endif %}
+    </nav>
+    {%- endif %}
+
+    {%- if page.edit_url %}
+    <p class="tm-doc-edit">
+      <a href="{{ page.edit_url }}" target="_blank" rel="noopener"><i class="fab fa-github" aria-hidden="true"></i> 在 GitHub 上编辑此页</a>
+      <span class="tm-dot-sep">·</span>
+      <a href="{{ config.repo_url }}/issues" target="_blank" rel="noopener">报告问题</a>
+    </p>
+    {%- endif %}
+  </main>
+
+  <aside class="tm-doc-toc bs-sidebar" aria-label="本页目录">
+    {%- if tm_show_toc %}
+    <p class="tm-toc-title">本页目录</p>
+    <ul class="tm-toc nav bs-sidenav">
+      {%- for toc_item in page.toc %}
+      <li class="first-level"><a href="{{ toc_item.url }}">{{ toc_item.title }}</a></li>
+        {%- for toc_item in toc_item.children %}
+        <li class="second-level"><a href="{{ toc_item.url }}">{{ toc_item.title }}</a></li>
+          {%- for toc_item in toc_item.children %}
+          <li class="third-level"><a href="{{ toc_item.url }}">{{ toc_item.title }}</a></li>
+          {%- endfor %}
+        {%- endfor %}
+      {%- endfor %}
+    </ul>
+    {%- endif %}
+  </aside>
+
+</div>
