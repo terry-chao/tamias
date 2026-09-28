@@ -193,6 +193,57 @@ body.homepage > .container {
   box-shadow: 0 48px 90px -46px rgba(0, 0, 0, .95);
 }
 
+/* 截图本身是个按钮：点开进全屏灯箱（逻辑在 docs/js/site.js） */
+
+.tm-hero-shot-btn {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: zoom-in;
+}
+
+.tm-hero-shot-btn:focus-visible {
+  outline: 2px solid #7fadff;
+  outline-offset: 4px;
+}
+
+.tm-hero-shot-hint {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 999px;
+  background: rgba(8, 14, 26, .74);
+  color: #dbe6fb;
+  font-size: 12.5px;
+  font-weight: 600;
+  opacity: .85;
+  pointer-events: none;
+  transition: opacity .16s ease, background .16s ease, border-color .16s ease;
+}
+
+.tm-hero-shot-btn:hover .tm-hero-shot-hint,
+.tm-hero-shot-btn:focus-visible .tm-hero-shot-hint {
+  opacity: 1;
+  background: rgba(47, 107, 243, .9);
+  border-color: rgba(255, 255, 255, .3);
+}
+
+@media (max-width: 640px) {
+  .tm-hero-shot-hint {
+    display: none;
+  }
+}
+
 .tm-shot-dots {
   display: inline-flex;
   gap: 5px;

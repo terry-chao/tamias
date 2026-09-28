@@ -304,6 +304,76 @@ body.homepage .tm-header.is-over .tm-burger span {
   color: var(--tm-accent-dark);
 }
 
+/* --------------------------------------------------- 图片灯箱 -------- */
+
+/* 任意元素加 data-tm-lightbox="图片地址" 就能点开全屏看大图，
+   逻辑在 docs/js/site.js；没有 JS 时元素照常显示，只是点不开。 */
+
+.tm-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1080;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5vh 4vw;
+  background: rgba(6, 11, 22, .93);
+  cursor: zoom-out;
+}
+
+.tm-lightbox[hidden] {
+  display: none;
+}
+
+.tm-lightbox-img {
+  max-width: 96vw;
+  max-height: 88vh;
+  border-radius: 6px;
+  box-shadow: 0 44px 90px -34px rgba(0, 0, 0, .95);
+  cursor: default;
+}
+
+.tm-lightbox-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border: 1px solid rgba(255, 255, 255, .24);
+  border-radius: 999px;
+  background: rgba(12, 20, 36, .85);
+  color: #eaf1ff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .16s ease, border-color .16s ease, color .16s ease;
+}
+
+.tm-lightbox-close:hover,
+.tm-lightbox-close:focus {
+  background: rgba(47, 107, 243, .92);
+  border-color: rgba(255, 255, 255, .42);
+  color: #fff;
+}
+
+.tm-lightbox-tip {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  color: rgba(226, 236, 253, .7);
+  font-size: 12.5px;
+}
+
+/* 灯箱开着的时候别让背后的页面跟着滚 */
+html.tm-lightbox-open,
+html.tm-lightbox-open body {
+  overflow: hidden;
+}
+
 /* ------------------------------------------------- 文档三栏布局 ------ */
 
 body:not(.homepage) > .container {

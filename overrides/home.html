@@ -31,8 +31,12 @@
       </div>
 
       <div class="tm-hero-visual">
-        <img class="tm-hero-shot" src="{{ 'image.png'|url }}" width="1600" height="855"
-             alt="Tamias 桌面客户端界面：三维视口、属性面板与命令入口">
+        <button type="button" class="tm-hero-shot-btn" data-tm-lightbox="{{ 'image.png'|url }}"
+                aria-label="全屏查看软件截图（Esc 关闭）">
+          <img class="tm-hero-shot" src="{{ 'image.png'|url }}" width="1600" height="855"
+               alt="Tamias 桌面客户端界面：三维视口、属性面板与命令入口">
+          <span class="tm-hero-shot-hint" aria-hidden="true"><i class="fas fa-expand"></i> 点击全屏看大图</span>
+        </button>
       </div>
     </div>
 
