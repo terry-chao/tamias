@@ -42,6 +42,9 @@ class RibbonGroup final : public QWidget {
   QToolButton* add_action(QAction* action);
   void reorder_buttons(const std::vector<QToolButton*>& ordered);
   void set_separator_visible(bool visible);
+  // 这一组里的全部命令（按按钮顺序）。命令搜索靠它把工具带上的按钮一条条列出来
+  // （见 ribbon_command_search.h）。
+  [[nodiscard]] std::vector<QAction*> actions() const;
 
   void set_display_mode(RibbonDisplayMode mode);
   void set_identity(const QString& page_id, const QString& group_id);

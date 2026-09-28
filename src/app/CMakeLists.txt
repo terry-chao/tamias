@@ -22,6 +22,7 @@ add_executable(tamias
   shell/ribbon_bar.cpp
   shell/ribbon_page.cpp
   shell/ribbon_group.cpp
+  shell/ribbon_command_search.cpp
   shell/ribbon_float_window.cpp
   shell/toast.cpp
   shell/mesh_thumbnail.cpp

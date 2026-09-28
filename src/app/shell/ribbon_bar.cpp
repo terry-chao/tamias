@@ -1,5 +1,6 @@
 #include "app/shell/ribbon_bar.h"
 
+#include "app/shell/ribbon_command_search.h"
 #include "app/shell/ribbon_float_window.h"
 #include "app/shell/ribbon_group.h"
 #include "app/shell/ribbon_page.h"
@@ -17,11 +18,13 @@
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QIcon>
+#include <QKeySequence>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMimeData>
 #include <QPixmap>
 #include <QScreen>
+#include <QShortcut>
 #include <QSize>
 #include <QSizePolicy>
 #include <QStackedWidget>
@@ -31,6 +34,7 @@
 #include <QVBoxLayout>
 #include <algorithm>
 #include <iterator>
+#include <utility>
 
 namespace tamias {
 namespace {
@@ -77,6 +81,19 @@ QString ribbon_stylesheet(bool dark) {
         "}"
         "QToolButton#ribbonStyleButton:hover { background: #3c3f41; }"
         "QToolButton#ribbonStyleButton::menu-indicator { image: none; width: 0; }"
+        // 命令搜索：菜单行右端的输入框，和它下面那张结果表（独立窗口，样式表由
+        // apply_theme 另外发一份过去，见 RibbonCommandSearch::set_popup_stylesheet）。
+        "QLineEdit#ribbonSearch {"
+        "  background: #26282b; border: 1px solid #3f4245; border-radius: 4px;"
+        "  color: #dcdcdc; padding: 1px 6px; font-size: 11px;"
+        "  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;"
+        "}"
+        "QLineEdit#ribbonSearch:focus { border: 1px solid #6cb6ff; }"
+        "QLineEdit#ribbonSearch:disabled { color: #7a7a7a; }"
+        "QListView#ribbonSearchPopup {"
+        "  background: #2b2d30; border: 1px solid #4a4d50; outline: none;"
+        "  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;"
+        "}"
         "QToolButton#ribbonButton {"
         "  background: transparent; border: none; border-radius: 4px;"
         "  color: #dcdcdc; padding: 4px 8px 2px 8px; font-size: 11px;"
@@ -127,6 +144,17 @@ QString ribbon_stylesheet(bool dark) {
       "}"
       "QToolButton#ribbonStyleButton:hover { background: #ececec; }"
       "QToolButton#ribbonStyleButton::menu-indicator { image: none; width: 0; }"
+      "QLineEdit#ribbonSearch {"
+      "  background: #ffffff; border: 1px solid #d0d0d0; border-radius: 4px;"
+      "  color: #222222; padding: 1px 6px; font-size: 11px;"
+      "  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;"
+      "}"
+      "QLineEdit#ribbonSearch:focus { border: 1px solid #1a73e8; }"
+      "QLineEdit#ribbonSearch:disabled { color: #9a9a9a; }"
+      "QListView#ribbonSearchPopup {"
+      "  background: #ffffff; border: 1px solid #c8c8c8; outline: none;"
+      "  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;"
+      "}"
       "QToolButton#ribbonButton {"
       "  background: transparent; border: none; border-radius: 4px;"
       "  color: #333333; padding: 4px 8px 2px 8px; font-size: 11px;"
@@ -200,10 +228,22 @@ RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
   collapse_button_->setIconSize(QSize(12, 12));
   connect(collapse_button_, &QToolButton::clicked, this, &RibbonBar::toggle_collapsed);
 
+  // 命令搜索：就摆在菜单行右端、样式按钮左边。工具带上的图标一行比一行多，切成
+  // 「仅图标」以后靠眼认人已经不靠谱了——这里是那条「按名字找」的退路。挂在菜单栏
+  // 的角部是有意的：卷起工具带以后，这一行仍然在，正好在最需要它的时候够得着。
+  search_ = new RibbonCommandSearch(menu_bar_);
+  search_->set_entry_provider([this] { return collect_commands(); });
+  search_->setToolTip(tr("Find a ribbon command by name (Ctrl+F)"));
+  // Ctrl+F 直接跳到这个框（和「文件 → 查找」一个按键习惯）。
+  auto* search_shortcut = new QShortcut(QKeySequence::Find, this);
+  search_shortcut->setContext(Qt::WindowShortcut);
+  connect(search_shortcut, &QShortcut::activated, this, &RibbonBar::focus_search);
+
   auto* corner_host = new QWidget(menu_bar_);
   auto* corner_layout = new QHBoxLayout(corner_host);
   corner_layout->setContentsMargins(0, 0, 6, 0);
   corner_layout->setSpacing(2);
+  corner_layout->addWidget(search_, 0, Qt::AlignVCenter);
   corner_layout->addWidget(style_button_, 0, Qt::AlignVCenter);
   corner_layout->addWidget(collapse_button_, 0, Qt::AlignVCenter);
   menu_bar_->setCornerWidget(corner_host, Qt::TopRightCorner);
@@ -310,7 +350,13 @@ void RibbonBar::apply_theme() {
     return;
   }
   applying_theme_ = true;
-  setStyleSheet(ribbon_stylesheet(is_dark_theme()));
+  const QString sheet = ribbon_stylesheet(is_dark_theme());
+  setStyleSheet(sheet);
+  // 搜索结果的列表是一个独立的顶层窗口（Qt::Popup），样式表不会自己顺着父子关系
+  // 传下去，得单独发一份，不然深色主题下它会突然白一块。
+  if (search_ != nullptr) {
+    search_->set_popup_stylesheet(sheet);
+  }
   // 分区主色是主题相关的（深色底上用亮一档的蓝 / 青绿），换主题要把颜色重发一遍。
   refresh_section_chrome();
   applying_theme_ = false;
@@ -398,6 +444,58 @@ void RibbonBar::set_display_mode(RibbonDisplayMode mode) {
   update_style_actions();
   updateGeometry();
   emit display_mode_changed(mode);
+}
+
+// ==== 命令搜索 ====
+
+std::vector<RibbonCommandEntry> RibbonBar::collect_commands() const {
+  std::vector<RibbonCommandEntry> entries;
+  for (RibbonPage* page : page_list_) {
+    if (page == nullptr) {
+      continue;
+    }
+    const QString section = page->section_title();
+    // all_groups 里带着已经拖出去浮着的分组：它们的按钮照样在，照样该搜得到
+    // （浮窗只是换个地方住，不是关掉了）。
+    for (RibbonGroup* group : page->all_groups()) {
+      if (group == nullptr) {
+        continue;
+      }
+      RibbonCommandEntry entry;
+      entry.location = section.isEmpty()
+                           ? group->title()
+                           : QStringLiteral("%1 · %2").arg(section, group->title());
+      for (QAction* action : group->actions()) {
+        if (action == nullptr) {
+          continue;
+        }
+        entry.action = action;
+        entry.keywords = action->toolTip();
+        entries.push_back(entry);
+      }
+    }
+  }
+  entries.insert(entries.end(), extra_commands_.begin(), extra_commands_.end());
+  return entries;
+}
+
+void RibbonBar::add_search_command(QAction* action, const QString& location) {
+  if (action == nullptr) {
+    return;
+  }
+  RibbonCommandEntry entry;
+  entry.action = action;
+  entry.location = location;
+  entry.keywords = action->toolTip();
+  extra_commands_.push_back(std::move(entry));
+}
+
+void RibbonBar::focus_search() {
+  if (search_ == nullptr) {
+    return;
+  }
+  search_->setFocus(Qt::ShortcutFocusReason);
+  search_->selectAll();
 }
 
 // ==== 分组拖出 / 拖回 ====

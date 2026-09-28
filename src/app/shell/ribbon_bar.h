@@ -1,5 +1,6 @@
 #pragma once
 
+#include "app/shell/ribbon_command_entry.h"
 #include "app/shell/ribbon_group.h"
 #include "app/shell/ribbon_page.h"
 
@@ -10,6 +11,7 @@
 #include <QString>
 #include <QStringList>
 #include <QWidget>
+#include <vector>
 
 class QAction;
 class QActionGroup;
@@ -31,6 +33,7 @@ namespace tamias {
 
 class RibbonFloatWindow;
 class RibbonPage;
+class RibbonCommandSearch;
 
 class RibbonBar final : public QWidget {
   Q_OBJECT
@@ -55,6 +58,14 @@ class RibbonBar final : public QWidget {
   [[nodiscard]] RibbonDisplayMode display_mode() const { return display_mode_; }
   // 切换按钮的图标由外面给（主题色的 SVG 在 main_window 里统一处理）。
   void set_style_button_icon(const QIcon& icon);
+
+  // ==== 命令搜索（菜单行右端那个输入框）====
+  // 工具带上的按钮本来就在可搜范围内（遍历分区 → 分组 → 按钮，插件后加的也算）；
+  // 宿主还能把只挂在菜单里的命令补进来，免得「搜得到」和「点得到」对不上。
+  // 位置串是「分区 · 分组」那种出处，画在结果行右边。
+  void add_search_command(QAction* action, const QString& location);
+  // 被 Ctrl+F（或别处）叫起来时用：聚焦并把已有内容全选，接着打字就是新搜索。
+  void focus_search();
 
   // ==== 被拖出 Ribbon 的分组（浮动小工具栏）====
   // 每条是 "page_id|group_id|x|y"，用来跨会话记住用户摆的位置。
@@ -106,6 +117,8 @@ class RibbonBar final : public QWidget {
   void build_style_menu();
   void update_style_actions();
   void install_group_hooks(RibbonGroup* group);
+  // 现在能搜到的东西：每个分组的每个按钮 + 宿主补的菜单命令（见 add_search_command）。
+  [[nodiscard]] std::vector<RibbonCommandEntry> collect_commands() const;
 
   [[nodiscard]] RibbonPage* page_of_group(RibbonGroup* group) const;
   // 分区顺序（= 加进来的先后）。
@@ -120,6 +133,8 @@ class RibbonBar final : public QWidget {
   static void clamp_to_screen(RibbonFloatWindow* window);
 
   QMenuBar* menu_bar_ = nullptr;
+  RibbonCommandSearch* search_ = nullptr;
+  std::vector<RibbonCommandEntry> extra_commands_;
   QToolButton* style_button_ = nullptr;
   QMenu* style_menu_ = nullptr;
   QActionGroup* style_group_ = nullptr;

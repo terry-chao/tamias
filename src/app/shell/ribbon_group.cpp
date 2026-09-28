@@ -174,6 +174,16 @@ void RibbonGroup::set_separator_visible(bool visible) {
   separator_->setVisible(visible);
 }
 
+std::vector<QAction*> RibbonGroup::actions() const {
+  std::vector<QAction*> result;
+  for (QToolButton* button : buttons()) {
+    if (QAction* action = button->defaultAction()) {
+      result.push_back(action);
+    }
+  }
+  return result;
+}
+
 void RibbonGroup::set_display_mode(RibbonDisplayMode mode) {
   mode_ = mode;
   apply_display_mode();

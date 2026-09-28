@@ -1588,6 +1588,10 @@ Meshes / textures: %2
         <translation>下一个标签页</translation>
     </message>
     <message>
+        <source>Tabs</source>
+        <translation>标签页</translation>
+    </message>
+    <message>
         <source>Previous Tab</source>
         <translation>上一个标签页</translation>
     </message>
@@ -2707,6 +2711,21 @@ Plugin ID: %4</source>
     <message>
         <source>Put every group back to its factory position and dock the floating toolbars</source>
         <translation>把每个分组放回出厂位置，并把浮动的小工具栏收回来</translation>
+    </message>
+    <message>
+        <source>Find a ribbon command by name (Ctrl+F)</source>
+        <translation>按名字找功能区里的命令（Ctrl+F）</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::RibbonCommandSearch</name>
+    <message>
+        <source>Search commands</source>
+        <translation>搜索命令</translation>
+    </message>
+    <message>
+        <source>No matching command</source>
+        <translation>没有匹配的命令</translation>
     </message>
 </context>
 <context>

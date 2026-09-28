@@ -172,6 +172,19 @@ void MainWindow::build_menu_bar() {
   QAction* about_menu_action = new QAction(tr("About Tamias"), this);
   connect(about_menu_action, &QAction::triggered, this, &MainWindow::open_about);
   help_menu->addAction(about_menu_action);
+
+  // 还有几条命令只在菜单里、没有自己的工具带按钮（导出渲染快照 / 关页签 / 切页签 /
+  // 退出 / 在线手册）。它们同样登记进命令搜索：搜索要当着「整个软件的入口表」用，
+  // 只认识图标那一排的话，用户会以为这些命令不存在。
+  if (ribbon_ != nullptr) {
+    ribbon_->add_search_command(export_scene_action_, tr("File"));
+    ribbon_->add_search_command(close_tab_action_, tr("File"));
+    ribbon_->add_search_command(exit_action_, tr("File"));
+    // 「窗口」这个源串在本上下文里已经被「窗（门窗）」占了，位置串改用「标签页」。
+    ribbon_->add_search_command(next_tab_action_, tr("Tabs"));
+    ribbon_->add_search_command(prev_tab_action_, tr("Tabs"));
+    ribbon_->add_search_command(docs_action, tr("Help"));
+  }
 }
 
 void MainWindow::refresh_recent_menu() {
