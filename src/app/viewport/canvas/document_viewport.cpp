@@ -1742,14 +1742,26 @@ void DocumentViewport::create_storey(const std::string& name, double elevation) 
 }
 
 void DocumentViewport::copy_storey(std::uint64_t source_storey_id,
-                                   std::uint64_t target_storey_id) {
+                                   const std::vector<std::uint64_t>& target_storey_ids) {
   const BimModel& bim = document_->bim();
-  const Storey* source = bim.find_storey(source_storey_id);
-  const Storey* target = bim.find_storey(target_storey_id);
-  if (source == nullptr || target == nullptr || source_storey_id == target_storey_id) {
-    emit status_message(tr("Copy floor: pick two different floors"));
+  if (bim.find_storey(source_storey_id) == nullptr || target_storey_ids.empty()) {
+    emit status_message(tr("Copy floor: pick a source floor and at least one target floor"));
     return;
   }
+  std::vector<std::uint64_t> targets;
+  for (const std::uint64_t target : target_storey_ids) {
+    if (target == 0 || target == source_storey_id || bim.find_storey(target) == nullptr) {
+      continue;
+    }
+    if (std::find(targets.begin(), targets.end(), target) == targets.end()) {
+      targets.push_back(target);
+    }
+  }
+  if (targets.empty()) {
+    emit status_message(tr("Copy floor: pick a source floor and at least one target floor"));
+    return;
+  }
+
   // 复制完成后选择要落到副本上：先记下复制前的实体清单。
   std::vector<std::uint64_t> before;
   before.reserve(document_->entities().size());
@@ -1757,8 +1769,13 @@ void DocumentViewport::copy_storey(std::uint64_t source_storey_id,
     (void)unused;
     before.push_back(id);
   }
+  std::vector<double> target_ids;
+  target_ids.reserve(targets.size());
+  for (const std::uint64_t target : targets) {
+    target_ids.push_back(static_cast<double>(target));
+  }
   const CommandArgs args{{"source_storey_id", static_cast<std::int64_t>(source_storey_id)},
-                         {"target_storey_id", static_cast<std::int64_t>(target_storey_id)}};
+                         {"target_storey_ids", std::move(target_ids)}};
   if (auto r = session_->dispatch("copy_storey", args); !r) {
     emit status_message(tr("Copy floor: %1").arg(QString::fromStdString(r.error())));
     return;
@@ -1769,9 +1786,9 @@ void DocumentViewport::copy_storey(std::uint64_t source_storey_id,
   request_redraw();
   emit document_changed();
   select_entities_created_since(before);
-  emit status_message(tr("Copied %1 component(s) to %2")
+  emit status_message(tr("Copied %1 component(s) to %2 floor(s)")
                           .arg(static_cast<int>(session_->selection().size()))
-                          .arg(QString::fromStdString(target->name)));
+                          .arg(static_cast<int>(targets.size())));
 }
 
 void DocumentViewport::set_active_storey(std::uint64_t storey_id) {

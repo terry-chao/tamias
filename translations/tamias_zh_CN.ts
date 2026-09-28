@@ -227,16 +227,16 @@ draw %1  tri %2  gpu %3MB  tess %4</source>
 绘制 %1  三角面 %2  显存 %3MB  细分 %4</translation>
     </message>
     <message>
-        <source>Copy floor: pick two different floors</source>
-        <translation>复制楼层：请选两个不同的楼层。</translation>
+        <source>Copy floor: pick a source floor and at least one target floor</source>
+        <translation>复制楼层：请选择源楼层和至少一个目标楼层。</translation>
     </message>
     <message>
         <source>Copy floor: %1</source>
         <translation>复制楼层：%1</translation>
     </message>
     <message>
-        <source>Copied %1 component(s) to %2</source>
-        <translation>已复制 %1 个构件到 %2</translation>
+        <source>Copied %1 component(s) to %2 floor(s)</source>
+        <translation>已复制 %1 个构件到 %2 个楼层</translation>
     </message>
 </context>
 <context>
@@ -4228,8 +4228,8 @@ tests failed (exit %1)
         <translation>复制楼层…</translation>
     </message>
     <message>
-        <source>Copy every component on one floor to another floor as new components</source>
-        <translation>把一层上的构件整体复制到另一层（副本都是新建构件）</translation>
+        <source>Copy every component on one floor to one or more other floors as new components</source>
+        <translation>把一层上的构件整体复制到一个或多个其他楼层（副本都是新建构件）</translation>
     </message>
     <message>
         <source>Copy Floor</source>
@@ -4255,12 +4255,16 @@ tests failed (exit %1)
         <translation>复制到</translation>
     </message>
     <message>
-        <source>Every component on the source floor is copied to the target floor as a new component. Doors and windows come with their walls; heights keep their offset relative to the floor.</source>
-        <translation>源楼层上的构件会整体复制到目标楼层（都是新建构件）。门窗跟着墙一起复制；高度保持相对本层的偏移。</translation>
+        <source>Select one or more target floors</source>
+        <translation>选择一个或多个目标楼层</translation>
     </message>
     <message>
-        <source>Pick two different floors.</source>
-        <translation>请选两个不同的楼层。</translation>
+        <source>Select one or more target floors. Hold Shift to select a continuous range, or Ctrl to add individual floors. Doors and windows come with their walls; heights keep their offset relative to the floor.</source>
+        <translation>选择一个或多个目标楼层。按住 Shift 可选择连续范围，按住 Ctrl 可逐个添加。门窗跟着墙一起复制；高度保持相对本层的偏移。</translation>
+    </message>
+    <message>
+        <source>Pick a source floor and at least one target floor.</source>
+        <translation>请选择源楼层和至少一个目标楼层。</translation>
     </message>
     <message>
         <source>[Mezzanine] %1</source>

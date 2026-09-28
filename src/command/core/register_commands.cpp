@@ -494,11 +494,19 @@ void register_commands(CommandRegistry& registry) {
         std::make_unique<CopyEntitiesCommand>(doc, ids, std::move(placements))};
   });
 
-  // 整层复制：把一层上的构件全搬到另一层（新实体 + 关系重映射 + 保留相对标高）。
+  // 整层复制：把一层上的构件全搬到一个或多个目标层（新实体 + 关系重映射 + 保留相对标高）。
   registry.register_command("copy_storey", [](Document& doc, const CommandArgs& args) {
+    std::vector<std::uint64_t> targets;
+    for (const double id : arg_doubles(args, "target_storey_ids")) {
+      targets.push_back(static_cast<std::uint64_t>(id));
+    }
+    if (targets.empty()) {
+      targets.push_back(
+          static_cast<std::uint64_t>(arg_int(args, "target_storey_id", 0)));
+    }
     return std::make_unique<CopyStoreyCommand>(
         doc, static_cast<std::uint64_t>(arg_int(args, "source_storey_id", 0)),
-        static_cast<std::uint64_t>(arg_int(args, "target_storey_id", 0)));
+        std::move(targets));
   });
 
   registry.register_command("set_material", [](Document& doc, const CommandArgs& args) {

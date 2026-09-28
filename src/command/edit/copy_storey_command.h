@@ -11,7 +11,7 @@
 
 namespace tamias {
 
-// 整层复制：把源楼层上的构件**整体**复制到目标楼层，一条撤销。
+// 整层复制：把源楼层上的构件**整体**复制到一个或多个目标楼层，一条撤销。
 //
 // 语义（和 CopyEntitiesCommand 同一套路，只是摆放不是「平移到位」而是「换层」）：
 //   - 复制出来的都是**新实体**（新 id），源件一动不动；
@@ -27,7 +27,9 @@ namespace tamias {
 class CopyStoreyCommand final : public Command {
  public:
   CopyStoreyCommand(Document& document, std::uint64_t source_storey_id,
-                    std::uint64_t target_storey_id);
+                     std::uint64_t target_storey_id);
+  CopyStoreyCommand(Document& document, std::uint64_t source_storey_id,
+                    std::vector<std::uint64_t> target_storey_ids);
 
   [[nodiscard]] Result<void> execute() override;
   void undo() override;
@@ -51,12 +53,13 @@ class CopyStoreyCommand final : public Command {
 
   void capture_sources();
   Result<void> create();
+  Result<void> create_to_target(std::uint64_t target_storey_id);
   void destroy();
   void record_made(const Entity& entity);
 
   Document* document_ = nullptr;
   std::uint64_t source_storey_id_ = 0;
-  std::uint64_t target_storey_id_ = 0;
+  std::vector<std::uint64_t> target_storey_ids_;
   std::vector<Source> sources_;
   std::vector<Made> made_;
   std::vector<Relation> made_relations_;

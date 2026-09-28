@@ -166,7 +166,7 @@ FloorPanel::FloorPanel(QWidget* parent) : QWidget(parent) {
   copy_->setToolButtonStyle(Qt::ToolButtonTextOnly);
   copy_->setText(tr("Copy Floor…"));
   copy_->setToolTip(
-      tr("Copy every component on one floor to another floor as new components"));
+      tr("Copy every component on one floor to one or more other floors as new components"));
   footer_bar->addWidget(copy_);
   show_all_ = new QToolButton(footer);
   show_all_->setObjectName(QStringLiteral("floorToolButton"));
@@ -482,7 +482,7 @@ void FloorPanel::open_copy_floor() {
   if (dialog.exec() != QDialog::Accepted) {
     return;
   }
-  viewport_->copy_storey(dialog.source_storey_id(), dialog.target_storey_id());
+  viewport_->copy_storey(dialog.source_storey_id(), dialog.target_storey_ids());
 }
 
 }  // namespace tamias

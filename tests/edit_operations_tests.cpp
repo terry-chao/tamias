@@ -310,6 +310,72 @@ TEST(EditOperations, CopyStoreyClonesComponentsOntoAnotherFloor) {
   EXPECT_EQ(document.bim().relations().size(), 2u);
 }
 
+// 批量整层复制：一次给多个目标层，但仍是一条命令、一次撤销。
+TEST(EditOperations, CopyStoreyClonesComponentsToMultipleFloors) {
+  CommandRegistry registry;
+  register_commands(registry);
+  CommandSystem system(registry);
+
+  Document document("copy-storey-batch");
+  const std::uint64_t ground = document.add_storey("1F", 0.0).id;
+  const std::uint64_t floor2 = document.add_storey("2F", 3.0).id;
+  const std::uint64_t floor3 = document.add_storey("3F", 6.0).id;
+  const std::uint64_t floor4 = document.add_storey("4F", 9.0).id;
+  document.set_active_storey(ground);
+  Entity* wall = add_wall(document, {0.f, 0.f, 0.f}, {6.f, 0.f, 0.f});
+  ASSERT_NE(wall, nullptr);
+  Entity* door = add_door(document, wall->id, {2.f, 0.f, 0.f});
+  ASSERT_NE(door, nullptr);
+  ASSERT_EQ(document.entities().size(), 2u);
+
+  ASSERT_TRUE(system.dispatch(
+      document, "copy_storey",
+      {{"source_storey_id", static_cast<std::int64_t>(ground)},
+       {"target_storey_ids",
+        std::vector<double>{static_cast<double>(floor2), static_cast<double>(floor3),
+                            static_cast<double>(floor4)}}}));
+  EXPECT_EQ(document.entities().size(), 8u);
+  EXPECT_EQ(document.bim().relations().size(), 4u);
+
+  for (const std::uint64_t target : {floor2, floor3, floor4}) {
+    std::uint64_t copied_wall = 0;
+    std::uint64_t copied_door = 0;
+    for (const auto& [id, entity] : document.entities()) {
+      if (entity_storey_id(*entity) != target) {
+        continue;
+      }
+      if (entity->kind() == EntityKind::Wall) {
+        copied_wall = id;
+      } else if (entity->kind() == EntityKind::Door) {
+        copied_door = id;
+      }
+    }
+    ASSERT_NE(copied_wall, 0u);
+    ASSERT_NE(copied_door, 0u);
+
+    const Relation* relation = document.bim().host_of(copied_door);
+    ASSERT_NE(relation, nullptr);
+    EXPECT_EQ(relation->to, copied_wall);
+    EXPECT_TRUE(relation->valid);
+    EXPECT_EQ(opening_cut_count(document, copied_wall), 1);
+
+    const float lift =
+        static_cast<float>(document.bim().storey_elevation(target) -
+                           document.bim().storey_elevation(ground));
+    EXPECT_NEAR(document.entity(copied_wall)->local_transform(1, 3),
+                document.entity(wall->id)->local_transform(1, 3) + lift, 1e-3f);
+  }
+
+  system.undo();
+  EXPECT_EQ(document.entities().size(), 2u);
+  EXPECT_EQ(document.bim().relations().size(), 1u);
+  EXPECT_EQ(opening_cut_count(document, wall->id), 1);
+
+  system.redo();
+  EXPECT_EQ(document.entities().size(), 8u);
+  EXPECT_EQ(document.bim().relations().size(), 4u);
+}
+
 // 高度：副本按构件相对源楼层的偏移摆放，不是「一律贴到目标层标高」。
 TEST(EditOperations, CopyStoreyKeepsOffsetRelativeToFloor) {
   Document document("copy-storey-offset");
@@ -339,6 +405,8 @@ TEST(EditOperations, CopyStoreyRejectsDegenerateRequests) {
 
   CopyStoreyCommand same(document, ground, ground);
   EXPECT_FALSE(same.execute());
+  CopyStoreyCommand no_targets(document, ground, std::vector<std::uint64_t>{});
+  EXPECT_FALSE(no_targets.execute());
   CopyStoreyCommand missing(document, ground, 9999);
   EXPECT_FALSE(missing.execute());
   CopyStoreyCommand empty(document, ground, upper);

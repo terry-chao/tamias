@@ -10,6 +10,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace tamias {
@@ -21,21 +22,45 @@ Vec3 transform_origin(const Mat4& m) { return {m(0, 3), m(1, 3), m(2, 3)}; }
 
 CopyStoreyCommand::CopyStoreyCommand(Document& document, std::uint64_t source_storey_id,
                                      std::uint64_t target_storey_id)
+    : CopyStoreyCommand(document, source_storey_id,
+                        std::vector<std::uint64_t>{target_storey_id}) {}
+
+CopyStoreyCommand::CopyStoreyCommand(Document& document, std::uint64_t source_storey_id,
+                                     std::vector<std::uint64_t> target_storey_ids)
     : document_(&document),
       source_storey_id_(source_storey_id),
-      target_storey_id_(target_storey_id) {}
+      target_storey_ids_(std::move(target_storey_ids)) {}
 
 Result<void> CopyStoreyCommand::execute() {
-  if (source_storey_id_ == 0 || target_storey_id_ == 0) {
-    return Err("copy_storey: a source and a target floor are required");
+  if (source_storey_id_ == 0) {
+    return Err("copy_storey: a source floor is required");
   }
-  if (source_storey_id_ == target_storey_id_) {
-    return Err("copy_storey: the source and target floor must differ");
+  if (target_storey_ids_.empty()) {
+    return Err("copy_storey: at least one target floor is required");
   }
-  if (document_->bim().find_storey(source_storey_id_) == nullptr ||
-      document_->bim().find_storey(target_storey_id_) == nullptr) {
+  if (document_->bim().find_storey(source_storey_id_) == nullptr) {
     return Err("copy_storey: floor not found");
   }
+
+  // 命令口和对话框都允许一次给多层：去重后按传入顺序复制，整批共用一次撤销。
+  std::vector<std::uint64_t> targets;
+  std::unordered_set<std::uint64_t> seen;
+  for (const std::uint64_t target : target_storey_ids_) {
+    if (target == 0) {
+      return Err("copy_storey: a target floor is required");
+    }
+    if (target == source_storey_id_) {
+      return Err("copy_storey: the source and target floors must differ");
+    }
+    if (document_->bim().find_storey(target) == nullptr) {
+      return Err("copy_storey: floor not found");
+    }
+    if (seen.insert(target).second) {
+      targets.push_back(target);
+    }
+  }
+  target_storey_ids_ = std::move(targets);
+
   if (!captured_) {
     capture_sources();
   }
@@ -95,8 +120,30 @@ Result<void> CopyStoreyCommand::create() {
   created_ids_.clear();
   affected_hosts_.clear();
 
+  for (const std::uint64_t target_storey_id : target_storey_ids_) {
+    if (auto r = create_to_target(target_storey_id); !r) {
+      destroy();
+      return Err(r.error());
+    }
+  }
+
+  // 复制的墙可能刚好顶到同一批副本墙的端点：交接（斜接面）要重算。
+  for (const std::uint64_t id : created_ids_) {
+    const Entity* entity = document_->entity(id);
+    if (entity != nullptr && is_wall_host(*entity)) {
+      if (auto r = remesh_wall_neighborhood(*document_, id); !r) {
+        log_warn("copy_storey: remesh wall failed: " + r.error());
+      }
+    }
+  }
+  document_->recompute_scene();
+  document_->mark_dirty();
+  return {};
+}
+
+Result<void> CopyStoreyCommand::create_to_target(std::uint64_t target_storey_id) {
   // 楼层标高差 = 整层的竖直位移。相对本层的偏移不变 → 构件相对本层的上下关系不乱。
-  const Vec3 lift{0.f, static_cast<float>(document_->bim().storey_elevation(target_storey_id_) -
+  const Vec3 lift{0.f, static_cast<float>(document_->bim().storey_elevation(target_storey_id) -
                                           document_->bim().storey_elevation(source_storey_id_)),
                   0.f};
 
@@ -112,19 +159,17 @@ Result<void> CopyStoreyCommand::create() {
     clone->id = 0;
     if (clone->location != nullptr) {
       // 相对源楼层的标高偏移原样搬到目标层（世界标高 = 目标层标高 + 原偏移）。
-      document_->assign_storey_with_offset(*clone, target_storey_id_, source.elevation_offset);
+      document_->assign_storey_with_offset(*clone, target_storey_id, source.elevation_offset);
     } else {
       // 没有 Location 的实体没有楼层归属，正常进不了复制范围；真进来了就按层高差平移。
       clone->local_transform = translate(lift) * clone->local_transform;
     }
     auto geometry = clone->createGeom();
     if (!geometry) {
-      destroy();
       return Err("copy_storey: " + geometry.error());
     }
     Entity* added = document_->add_entity(std::move(clone), std::move(*geometry));
     if (added == nullptr) {
-      destroy();
       return Err("copy_storey: add entity failed");
     }
     id_map[source.entity->id] = added->id;
@@ -152,18 +197,15 @@ Result<void> CopyStoreyCommand::create() {
     apply_entity_placement(*document_, *clone, world);
     auto geometry = clone->createGeom();
     if (!geometry) {
-      destroy();
       return Err("copy_storey: " + geometry.error());
     }
     Entity* added = document_->add_entity(std::move(clone), std::move(*geometry));
     if (added == nullptr) {
-      destroy();
       return Err("copy_storey: add opening failed");
     }
     created_ids_.push_back(added->id);
     if (auto r = bind_opening_to_host(*document_, added->id, host_id, transform_origin(world));
         !r) {
-      destroy();
       return Err("copy_storey: " + r.error());
     }
     affected_hosts_.push_back(host_id);
@@ -173,17 +215,6 @@ Result<void> CopyStoreyCommand::create() {
     record_made(*added);
   }
 
-  // 复制的墙可能刚好顶到同一批副本墙的端点：交接（斜接面）要重算。
-  for (const std::uint64_t id : created_ids_) {
-    const Entity* entity = document_->entity(id);
-    if (entity != nullptr && is_wall_host(*entity)) {
-      if (auto r = remesh_wall_neighborhood(*document_, id); !r) {
-        log_warn("copy_storey: remesh wall failed: " + r.error());
-      }
-    }
-  }
-  document_->recompute_scene();
-  document_->mark_dirty();
   return {};
 }
 

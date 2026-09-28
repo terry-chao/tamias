@@ -188,8 +188,9 @@ class DocumentViewport final : public QWidget {
   void update_library_material(const Material& material);
   void create_storey(const std::string& name, double elevation);
   void set_active_storey(std::uint64_t storey_id);
-  // 整层复制：把 source 层上的构件全部复制到 target 层（可撤销；副本换成选中）。
-  void copy_storey(std::uint64_t source_storey_id, std::uint64_t target_storey_id);
+  // 整层复制：把 source 层上的构件全部复制到一个或多个 target 层（可撤销；副本换成选中）。
+  void copy_storey(std::uint64_t source_storey_id,
+                   const std::vector<std::uint64_t>& target_storey_ids);
   // 楼层设置对话框的落点：整表替换楼层（可撤销）。
   void apply_storey_settings(std::vector<Storey> storeys, std::uint64_t active_storey_id);
   // 轴网设置对话框的落点：整表替换轴网（可撤销）。
