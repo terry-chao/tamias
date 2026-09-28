@@ -848,7 +848,7 @@ Vec3 eye_position() const { return target_ + Vec3{distance*cp*sy, distance*sp, d
 | 全览 / Frame All | 文档包围盒中心 | `frame_scene()` |
 | 定位某个构件 | 该构件的 `world_bounds` 中心 | `frame_node(node_id)` |
 | 定位选中集 | 选中实体的**并盒**中心 | 遍历选中项合并 AABB 后 `frame_aabb(box)` |
-| 切楼层 / 平面视图 | 该楼层高度范围内的包围盒（把高度压到楼层，平面视图下高度不参与投影） | `open_floor_view(floor_index)` |
+| 楼层页签 | 该楼层高度范围内的包围盒（把高度压到楼层，平面视图下高度不参与投影） | `enter_floor_workspace` → `floor_view_box` |
 | 打开文档 | 保存的 `ViewportState.target` | `apply_viewport_state` |
 
 所以「鼠标中心 / 场景中心 / 选中实体中心」其实是三种**命令**，不是三种鼠标模式，最后都落到同一个 `target_` 上。

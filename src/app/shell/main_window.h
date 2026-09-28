@@ -14,6 +14,7 @@
 #include <QStringList>
 #include <QStackedWidget>
 #include <QTabWidget>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -59,6 +60,8 @@ class MainWindow final : public QMainWindow {
   bool save_file_as();
   void frame_all();
   void close_tab(int index);
+  // 楼层面板点了一行：0 = 回文档页签（全局三维），其余 = 开 / 切那一层的独立页签。
+  void on_floor_view_requested(DocumentViewport* source, std::uint64_t storey_id);
   void open_recent_path(const QString& path);
   void on_missing_recent(const QString& path);
   void open_drawing_file();
@@ -91,6 +94,16 @@ class MainWindow final : public QMainWindow {
   void add_document_tab(std::shared_ptr<Document> document,
                         const ViewportState* viewport = nullptr,
                         const UiLoadProgressCallback& progress = {});
+  // 造一张文档视口（含渲染线程 / 网格上传 / 与主窗口的全部连线），但不进页签。
+  // 文档页签与楼层页签共用它——两者共享同一份 Document，只是视图状态各异。
+  DocumentViewport* create_document_viewport(std::shared_ptr<Document> document,
+                                             const UiLoadProgressCallback& progress = {});
+  // 楼层页签：这份文档里那一层的独立视图（只显示这一层，本层底面当原点）。
+  void open_floor_tab(DocumentViewport* source, std::uint64_t storey_id);
+  // 关文档页签时把它的楼层页签一并关掉（楼层页签只是这份文档的几个房间）。
+  void close_floor_tabs_for(Document* document);
+  int find_floor_tab(const Document* document, std::uint64_t storey_id) const;
+  int find_global_tab(const Document* document) const;
   Result<void> populate_document_meshes(Document& document, RenderThread& thread,
                                         const UiLoadProgressCallback& progress = {});
   void refresh_home();

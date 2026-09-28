@@ -1224,9 +1224,12 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     pc.color[0] = 1.f / std::max(std::fabs(frame.proj(0, 0)), 1e-4f);
     pc.color[1] = 1.f / std::max(std::fabs(frame.proj(1, 1)), 1e-4f);
     pc.material[0] = frame.orthographic ? 1.f : 0.f;
-    pc.eye_pos_mode[0] = frame.eye_position.x;
-    pc.eye_pos_mode[1] = frame.eye_position.y;
-    pc.eye_pos_mode[2] = frame.eye_position.z;
+    // 背景的射线重建也走**显示空间**：把眼点同样下沉 view_origin，天空里的地面 /
+    // 工作平面网格才和轴网、构件落在同一个平面上（楼层工作区的本层底面 = y 0）。
+    const Vec3 sky_eye = display_eye_position(frame);
+    pc.eye_pos_mode[0] = sky_eye.x;
+    pc.eye_pos_mode[1] = sky_eye.y;
+    pc.eye_pos_mode[2] = sky_eye.z;
     pc.eye_pos_mode[3] = std::max(frame.view_distance, 1.f);
     channel.command_list->set_pipeline(*sky_pipeline_);
     channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
@@ -1287,7 +1290,9 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     bind_mesh_sets();
     std::unordered_set<std::uint64_t> hidden(frame.hidden_node_ids.begin(),
                                              frame.hidden_node_ids.end());
-    const Frustum frustum = Frustum::from_view_proj(frame.proj * frame.view);
+    // 剔除视锥按**世界坐标**建：view 可能被楼层工作区整体下沉过（frame.view_origin），
+    // 而节点包围盒始终是世界坐标（见 world_view_proj）。
+    const Frustum frustum = Frustum::from_view_proj(world_view_proj(frame));
     SceneGraphDrawContext ctx{};
     ctx.command_list = channel.command_list.get();
     ctx.view_proj = &view_proj;

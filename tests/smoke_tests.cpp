@@ -715,6 +715,56 @@ TEST(ViewportFloor, StoreyTopSlabBelongsToTheStoreyItWasDrawnOn) {
   EXPECT_FALSE(viewport_floor_allows(floors, 0, node->world_bounds, {1}));
 }
 
+// 楼层工作区（独立楼层页签）：frame.view 被整体下沉了 view_origin（本层底面落到屏幕上的
+// y = 0），而 items / 输入点仍是世界坐标。两条补偿必须成立，否则"进入这一层"会歪：
+//   1. 剔除视锥补回平移后 = 普通的世界坐标 view_proj（世界包围盒照旧按世界判）；
+//   2. 本层底面那一点，投影到普通视图里"世界原点"的位置——也就是本层底面就是 0, 0, 0。
+TEST(FrameViewOrigin, FloorWorkspaceShiftKeepsCullingAndBackgroundConsistent) {
+  TurntableCamera camera;
+  camera.set_target({1.f, 3.f, 2.f});
+  camera.set_distance(14.f);
+  camera.set_yaw_pitch(0.6f, 0.5f);
+  const float aspect = 1.6f;
+
+  FrameSubmission plain{};
+  plain.view = camera.view_matrix();
+  plain.proj = camera.proj_matrix(aspect);
+  plain.eye_position = camera.eye_position();
+
+  const Vec3 origin{0.f, 3.f, 0.f};  // 2F：本层底面在 3 m
+  FrameSubmission floor_tab = plain;
+  floor_tab.view = camera.view_matrix() * translate(Vec3{-origin.x, -origin.y, -origin.z});
+  floor_tab.view_origin = origin;
+
+  // 1) 世界坐标 view_proj 与"没下沉过的相机"完全一致：剔除仍按世界包围盒判。
+  const Mat4 world = world_view_proj(floor_tab);
+  const Mat4 plain_world = plain.proj * plain.view;
+  for (int i = 0; i < 16; ++i) {
+    EXPECT_NEAR(world.m[i], plain_world.m[i], 1e-4f) << "element " << i;
+  }
+
+  // 2) 本层底面 (0, 3, 0) 在这张页签里，落在普通视图里世界原点的那个像素上。
+  constexpr float kWidth = 800.f;
+  constexpr float kHeight = 500.f;
+  float fx = 0.f;
+  float fy = 0.f;
+  float ox = 0.f;
+  float oy = 0.f;
+  ASSERT_TRUE(project_world_to_screen(floor_tab.proj * floor_tab.view, origin, kWidth, kHeight,
+                                      fx, fy));
+  ASSERT_TRUE(project_world_to_screen(plain_world, Vec3{0.f, 0.f, 0.f}, kWidth, kHeight, ox, oy));
+  EXPECT_NEAR(fx, ox, 1e-2f);
+  EXPECT_NEAR(fy, oy, 1e-2f);
+
+  // 3) 背景眼点跟着 view 一起下沉：天空里的地面才和轴网（本层底面）同面。
+  const Vec3 sky_eye = display_eye_position(floor_tab);
+  EXPECT_NEAR(sky_eye.x, camera.eye_position().x, 1e-5f);
+  EXPECT_NEAR(sky_eye.y, camera.eye_position().y - origin.y, 1e-5f);
+  EXPECT_NEAR(sky_eye.z, camera.eye_position().z, 1e-5f);
+  // 普通视图没有下沉：两条补偿都是恒等。
+  EXPECT_FLOAT_EQ(display_eye_position(plain).y, plain.eye_position.y);
+}
+
 TEST(Picking, RayHitsTransformedNode) {
   Document doc("t");
   MeshAsset asset{};

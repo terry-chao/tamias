@@ -25,6 +25,9 @@ class Session {
 
   [[nodiscard]] Document& document() { return *document_; }
   [[nodiscard]] const Document& document() const { return *document_; }
+  // 同一个文档可以同时开好几张视图（如文档页签 + 楼层页签），它们共享这一份
+  // shared_ptr：谁先关都不会把文档拆掉，最后一个关的人负责释放。
+  [[nodiscard]] std::shared_ptr<Document> shared_document() const { return document_; }
   // 替换文档（加载文件时用），同时清空命令栈与工具状态。
   void reset_document(std::shared_ptr<Document> document);
   [[nodiscard]] CommandSystem& command_system() { return command_system_; }

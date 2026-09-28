@@ -242,8 +242,8 @@ draw %1  tri %2  gpu %3MB  tess %4</source>
 <context>
     <name>tamias::ViewportToolPanel</name>
     <message>
-        <source>Floors: show/hide, open a view, set heights</source>
-        <translation>楼层：显隐、打开视图、设置层高</translation>
+        <source>Floors: show/hide, open a floor in its own tab, set heights</source>
+        <translation>楼层：显隐、在新标签页里打开某一层、设置层高</translation>
     </message>
     <message>
         <source>Reference drawings (DWF / DXF / PDF…): attach, show/hide, place</source>
@@ -475,6 +475,21 @@ draw %1  tri %2  gpu %3MB  tess %4</source>
         <location filename="../src/app/shell/main_window.cpp" line="1406"/>
         <source>Open Drawing</source>
         <translation>打开图纸</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/main_window.cpp" line="1938"/>
+        <source>Level %1</source>
+        <translation>标高 %1 层</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/main_window.cpp" line="1947"/>
+        <source>%1 — floor of %2</source>
+        <translation>%1 —— %2 的楼层</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/main_window.cpp" line="1953"/>
+        <source>%1: this tab works on that floor only — its floor is the origin (0, 0, 0)</source>
+        <translation>%1：这张标签页只做这一层的事——本层底面就是原点 (0, 0, 0)。</translation>
     </message>
     <message>
         <location filename="../src/app/shell/main_window.cpp" line="191"/>
@@ -1504,8 +1519,8 @@ Meshes / textures: %2
         <translation>楼层</translation>
     </message>
     <message>
-        <source>Show or hide floors, open each floor's view, and set floor heights</source>
-        <translation>按楼层显隐，打开各层视图，并设置层高</translation>
+        <source>Show or hide floors, open a floor in its own tab, and set floor heights</source>
+        <translation>按楼层显隐，在新标签页里打开某一层，并设置层高</translation>
     </message>
     <message>
         <source>Drawings</source>
@@ -4204,8 +4219,9 @@ tests failed (exit %1)
         <translation>点击回到全局三维视图</translation>
     </message>
     <message>
-        <source>Click to open this floor's view; the checkbox only shows or hides it</source>
-        <translation>点击打开该层视图；勾选框只控制显隐。</translation>
+        <location filename="../src/app/bim/floors/floor_panel.cpp" line="348"/>
+        <source>Click to open this floor in its own tab; the checkbox only shows or hides it</source>
+        <translation>点击在新标签页里打开这一层；勾选框只控制显隐。</translation>
     </message>
     <message>
         <source>Copy Floor…</source>

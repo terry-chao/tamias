@@ -66,6 +66,7 @@
 #include <QIcon>
 #include <QImage>
 #include <QInputDialog>
+#include <QPointer>
 #include <QKeySequence>
 #include <QLineEdit>
 #include <QMenu>
@@ -1106,13 +1107,13 @@ MainWindow::MainWindow(QWidget* parent)
   });
   addAction(components_action_);
   panels_group->add_action(components_action_);
-  // 楼层面板同样住在视口右侧的工具列里（同一列的第二个功能页）：显隐 + 打开楼层视图
-  // 合在一张清单里，一层一行，双击某层就是打开该层的视图。
+  // 楼层面板同样住在视口右侧的工具列里（同一列的第二个功能页）：显隐 + 按楼层开页签
+  // 合在一张清单里，一层一行，点某层就在新标签页里打开那一层。
   floors_action_ =
       new QAction(ribbon_icon(QStringLiteral(":/icons/storey.svg")), tr("Floors"), this);
   floors_action_->setShortcut(QKeySequence(tr("Ctrl+Shift+L")));
   floors_action_->setToolTip(
-      tr("Show or hide floors, open each floor's view, and set floor heights"));
+      tr("Show or hide floors, open a floor in its own tab, and set floor heights"));
   connect(floors_action_, &QAction::triggered, this, [this] {
     if (auto* vp = current_viewport()) {
       vp->toggle_floor_panel();
@@ -1501,6 +1502,11 @@ void MainWindow::refresh_home() {
   QVector<OpenDocumentItem> open_items;
   open_items.reserve(tabs_->count());
   for (int i = 0; i < tabs_->count(); ++i) {
+    // 楼层页签不是"打开的文档"，是某份文档里的一个房间：首页清单里不重复出现。
+    if (auto* workspace = qobject_cast<DocumentViewport*>(tabs_->widget(i));
+        workspace != nullptr && workspace->floor_workspace()) {
+      continue;
+    }
     OpenDocumentItem item;
     item.index = i;
     item.name = tabs_->tabText(i);
@@ -1769,6 +1775,30 @@ void MainWindow::rebuild_plugin_ribbon(RibbonBar* ribbon) {
 void MainWindow::add_document_tab(std::shared_ptr<Document> document,
                                   const ViewportState* viewport,
                                   const UiLoadProgressCallback& progress) {
+  DocumentViewport* vp = create_document_viewport(std::move(document), progress);
+  if (vp == nullptr) {
+    return;
+  }
+  const int index = tabs_->addTab(vp, QString::fromStdString(vp->document().name()));
+  tabs_->setCurrentIndex(index);
+  show_documents();
+  if (viewport) {
+    vp->apply_viewport_state(*viewport);
+    vp->request_redraw();
+  }
+  sync_render_mode_actions();
+  sync_bim_actions();
+  bind_plugin_session();
+  // add_entity / add_import_mesh mark dirty while assembling the initial scene.
+  // That baseline is not a user edit, so closing without further changes must
+  // not prompt to save.
+  vp->document().clear_dirty();
+}
+
+// 一张文档视口 = 一条渲染通道 + 一套与主窗口的连线。文档页签与楼层页签都从这里造：
+// 楼层页签复用同一份 Document（shared_ptr），所以两张页签看的是同一个模型。
+DocumentViewport* MainWindow::create_document_viewport(
+    std::shared_ptr<Document> document, const UiLoadProgressCallback& progress) {
   const RenderDeviceConfig config = AppSettings::instance().render_device_config();
   auto thread = RenderThreadPool::instance().acquire(config);
   if (!thread) {
@@ -1776,11 +1806,11 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
         this, tr("Render"),
         tr("Failed to create %1 render thread.")
             .arg(QString::fromUtf8(to_string(config.backend))));
-    return;
+    return nullptr;
   }
   if (auto r = populate_document_meshes(*document, *thread, progress); !r) {
     QMessageBox::critical(this, tr("Upload"), QString::fromStdString(r.error()));
-    return;
+    return nullptr;
   }
   // Parent after addTab so the first present sees a real laid-out size. Applying
   // viewport (and redrawing) before addTab can create a tiny swapchain that only
@@ -1840,20 +1870,136 @@ void MainWindow::add_document_tab(std::shared_ptr<Document> document,
               }
             }
           });
-  const int index = tabs_->addTab(vp, QString::fromStdString(document->name()));
+  // 楼层面板点某一行：视口开不了页签，转给主窗口开 / 切对应的页签。
+  connect(vp, &DocumentViewport::floor_view_requested, this,
+          [this, vp](std::uint64_t storey_id) { on_floor_view_requested(vp, storey_id); });
+  // 楼层页签的那一层被删掉了（楼层设置里删层）→ 这张页签没有存在意义了，关掉它。
+  // 延到事件循环下一拍再关：这会儿正走在视口自己的信号里，不能就地删掉发信号的它。
+  connect(vp, &DocumentViewport::document_changed, this, [this, vp] {
+    if (!vp->floor_workspace() ||
+        vp->document().bim().find_storey(vp->floor_workspace_storey_id()) != nullptr) {
+      return;
+    }
+    // 定时器跑起来之前这张页签可能已经被关掉了：用 QPointer 兜住。
+    const QPointer<DocumentViewport> guard(vp);
+    QTimer::singleShot(0, this, [this, guard] {
+      DocumentViewport* workspace = guard.data();
+      if (workspace == nullptr) {
+        return;
+      }
+      const int index = tabs_->indexOf(workspace);
+      if (index < 0) {
+        return;
+      }
+      const int global = find_global_tab(&workspace->document());
+      DocumentViewport* global_vp =
+          global >= 0 ? qobject_cast<DocumentViewport*>(tabs_->widget(global)) : nullptr;
+      tabs_->removeTab(index);
+      delete workspace;
+      if (global_vp != nullptr) {
+        activate_viewport(global_vp);
+      }
+    });
+  });
+  return vp;
+}
+
+int MainWindow::find_floor_tab(const Document* document, std::uint64_t storey_id) const {
+  if (document == nullptr || storey_id == 0) {
+    return -1;
+  }
+  for (int i = 0; i < tabs_->count(); ++i) {
+    auto* vp = qobject_cast<DocumentViewport*>(tabs_->widget(i));
+    if (vp != nullptr && &vp->document() == document && vp->floor_workspace() &&
+        vp->floor_workspace_storey_id() == storey_id) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+int MainWindow::find_global_tab(const Document* document) const {
+  if (document == nullptr) {
+    return -1;
+  }
+  for (int i = 0; i < tabs_->count(); ++i) {
+    auto* vp = qobject_cast<DocumentViewport*>(tabs_->widget(i));
+    if (vp != nullptr && &vp->document() == document && !vp->floor_workspace()) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+void MainWindow::on_floor_view_requested(DocumentViewport* source, std::uint64_t storey_id) {
+  if (source == nullptr) {
+    return;
+  }
+  if (storey_id == 0) {
+    // 第一行「全局三维」：全局视图住在文档自己的页签里，切过去就是了。
+    const int index = find_global_tab(&source->document());
+    if (index >= 0) {
+      activate_open_document(index);
+    }
+    return;
+  }
+  open_floor_tab(source, storey_id);
+}
+
+// 楼层页签 = 这一层的一间独立的屋子：只有这一层，本层底面就是 0,0,0。
+// 已经开着同一层的页签就直接切过去，不重复开。
+void MainWindow::open_floor_tab(DocumentViewport* source, std::uint64_t storey_id) {
+  if (source == nullptr || storey_id == 0) {
+    return;
+  }
+  Document& document = source->document();
+  const Storey* storey = document.bim().find_storey(storey_id);
+  if (storey == nullptr) {
+    return;
+  }
+  if (const int existing = find_floor_tab(&document, storey_id); existing >= 0) {
+    activate_open_document(existing);
+    return;
+  }
+  // 名字先抄下来：进工作区会顺手动当前楼层，别拿着可能失效的指针往下用。
+  QString title = QString::fromStdString(storey->name);
+  if (title.trimmed().isEmpty()) {
+    title = tr("Level %1").arg(storey->elevation, 0, 'f', 3);
+  }
+  const QString document_name = QString::fromStdString(document.name());
+
+  DocumentViewport* vp = create_document_viewport(source->shared_document());
+  if (vp == nullptr) {
+    return;
+  }
+  const int index = tabs_->addTab(vp, title);
+  tabs_->setTabToolTip(index, tr("%1 — floor of %2").arg(title, document_name));
   tabs_->setCurrentIndex(index);
   show_documents();
-  if (viewport) {
-    vp->apply_viewport_state(*viewport);
-    vp->request_redraw();
+  // 面板开着哪一页也照搬：功能页通高，源页签开着、新页签收着，两张页签的 3D 区
+  // 就会差一列的宽窄，切过去像"视口变了大小"。
+  vp->copy_tool_panel_state_from(*source);
+  // 这张页签的身体：钉死这一层 + 只显示这一层 + 本层底面当原点，看法沿用源页签。
+  const ViewportState source_state = source->capture_viewport_state();
+  vp->enter_floor_workspace(storey_id, &source_state, source->plan_view());
+  vp->request_redraw();
+  statusBar()->showMessage(
+      tr("%1: this tab works on that floor only — its floor is the origin (0, 0, 0)").arg(title),
+      6000);
+}
+
+void MainWindow::close_floor_tabs_for(Document* document) {
+  if (document == nullptr) {
+    return;
   }
-  sync_render_mode_actions();
-  sync_bim_actions();
-  bind_plugin_session();
-  // add_entity / add_import_mesh mark dirty while assembling the initial scene.
-  // That baseline is not a user edit, so closing without further changes must
-  // not prompt to save.
-  document->clear_dirty();
+  for (int i = tabs_->count() - 1; i >= 0; --i) {
+    auto* vp = qobject_cast<DocumentViewport*>(tabs_->widget(i));
+    if (vp == nullptr || !vp->floor_workspace() || &vp->document() != document) {
+      continue;
+    }
+    tabs_->removeTab(i);
+    delete vp;
+  }
 }
 
 void MainWindow::new_document() {
@@ -2778,7 +2924,8 @@ void MainWindow::activate_viewport(DocumentViewport* vp) {
 }
 
 bool MainWindow::confirm_close_document(DocumentViewport* vp) {
-  if (vp == nullptr || !vp->document().dirty()) {
+  // 楼层页签只是这份文档的一个房间：存不存由文档页签负责，别在这儿问第二遍。
+  if (vp == nullptr || vp->floor_workspace() || !vp->document().dirty()) {
     return true;
   }
 
@@ -2842,8 +2989,15 @@ void MainWindow::persist_window_state() {
 }
 
 void MainWindow::close_tab(int index) {
-  if (auto* vp = qobject_cast<DocumentViewport*>(tabs_->widget(index))) {
-    if (!confirm_close_document(vp)) {
+  DocumentViewport* vp = qobject_cast<DocumentViewport*>(tabs_->widget(index));
+  if (!confirm_close_document(vp)) {
+    return;
+  }
+  if (vp != nullptr && !vp->floor_workspace()) {
+    // 关文档页签 = 连它的楼层页签一起关（那几张只是这份文档的几个房间）。
+    close_floor_tabs_for(&vp->document());
+    index = tabs_->indexOf(vp);
+    if (index < 0) {
       return;
     }
   }

@@ -141,17 +141,30 @@ class DocumentViewport final : public QWidget {
   [[nodiscard]] std::optional<DrawingInfo> drawing_info(const std::string& path);
   [[nodiscard]] std::optional<DrawingPlacement> suggested_drawing_placement(
       const std::string& path, int page);
-  // ==== 楼层视图（楼层面板用；默认打开的是全局三维）====
-  // 当前打开的是不是"某一层的视图"；没打开时就是全局三维。
+  // ==== 楼层视图（楼层页签里打开的是哪一层）====
+  // 当前打开的是不是"某一层的视图"；没打开时就是这份文档的全局视图。
   [[nodiscard]] bool floor_view_open() const { return floor_view_.has_value(); }
   [[nodiscard]] std::size_t floor_view_index() const { return floor_view_.value_or(0); }
-  // 打开全局三维：透视 + 框住整个模型（不动楼层显隐）。
-  void open_global_view();
-  // 打开某一层的视图：把它设为当前楼层、切到平面（2D）并框到这一层。**不动楼层显隐**：
-  // 想只显示这一层就用楼层面板的勾选框，两件事各管各的。
-  // 打开的是"这一层"而不是"这一层的平面"：2D/3D 只是同一张视图的两种看法，
-  // 切回三维（set_plan_view(false)）仍然是该层的三维。
-  void open_floor_view(std::size_t floor_index);
+  // ==== 楼层工作区（楼层页签）====
+  // 楼层面板点某一行 = 主窗口另开一张独立页签，并在那张页签里进"这一层的工作区"：
+  // 只显示这一层的构件（其他楼层与未归属构件都不画），且把本层底面当作原点
+  // （显示 / 坐标读数 / 轴网工作面都按本层走），像"进入这一层空间"。
+  // **看法沿用源页签**（2D/3D 与三维角度）：从三维切过去不该变成一片黑地板
+  // （2D 平面视图整个屏幕都是地面色），源页签是平面视图就跟着平面视图。
+  // 一张页签钉死一层；普通文档页签不调这里，保持全局视图。
+  void enter_floor_workspace(std::uint64_t storey_id, const ViewportState* source_view = nullptr,
+                             bool source_plan = false);
+  // 把源视口开着的那一页工具页照搬过来（页宽影响 3D 区宽，不照搬两张页签大小不一）。
+  void copy_tool_panel_state_from(const DocumentViewport& other);
+  [[nodiscard]] bool floor_workspace() const { return floor_workspace_storey_id_ != 0; }
+  [[nodiscard]] std::uint64_t floor_workspace_storey_id() const {
+    return floor_workspace_storey_id_;
+  }
+  // 楼层页签与文档页签共享同一个 Document（同一份模型、同一份选择）；
+  // 主窗口靠它给新页签再取一条渲染通道。
+  [[nodiscard]] std::shared_ptr<Document> shared_document() const {
+    return session_->shared_document();
+  }
   [[nodiscard]] ViewportState capture_viewport_state() const;
   [[nodiscard]] RenderScene::View capture_render_scene_view() const;
   [[nodiscard]] std::vector<std::uint64_t> capture_hidden_node_ids() const;
@@ -258,6 +271,9 @@ class DocumentViewport final : public QWidget {
   void plugin_point_input_changed(bool active);
   void visibility_changed();               // 隐藏/隔离/楼层过滤变化，面板据此刷新
   void view_changed();  // 打开的视图变了（全局三维 ↔ 某楼层），楼层面板据此换高亮
+  // 楼层面板点了一行：0 = 第一行「全局三维」，其余是那一层的 storey id。
+  // 视口自己开不了页签，转给主窗口去开 / 切对应的页签。
+  void floor_view_requested(std::uint64_t storey_id);
   // 轴网显示开关变了：Ribbon 上的「显示轴网」要跟着勾（视口也会自己打开它——
   // 轴网布柱看不见轴就没得框）。
   void grid_visible_changed(bool visible);
@@ -318,8 +334,8 @@ class DocumentViewport final : public QWidget {
                            bool finish_orthographic = false);
   void stop_view_animation();
   // 平面 / 三维切换的实现体：animate=false 时立刻到位（打开楼层视图要一次落到
-  // "该层平面"，不能先转一半再被 framing 打断）。三维不吃掉楼层视图状态：在某一
-  // 层的视图里切回三维 = 该层的三维（见 open_floor_view）。
+  // 到位，不能先转一半再被 framing 打断）。三维不吃掉楼层视图状态：在某一层的
+  // 页签里切回三维 = 该层的三维（见 enter_floor_workspace）。
   void apply_plan_view(bool plan, bool restore_perspective, bool animate);
   void refresh_floors();
   // 某一层视图的包围盒：模型的平面范围 + 这层的标高区间（平面视图下高度不参与
@@ -401,6 +417,13 @@ class DocumentViewport final : public QWidget {
   void update_box_select_rect(const QPoint& pos);
   void finish_box_select(const QPoint& pos, bool additive);
   [[nodiscard]] Mat4 view_proj() const;
+  // 显示原点（世界坐标）：不在地楼层工作区时是 0；在的时候本层底面落在 y = 0，
+  // 其余方向不动（模型 / 轴网 / 读数的 XZ 还是那套世界坐标）。
+  [[nodiscard]] Vec3 view_origin() const;
+  // 提交帧 / 屏幕投影用的视图矩阵：把世界整体平移 -view_origin()，于是"本层底面"
+  // 在屏幕上就是 y = 0。相机本身、items、世界坐标下的输入点都不动——渲染侧拿
+  // frame.view_origin 把剔除视锥与背景眼点补回世界坐标（见 render_runtime）。
+  [[nodiscard]] Mat4 scene_view_matrix() const;
   [[nodiscard]] bool pick_grip_at(const QPoint& pos, EntityGrip& out) const;
   void apply_grip_at(const QPoint& pos);
   void commit_grip_drag();
@@ -494,6 +517,8 @@ class DocumentViewport final : public QWidget {
   bool plan_view_ = false;
   // 打开的楼层视图（floors_ 的下标）；空 = 默认的全局三维。
   std::optional<std::size_t> floor_view_;
+  // 楼层工作区（独立楼层页签）：非 0 = 只显示这一层，并把本层底面当显示原点。
+  std::uint64_t floor_workspace_storey_id_ = 0;
   bool grid_visible_ = true;
   // 放置中的轴网：整张表 + 锚点。只在"轴网设置 → 确定"到落位之间非空。
   struct GridPlacement {

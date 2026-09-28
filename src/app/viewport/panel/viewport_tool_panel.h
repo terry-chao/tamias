@@ -3,6 +3,8 @@
 #include <QIcon>
 #include <QWidget>
 
+#include <cstdint>
+
 #include "app/base/theme.h"
 
 class QStackedWidget;
@@ -36,12 +38,17 @@ class ViewportToolPanel final : public QWidget {
   void toggle_drawing_page();
   // 直接开/关「图纸管理」页（挂上新图纸时主窗口把它翻出来）。
   void set_drawing_page_open(bool open);
+  // 新开一张视口时把源视口开着的那一页照搬过来。功能页是通高的：源视口开着某页、
+  // 新视口收着，两张视口的 3D 区就会差一列，切过去像"视口变了大小"。
+  void copy_page_from(const ViewportToolPanel& other);
 
  signals:
   void plan_view_toggled(bool plan);
   void frame_all_clicked();
   void layout_changed();  // 展开/收起功能页后，视口要重新摆叠加层（ViewCube 等）
   void drawing_open_requested(const QString& path);  // 图纸管理页双击 / 打开某张图纸
+  // 楼层页点了一行：0 = 「全局三维」，其余是那一层的 storey id。视口再往上转给主窗口。
+  void floor_view_requested(std::uint64_t storey_id);
 
  protected:
   void paintEvent(QPaintEvent* event) override;

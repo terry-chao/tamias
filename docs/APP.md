@@ -47,7 +47,7 @@ BIM 业务层的分组只影响「谁在管哪个面板」，不放宽上面那�
 | 视口工具列（视口右侧通高，左列按钮 + 右侧功能页） | `viewport_tool_panel` |
 | 命令控制台（底部停靠，Ctrl+Shift+J；回显 + C# 求值） | `console_panel` |
 | 构件显隐页（按类别显隐，Ctrl+L） | `visibility_panel` / `entity_kind_catalog` |
-| 楼层面板（按楼层显隐 + 打开每层视图 + 当前楼层，Ctrl+Shift+L） | `floor_panel` / `viewport_floor.h` |
+| 楼层面板（按楼层显隐 + 按楼层开页签 + 当前楼层，Ctrl+Shift+L） | `floor_panel` / `viewport_floor.h` |
 | 图纸管理页（视口右列；把 DWF/DXF/PDF 等图纸挂在文档下，显隐 / 摆放 / 定位） | `drawing_manager_panel` / `drawing_settings_dialog` |
 | 图纸底图（贴进三维视口的贴图平面 + 测试深度不写深度） | `document_viewport`（`sync_drawing_underlays`） / `render_runtime`（`overlay_pipeline_`） |
 | 楼层设置对话框（标高 / 层高 / 夹层） | `floor_settings_dialog` / `update_storeys_command` |
@@ -192,7 +192,7 @@ Ribbon「开始 → 插件」由 `PluginHost` 在启动时加载 C# 插件。插
 
 ## 现在有 / 还没有
 
-**有：** 打开 `.tdoc` / `.trscn` / 导入网格、转相机、点选、挤出等特征的属性编辑、墙工具预览线、线框/着色/真实模式、**开始 → 轴网设置**（按间距生成正交轴网 / 逐根增删改名，确定后在视口里**点击放置**）、**视图 → 渲染场景**（`Ctrl+Shift+I`：对照 draw list、写 `.trscn` / 钉金样 / 导出 OBJ；`Ctrl+Shift+P` 钉进 `assets/samples/render/`，调试步骤见 [渲染场景快照](RENDER-SCENE.md#调试步骤)）、**Ctrl+D 句柄检查窗口**（点选构件显示 `.tdoc` 里的 id、所在楼层）、**构件显隐页**（`Ctrl+L`，按类别一键显隐）、**楼层面板**（`Ctrl+Shift+L`，视口右列一张楼层清单，一层一行：勾选框只管显隐；点行本身 = 打开该层视图——设为当前楼层、切到平面并框到该层，不改显隐；在这张视图里切回三维就是**该层的三维**；第一行「全局三维」= 默认视图，点它回去；齿轮开「楼层设置」改标高 / 层高 / 夹层）、**开始 → 插件**（C# 示例：列出选择 / 删除所选）、**设置 → Modeling → Kernel backend**（选建模内核：OCCT 完整 / Truck 实验性，重启生效，见 [建模内核](MODELING-KERNEL.md)）。
+**有：** 打开 `.tdoc` / `.trscn` / 导入网格、转相机、点选、挤出等特征的属性编辑、墙工具预览线、线框/着色/真实模式、**开始 → 轴网设置**（按间距生成正交轴网 / 逐根增删改名，确定后在视口里**点击放置**）、**视图 → 渲染场景**（`Ctrl+Shift+I`：对照 draw list、写 `.trscn` / 钉金样 / 导出 OBJ；`Ctrl+Shift+P` 钉进 `assets/samples/render/`，调试步骤见 [渲染场景快照](RENDER-SCENE.md#调试步骤)）、**Ctrl+D 句柄检查窗口**（点选构件显示 `.tdoc` 里的 id、所在楼层）、**构件显隐页**（`Ctrl+L`，按类别一键显隐）、**楼层面板**（`Ctrl+Shift+L`，视口右列一张楼层清单，一层一行：勾选框只管显隐；点行本身 = **在新标签页里打开这一层**——那张页签钉死这一层、只显示这一层，本层底面就是原点 (0, 0, 0)，并沿用源页签的看法（2D/3D、三维角度）与工具列面板，切 2D/3D 换的只是看法，切回三维就是**该层的三维**；第一行「全局三维」= 回到文档页签；齿轮开「楼层设置」改标高 / 层高 / 夹层）、**开始 → 插件**（C# 示例：列出选择 / 删除所选）、**设置 → Modeling → Kernel backend**（选建模内核：OCCT 完整 / Truck 实验性，重启生效，见 [建模内核](MODELING-KERNEL.md)）。
 
 **命令控制台**（`Ctrl+Shift+J`）：输出面把每条执行过的内核命令渲染成可抄走的 C# 调用，
 输入面能直接跑 C# 片段（每段一个事务），脚本存在 `<AppData>/scripts`。见[脚本与命令控制台](SCRIPTING.md)。

@@ -59,6 +59,10 @@ struct FrameSubmission {
   // 增量更新留存场景图（空列表 = 整树重建兜底）。
   std::uint64_t scene_generation = 0;
   std::vector<std::uint64_t> scene_dirty_ids;
+  // 显示原点（楼层工作区用）：view 矩阵已经整体下沉了 view_origin，
+  // 而 items / 输入点仍是世界坐标。渲染侧靠它把两件事补回世界坐标——
+  // 录制时的剔除视锥（世界包围盒要按世界视锥判）与背景的天空 / 地面眼点。
+  Vec3 view_origin{};
   // 按语义节点 id 隐藏（视口 floor/类别/isolate 过滤；录制时生效）。
   std::vector<std::uint64_t> hidden_node_ids;
   bool show_axes = true;  // 世界坐标轴（X红/Y绿/Z蓝）
@@ -89,6 +93,22 @@ struct FrameSubmission {
   // 硬件写回时会再编一次（shader 里的调色板同理）。
   float clear_color[4] = {0.042f, 0.068f, 0.112f, 1.f};
 };
+
+// 楼层工作区的两处坐标补偿（frame.view_origin 非 0 时才有意义；为 0 时是恒等）：
+//
+// 1) 剔除 / 录制用**世界坐标** view_proj。frame.view 被整体下沉了 view_origin
+//    （本层底面落到屏幕上的 y = 0），而 items 的包围盒始终是世界坐标；补回这段
+//    平移就得到 world → clip，视锥剔除照旧按世界判。
+[[nodiscard]] inline Mat4 world_view_proj(const FrameSubmission& frame) {
+  return frame.proj * frame.view *
+         translate(Vec3{frame.view_origin.x, frame.view_origin.y, frame.view_origin.z});
+}
+
+// 2) 背景（天空 / 地面 / 工作平面网格）在**显示空间**重建射线：眼点跟着 frame.view
+//    一起下沉，天空里的地面才和轴网、构件落在同一个平面上。
+[[nodiscard]] inline Vec3 display_eye_position(const FrameSubmission& frame) {
+  return frame.eye_position - frame.view_origin;
+}
 
 // Shared execution config: Vulkan views with matching validation can share a device/thread.
 struct RenderDeviceConfig {

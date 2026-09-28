@@ -240,7 +240,8 @@ void FloorPanel::refresh() {
   settings_->setEnabled(has_viewport);
   copy_->setEnabled(has_viewport && viewport_->document().bim().storeys().size() >= 2);
   show_all_->setEnabled(has_viewport && viewport_->has_active_filter());
-  storey_combo_->setEnabled(has_viewport);
+  // 楼层页签钉死了自己的那一层，"当前楼层"不该在这张页签里被改走。
+  storey_combo_->setEnabled(has_viewport && !viewport_->floor_workspace());
   if (!has_viewport) {
     hint_->setText(tr("Open a model document to show or hide its floors and open floor views "
                       "here."));
@@ -272,6 +273,9 @@ void FloorPanel::sync_storey_combo() {
 
 void FloorPanel::sync_rows() {
   const std::vector<ViewportFloor> floors = viewport_->floors();
+  // 楼层工作区里这张清单是"切页签"的清单：只有这一层在这间屋里，别的层不显示，
+  // 勾选框没有意义（勾了也看不见），干脆不画。
+  const bool workspace = viewport_->floor_workspace();
   // 行只在楼层表变了以后重建（第 0 行恒为「全局三维」）；否则原地改勾选与高亮，
   // 避免在 itemChanged / itemClicked 里删掉正被用的项。
   bool rebuild = tree_->topLevelItemCount() != static_cast<int>(floors.size()) + 1;
@@ -279,7 +283,8 @@ void FloorPanel::sync_rows() {
     const QTreeWidgetItem* item = tree_->topLevelItem(i + 1);
     const ViewportFloor& floor = floors[static_cast<std::size_t>(i)];
     rebuild = item->data(0, kStoreyIdRole).toULongLong() != floor.storey_id ||
-              item->data(0, kLabelRole).toString() != QString::fromStdString(floor.label);
+              item->data(0, kLabelRole).toString() != QString::fromStdString(floor.label) ||
+              item->flags().testFlag(Qt::ItemIsUserCheckable) == workspace;
   }
 
   const ThemePalette palette = theme_palette(dark_);
@@ -340,9 +345,20 @@ void FloorPanel::sync_rows() {
     item->setText(2, QStringLiteral("%1 m").arg(static_cast<double>(floor.height), 0, 'f', 3));
     item->setIcon(0, floor_icon);
     item->setToolTip(0,
-                     tr("Click to open this floor's view; the checkbox only shows or hides it"));
-    const bool hidden = viewport_->floor_hidden(i);
-    item->setCheckState(0, hidden ? Qt::Unchecked : Qt::Checked);
+                     tr("Click to open this floor in its own tab; the checkbox only shows or "
+                        "hides it"));
+    if (workspace) {
+      item->setData(0, Qt::CheckStateRole, QVariant());
+      item->setFlags(item->flags() & ~Qt::ItemIsUserCheckable);
+    } else {
+      item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+      const bool hidden = viewport_->floor_hidden(i);
+      item->setCheckState(0, hidden ? Qt::Unchecked : Qt::Checked);
+    }
+    // 工作区里"别的楼层"在这间屋根本不显示，按隐藏的样子画（灰）；本层照常高亮。
+    const bool hidden =
+        workspace ? floor.storey_id != viewport_->floor_workspace_storey_id()
+                  : viewport_->floor_hidden(i);
     const bool is_active = static_cast<int>(i) + 1 == active_row;
     item->setForeground(0, hidden ? muted : (is_active ? QBrush(accent) : active));
     item->setForeground(1, muted);
@@ -383,13 +399,20 @@ void FloorPanel::on_item_clicked(QTreeWidgetItem* item, int column) {
 void FloorPanel::open_view_for(QTreeWidgetItem* item) {
   const int index = item->data(0, kFloorIndexRole).toInt();
   if (index == kGlobalRow) {
-    viewport_->open_global_view();
+    // 第一行「全局三维」= 回这份文档自己的页签（全局三维住在文档页签里）。
+    emit floor_view_requested(0);
     return;
   }
-  viewport_->open_floor_view(static_cast<std::size_t>(index));
+  // 点某一层 = 让主窗口开 / 切那一层的独立页签。视图状态只活在那张页签里，
+  // 当前这张页签（文档页签）不动。
+  emit floor_view_requested(item->data(0, kStoreyIdRole).toULongLong());
 }
 
 bool FloorPanel::click_hit_check_indicator(const QTreeWidgetItem* item) const {
+  if (item == nullptr || !item->flags().testFlag(Qt::ItemIsUserCheckable)) {
+    // 不带勾选框的行（楼层工作区的清单）：整行都是"开页签"的点击区。
+    return false;
+  }
   const QModelIndex index = tree_->indexFromItem(item);
   if (!index.isValid()) {
     return false;

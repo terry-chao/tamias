@@ -65,9 +65,9 @@ ViewportToolPanel::ViewportToolPanel(QWidget* parent) : QWidget(parent) {
   });
 
   // 楼层：和构件显隐一样是同一列里的功能页。一层一行，勾选 = 显隐，
-  // 双击 = 打开该层视图（第一行「全局三维」双击回到默认视图）。
+  // 点行 = 让主窗口在新标签页里打开这一层（第一行「全局三维」= 回文档页签）。
   floor_button_ = add_rail_button(rail_layout, load_icon(QStringLiteral(":/icons/storey.svg")),
-                                  tr("Floors: show/hide, open a view, set heights"));
+                                  tr("Floors: show/hide, open a floor in its own tab, set heights"));
   floor_button_->setCheckable(true);
   connect(floor_button_, &QToolButton::toggled, this, [this](bool open) {
     set_active_page(open ? kFloorPage : -1);
@@ -105,6 +105,8 @@ ViewportToolPanel::ViewportToolPanel(QWidget* parent) : QWidget(parent) {
   floor_page_ = new FloorPanel(pages_);
   floor_page_->set_dark_theme(is_dark_theme());
   pages_->addWidget(floor_page_);
+  connect(floor_page_, &FloorPanel::floor_view_requested, this,
+          &ViewportToolPanel::floor_view_requested);
   drawing_page_ = new DrawingManagerPanel(pages_);
   drawing_page_->set_dark_theme(is_dark_theme());
   pages_->addWidget(drawing_page_);
@@ -198,6 +200,10 @@ void ViewportToolPanel::set_active_page(int page) {
 void ViewportToolPanel::apply_width() {
   // 整列宽 = 按钮列（+ 功能页），视口左余下的空间让给三维区域。
   setFixedWidth(preferred_width());
+}
+
+void ViewportToolPanel::copy_page_from(const ViewportToolPanel& other) {
+  set_active_page(other.active_page_);
 }
 
 void ViewportToolPanel::set_plan_view(bool plan) {

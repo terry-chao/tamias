@@ -246,6 +246,9 @@ DocumentViewport::DocumentViewport(std::shared_ptr<Document> document,
   // 图纸管理页双击 / 点「打开」：视口自己开不了标签页，转给主窗口去开。
   connect(tool_panel_, &ViewportToolPanel::drawing_open_requested, this,
           &DocumentViewport::drawing_open_requested);
+  // 楼层页点某一行：视口同样开不了标签页（楼层页签归主窗口管），原样转上去。
+  connect(tool_panel_, &ViewportToolPanel::floor_view_requested, this,
+          &DocumentViewport::floor_view_requested);
 
   view_anim_timer_ = new QTimer(this);
   view_anim_timer_->setInterval(16);
@@ -508,15 +511,18 @@ void DocumentViewport::sync_coord_readout() {
     return;
   }
   QString text;
+  // 楼层工作区里读数按本层走：本层底面是 y = 0（"进入这一层空间"）。
+  const Vec3 origin = view_origin();
   if (!has_cursor_) {
-    const Vec3 target = camera_.target();
+    const Vec3 target = camera_.target() - origin;
     text = tr("X %1  Y %2  Z %3")
                .arg(target.x, 0, 'f', 3)
                .arg(target.y, 0, 'f', 3)
                .arg(target.z, 0, 'f', 3);
   } else {
-    const Vec3 p = grid_snap_active() ? cursor_ground_position(last_mouse_)
-                                      : cursor_world_position(last_mouse_);
+    const Vec3 p = (grid_snap_active() ? cursor_ground_position(last_mouse_)
+                                       : cursor_world_position(last_mouse_)) -
+                   origin;
     text = tr("X %1  Y %2  Z %3")
                .arg(p.x, 0, 'f', 3)
                .arg(p.y, 0, 'f', 3)
@@ -779,7 +785,12 @@ void DocumentViewport::submit_current_frame() {
   frame.width = w;
   frame.height = h;
   const float aspect = static_cast<float>(w) / static_cast<float>(h);
-  frame.view = camera_.view_matrix();
+  // 楼层工作区里视图整体下沉 view_origin()：本层底面在屏幕上就是 y = 0。
+  // 只挪相机（+ view_origin 告诉渲染侧剔除 / 背景怎么补回来）：模型、轴网、预览线
+  // 全都还是世界坐标，跟着同一套 view_proj 一起下沉，谁也不掉队。
+  const Vec3 origin = view_origin();
+  frame.view = scene_view_matrix();
+  frame.view_origin = origin;
   frame.proj = camera_.proj_matrix(aspect);
   frame.eye_position = camera_.eye_position();
   frame.view_distance = camera_.distance();
@@ -916,6 +927,13 @@ void DocumentViewport::submit_current_frame() {
 
 void DocumentViewport::showEvent(QShowEvent* event) {
   QWidget::showEvent(event);
+  // 楼层工作区：这张页签一露脸就把当前楼层钉回自己那一层。工作区只做这一层的事，
+  // 别处改过的"当前楼层"不能把这里新画的构件带到别的楼层上去。
+  if (floor_workspace_storey_id_ != 0 &&
+      document_->bim().active_storey_id() != floor_workspace_storey_id_) {
+    document_->set_active_storey(floor_workspace_storey_id_);
+    emit document_changed();
+  }
   layout_overlays();
   ensure_channel();
   request_redraw();
@@ -1960,12 +1978,20 @@ std::uint64_t DocumentViewport::pick_node_at(const QPoint& pos) const {
 float DocumentViewport::grid_plane_y() const {
   // 轴网是地面 / 平面参考：数据恒在 y = 0，画 / 点也都在这一层。挂到楼层标高上的话，
   // 一切到高层轴网就飘在半空（见 docs/BIM.md）。
+  // 楼层工作区例外：那一层的底面就是地面，轴网跟着落到本层底面（屏幕上还是 y = 0）。
+  if (floor_workspace_storey_id_ != 0) {
+    return view_origin().y;
+  }
   return static_cast<float>(kGridPlaneY);
 }
 
 float DocumentViewport::storey_plane_y() const {
+  // 楼层工作区里工作平面钉死在那一层（当前楼层可能被别处改过）：工作区只做这一层的事。
+  const std::uint64_t storey_id = floor_workspace_storey_id_ != 0
+                                      ? floor_workspace_storey_id_
+                                      : document_->bim().active_storey_id();
   return static_cast<float>(
-      document_->bim().storey_elevation(document_->bim().active_storey_id()));
+      document_->bim().storey_elevation(storey_id));
 }
 
 std::uint64_t DocumentViewport::pick_grid_axis_at(const QPoint& pos) const {
@@ -2235,11 +2261,29 @@ Vec3 DocumentViewport::snapped_ground_position(const QPoint& pos) const {
   return snap_to_grid_xz_if_near(hit, radius);
 }
 
+// 显示原点：普通视图是 0；楼层工作区里把本层底面抬到 y = 0（XZ 不动，读数的平面
+// 坐标还是那套世界坐标，和全局视图对得上）。
+Vec3 DocumentViewport::view_origin() const {
+  if (floor_workspace_storey_id_ == 0) {
+    return {};
+  }
+  const double elevation = document_->bim().storey_elevation(floor_workspace_storey_id_);
+  return {0.f, static_cast<float>(elevation), 0.f};
+}
+
+Mat4 DocumentViewport::scene_view_matrix() const {
+  const Vec3 origin = view_origin();
+  if (origin.x == 0.f && origin.y == 0.f && origin.z == 0.f) {
+    return camera_.view_matrix();
+  }
+  return camera_.view_matrix() * translate(Vec3{-origin.x, -origin.y, -origin.z});
+}
+
 Mat4 DocumentViewport::view_proj() const {
   const QSize area = scene_area_size();
   return camera_.proj_matrix(static_cast<float>(area.width()) /
                              static_cast<float>(area.height())) *
-         camera_.view_matrix();
+         scene_view_matrix();
 }
 
 void DocumentViewport::update_box_select_rect(const QPoint& pos) {
@@ -2292,8 +2336,8 @@ void DocumentViewport::finish_box_select(const QPoint& pos, bool additive) {
 void DocumentViewport::set_plan_view(bool plan, bool restore_perspective) {
   const bool had_floor_view = floor_view_.has_value();
   apply_plan_view(plan, restore_perspective, /*animate=*/true);
-  // 在某一层的视图里 2D ⇄ 3D 换的只是看法，不是"离开这一层"：楼层视图、当前楼层
-  // 都留在原地。回到全局三维走 open_global_view（楼层面板第一行）。
+  // 在某一层的页签里 2D ⇄ 3D 换的只是看法，不是"离开这一层"：楼层视图、当前楼层
+  // 都留在原地。回到全局视图走文档页签（楼层面板第一行切过去）。
   if (had_floor_view && !floor_view_.has_value()) {
     emit view_changed();
   }
@@ -2301,7 +2345,7 @@ void DocumentViewport::set_plan_view(bool plan, bool restore_perspective) {
 
 void DocumentViewport::apply_plan_view(bool plan, bool restore_perspective, bool animate) {
   // 三维不吃掉楼层视图：当前打开的是某一层时，这里是"这一层的三维"，相机的目标点 /
-  // 距离也是 open_floor_view 框这一层时定下的。
+  // 距离也是进楼层工作区时框这一层定下的。
   if (plan_view_ != plan) {
     if (plan) {
       persp_yaw_ = camera_.yaw();
@@ -2337,40 +2381,54 @@ void DocumentViewport::apply_plan_view(bool plan, bool restore_perspective, bool
   request_redraw();
 }
 
-// 全局三维：透视、框住整个模型。楼层面板的第一行走这里。**不动楼层显隐**——显隐是
-// 楼层面板勾选框的事，要复位走「全部显示」。
-void DocumentViewport::open_global_view() {
-  refresh_floors();
-  const bool had_view = floor_view_.has_value();
-  floor_view_.reset();
-  apply_plan_view(false, /*restore_perspective=*/true, /*animate=*/false);
-  frame_scene();
-  if (had_view) {
-    emit view_changed();
+void DocumentViewport::copy_tool_panel_state_from(const DocumentViewport& other) {
+  if (tool_panel_ != nullptr && other.tool_panel_ != nullptr) {
+    tool_panel_->copy_page_from(*other.tool_panel_);
   }
 }
 
-// 某一层的视图：把它设为当前楼层 + 切到平面（2D）+ 相机框到这一层。楼层面板里点某个
-// 楼层走这里。**不动楼层显隐**：想只留这一层就自己勾——"看哪一层"和"显隐"是两件事。
-void DocumentViewport::open_floor_view(std::size_t floor_index) {
-  refresh_floors();
-  if (floor_index >= floors_.size()) {
+// 进入某一层的独立工作区（楼层页签的身体）：钉死这一层 + 只显示这一层 + 本层底面
+// 当原点。开的是"这一层"而不是"这一层的平面"：在 2D / 3D 之间切只是换看法，
+// 视图还是这一层的（和 open_floor_view 同一套语义）。
+void DocumentViewport::enter_floor_workspace(std::uint64_t storey_id,
+                                             const ViewportState* source_view,
+                                             bool source_plan) {
+  if (storey_id == 0 || document_->bim().find_storey(storey_id) == nullptr) {
     return;
   }
-  const std::optional<std::size_t> before = floor_view_;
+  const bool changed = floor_workspace_storey_id_ != storey_id;
+  floor_workspace_storey_id_ = storey_id;
+  refresh_floors();
+  std::size_t index = floors_.size();
+  for (std::size_t i = 0; i < floors_.size(); ++i) {
+    if (floors_[i].storey_id == storey_id) {
+      index = i;
+      break;
+    }
+  }
+  if (index == floors_.size()) {
+    return;
+  }
   stop_view_animation();
-  floor_view_ = floor_index;
-  // 当前楼层跟着视图走。
-  const std::uint64_t storey_id = floors_[floor_index].storey_id;
-  const bool storey_changed =
-      storey_id != 0 && document_->bim().active_storey_id() != storey_id;
+  const std::optional<std::size_t> before = floor_view_;
+  floor_view_ = index;
+  // 当前楼层跟着视图走（工作区只做这一层的事）。
+  const bool storey_changed = document_->bim().active_storey_id() != storey_id;
   if (storey_changed) {
     document_->set_active_storey(storey_id);
   }
-  apply_plan_view(true, /*restore_perspective=*/false, /*animate=*/false);
-  const Aabb box = floor_view_box(floor_index);
+  // 看法沿用源页签：2D / 3D 一致，三维还带上原来的角度——不然从三维切过来会看到
+  // 一整屏深色地面（平面视图里整个屏幕都是地面色），像"这层是黑的"。
+  if (source_view != nullptr) {
+    camera_.set_yaw_pitch(source_view->yaw, source_view->pitch);
+    camera_.set_fovy(source_view->fovy);
+    persp_yaw_ = source_view->yaw;
+    persp_pitch_ = source_view->pitch;
+  }
+  apply_plan_view(source_plan, /*restore_perspective=*/true, /*animate=*/false);
+  const Aabb box = floor_view_box(index);
   if (box.valid()) {
-    camera_.frame_aabb(box);
+    camera_.frame_aabb(box);  // 框到这一层
   }
   request_redraw();
   if (storey_changed) {
@@ -2378,6 +2436,9 @@ void DocumentViewport::open_floor_view(std::size_t floor_index) {
   }
   if (floor_view_ != before) {
     emit view_changed();
+  }
+  if (changed) {
+    emit visibility_changed();
   }
 }
 
@@ -2979,8 +3040,7 @@ bool DocumentViewport::text_annotation_rect(const TextAnnotation& annotation, QR
   const float width = static_cast<float>(area.width()) * dpr;
   const float height = static_cast<float>(area.height()) * dpr;
   // 和提交帧用同一套投影（不含裁剪修正）；见 submit_current_frame()。
-  const Mat4 view_proj =
-      camera_.proj_matrix(width / height) * camera_.view_matrix();
+  const Mat4 view_proj = camera_.proj_matrix(width / height) * scene_view_matrix();
   float sx = 0.f;
   float sy = 0.f;
   if (!project_world_to_screen(view_proj, annotation.anchor, width, height, sx, sy)) {
@@ -3164,8 +3224,16 @@ void DocumentViewport::append_storey_labels(FrameSubmission& frame, const Mat4& 
   style.size = 12.f * dpr;
   style.color = Vec3{0.78f, 0.88f, 1.00f};
   for (const Storey& storey : storeys) {
-    const std::string elevation = format_elevation(storey.elevation);
+    // 楼层工作区里只标这一层：别的楼层在屏幕上根本不该出现。
+    if (floor_workspace_storey_id_ != 0 && storey.id != floor_workspace_storey_id_) {
+      continue;
+    }
+    // 工作区里标高也按本层算：本层底面是 0，标注跟着读数走（不然一边说 0 一边说 +3.300）。
+    const double shown_elevation =
+        storey.elevation - (floor_workspace_storey_id_ != 0 ? view_origin().y : 0.0f);
+    const std::string elevation = format_elevation(shown_elevation);
     const std::string text = storey.name.empty() ? elevation : storey.name + "  " + elevation;
+    // 锚点仍走世界坐标（投影矩阵已经整体平移过），变的是文字里的数值。
     const Vec3 anchor{bounds.min.x, static_cast<float>(storey.elevation), bounds.min.z};
     // 右对齐：文字整个落在锚点左侧，不压住模型。
     append_label(frame, view_proj, anchor, text, style, TextAlign::Right, -8.f,
@@ -3312,15 +3380,22 @@ bool DocumentViewport::node_visible_in_view(std::uint64_t id) const {
     return false;
   }
   const Entity* entity = document_->entity(id);
+  // 楼层工作区：只做这一层的事。别的楼层、以及没有楼层归属的构件（导入网格 /
+  // 未归属构件）都不画——工作区是一间"只有这一层"的房间，不是一次显隐勾选。
+  if (floor_workspace_storey_id_ != 0) {
+    const std::uint64_t storey_id = entity != nullptr ? entity_storey_id(*entity) : 0;
+    if (storey_id != floor_workspace_storey_id_) {
+      return false;
+    }
+  }
   if (entity != nullptr && hidden_kinds_.count(entity->kind()) != 0) {
     return false;
   }
   if (!hidden_floors_.empty()) {
     const SceneNode* node = document_->scene().find(id);
     if (node != nullptr) {
-      // 归属优先看 Location 的楼层（在 1 楼画的顶板就是 1 楼的），没有归属的
+      // 归属优先看构件自己记的楼层（在 1 楼画的顶板就是 1 楼的），没有归属的
       // （导入网格、未归属构件）才按几何楼层带兜底。
-      const Entity* entity = document_->entity(id);
       // 族实体自带楼层（entity_storey_id：族实体优先，基础体退回 Location）；
       // 连 Location 都没有的（导入网格）才是 0 → 按几何楼层带兜底。
       const std::uint64_t storey_id = entity != nullptr ? entity_storey_id(*entity) : 0;

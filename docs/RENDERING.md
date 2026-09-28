@@ -221,6 +221,12 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 tan(半视角)，正交下是半宽 / 半高——所以平面视图（正交顶视）里地面照样铺满整屏、网格照常出现，
 立面视图（射线与地面平行）退化成一层没有细节的地面填充。
 
+眼点传的是**显示空间**的 `display_eye_position(frame)`（`frame.eye_position - frame.view_origin`）。
+普通视图 `view_origin` 是 0，等于世界坐标；**楼层页签**里 `frame.view` 整体下沉了本层标高，
+眼点也得跟着下沉，天空里的地面 / 网格才会和轴网、构件落在同一个平面上（本层底面 = 屏幕上 y 0）。
+同一份 `view_origin` 还要补回**剔除视锥**：节点包围盒始终是世界坐标，`world_view_proj(frame)`
+把下沉的那段平移加回去，录制时的视锥剔除照旧按世界判（`render_runtime.h` 的两个小函数）。
+
 模型那一圈对每个 `SceneDrawItem`：
 
 1. `mesh_asset_id` → GPU 网格；没有就跳过（还没 upload）。
