@@ -17,6 +17,8 @@
 #include "bim/length_text.h"
 #include "engine/base/log.h"
 #include "engine/document/picking.h"
+#include "engine/interaction/drag.h"
+#include "engine/interaction/drag_manager.h"
 #include "engine/render/text/font_fallback.h"
 #include "engine/render/text/text_layout.h"
 #include "engine/render/text/text_quad_builder.h"
@@ -53,8 +55,12 @@
 #include <QWheelEvent>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <memory>
+#include <optional>
+#include <span>
 #include <string_view>
 #include <utility>
 
@@ -71,6 +77,112 @@
 namespace tamias {
 
 namespace {
+
+// —— Qt → 交互层的事件翻译。只做单向翻译，不反向把引擎事件喂回 Qt ——
+
+Modifiers to_engine(Qt::KeyboardModifiers modifiers) {
+  Modifiers out{};
+  out.shift = modifiers.testFlag(Qt::ShiftModifier);
+  out.ctrl = modifiers.testFlag(Qt::ControlModifier);
+  out.alt = modifiers.testFlag(Qt::AltModifier);
+  out.meta = modifiers.testFlag(Qt::MetaModifier);
+  return out;
+}
+
+ButtonId to_engine_button(Qt::MouseButton button) {
+  switch (button) {
+    case Qt::LeftButton:
+      return ButtonId::Primary;
+    case Qt::RightButton:
+      return ButtonId::Secondary;
+    case Qt::MiddleButton:
+      return ButtonId::Middle;
+    case Qt::BackButton:
+      return ButtonId::Aux1;
+    case Qt::ForwardButton:
+      return ButtonId::Aux2;
+    default:
+      return ButtonId::None;
+  }
+}
+
+ButtonMask to_engine_mask(Qt::MouseButtons buttons) {
+  ButtonMask mask{};
+  if (buttons.testFlag(Qt::LeftButton)) {
+    mask.add(ButtonId::Primary);
+  }
+  if (buttons.testFlag(Qt::RightButton)) {
+    mask.add(ButtonId::Secondary);
+  }
+  if (buttons.testFlag(Qt::MiddleButton)) {
+    mask.add(ButtonId::Middle);
+  }
+  if (buttons.testFlag(Qt::BackButton)) {
+    mask.add(ButtonId::Aux1);
+  }
+  if (buttons.testFlag(Qt::ForwardButton)) {
+    mask.add(ButtonId::Aux2);
+  }
+  return mask;
+}
+
+// 只映射交互层用到的键，其余是 Unknown（drag 需要就自己映射）。
+KeyCode to_engine_key(int key) {
+  switch (key) {
+    case Qt::Key_Escape:
+      return KeyCode::Escape;
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+      return KeyCode::Enter;
+    case Qt::Key_Backspace:
+      return KeyCode::Backspace;
+    case Qt::Key_Delete:
+      return KeyCode::Delete;
+    case Qt::Key_Tab:
+      return KeyCode::Tab;
+    case Qt::Key_Space:
+      return KeyCode::Space;
+    case Qt::Key_Left:
+      return KeyCode::Left;
+    case Qt::Key_Right:
+      return KeyCode::Right;
+    case Qt::Key_Up:
+      return KeyCode::Up;
+    case Qt::Key_Down:
+      return KeyCode::Down;
+    case Qt::Key_BracketLeft:
+      return KeyCode::BracketLeft;
+    case Qt::Key_BracketRight:
+      return KeyCode::BracketRight;
+    default:
+      return KeyCode::Unknown;
+  }
+}
+
+Qt::CursorShape to_qt(CursorShape shape) {
+  switch (shape) {
+    case CursorShape::SizeAll:
+      return Qt::SizeAllCursor;
+    case CursorShape::Cross:
+      return Qt::CrossCursor;
+    case CursorShape::Hand:
+      return Qt::PointingHandCursor;
+    case CursorShape::ResizeNS:
+      return Qt::SizeVerCursor;
+    case CursorShape::ResizeEW:
+      return Qt::SizeHorCursor;
+    case CursorShape::Panning:
+      return Qt::ClosedHandCursor;
+    case CursorShape::Arrow:
+      break;
+  }
+  return Qt::ArrowCursor;
+}
+
+[[nodiscard]] double steady_now_seconds() {
+  using Clock = std::chrono::steady_clock;
+  return std::chrono::duration<double>(Clock::now().time_since_epoch()).count();
+}
 
 // 环阵列中心初值：选中构件在世界 XZ 上的包围盒中心。
 Vec3 selected_centre_xz(const Document& document) {
@@ -182,6 +294,126 @@ class DocumentViewport::NativeSurface final : public QWidget {
   }
 };
 
+// 交互层宿主：把视口的能力包成 DragContext。drag 通过它取尺寸 / DPR、判断宿主
+// 死活、请求重绘、把预览推出去——drag 本身不知道 Qt 和视口的任何细节。
+class DocumentViewport::DragHost final : public DragContext {
+ public:
+  explicit DragHost(DocumentViewport& viewport) : viewport_(viewport), owner_(next_id()) {}
+
+  [[nodiscard]] DragOwnerId owner() const override { return owner_; }
+
+  [[nodiscard]] Vec2 viewport_size() const override {
+    const QSize area = viewport_.scene_area_size();
+    return {static_cast<float>(area.width()), static_cast<float>(area.height())};
+  }
+  [[nodiscard]] float device_pixel_ratio() const override {
+    return static_cast<float>(viewport_.devicePixelRatioF());
+  }
+  [[nodiscard]] bool alive() const override { return viewport_.alive_; }
+  void request_redraw() override { viewport_.request_redraw(); }
+
+  // 屏幕点 → 指定标高平面上的世界点。和 cursor_ground_position() 同一套算法
+  // （投影 → 与 plane_y 平面求交 → 需要时吸附网格），只是工作面由 drag 指定，
+  // 不再去问 CommandSystem（命令不走 pending 之后那里已经是空的）。
+  [[nodiscard]] Vec3 cursor_world(Vec2 screen_pos, float plane_y) const override {
+    const QPoint pos(static_cast<int>(screen_pos.x), static_cast<int>(screen_pos.y));
+    const Ray ray = viewport_.ray_at(pos);
+    Vec3 hit = ray.origin + ray.direction * viewport_.camera_.distance();
+    if (std::fabs(ray.direction.y) > 1e-6f) {
+      const float t = (plane_y - ray.origin.y) / ray.direction.y;
+      if (t > 0.f) {
+        hit = ray.origin + ray.direction * t;
+      }
+    }
+    if (!viewport_.grid_snap_active()) {
+      return hit;
+    }
+    const float dist = length(hit - viewport_.camera_.eye_position());
+    const float radius = grid_snap_world_radius(
+        dist, viewport_.camera_.fovy(),
+        static_cast<float>(viewport_.scene_area_size().height()));
+    return snap_to_grid_xz_if_near(hit, radius);
+  }
+
+  // —— 预览出口：drag 推什么，这里存什么，帧组装时取用 ——
+  void set_drag_polyline(std::span<const Vec3> line) override {
+    polyline_.assign(line.begin(), line.end());
+  }
+  void set_drag_control_polyline(std::span<const Vec3> line) override {
+    control_polyline_.assign(line.begin(), line.end());
+  }
+  void set_drag_points(std::span<const Vec3> pts) override {
+    points_.assign(pts.begin(), pts.end());
+  }
+  void set_drag_screen_rect(std::optional<ScreenRect> box) override { screen_rect_ = box; }
+  void clear_drag_preview() override {
+    polyline_.clear();
+    control_polyline_.clear();
+    points_.clear();
+    screen_rect_.reset();
+  }
+  void set_cursor(CursorShape shape) override { viewport_.setCursor(to_qt(shape)); }
+
+  [[nodiscard]] bool has_preview() const {
+    return !polyline_.empty() || !control_polyline_.empty() || !points_.empty() ||
+           screen_rect_.has_value();
+  }
+  [[nodiscard]] const std::vector<Vec3>& polyline() const { return polyline_; }
+  [[nodiscard]] const std::vector<Vec3>& control_polyline() const { return control_polyline_; }
+  [[nodiscard]] const std::vector<Vec3>& points() const { return points_; }
+  [[nodiscard]] const std::optional<ScreenRect>& screen_rect() const { return screen_rect_; }
+
+  // —— 事件翻译 + 投递。返回 true = 已被 drag 消费，壳不要再走默认逻辑 ——
+  bool route_pointer(const QMouseEvent& event, PointerPhase phase) {
+    PointerEvent e{};
+    e.phase = phase;
+    e.button = to_engine_button(event.button());
+    e.buttons = to_engine_mask(event.buttons());
+    e.pos = {static_cast<float>(event.position().x()), static_cast<float>(event.position().y())};
+    e.mods = to_engine(event.modifiers());
+    if (phase == PointerPhase::Move && has_last_pos_) {
+      e.delta = {e.pos.x - last_pos_.x, e.pos.y - last_pos_.y};
+    }
+    last_pos_ = e.pos;
+    has_last_pos_ = true;
+    return DragManager::instance().handle_pointer(*this, e);
+  }
+
+  bool route_wheel(const QWheelEvent& event) {
+    WheelEvent e{};
+    e.pos = {static_cast<float>(event.position().x()), static_cast<float>(event.position().y())};
+    e.delta = {static_cast<float>(event.angleDelta().x()) / 120.f,
+               static_cast<float>(event.angleDelta().y()) / 120.f};
+    e.mods = to_engine(event.modifiers());
+    e.precise = !event.pixelDelta().isNull();
+    return DragManager::instance().handle_wheel(*this, e);
+  }
+
+  bool route_key(const QKeyEvent& event) {
+    KeyEvent e{};
+    e.code = to_engine_key(event.key());
+    e.mods = to_engine(event.modifiers());
+    e.down = event.type() != QEvent::KeyRelease;
+    e.repeat = event.isAutoRepeat();
+    return DragManager::instance().handle_key(*this, e);
+  }
+
+ private:
+  static DragOwnerId next_id() {
+    static std::atomic<std::uint64_t> next{1};
+    return next.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  DocumentViewport& viewport_;
+  DragOwnerId owner_ = 0;
+  Vec2 last_pos_{};
+  bool has_last_pos_ = false;
+  std::vector<Vec3> polyline_;
+  std::vector<Vec3> control_polyline_;
+  std::vector<Vec3> points_;
+  std::optional<ScreenRect> screen_rect_;
+};
+
 DocumentViewport::DocumentViewport(std::shared_ptr<Document> document,
                                    std::shared_ptr<RenderThread> render_thread, QWidget* parent)
     : QWidget(parent),
@@ -281,6 +513,11 @@ DocumentViewport::DocumentViewport(std::shared_ptr<Document> document,
   rebuild_bvh();
   sync_view_cube();
   sync_coord_readout();
+
+  // 交互层宿主：drag 从这里拿视口能力和预览出口。
+  drag_host_ = std::make_unique<DragHost>(*this);
+  // 命令层的交互宿主：命令要在 execute() 里起 drag 时靠它拿 DragContext。
+  session_->command_system().set_interaction_context(drag_host_.get());
 }
 
 DocumentViewport::~DocumentViewport() {
@@ -288,6 +525,12 @@ DocumentViewport::~DocumentViewport() {
   // Tear down the swapchain/surface while the native HWND is still valid, and
   // wait for the render thread so it cannot draw into a destroyed window.
   alive_ = false;
+  // 先摘掉交互宿主：之后再执行的命令不该拿到一个垂死的视口。
+  session_->command_system().set_interaction_context(nullptr);
+  // 活动 drag 必须在宿主死之前收尾，否则它手里的 DragContext* 会悬垂。
+  if (drag_host_) {
+    DragManager::instance().owner_destroyed(drag_host_->owner());
+  }
   channel_.reset();
   render_thread_.reset();
   destroy_gl_surface();
@@ -745,6 +988,8 @@ void DocumentViewport::rebuild_bvh() { bvh_.build(*document_); }
 
 void DocumentViewport::submit_current_frame() {
   TAMIAS_TIMING_SCOPE("submit_current_frame", TimingCategory::Render);
+  // 交互层的看门狗心跳：管理器是纯事件驱动的，自己不起定时器，靠这里喂。
+  DragManager::instance().tick(steady_now_seconds());
   if (!alive_) {
     return;
   }
@@ -874,6 +1119,24 @@ void DocumentViewport::submit_current_frame() {
     frame.preview_control_polyline = command_system_.preview_control_polyline(cursor);
     frame.preview_points = command_system_.preview_points(cursor);
   }
+  // drag 进行中的预览：drag 主动推给宿主的那一份。它优先于命令预览——
+  // 同一时刻只该有一个交互在画东西，而 drag 握着输入所有权。
+  if (drag_host_ != nullptr && drag_host_->has_preview()) {
+    if (!drag_host_->polyline().empty()) {
+      frame.preview_polyline = drag_host_->polyline();
+    }
+    if (!drag_host_->control_polyline().empty()) {
+      frame.preview_control_polyline = drag_host_->control_polyline();
+    }
+    if (!drag_host_->points().empty()) {
+      frame.preview_points = drag_host_->points();
+    }
+    if (const auto& box = drag_host_->screen_rect(); box.has_value()) {
+      const QRect rect(QPoint(static_cast<int>(box->min.x), static_cast<int>(box->min.y)),
+                       QPoint(static_cast<int>(box->max.x), static_cast<int>(box->max.y)));
+      box_select_overlay_->set_box(rect, box->crossing);
+    }
+  }
   if (grid_snap_active() && has_cursor_ && is_on_grid_xz(cursor)) {
     frame.snap_point = cursor;
   }
@@ -955,6 +1218,11 @@ void DocumentViewport::resizeEvent(QResizeEvent* event) {
 }
 
 void DocumentViewport::mousePressEvent(QMouseEvent* event) {
+  // 路径 A：拖拽由命令 / 工具激活，不需要 handler 仲裁；但事件仍要经过管理器，
+  // 否则活动中的 drag 收不到。返回 true = 已被 drag 拿走。
+  if (drag_host_ && drag_host_->route_pointer(*event, PointerPhase::Down)) {
+    return;
+  }
   setFocus();  // 让视口能收到按键（[ ] 改选中对象的参数）
   last_mouse_ = event->pos();
   press_mouse_ = event->pos();
@@ -1105,6 +1373,9 @@ void DocumentViewport::mousePressEvent(QMouseEvent* event) {
 }
 
 void DocumentViewport::mouseMoveEvent(QMouseEvent* event) {
+  if (drag_host_ && drag_host_->route_pointer(*event, PointerPhase::Move)) {
+    return;
+  }
   const QPoint delta = event->pos() - last_mouse_;
   last_mouse_ = event->pos();
   has_cursor_ = true;
@@ -1159,6 +1430,9 @@ void DocumentViewport::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
+  if (drag_host_ && drag_host_->route_pointer(*event, PointerPhase::Up)) {
+    return;
+  }
   if (event->button() == Qt::LeftButton) {
     // 框选优先：拖动可能正好从一根轴线上起手，按下那一下的"选中轴线"不该吃掉框选。
     if (box_selecting_ && pending_column_grid_) {
@@ -1256,6 +1530,11 @@ void DocumentViewport::mouseReleaseEvent(QMouseEvent* event) {
 }
 
 void DocumentViewport::mouseDoubleClickEvent(QMouseEvent* event) {
+  // 双击在引擎侧没有独立相位：按"又一次按下"转交，保证捕获期间不会漏回壳。
+  // 将来真有 drag 需要区分双击，再给 PointerPhase 加一个值。
+  if (drag_host_ && drag_host_->route_pointer(*event, PointerPhase::Down)) {
+    return;
+  }
   // 双击注记 = 就地改文字（先于命令确认，不然会被当成"完成当前命令"）。
   if (event->button() == Qt::LeftButton) {
     if (const std::uint64_t text_id = pick_text_annotation_at(event->pos()); text_id != 0) {
@@ -1279,6 +1558,9 @@ void DocumentViewport::mouseDoubleClickEvent(QMouseEvent* event) {
 }
 
 void DocumentViewport::wheelEvent(QWheelEvent* event) {
+  if (drag_host_ && drag_host_->route_wheel(*event)) {
+    return;
+  }
   stop_view_animation();
   const float steps = event->angleDelta().y() / 120.f;
   const float factor = std::pow(0.9f, steps);
@@ -1298,6 +1580,10 @@ void DocumentViewport::wheelEvent(QWheelEvent* event) {
 }
 
 void DocumentViewport::keyPressEvent(QKeyEvent* event) {
+  // drag 没消费的键继续落到下面的默认逻辑（快捷键、Delete、[ ] 等）。
+  if (drag_host_ && drag_host_->route_key(*event)) {
+    return;
+  }
   if (plugin_point_input_.active()) {
     if (event->key() == Qt::Key_Escape) {
       plugin_point_input_.cancel();
@@ -1367,6 +1653,11 @@ void DocumentViewport::set_tool(ToolMode mode) {
   session_->set_tool(mode);
   cancel_plugin_point_input();
   command_system_.cancel();
+  // 换工具 = 放弃当前交互：活动中的 drag 也要收掉，否则它会继续吃事件，
+  // 而壳已经认为工具换了。
+  if (drag_host_) {
+    DragManager::instance().cancel(drag_host_->owner(), DragEnd::Cancelled);
+  }
   if (mode != ToolMode::None) {
     setFocus();
     // 有绘制规格的构件（墙/梁/柱/板/门/窗/结构墙/基础/幕墙）走面板武装，
@@ -1408,11 +1699,26 @@ void DocumentViewport::arm_create(ToolMode mode, const CommandArgs& args) {
     emit tool_mode_changed(mode);
     return;
   }
-  dispatch_armed_component(spec->command.toStdString(), args);
+  // 先把状态播出去再 dispatch：交互式命令会阻塞（在 execute() 里起 drag 采点），
+  // 不先发的话面板和 Ribbon 要等构件画完才更新。
   last_arm_mode_ = mode;
   last_arm_args_ = args;
   request_redraw();
   emit tool_mode_changed(mode);
+
+  dispatch_armed_component(spec->command.toStdString(), args);
+
+  // 只有"dispatch 返回时就已经画完"的命令才在这里收尾——也就是在 execute()
+  // 里起 drag 采集的那类（梁）。交互式命令（墙 / 板 / 柱…）返回时只是进了
+  // pending_，还在等用户点，工具必须留着：所以用 has_pending() 区分，
+  // 否则一武装就立刻取消了 pending，面板也会闪回「开始绘制」。
+  //
+  // 想要恢复"画完一根继续画下一根"：把上面那次 dispatch 包进一个循环，每轮
+  // 结束后判断 session_->tool_mode() 是否还是 mode，是就再 dispatch 一次（每根
+  // 是独立命令 → 独立撤销记录）。取消时命令返回 kCommandCancelled，据此跳出。
+  if (!command_system_.has_pending() && alive_ && session_->tool_mode() == mode) {
+    set_tool(ToolMode::None);
+  }
 }
 
 void DocumentViewport::rearm_tool() {
@@ -1434,7 +1740,10 @@ void DocumentViewport::rearm_tool() {
 void DocumentViewport::dispatch_armed_component(const std::string& command,
                                                 const CommandArgs& args) {
   if (auto r = session_->dispatch(command, args); !r) {
-    log_error(r.error());
+    // 用户放弃（Esc / 右键）不是错误，别在日志里报。
+    if (r.error() != kCommandCancelled) {
+      log_error(r.error());
+    }
     armed_placement_ = {};
     return;
   }

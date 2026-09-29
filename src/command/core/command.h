@@ -5,9 +5,16 @@
 #include "engine/math/math.h"
 
 #include <cstdint>
+#include <string_view>
 #include <vector>
 
 namespace tamias {
+
+class DragContext;
+
+// 交互被用户放弃（Esc / 右键 / 设备丢失）时，命令返回的错误文本。宿主据此
+// 区分"没做完"和"真出错"——前者不该弹错误、也不该在日志里报 error。
+inline constexpr std::string_view kCommandCancelled = "command: cancelled by user";
 
 // 可逆编辑命令的基类。
 class Command {
@@ -66,6 +73,16 @@ class Command {
   // CommandSystem 把它合并进武装参数，拼出等价的脚本式调用（见 host/command_echo.h）。
   // 非交互命令缺省返回空——它们的 dispatch 参数本来就是完整的。
   [[nodiscard]] virtual CommandArgs echo_args() const { return {}; }
+
+  // ── 交互宿主（给"命令里起 drag"用）────────────────────────────────────
+  // 命令要在 execute() 里阻塞采集屏幕输入时，靠这个拿到 DragContext。
+  // 由 CommandSystem 在执行前注入；脚本 / 测试环境里可能是 null。
+  // 典型用法见 CreateBeamCommand：execute() 起一个 BeamDrag 采两个屏幕点。
+  void set_interaction_context(DragContext* context) { interaction_context_ = context; }
+  [[nodiscard]] DragContext* interaction_context() const { return interaction_context_; }
+
+ private:
+  DragContext* interaction_context_ = nullptr;
 };
 
 }  // namespace tamias

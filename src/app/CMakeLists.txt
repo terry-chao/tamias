@@ -11,6 +11,7 @@ add_executable(tamias
   base/recent_files.cpp
   base/script_store.cpp
   base/rhi_backends.cpp
+  base/qt_event_source.cpp
   base/rhi_startup.cpp
   base/startup_guard.cpp
   base/log_buffer.cpp
@@ -140,6 +141,7 @@ target_link_libraries(tamias
     tamias::drawing
     tamias::modeling
     tamias::command
+      tamias::interaction
     tamias::plugin
     tamias::ifc
     Qt6::Widgets

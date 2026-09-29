@@ -64,6 +64,10 @@ class CommandSystem {
 
   // 注册命令执行观察者（每个 CommandSystem 一个；重新设置会覆盖）。
   void set_observer(CommandObserver observer) { observer_ = std::move(observer); }
+  // 交互宿主：命令要在 execute() 里起 drag 时靠它拿 DragContext。
+  // 壳在视口构造时装上、析构时清空；不装则这类命令会以"没有交互宿主"失败。
+  void set_interaction_context(DragContext* context) { interaction_context_ = context; }
+  [[nodiscard]] DragContext* interaction_context() const { return interaction_context_; }
   // 给 pending 命令喂一个交互点；返回 true 表示命令已完成。
   [[nodiscard]] Result<bool> feed_point(Vec3 point, std::uint64_t picked_entity_id = 0);
   // 光标悬停：更新门窗等跟墙预览，不提交。
@@ -111,6 +115,7 @@ class CommandSystem {
   std::string pending_name_;
   CommandArgs pending_args_;  // 武装时那份参数，交互完成后与 echo_args() 合并
   CommandObserver observer_;
+  DragContext* interaction_context_ = nullptr;
   bool transaction_open_ = false;
   std::string transaction_name_;
   CommandGroup transaction_;  // 事务里已执行的命令（提交时整体压栈）

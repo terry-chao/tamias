@@ -34,6 +34,7 @@
 
 namespace tamias {
 void register_linked_rhi_backends();
+void install_qt_event_source();
 }
 
 int main(int argc, char* argv[]) {
@@ -49,6 +50,8 @@ int main(int argc, char* argv[]) {
   tamias::profiling::set_program_name("Tamias");
   tamias::profiling::set_thread_name("ui");
   tamias::register_linked_rhi_backends();
+  // 交互层：把 Qt 的等待原语装到 DragManager 上（阻塞式 drag 需要它）。
+  tamias::install_qt_event_source();
   tamias::register_linked_kernels();
   tamias::register_commands(tamias::command_registry());
   tamias::register_occt_shape_ops();

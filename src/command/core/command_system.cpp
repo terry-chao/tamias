@@ -28,6 +28,8 @@ Result<void> CommandSystem::dispatch(Document& doc, const std::string& name,
   if (!command) {
     return Err("CommandSystem: unknown command '" + name + "'");
   }
+  // 命令要在 execute() 里起 drag 的话，宿主从这里拿（见 Command::interaction_context）。
+  command->set_interaction_context(interaction_context_);
   if (command->interactive()) {
     if (transaction_open_) {
       // 交互式命令点齐的时刻由鼠标决定，不在事务窗口里——拒绝比默默错位好。
@@ -58,6 +60,7 @@ Result<bool> CommandSystem::feed_point(Vec3 point, std::uint64_t picked_entity_i
   }
   if (*done) {
     TAMIAS_TIMING_SCOPE_DYNAMIC(pending_name_, TimingCategory::Command);
+    pending_->set_interaction_context(interaction_context_);
     if (auto r = pending_->execute(); !r) {
       cancel();
       return Err(r.error());
@@ -89,6 +92,7 @@ Result<bool> CommandSystem::confirm() {
   }
   if (*done) {
     TAMIAS_TIMING_SCOPE_DYNAMIC(pending_name_, TimingCategory::Command);
+    pending_->set_interaction_context(interaction_context_);
     if (auto r = pending_->execute(); !r) {
       cancel();
       return Err(r.error());

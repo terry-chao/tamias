@@ -4,6 +4,7 @@ add_library(tamias_command STATIC
   core/register_commands.cpp
   # 创建：构件（按专业）/ 曲线 / 基础体 / 轴网 / 楼层
   create/create_wall_command.cpp
+  create/beam_drag.cpp
   create/create_curtain_wall_command.cpp
   create/create_beam_command.cpp
   create/create_slab_command.cpp
@@ -44,4 +45,11 @@ add_library(tamias_command STATIC
 )
 add_library(tamias::command ALIAS tamias_command)
 target_include_directories(tamias_command PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(tamias_command PUBLIC tamias::document tamias::graphics tamias::modeling)
+target_link_libraries(tamias_command
+  PUBLIC
+    tamias::document
+    tamias::graphics
+    tamias::modeling
+    # 命令可以在 execute() 里起 drag 采集输入（见 create/beam_drag）。
+    tamias::interaction
+)

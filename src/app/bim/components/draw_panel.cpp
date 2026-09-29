@@ -374,11 +374,14 @@ CommandArgs DrawPanel::gather_args() const {
 }
 
 void DrawPanel::gather_and_emit(bool arm) {
-  emit armed_args(current_mode_, gather_args());
+  // 先刷状态再发信号：接收方（视口）现在可能阻塞很久——交互式命令在
+  // execute() 里起 drag 采点，直到构件落地才返回。按钮必须在那之前就把
+  // 「正在绘制」显示出来，否则用户点了开始绘制却看不到任何反应。
   if (arm) {
     armed_ = true;
     update_arm_button();
   }
+  emit armed_args(current_mode_, gather_args());
 }
 
 void DrawPanel::arm_clicked() {

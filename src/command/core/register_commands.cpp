@@ -214,6 +214,11 @@ void register_commands(CommandRegistry& registry) {
   registry.register_command("create_beam", [](Document& doc, const CommandArgs& args) {
     const std::string sub = arg_string(args, "sub_type", "rect");
     auto points = arg_points(args, "points");
+    // 偏移相对当前楼层标高：没显式给就默认放在**本层顶**（梁在楼面下），
+    // 和 create_slab 的"本层顶板"一致。没有当前楼层就落在 0。
+    const Storey* active = doc.bim().find_storey(doc.bim().active_storey_id());
+    const double default_elevation = active != nullptr && active->height > 0.0 ? active->height : 0.0;
+    const double elevation = arg_double(args, "elevation", default_elevation);
     if (sub == "tee" || sub == "i") {
       const BeamShape shape = sub == "tee" ? BeamShape::Tee : BeamShape::IBeam;
       const double flange_width = arg_double(args, "flange_width", 0.4);
@@ -222,19 +227,20 @@ void register_commands(CommandRegistry& registry) {
       const double flange_thickness = arg_double(args, "flange_thickness", 0.1);
       if (points.size() >= 2) {
         auto cmd = std::make_unique<CreateBeamCommand>(doc, shape, flange_width, web_thickness,
-                                                       height, flange_thickness);
+                                                       height, flange_thickness, elevation);
         // 脚本式暂不支持 T/I 带点构造，回退到交互式。
         return cmd;
       }
       return std::make_unique<CreateBeamCommand>(doc, shape, flange_width, web_thickness,
-                                                  height, flange_thickness);
+                                                  height, flange_thickness, elevation);
     }
     const double width = arg_double(args, "width", 0.3);
     const double depth = arg_double(args, "depth", 0.5);
     if (points.size() >= 2) {
-      return std::make_unique<CreateBeamCommand>(doc, width, depth, points[0], points[1]);
+      return std::make_unique<CreateBeamCommand>(doc, width, depth, points[0], points[1],
+                                                 elevation);
     }
-    return std::make_unique<CreateBeamCommand>(doc, width, depth);
+    return std::make_unique<CreateBeamCommand>(doc, width, depth, elevation);
   });
 
   registry.register_command("create_column", [](Document& doc, const CommandArgs& args) {

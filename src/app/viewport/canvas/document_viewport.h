@@ -443,6 +443,10 @@ class DocumentViewport final : public QWidget {
   bool xray_ = false;
   class NativeSurface;
   NativeSurface* surface_ = nullptr;
+  // 交互层宿主：把视口的能力（尺寸 / DPR / 死活 / 重绘 / 预览出口）包成
+  // DragContext 给拖拽子系统用。定义在 .cpp 里，和 NativeSurface 一个做法。
+  class DragHost;
+  std::unique_ptr<DragHost> drag_host_;
   void* gl_hwnd_ = nullptr;  // Win32 OpenGL child HWND (UI-thread owned)
   ViewCubeWidget* view_cube_ = nullptr;
   ViewportToolPanel* tool_panel_ = nullptr;

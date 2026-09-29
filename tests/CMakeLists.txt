@@ -11,7 +11,8 @@ add_executable(tamias_tests smoke_tests.cpp location_tests.cpp ifc_spatial_tree_
   text_layout_tests.cpp glyph_atlas_tests.cpp stb_font_tests.cpp text_quad_builder_tests.cpp
   length_text_tests.cpp grid_dimensions_tests.cpp annotation_layout_tests.cpp
   text_annotation_tests.cpp vulkan_loader_tests.cpp rhi_startup_tests.cpp
-  offscreen_render_tests.cpp scene_capture_tests.cpp edit_operations_tests.cpp)
+  offscreen_render_tests.cpp scene_capture_tests.cpp edit_operations_tests.cpp
+  interaction_tests.cpp)
 
 # Vulkan 加载路径（volk）的冒烟测试：只在建了 Vulkan 后端时链进来。
 if(TARGET tamias::rhi_vulkan)
@@ -31,6 +32,7 @@ target_link_libraries(tamias_tests
     tamias::document
     tamias::command
     tamias::host
+    tamias::interaction
     tamias::plugin
     tamias::modeling
     tamias::render
