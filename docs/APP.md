@@ -183,7 +183,7 @@ Ribbon「开始 → 插件」由 `PluginHost` 在启动时加载 C# 插件。插
 
 **输入面**：敲一段 C#，`Ctrl+Enter` 跑。`host` 就是当前文档的宿主（`IHost`），能读特征树、能 `Dispatch`、能弹宿主对话框。
 
-它同时是个**文件型脚本页**（见 [console_panel](https://github.com/terry-chao/tamias/blob/main/src/app/shell/console_panel.cpp)）：
+它同时是个**文件型脚本页**（见 [console_panel](https://github.com/terry-chao/tamias/blob/main/src/app/shell/panel/console_panel.cpp)）：
 
 - 带行号的编辑器，上下拖动分隔条调「回显 / 编辑器」比例。
 - 脚本住在 `<AppData>/scripts`（`Ctrl+S` 保存；第一次保存直接落进这个目录，不弹框）。**不进 `.tdoc`**——脚本是行为，工作文档是数据；脚本应该能用 git 管、能拷给同事。

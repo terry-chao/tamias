@@ -1,9 +1,9 @@
 #include "app/shell/main_window.h"
 
-#include "app/shell/about_dialog.h"
-#include "app/shell/console_panel.h"
-#include "app/shell/extension_watcher.h"
-#include "app/shell/graphics_diagnostics_dialog.h"
+#include "app/shell/dialog/about_dialog.h"
+#include "app/shell/panel/console_panel.h"
+#include "app/shell/panel/extension_watcher.h"
+#include "app/shell/dialog/graphics_diagnostics_dialog.h"
 #include "app/base/app_settings.h"
 #include "bim/ifc_spatial_tree.h"
 #include "bim/wall_size.h"
@@ -13,14 +13,14 @@
 #include "engine/io/mesh_io.h"
 #include "engine/render/scene/render_scene_golden.h"
 #include "app/debug/golden_test_runner.h"
-#include "app/shell/mesh_thumbnail.h"
+#include "app/shell/widget/mesh_thumbnail.h"
 #include "engine/modeling/occt/occt_shape_ops.h"
 #include "engine/modeling/kernel/shape_ops.h"
 #include "app/debug/handle_inspector.h"
 #include "plugin/plugin_host.h"
 #include "plugin/plugin_manager.h"
-#include "app/shell/plugin_manager_dialog.h"
-#include "app/shell/plugin_prompt_dialog.h"
+#include "app/shell/dialog/plugin_manager_dialog.h"
+#include "app/shell/dialog/plugin_prompt_dialog.h"
 #include "app/debug/pin_result_dialog.h"
 #include "app/bim/properties/property_panel.h"
 #include "app/bim/components/draw_panel.h"
@@ -29,16 +29,16 @@
 #include "app/drawing/drawing_view.h"
 #include "app/bim/grid/grid_settings_dialog.h"
 #include "app/base/qt_path.h"
-#include "app/shell/ribbon_bar.h"
-#include "app/shell/ribbon_group.h"
-#include "app/shell/ribbon_page.h"
+#include "app/shell/ribbon/ribbon_bar.h"
+#include "app/shell/ribbon/ribbon_group.h"
+#include "app/shell/ribbon/ribbon_page.h"
 #include "app/edit/array_dialog.h"
 #include "app/debug/scene_debugger_window.h"
-#include "app/shell/settings_dialog.h"
+#include "app/shell/dialog/settings_dialog.h"
 #include "app/texture/texture_image.h"
 #include "app/texture/texture_library_panel.h"
 #include "app/debug/timing_panel.h"
-#include "app/shell/toast.h"
+#include "app/shell/widget/toast.h"
 #include "engine/profile/timing_scope.h"
 
 #include <QByteArray>
@@ -485,7 +485,7 @@ MainWindow::MainWindow(QWidget* parent)
   });
   addAction(chamfer_action_);
 
-  // 通用编辑：移动 / 复制 / 旋转 / 镜像 / 阵列（见 command/edit/entity_transform.h）。
+  // 通用编辑：移动 / 复制 / 旋转 / 镜像 / 阵列（见 command/edit/transform/entity_transform.h）。
   // 前四个是「点基点 → 点目标点」的交互式工具；阵列收参数后一次落位。
   move_action_ = new QAction(ribbon_icon(QStringLiteral(":/icons/move.svg")),
                              tr("Move"), this);

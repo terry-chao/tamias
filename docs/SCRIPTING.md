@@ -4,8 +4,8 @@
 > **输入**——敲一段 C# 跑，`host` 就是当前文档。它和插件是同一个宿主（`IHost`），
 > 区别只在生命周期：插件是装好的扩展，脚本是随手写的文件。
 
-代码：[`console_panel`](https://github.com/terry-chao/tamias/blob/main/src/app/shell/console_panel.cpp)（面板）、
-[`code_editor`](https://github.com/terry-chao/tamias/blob/main/src/app/shell/code_editor.cpp)（带行号的编辑器）、
+代码：[`console_panel`](https://github.com/terry-chao/tamias/blob/main/src/app/shell/panel/console_panel.cpp)（面板）、
+[`code_editor`](https://github.com/terry-chao/tamias/blob/main/src/app/shell/widget/code_editor.cpp)（带行号的编辑器）、
 [`script_store`](https://github.com/terry-chao/tamias/blob/main/src/app/base/script_store.h)（脚本目录）、
 [`command_echo.h`](https://github.com/terry-chao/tamias/blob/main/src/host/command_echo.h)（回显文本）、
 [`ScriptEngine.cs`](https://github.com/terry-chao/tamias/blob/main/plugin-sdk/csharp/Tamias.Host/ScriptEngine.cs)（求值）。

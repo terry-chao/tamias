@@ -258,11 +258,11 @@ src/bim/drawing_import.h    // 翻模：图纸 → 候选构件（见 图纸 →
 
 ## 附录：涉及文件（现状）
 
-- [wall_entity.cpp](https://github.com/terry-chao/tamias/blob/main/src/entity/family/host/architectural/wall_entity.cpp) 等 —— 构件几何配方，不是业务层
+- [wall_entity.cpp](https://github.com/terry-chao/tamias/blob/main/src/entity/family/host/architectural/wall/wall_entity.cpp) 等 —— 构件几何配方，不是业务层
 - [wall_join.cpp](https://github.com/terry-chao/tamias/blob/main/src/bim/wall_join.cpp) —— 墙-墙交接斜接：找接点、裁轮廓、重建网格（见 [墙-墙交接](bim/junctions.md)）
-- [create_wall_command.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/create/create_wall_command.cpp) —— 今日直写 Document；楼层落地后改调 `BimModel`
-- [create_primitive_command.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/create/create_primitive_command.cpp) —— 窗/门点中墙时调 `bind_opening_to_host`
-- [set_feature_param_command.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/edit/set_feature_param_command.cpp) —— 改参后 `notify_entity_changed`
+- [create_wall_command.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/create/component/create_wall_command.cpp) —— 今日直写 Document；楼层落地后改调 `BimModel`
+- [create_primitive_command.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/create/component/create_primitive_command.cpp) —— 窗/门点中墙时调 `bind_opening_to_host`
+- [set_feature_param_command.cpp](https://github.com/terry-chao/tamias/blob/main/src/command/edit/feature/set_feature_param_command.cpp) —— 改参后 `notify_entity_changed`
 - [scene.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/scene.h) —— `parent`；不出现 Storey / Grid / Relation 类型
 - [handle_inspector.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/debug/handle_inspector.cpp) —— Ctrl+D 句柄检查窗口（app 调试，不是业务层）
 - [DECISION-MCAD-BIM.md](DECISION-MCAD-BIM.md) —— 单 app、域用这一层分叉

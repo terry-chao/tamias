@@ -12,7 +12,7 @@
 
 #include "app/shell/main_window.h"
 
-#include "app/shell/ribbon_bar.h"
+#include "app/shell/ribbon/ribbon_bar.h"
 
 #include <QAction>
 #include <QActionGroup>

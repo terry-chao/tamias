@@ -1,6 +1,6 @@
 #include "engine/interaction/drag_manager.h"
 #include "engine/interaction/event_source.h"
-#include "command/create/beam_drag.h"
+#include "command/create/component/beam_drag.h"
 
 #include <gtest/gtest.h>
 

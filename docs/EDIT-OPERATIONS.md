@@ -130,11 +130,11 @@ Dispatch("mirror_entities", "a:ids=3; p:points=0,0,0|0,0,1");
 
 | 文件 | 角色 |
 |---|---|
-| [src/command/edit/entity_transform.h](../src/command/edit/entity_transform.h) | 变换构造（平移 / 绕竖直轴旋转 / 镜像）、阵列摆放序列、世界摆放读写 |
-| [src/command/edit/transform_entities_command.cpp](../src/command/edit/transform_entities_command.cpp) | 移动 / 旋转：改现有实体 + 门窗联动 + 交接重算 |
-| [src/command/edit/copy_entities_command.cpp](../src/command/edit/copy_entities_command.cpp) | 复制 / 阵列：克隆 + 宿主关系重映射 + undo/redo |
-| [src/command/edit/copy_storey_command.cpp](../src/command/edit/copy_storey_command.cpp) | 整层复制：克隆 + 换层 + 关系重映射 + undo/redo |
-| [src/command/edit/mirror_entities_command.cpp](../src/command/edit/mirror_entities_command.cpp) | 镜像：烘焙进几何 + 快照回滚 |
-| [src/command/edit/transform_tool_command.cpp](../src/command/edit/transform_tool_command.cpp) | 交互式工具：凑齐点 → 构造上面三条命令 |
+| [src/command/edit/transform/entity_transform.h](../src/command/edit/transform/entity_transform.h) | 变换构造（平移 / 绕竖直轴旋转 / 镜像）、阵列摆放序列、世界摆放读写 |
+| [src/command/edit/transform/transform_entities_command.cpp](../src/command/edit/transform/transform_entities_command.cpp) | 移动 / 旋转：改现有实体 + 门窗联动 + 交接重算 |
+| [src/command/edit/transform/copy_entities_command.cpp](../src/command/edit/transform/copy_entities_command.cpp) | 复制 / 阵列：克隆 + 宿主关系重映射 + undo/redo |
+| [src/command/edit/reference/copy_storey_command.cpp](../src/command/edit/reference/copy_storey_command.cpp) | 整层复制：克隆 + 换层 + 关系重映射 + undo/redo |
+| [src/command/edit/transform/mirror_entities_command.cpp](../src/command/edit/transform/mirror_entities_command.cpp) | 镜像：烘焙进几何 + 快照回滚 |
+| [src/command/edit/transform/transform_tool_command.cpp](../src/command/edit/transform/transform_tool_command.cpp) | 交互式工具：凑齐点 → 构造上面三条命令 |
 | [src/app/edit/array_dialog.cpp](../src/app/edit/array_dialog.cpp) | 阵列参数对话框 |
 | [tests/edit_operations_tests.cpp](../tests/edit_operations_tests.cpp) | 阵列数学、复制带门窗、撤销/重做、镜像右手系、三点旋转 |

@@ -20,22 +20,22 @@ add_executable(tamias
   shell/main_window.cpp
   shell/main_menu.cpp
   shell/home_page.cpp
-  shell/ribbon_bar.cpp
-  shell/ribbon_page.cpp
-  shell/ribbon_group.cpp
-  shell/ribbon_command_search.cpp
-  shell/ribbon_float_window.cpp
-  shell/toast.cpp
-  shell/mesh_thumbnail.cpp
-  shell/code_editor.cpp
-  shell/about_dialog.cpp
-  shell/graphics_diagnostics_dialog.cpp
-  shell/settings_dialog.cpp
-  shell/settings_section.cpp
-  shell/plugin_manager_dialog.cpp
-  shell/plugin_prompt_dialog.cpp
-  shell/console_panel.cpp
-  shell/extension_watcher.cpp
+  shell/ribbon/ribbon_bar.cpp
+  shell/ribbon/ribbon_page.cpp
+  shell/ribbon/ribbon_group.cpp
+  shell/ribbon/ribbon_command_search.cpp
+  shell/ribbon/ribbon_float_window.cpp
+  shell/widget/toast.cpp
+  shell/widget/mesh_thumbnail.cpp
+  shell/widget/code_editor.cpp
+  shell/dialog/about_dialog.cpp
+  shell/dialog/graphics_diagnostics_dialog.cpp
+  shell/dialog/settings_dialog.cpp
+  shell/dialog/settings_section.cpp
+  shell/dialog/plugin_manager_dialog.cpp
+  shell/dialog/plugin_prompt_dialog.cpp
+  shell/panel/console_panel.cpp
+  shell/panel/extension_watcher.cpp
   # 三维视口：画布本体 / 画布上的浮层 / 右侧工具列 / 录制回放
   viewport/canvas/document_viewport.cpp
   viewport/overlay/view_cube_widget.cpp
@@ -101,7 +101,7 @@ add_custom_command(
   COMMENT "Refreshing Tamias version header from git"
   VERBATIM
 )
-set_source_files_properties(main.cpp shell/about_dialog.cpp PROPERTIES
+set_source_files_properties(main.cpp shell/dialog/about_dialog.cpp PROPERTIES
   OBJECT_DEPENDS "${TAMIAS_VERSION_HEADER}"
 )
 

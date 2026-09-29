@@ -1,6 +1,6 @@
 #include "command/core/command_system.h"
 #include "command/import/import_texture_command.h"
-#include "command/edit/update_material_command.h"
+#include "command/edit/material/update_material_command.h"
 #include "bim/grid.h"
 #include "engine/document/document.h"
 #include "engine/modeling/feature/feature.h"

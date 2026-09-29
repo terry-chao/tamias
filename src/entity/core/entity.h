@@ -149,7 +149,8 @@ class Entity {
   void sync_from_location(double storey_elevation);
   // 兼容移动/夹点命令：把新的刚体变换反写到现有 Location。
   void sync_location_from_transform(const Mat4& transform, double storey_elevation);
-  // 造型：委托 createGeom 抽象（IGeometryBuilder），生成几何。
+  // 造型：先要一份"造型数据"（createGeomImpl），再交给内核求值成网格。
+  // 派生类只需要重写 createGeomImpl —— 它返回的是配方，不是网格。
   [[nodiscard]] Result<MeshCpu> createGeom(double deflection = 0.05) const;
 
   EntityKind kind_ = EntityKind::Wall;
@@ -161,6 +162,15 @@ class Entity {
   std::unique_ptr<Location> location;       // 柱=点、墙=线、板=面；其他实体可为空
   Mat4 local_transform = Mat4::identity();  // 放置（墙=位置+朝向，盒子/圆柱=位置）
   std::vector<Vec3> grips;                 // 局部夹点，随文档持久化
+
+ protected:
+  // 造型数据层：返回自己的特征树（配方）。默认就是成员里那份持久化的 model，
+  // 所以不重写的实体行为完全不变。
+  //
+  // 重写约定：子类**从自己的参数**重新写一份配方返回；同时构造函数要把同一份
+  // 配方写进 model —— model 是持久化载体（保存 / 加载 / clone / 属性面板都读它），
+  // 反序列化出来的是基类，不会走子类的重写，只能靠 model 还原形状。
+  [[nodiscard]] virtual Result<FeatureModel> createGeomImpl() const;
 };
 
 // 按 kind 构造一个实体（供反序列化 / clone 用）。

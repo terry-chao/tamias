@@ -13,7 +13,7 @@
 | 属性面板 | 改选中构件的参数 | [`property_panel`](https://github.com/terry-chao/tamias/blob/main/src/app/bim/properties/property_panel.cpp) |
 | 构件显隐页（视口右上，Ctrl+L） | 一眼看清、一下切换每类构件的显隐 | [`visibility_panel`](https://github.com/terry-chao/tamias/blob/main/src/app/bim/visibility/visibility_panel.cpp) |
 | ViewCube | 快速换视角 | [`view_cube_widget`](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/overlay/view_cube_widget.cpp) |
-| 设置对话框 | 选渲染后端（Vulkan/OpenGL）等 | [`settings_dialog`](https://github.com/terry-chao/tamias/blob/main/src/app/shell/settings_dialog.cpp) |
+| 设置对话框 | 选渲染后端（Vulkan/OpenGL）等 | [`settings_dialog`](https://github.com/terry-chao/tamias/blob/main/src/app/shell/dialog/settings_dialog.cpp) |
 | 句柄检查（Ctrl+D） | 显示构件在 `.tdoc` 里的 id | [`handle_inspector`](https://github.com/terry-chao/tamias/blob/main/src/app/debug/handle_inspector.cpp) |
 | Ribbon「插件」 | 列出选择、删除所选（C# 示例） | [`plugin_host`](https://github.com/terry-chao/tamias/blob/main/src/plugin/plugin_host.cpp)；说明见[插件系列](../plugin/index.md) |
 

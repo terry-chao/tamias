@@ -65,7 +65,7 @@ class Document {
     return text_annotations_;
   }
   [[nodiscard]] std::vector<TextAnnotation>& text_annotations() { return text_annotations_; }
-  // 新建时分配 id；编辑走命令撤销（见 command/create/create_text_command.h）。
+  // 新建时分配 id；编辑走命令撤销（见 command/create/text/create_text_command.h）。
   TextAnnotation& add_text_annotation(TextAnnotation annotation);
   // 保留 id 插入（load / redo 用）。
   TextAnnotation& insert_text_annotation(TextAnnotation annotation);

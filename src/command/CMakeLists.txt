@@ -3,38 +3,38 @@ add_library(tamias_command STATIC
   core/command_system.cpp
   core/register_commands.cpp
   # 创建：构件（按专业）/ 曲线 / 基础体 / 轴网 / 楼层
-  create/create_wall_command.cpp
-  create/beam_drag.cpp
-  create/create_curtain_wall_command.cpp
-  create/create_beam_command.cpp
-  create/create_slab_command.cpp
-  create/create_structural_wall_command.cpp
-  create/create_foundation_command.cpp
-  create/create_columns_on_grid_command.cpp
-  create/create_primitive_command.cpp
-  create/create_curve_command.cpp
-  create/create_sketch_command.cpp
-  create/create_grid_axis_command.cpp
-  create/create_storey_command.cpp
-  create/create_text_command.cpp
+  create/component/create_wall_command.cpp
+  create/component/beam_drag.cpp
+  create/component/create_curtain_wall_command.cpp
+  create/component/create_beam_command.cpp
+  create/component/create_slab_command.cpp
+  create/component/create_structural_wall_command.cpp
+  create/component/create_foundation_command.cpp
+  create/component/create_columns_on_grid_command.cpp
+  create/component/create_primitive_command.cpp
+  create/curve/create_curve_command.cpp
+  create/curve/create_sketch_command.cpp
+  create/reference/create_grid_axis_command.cpp
+  create/reference/create_storey_command.cpp
+  create/text/create_text_command.cpp
   # 编辑：改特征参数 / 夹点 / 变换（移动·旋转·镜像）/ 复制·阵列 / 定位 / 布尔 / 材质 / 贴图 / 轴网 / 楼层
-  edit/add_feature_command.cpp
-  edit/set_feature_param_command.cpp
-  edit/edit_entity_grip_command.cpp
-  edit/entity_transform.cpp
-  edit/transform_entities_command.cpp
-  edit/transform_tool_command.cpp
-  edit/copy_entities_command.cpp
-  edit/mirror_entities_command.cpp
-  edit/set_location_command.cpp
-  edit/boolean_command.cpp
-  edit/set_material_command.cpp
-  edit/update_material_command.cpp
-  edit/replace_texture_command.cpp
-  edit/update_grid_command.cpp
-  edit/update_storeys_command.cpp
-  edit/copy_storey_command.cpp
-  edit/update_text_command.cpp
+  edit/feature/add_feature_command.cpp
+  edit/feature/set_feature_param_command.cpp
+  edit/feature/edit_entity_grip_command.cpp
+  edit/transform/entity_transform.cpp
+  edit/transform/transform_entities_command.cpp
+  edit/transform/transform_tool_command.cpp
+  edit/transform/copy_entities_command.cpp
+  edit/transform/mirror_entities_command.cpp
+  edit/transform/set_location_command.cpp
+  edit/geometry/boolean_command.cpp
+  edit/material/set_material_command.cpp
+  edit/material/update_material_command.cpp
+  edit/material/replace_texture_command.cpp
+  edit/reference/update_grid_command.cpp
+  edit/reference/update_storeys_command.cpp
+  edit/reference/copy_storey_command.cpp
+  edit/annotation/update_text_command.cpp
   # 删除
   delete/delete_entity_command.cpp
   delete/delete_grid_axis_command.cpp
@@ -50,6 +50,6 @@ target_link_libraries(tamias_command
     tamias::document
     tamias::graphics
     tamias::modeling
-    # 命令可以在 execute() 里起 drag 采集输入（见 create/beam_drag）。
+    # 命令可以在 execute() 里起 drag 采集输入（见 create/component/beam_drag）。
     tamias::interaction
 )

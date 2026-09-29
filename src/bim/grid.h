@@ -80,7 +80,7 @@ void append_axis_segments(const std::vector<GridAxis>& axes, std::vector<Vec3>& 
 // 不会把柱子带到它没画到的地方。同一个平面点（tolerance 内）只出一次，重复的轴线
 // 不会叠出两根柱子。
 // y 恒为 0：轴网是平面参考，抬到哪一层的标高由调用方决定（见
-// command/create/create_columns_on_grid_command.h）。
+// command/create/component/create_columns_on_grid_command.h）。
 [[nodiscard]] std::vector<Vec3> grid_intersections(const std::vector<GridAxis>& axes,
                                                    const std::vector<std::uint64_t>& ids = {},
                                                    double tolerance = 1e-6);

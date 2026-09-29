@@ -354,7 +354,7 @@ Ribbon **Annotate → Text**（`Ctrl+Shift+T`）→ 视口里点一下定锚点 
 | `bim/length_text.*` | 标高 / 距离文本（±0.000 / 6.000） |
 | `bim/grid_dimensions.*` | 轴网尺寸链（相邻轴线间距） |
 | `engine/document/text_annotation.h` | 用户文字注记（世界锚点 + 屏幕朝向） |
-| `command/create/create_text_command.*`、`command/edit/update_text_command.*`、`command/delete/delete_text_command.*` | 放 / 改 / 删注记，都可撤销 |
+| `command/create/text/create_text_command.*`、`command/edit/annotation/update_text_command.*`、`command/delete/delete_text_command.*` | 放 / 改 / 删注记，都可撤销 |
 | `document_io.cpp` 的 `kChunkAnno` | `.tdoc` 的 `ANNO` 块 |
 | `shaders/text.vert.hlsl` / `text.frag.hlsl` | 屏幕空间文字管线（实例化、预乘混合） |
 | [picking.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/picking.h) | `project_world_to_screen()`：锚点投影现成可用 |

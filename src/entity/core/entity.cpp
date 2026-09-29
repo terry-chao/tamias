@@ -3,23 +3,23 @@
 #include "entity/sketch/arc_entity.h"
 #include "entity/sketch/bezier_entity.h"
 #include "entity/primitive/box_entity.h"
-#include "entity/family/host/structural/beam_entity.h"
+#include "entity/family/host/structural/beam/beam_entity.h"
 #include "entity/sketch/bspline_entity.h"
 #include "entity/sketch/circle_entity.h"
-#include "entity/family/host/structural/column_entity.h"
-#include "entity/family/host/architectural/curtain_wall_entity.h"
+#include "entity/family/host/structural/column/column_entity.h"
+#include "entity/family/host/architectural/curtain_wall/curtain_wall_entity.h"
 #include "entity/primitive/cylinder_entity.h"
-#include "entity/family/attached/opening/door_entity.h"
+#include "entity/family/attached/opening/door/door_entity.h"
 #include "entity/family/family_entity.h"
-#include "entity/family/host/structural/foundation_entity.h"
+#include "entity/family/host/structural/foundation/foundation_entity.h"
 #include "entity/sketch/line_entity.h"
 #include "entity/sketch/nurbs_entity.h"
 #include "entity/sketch/polyline_entity.h"
 #include "entity/sketch/rectangle_entity.h"
-#include "entity/family/host/structural/slab_entity.h"
-#include "entity/family/host/structural/structural_wall_entity.h"
-#include "entity/family/host/architectural/wall_entity.h"
-#include "entity/family/attached/opening/window_entity.h"
+#include "entity/family/host/structural/slab/slab_entity.h"
+#include "entity/family/host/structural/wall/structural_wall_entity.h"
+#include "entity/family/host/architectural/wall/wall_entity.h"
+#include "entity/family/attached/opening/window/window_entity.h"
 #include "engine/modeling/evaluate/geom_builder.h"
 #include "engine/profile/timing_scope.h"
 #include "bim/line_location.h"
@@ -145,9 +145,16 @@ void Entity::sync_location_from_transform(const Mat4& transform, double storey_e
   }
 }
 
+// 默认造型数据 = 成员里那份特征树。绝大多数实体不需要重写 createGeomImpl。
+Result<FeatureModel> Entity::createGeomImpl() const { return model; }
+
 Result<MeshCpu> Entity::createGeom(double deflection) const {
   TAMIAS_TIMING_SCOPE("createGeom", TimingCategory::Modeling);
-  return geometry_builder().build(model, deflection);
+  Result<FeatureModel> recipe = createGeomImpl();
+  if (!recipe) {
+    return Err(recipe.error());
+  }
+  return geometry_builder().build(*recipe, deflection);
 }
 
 }  // namespace tamias

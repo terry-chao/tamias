@@ -10,7 +10,7 @@ class QSpinBox;
 namespace tamias {
 
 // 阵列参数对话框（线性 / 环形）。只收参数，落盘走 array_entities 命令
-// （见 command/edit/copy_entities_command.h）。
+// （见 command/edit/transform/copy_entities_command.h）。
 class ArrayDialog final : public QDialog {
   Q_OBJECT
  public:

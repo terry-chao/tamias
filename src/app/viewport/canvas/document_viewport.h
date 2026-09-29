@@ -370,13 +370,13 @@ class DocumentViewport final : public QWidget {
   void run_command(const std::string& name, const CommandArgs& args, bool notify = true);
   // 会新增实体的编辑（复制 / 阵列）：跑完把选择换成新建的副本（CAD 惯例）。
   void run_creating_command(const std::string& name, const CommandArgs& args);
-  // 武装一个交互式变换工具：命令名 + 提示语（见 command/edit/transform_tool_command.h）。
+  // 武装一个交互式变换工具：命令名 + 提示语（见 command/edit/transform/transform_tool_command.h）。
   void begin_transform_tool(const std::string& command, const QString& hint);
   // 跑完复制类工具后，用前后 id 差集把选择换成新建的副本。
   void select_entities_created_since(const std::vector<std::uint64_t>& before_ids);
   void dispatch_tool_command(ToolMode mode);
   // 武装一个构件命令（dispatch）并记下这一刻的楼层放置状态。
-  void dispatch_armed_component(const std::string& command, const CommandArgs& args);
+  Result<void> dispatch_armed_component(const std::string& command, const CommandArgs& args);
   // 用面板最近一次武装的参数重新武装当前工具（连续绘制同类型构件时用）。
   void rearm_tool();
   // 当前楼层（或它的标高 / 层高）变了以后，武装中的构件命令要按新楼层重画一遍：

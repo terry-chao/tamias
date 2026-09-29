@@ -1,12 +1,12 @@
 #include "bim/line_location.h"
 #include "bim/point_location.h"
 #include "bim/surface_location.h"
-#include "command/edit/update_storeys_command.h"
+#include "command/edit/reference/update_storeys_command.h"
 #include "engine/document/document.h"
 #include "engine/document/document_io.h"
-#include "entity/family/host/structural/column_entity.h"
-#include "entity/family/host/structural/slab_entity.h"
-#include "entity/family/host/architectural/wall_entity.h"
+#include "entity/family/host/structural/column/column_entity.h"
+#include "entity/family/host/structural/slab/slab_entity.h"
+#include "entity/family/host/architectural/wall/wall_entity.h"
 #include "entity/core/entity_storey.h"
 
 #include <gtest/gtest.h>

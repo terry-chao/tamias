@@ -1,15 +1,15 @@
 #include "bim/host_geometry.h"
 #include "bim/host_update.h"
 #include "bim/wall_join.h"
-#include "command/edit/entity_transform.h"
-#include "command/edit/transform_entities_command.h"
+#include "command/edit/transform/entity_transform.h"
+#include "command/edit/transform/transform_entities_command.h"
 #include "engine/document/document.h"
 #include "engine/graphics/mesh.h"
 #include "engine/modeling/evaluate/edge_fingerprint.h"
 #include "engine/modeling/feature/feature.h"
 #include "engine/modeling/evaluate/evaluator.h"
-#include "entity/family/host/architectural/wall_entity.h"
-#include "entity/family/attached/opening/window_entity.h"
+#include "entity/family/host/architectural/wall/wall_entity.h"
+#include "entity/family/attached/opening/window/window_entity.h"
 
 #include <gtest/gtest.h>
 

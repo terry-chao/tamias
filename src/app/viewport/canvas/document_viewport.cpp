@@ -5,13 +5,13 @@
 #include "app/edit/array_dialog.h"
 #include "bim/host_geometry.h"
 #include "bim/wall_size.h"
-#include "command/edit/edit_entity_grip_command.h"
+#include "command/edit/feature/edit_entity_grip_command.h"
 #include "command/import/import_texture_command.h"
 #include "command/import/import_drawing_command.h"
-#include "command/edit/replace_texture_command.h"
-#include "command/edit/update_material_command.h"
-#include "command/edit/update_grid_command.h"
-#include "command/edit/update_storeys_command.h"
+#include "command/edit/material/replace_texture_command.h"
+#include "command/edit/material/update_material_command.h"
+#include "command/edit/reference/update_grid_command.h"
+#include "command/edit/reference/update_storeys_command.h"
 #include "app/bim/components/component_specs.h"
 #include "bim/grid_dimensions.h"
 #include "bim/length_text.h"
@@ -1706,17 +1706,28 @@ void DocumentViewport::arm_create(ToolMode mode, const CommandArgs& args) {
   request_redraw();
   emit tool_mode_changed(mode);
 
-  dispatch_armed_component(spec->command.toStdString(), args);
+  const Result<void> placed = dispatch_armed_component(spec->command.toStdString(), args);
 
   // 只有"dispatch 返回时就已经画完"的命令才在这里收尾——也就是在 execute()
   // 里起 drag 采集的那类（梁）。交互式命令（墙 / 板 / 柱…）返回时只是进了
   // pending_，还在等用户点，工具必须留着：所以用 has_pending() 区分，
   // 否则一武装就立刻取消了 pending，面板也会闪回「开始绘制」。
-  //
-  // 想要恢复"画完一根继续画下一根"：把上面那次 dispatch 包进一个循环，每轮
-  // 结束后判断 session_->tool_mode() 是否还是 mode，是就再 dispatch 一次（每根
-  // 是独立命令 → 独立撤销记录）。取消时命令返回 kCommandCancelled，据此跳出。
-  if (!command_system_.has_pending() && alive_ && session_->tool_mode() == mode) {
+  if (command_system_.has_pending()) {
+    return;
+  }
+  if (placed && alive_) {
+    // 同步完成的命令（drag 式采集）原来走 finish_pending_if_done 收尾，那条路
+    // 它现在不经过了：新构件的网格要同步进渲染线程、包围盒要重建、属性面板和
+    // 标题要刷新——缺这一步，画出来的实体不会进渲染、也不会进拾取索引。
+    resync_all_meshes();
+    rebuild_bvh();
+    emit document_changed();
+  }
+  // 一次武装 = 一个构件，画完把工具收掉，面板回到「开始绘制」。
+  // 想要恢复"画完继续画"：把上面那次 dispatch 包进循环，每轮判断 tool_mode
+  // 是否还是 mode，是就再 dispatch 一次（每根独立命令 → 独立撤销记录）；
+  // 取消时命令返回 kCommandCancelled，据此跳出。
+  if (alive_ && session_->tool_mode() == mode) {
     set_tool(ToolMode::None);
   }
 }
@@ -1730,27 +1741,28 @@ void DocumentViewport::rearm_tool() {
     // 面板构件：用上次武装参数重新 dispatch。
     command_system_.cancel();
     const ComponentSpec* spec = find_component_spec(mode);
-    dispatch_armed_component(spec->command.toStdString(), last_arm_args_);
+    (void)dispatch_armed_component(spec->command.toStdString(), last_arm_args_);
   } else {
     dispatch_tool_command(mode);
   }
 }
 
 // 武装一个构件命令，并记下"这一刻是照哪一层摆的"（见 armed_placement.h）。
-void DocumentViewport::dispatch_armed_component(const std::string& command,
-                                                const CommandArgs& args) {
+Result<void> DocumentViewport::dispatch_armed_component(const std::string& command,
+                                                        const CommandArgs& args) {
   if (auto r = session_->dispatch(command, args); !r) {
     // 用户放弃（Esc / 右键）不是错误，别在日志里报。
     if (r.error() != kCommandCancelled) {
       log_error(r.error());
     }
     armed_placement_ = {};
-    return;
+    return Err(r.error());
   }
   // 非交互命令 dispatch 就执行完了，没有"武装着等点"的状态；只有交互式命令
   // 会留在 pending 里，才有必要记住它的楼层。
   armed_placement_ = command_system_.has_pending() ? capture_armed_placement(*document_)
                                                     : ArmedPlacement{};
+  return {};
 }
 
 void DocumentViewport::sync_armed_placement() {
