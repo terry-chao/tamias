@@ -54,6 +54,7 @@ nav:
       - 路线图: ROADMAP.md
       - MCAD 与 BIM: DECISION-MCAD-BIM.md
       - 内嵌浏览器（决策）: DECISION-EMBEDDED-BROWSER.md
+      - C++20 模块（试点）: DECISION-MODULES-MATH.md
       - 架构: ARCHITECTURE.md
   - 入门教程:
       - 教程总览: tutorial/index.md

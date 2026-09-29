@@ -1,0 +1,78 @@
+# C++20 模块试点（tamias::math）的 CI。
+#
+# 只构建 tests/math_module/standalone —— 那条路径不依赖 vcpkg / Qt / OCCT，
+# 所以能在几十秒内回答“这个工具链还编得动模块吗”。真实工程里的模块 target
+# 由 TAMIAS_ENABLE_MATH_MODULE 控制，默认关闭，见 src/engine/math/CMakeLists.txt。
+#
+# 注意：本文件是在没有网络的环境里写的，尚未跑过一次真实的 CI。首次使用请用
+# workflow_dispatch 手动触发，确认两个 job 都绿再当作门禁。
+name: math-module-pilot
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'src/engine/math/**'
+      - 'tests/math_module/**'
+      - 'tests/math_module_parity_tests.cpp'
+      - '.github/workflows/math-module-pilot.yml'
+  pull_request:
+    paths:
+      - 'src/engine/math/**'
+      - 'tests/math_module/**'
+      - 'tests/math_module_parity_tests.cpp'
+      - '.github/workflows/math-module-pilot.yml'
+
+jobs:
+  pilot:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-msvc
+            os: windows-latest
+          - name: linux-gcc14
+            os: ubuntu-latest
+            cxx: g++-14
+    steps:
+      - uses: actions/checkout@v4
+
+      # 用 pip 里的 cmake/ninja，避免依赖镜像预装版本（模块要 CMake >= 3.28）。
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install CMake and Ninja
+        run: python -m pip install --upgrade "cmake>=3.30" ninja
+
+      - name: Install GCC 14
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y g++-14
+
+      # GCC 14 以前不支持 C++20 具名模块（CMake 也需要 14 + Ninja 1.11+）。
+      - name: Install MSVC environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Versions
+        shell: bash
+        run: cmake --version | head -1; ninja --version
+
+      - name: Configure (MSVC)
+        if: runner.os == 'Windows'
+        run: >
+          cmake -S tests/math_module/standalone -B build/math-module
+          -G Ninja -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Configure (GCC)
+        if: runner.os == 'Linux'
+        run: >
+          cmake -S tests/math_module/standalone -B build/math-module
+          -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+
+      - name: Build
+        run: cmake --build build/math-module
+
+      - name: Test
+        run: ctest --test-dir build/math-module --output-on-failure

@@ -57,3 +57,33 @@ gtest_discover_tests(tamias_tests
 )
 tamias_copy_runtime_dlls(tamias_tests)
 tamias_copy_nethost(tamias_tests)
+
+# ---------------------------------------------------------------------------
+# C++20 模块试点（见 src/engine/math/tamias.math.cppm）。
+#
+# 单独一个 target 而不是塞进 tamias_tests：既有测试 target 挂着 PCH、unity、
+# 目标文件缓存等加速手段，混在一起会污染“模块能不能用”的实验结论。
+#
+# 两侧探针必须分处不同 TU：header_side.cpp 只 include 头文件，module_side.cpp
+# 只 import tamias.math。同一个 TU 里混用会让同名实体同时挂在全局模块和具名模块上。
+if(TARGET tamias::math_module)
+  add_executable(tamias_math_module_tests
+    math_module_parity_tests.cpp
+    math_module/header_side.cpp
+    math_module/module_side.cpp
+    math_module/parity_check.cpp)
+  # 必须显式打开扫描：仓库的 cmake_minimum_required(VERSION 3.24) 让 CMP0155
+  # 停留在 OLD，消费者 TU 默认不扫描 import，于是 module_side.cpp 会以
+  # “unscanned” 规则编译（CMake 不给它 BMI 引用）并报 C2230 “无法找到模块”。
+  # 试点只在需要的 target 上开，避免全项目每个 TU 多一遍扫描（那是整体迁移时才付的账）。
+  set_property(TARGET tamias_math_module_tests PROPERTY CXX_SCAN_FOR_MODULES ON)
+  target_include_directories(tamias_math_module_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  target_link_libraries(tamias_math_module_tests
+    PRIVATE
+      tamias::math
+      tamias::math_module
+      GTest::gtest_main
+  )
+  gtest_discover_tests(tamias_math_module_tests DISCOVERY_MODE PRE_TEST)
+  tamias_copy_runtime_dlls(tamias_math_module_tests)
+endif()
