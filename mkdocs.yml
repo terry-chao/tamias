@@ -115,6 +115,7 @@ nav:
       - 渲染总览: render/index.md
       - 超大规模三角: MASSIVE-GEOMETRY.md
       - 管线与 RHI: RENDERING.md
+      - UE5 对照: UE5-VS-TAMIAS.md
       - RHI 启动（探测/降级/块名单）: RHI-STARTUP.md
       - 视锥、NDC 与屏幕: NDC.md
       - OpenGL 后端: OPENGL.md
