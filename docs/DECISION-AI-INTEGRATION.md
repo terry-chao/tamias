@@ -7,7 +7,8 @@
 > 目标是把 Tamias 的文档、命令与特征树交给
 > AI/Agent 驱动，**不新开一条编辑通道**——写操作仍然只有 `dispatch` 一条路。
 >
-> 相关：[插件设计理念](plugin/design.md)（窄写宽读的来源）、
+> 相关：[AI 总览](ai/index.md)（这一系列的范围与入口）、
+> [插件设计理念](plugin/design.md)（窄写宽读的来源）、
 > [脚本与命令控制台](SCRIPTING.md)（全信任 C# 与审计回显）、
 > [C ABI](plugin/api/abi.md)（稳定面）、[架构](ARCHITECTURE.md)（分层）。
 

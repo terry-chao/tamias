@@ -17,6 +17,7 @@ Qt 做壳，自研 RHI 跑 Vulkan / OpenGL，OCCT 提供 BRep，IfcOpenShell 提
 | **自研 RHI** | Vulkan 主 / OpenGL 副（独立线程），启动探测、失败降级、驱动块名单；浏览器走 WASM + WebGPU | [RHI 启动](RHI-STARTUP.md) |
 | **参考图纸** | PDF / DXF / DWF / SVG / 位图贴进三维视口当底图，另有只读二维图纸页 | [参考图纸](DRAWING.md) |
 | **插件与脚本** | C# 扩展：约定目录热加载 `main.cs` / `.dll`，Ribbon 命令、视口输入、宿主对话框 | [插件](plugin/index.md) |
+| **AI 助手 / Agent** | 内置对话面板，或以 MCP 接 Claude Desktop / Cursor / Codex；写只走 `dispatch` + 事务，可审批可审计 | [AI 系列](ai/index.md) |
 | **通用编辑** | 移动 / 复制 / 旋转 / 镜像 / 阵列 = 选择集 → 一条可撤销命令 | [通用编辑](EDIT-OPERATIONS.md) |
 | **格式分工** | 编辑态 `.tdoc`（语义树 + 特征树），交换态 IFC / STEP / IGES / BREP / OBJ / GLB | [路线图](ROADMAP.md) |
 
@@ -24,7 +25,7 @@ Qt 做壳，自研 RHI 跑 Vulkan / OpenGL，OCCT 提供 BRep，IfcOpenShell 提
 
 - [路线图](ROADMAP.md) —— 一句话定位、分层关系、里程碑
 - [MCAD 与 BIM](DECISION-MCAD-BIM.md) —— 为什么做一个 app、编辑深度怎么分层
-- [AI 接入（MCP）](DECISION-AI-INTEGRATION.md) —— 把文档/命令/特征树交给 AI，写仍走 `dispatch` + 事务
+- [AI 系列](ai/index.md) —— 把文档/命令/特征树交给 AI，写仍走 `dispatch` + 事务
 - [架构](ARCHITECTURE.md) —— 引擎 / 宿主 / 胶水 / 界面
 
 ## 想学 C++ 3D 开发
@@ -55,5 +56,5 @@ Qt 做壳，自研 RHI 跑 Vulkan / OpenGL，OCCT 提供 BRep，IfcOpenShell 提
 └───────────────────────────────────────────────┘
 ```
 
-侧栏的分组就是上图的层：总览 / 入门教程 / 客户端 / 插件 / BIM / 场景图 / 造型 / 渲染 / 工程实践。
+侧栏的分组就是上图的层：总览 / 入门教程 / 客户端 / 插件 / AI / BIM / 场景图 / 造型 / 渲染 / 工程实践。
 散落的「为什么」（场景规模、BRep、mipmap、RHI、插件、拾取、文字、浮点、LOD）集中在 [答疑（Q&A）](FAQ.md)。

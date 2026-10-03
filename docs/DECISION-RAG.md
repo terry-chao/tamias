@@ -156,7 +156,7 @@ mcp::McpServer server(backend, "tamias", version);
 
 - 以 `## / ###` 标题为边界；目标 300–600 汉字，超长按段落再切。
 - **代码块整体保留**，不跨块切断；表格不切。
-- 每块带面包屑（`总览 > AI 接入 > 安全模型`）与 `mkdocs.yml` 的 nav 分组作为 `section`。
+- 每块带面包屑（`AI > AI 接入（MCP） > 安全模型`）与 `mkdocs.yml` 的 nav 分组作为 `section`。
 - anchor 用 mkdocs 的标题 slug，结果是**可直接点回官网的链接**：
   `https://terry-chao.github.io/tamias/<页面>#<anchor>`。
 
