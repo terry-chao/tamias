@@ -103,7 +103,7 @@ nav:
       - BIM 总览: bim/index.md
       - BIM 业务层: BIM.md
       - 图纸 → BIM（翻模）: DRAWING-TO-BIM.md
-      - 图纸识别（YOLO）: PLAN-VISION.md
+      - 图纸识别（RF-DETR）: PLAN-VISION.md
       - 关联关系: bim/relations.md
       - 墙-墙交接: bim/junctions.md
   - 场景图:

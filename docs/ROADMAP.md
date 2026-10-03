@@ -214,6 +214,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 - **渲染场景图 = VSG 式（节点 + 访问者 + 命令图状态）**：渲染侧场景图用「节点 + 访问者」组织、渲染状态用命令图（`StateGroup`/`StateCommands`）挂载；它是语义树的「绘制投影」而非复制，语义树仍是层级唯一真相源，靠脏标记增量同步。详见 [SCENE-GRAPH.md](SCENE-GRAPH.md)。
 - **`.tdoc` 后期用 LevelDB 改造**：现在仍是自研 `binary_archive` 整文件（不是 LevelDB）。后期把存储引擎换成 LevelDB，以支撑增量读写和大模型局部加载；扩展名可以不变。
 - **OCCT 钉 7.9.3**：和 IfcOpenShell 共用同一份内核。IfcParse 不链 OCCT；以后 IfcGeom 必须链这份 7.9.3，不要另装一套。
+- **图纸识别的检测器 = RF-DETR（Apache-2.0 档）**：不用 Ultralytics YOLO——它是 AGPL-3.0，与 Tamias 的 MIT 合不到一块，且「用其工具训出的权重」是否受 AGPL 覆盖没有定论，会挡住以后的闭源分发行人尽调。**只用检测版 Nano / Small / Medium / Large 与全系分割版**（分割全档 Apache-2.0）；检测版 **XL / 2XLarge 是 PML 1.0，不许碰**。见 [图纸识别（RF-DETR）](PLAN-VISION.md) §11。
 
 **待拍板：**
 
