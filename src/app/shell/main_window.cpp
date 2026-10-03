@@ -942,6 +942,10 @@ MainWindow::MainWindow(QWidget* parent)
   });
 
   // AI 对话面板：和命令控制台同一层，右侧停靠，默认收起。
+  //
+  // 位置和尺寸保持"普通停靠"：不开成右侧整列、不给最小宽度。试过 splitDockWidget 单独
+  // 成列（1800x1000 下能到 620x755），但那样会明显吃掉视口宽度、也把句柄面板压扁，
+  // 用户反馈"占空间"，所以维持紧凑形态：要更大就拖动分隔条或把它拖成浮动窗口。
   ai_panel_ = new AiPanel(this);
   ai_dock_ = new QDockWidget(tr("AI Assistant"), this);
   ai_dock_->setObjectName(QStringLiteral("aiDock"));
@@ -1270,13 +1274,24 @@ MainWindow::MainWindow(QWidget* parent)
   // 卷起 / 展开的状态也记着（放在 setMenuWidget 之后：这时 Ribbon 才真正进了窗口）
   ribbon->set_collapsed(AppSettings::instance().ribbon_collapsed());
 
-  // 面板停靠布局（属性 / 绘制 / 贴图 / 句柄 / 计时 / 控制台）：上次拖到哪儿、多大、
-  // 是不是浮着、关掉没有，一起还原。
+  // 面板停靠布局（属性 / 绘制 / 贴图 / 句柄 / 计时 / 控制台 / AI）：上次拖到哪儿、
+  // 多大、是不是浮着、关掉没有，一起还原。
+  //
+  // 带版本号：布局本身改设计时（比如 AI 面板从窄条改成右侧整列）把版本 +1，
+  // 老布局就作废一次、按新默认重排——不然用户看到的永远是旧的那套。窗口几何不受影响。
+  // v4：AI 面板收回普通停靠（v3 那版把它做成了右侧整列，太占视口）。
+  constexpr int kDockLayoutVersion = 4;
   {
-    const QByteArray dock_state = AppSettings::instance().window_state();
+    auto& settings = AppSettings::instance();
+    if (settings.dock_layout_version() != kDockLayoutVersion) {
+      settings.set_window_state(QByteArray());
+    }
+    const QByteArray dock_state = settings.window_state();
     if (!dock_state.isEmpty()) {
       restoreState(dock_state);
     }
+    settings.set_dock_layout_version(kDockLayoutVersion);
+    settings.save();
   }
   // 从那以后：布局一动就（节流）记下来，不用等到关窗口。
   window_state_timer_ = new QTimer(this);

@@ -52,10 +52,14 @@ class AppSettings {
   // 是否浮动、显不显示）。拖动面板之后记下来，下次开还是这样。
   [[nodiscard]] QByteArray window_state() const { return window_state_; }
   void set_window_state(const QByteArray& state);
+  // 停靠布局的版本号。布局设计改动（面板换位置、换大小档）时把它 +1，
+  // 老布局就不会被还原——否则改得再好看，老用户看到的还是旧的那套。
+  [[nodiscard]] int dock_layout_version() const { return dock_layout_version_; }
+  void set_dock_layout_version(int version) { dock_layout_version_ = version; }
 
   // 内置 AI 面板：OpenAI 兼容端点（OpenAI / DeepSeek / Ollama / LM Studio …）。
-  // 注意**只存地址和模型名，不存 API key**——密钥只在本次会话的内存里，
-  // 免得把凭据明文写进注册表/配置文件。Keychain 集成见 docs/DECISION-AI-INTEGRATION.md。
+  // 这里**只存地址和模型名**：API key 不进 QSettings（那是明文），走
+  // SecretStore —— Windows 上就是凭据管理器，见 app/base/secret_store.h。
   [[nodiscard]] QString ai_base_url() const { return ai_base_url_; }
   void set_ai_base_url(const QString& url);
   [[nodiscard]] QString ai_model() const { return ai_model_; }
@@ -108,6 +112,7 @@ class AppSettings {
   QStringList ribbon_layout_;
   bool ribbon_collapsed_ = false;
   QByteArray window_state_;
+  int dock_layout_version_ = 0;
   QString ai_base_url_;
   QString ai_model_;
   QStringList disabled_plugin_ids_;

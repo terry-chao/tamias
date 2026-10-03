@@ -1,6 +1,7 @@
 #include "app/shell/panel/ai_panel.h"
 
 #include "app/base/app_settings.h"
+#include "app/base/secret_store.h"
 
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -25,6 +26,9 @@ namespace {
 
 // 一轮对话最多让模型连着调几轮工具，防止它在「读-想-读」里转圈。
 constexpr int kMaxToolRounds = 8;
+
+// 密钥在凭据管理器里的槽位名。落盘位置的选择见 secret_store.h 的注释。
+const char* const kApiKeySlot = "ai/api-key";
 
 // 系统提示要交代三件事：先读后写、写只走工具、armed 是怎么回事。
 const char* const kSystemPrompt = R"(你是 Tamias（跨 MCAD / BIM 的参数化建模软件）里的助手，可以直接读写用户当前打开的文档。
@@ -135,7 +139,10 @@ AiPanel::AiPanel(QWidget* parent) : QWidget(parent) {
   }
 
   const auto& settings = AppSettings::instance();
-  client_->set_config(ai::AiClient::Config{settings.ai_base_url(), QString(), settings.ai_model()});
+  // 密钥从凭据管理器捞回来，省得每次启动重敲一遍。
+  api_key_ = SecretStore::load(QLatin1String(kApiKeySlot));
+  client_->set_config(
+      ai::AiClient::Config{settings.ai_base_url(), api_key_, settings.ai_model()});
   stop_button_->setEnabled(false);
   refresh_status();
   append(tr("System"),
@@ -330,7 +337,7 @@ void AiPanel::open_settings() {
   model->setToolTip(tr("Model name exactly as the service expects it"));
   auto* key = new QLineEdit(api_key_, &dialog);
   key->setEchoMode(QLineEdit::Password);
-  key->setPlaceholderText(tr("Local models can leave this empty; the key stays in this session"));
+  key->setPlaceholderText(tr("Leave empty to forget the saved key; local models need no key"));
 
   auto* form = new QFormLayout;
   form->addRow(tr("Service address"), base_url);
@@ -342,9 +349,10 @@ void AiPanel::open_settings() {
   connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 
   auto* note = new QLabel(
-      tr("Service address and model are remembered; the API key stays in this session "
-         "only and is never written to disk. Any OpenAI-compatible endpoint works "
-         "(OpenAI / DeepSeek / Claude / Ollama / LM Studio ...)."),
+      tr("Service address and model are remembered; the API key is saved to %1 so you "
+         "don't have to retype it. Any OpenAI-compatible endpoint works "
+         "(OpenAI / DeepSeek / Claude / Ollama / LM Studio ...).")
+          .arg(SecretStore::backend_name()),
       &dialog);
   note->setWordWrap(true);
 
@@ -361,11 +369,20 @@ void AiPanel::open_settings() {
   settings.set_ai_base_url(base_url->currentText().trimmed());
   settings.set_ai_model(model->currentText().trimmed());
   settings.save();
-  api_key_ = key->text();
+  api_key_ = key->text().trimmed();
+
+  // 留空 = 把存过的密钥删掉，不是存一个空串。
+  QString key_error;
+  const bool key_saved = SecretStore::save(QLatin1String(kApiKeySlot), api_key_, &key_error);
 
   client_->set_config(ai::AiClient::Config{settings.ai_base_url(), api_key_, settings.ai_model()});
   refresh_status();
   append(tr("System"), tr("Settings updated."));
+  if (!key_saved) {
+    // 没写进去就只在本次会话生效：功能照用，但要让用户知道下次得重敲。
+    append(tr("System"),
+           tr("Could not save the API key (%1); it stays in this session only.").arg(key_error));
+  }
 }
 
 }  // namespace tamias

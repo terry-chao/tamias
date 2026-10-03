@@ -221,6 +221,15 @@ Claude Desktop 写进 `claude_desktop_config.json`，Cursor 写进 `.cursor/mcp.
 
 **视图 → 面板 → AI Assistant**，或 `Ctrl+Shift+A`。右侧停靠，默认收起。
 
+停靠形态刻意保持**紧凑**：和命令控制台同一层，`addDockWidget` 挤在右列里，不给最小宽度、
+不开独立列。试过用 `splitDockWidget` 把它做成右侧整列（1800×1000 下能到 620×755），但那样
+明显吃视口宽度、还把句柄面板压扁，用户判定"占空间"，于是收回普通停靠。要更大就拖分隔条，
+或者把面板拖成浮动窗口。
+
+布局设计改动时（面板换位置、换尺寸档）把 `MainWindow` 里的 `kDockLayoutVersion` +1：
+老的停靠布局作废一次、按新默认重排，否则改得再好看，老用户看到的还是旧的那套
+（AI 面板这次就 +1 到 v4，收掉 v3 留下的整列布局）。
+
 和外部客户端走**同一套工具语义**，但不经 MCP 传输：面板直接调 `SessionMcpBackend`，
 所以没有发现文件、端口、token 这些概念，也不需要 `--mcp`。
 
@@ -234,7 +243,9 @@ Claude Desktop 写进 `claude_desktop_config.json`，Cursor 写进 `.cursor/mcp.
 配置（面板右上角「设置」）：任何 **OpenAI 兼容**端点都行——
 `https://api.openai.com/v1`、`https://api.deepseek.com/v1`、
 `http://127.0.0.1:11434/v1`（Ollama）、LM Studio、llama.cpp server。
-服务地址和模型名会记住；**API key 只在本次会话的内存里，不落盘**。
+服务地址和模型名记在 `QSettings`；**API key 走 `SecretStore`**——Windows 上是
+凭据管理器（DPAPI 按当前用户加密，不进注册表/配置文件），其它平台退化成一个只有
+属主可读的文件。设置里把 Key 清空即删除。实现见 `src/app/base/secret_store.{h,cpp}`。
 
 一轮对话最多 8 轮工具调用（防止模型在「读-想-读」里转圈）。创建类命令如果返回
 `armed: true`，表示工具已架起、等用户在视口点位置——这是设计好的两段式，见 §6。
@@ -286,7 +297,7 @@ AI 调 tamias_create_wall(thickness=0.2, height=3)   不给 points
 | **B2.5** ✅ | 外部 stdio 转发器 `tamias-mcp` + 客户端配置形状 + 打包 + 发现文件存活/自愈 | stdio 端到端：握手、工具调用、Tamias 换端口重启后自愈、Tamias 未运行时返回可操作错误 |
 | **B3a** ✅ | 三档写策略 + 人工审批 + 审计接入 ConsolePanel + 执行期 `busy` 拒绝并发 | 只读档写操作被拒并说明原因；auto 档放行；每次调用在控制台留痕 |
 | **B3b** ⬅ **下一步** | 目标文档语义（结果回显 document + `tamias_list_documents`）+ 多实例语义 + 策略持久化/UI | 切页签不再静默换目标；两个 Tamias 并存时客户端知道连的是谁 |
-| **B4a** ✅ | 内置 AI 对话面板：OpenAI 兼容端点 + 工具循环 + 设置（密钥不落盘） | 端到端：提问 → 模型要工具 → 面板执行 → 回填 → 最终答案；写操作真建出墙 |
+| **B4a** ✅ | 内置 AI 对话面板：OpenAI 兼容端点 + 工具循环 + 设置（密钥落凭据管理器） | 端到端：提问 → 模型要工具 → 面板执行 → 回填 → 最终答案；写操作真建出墙 |
 | **B4b** | 流式输出 + Anthropic + 会话历史持久化 + 多轮上下文压缩 | 长回答不"卡住"；能换 provider |
 | **B5** | 上下文质量：docs/IFC schema RAG、截图多模态、无头批量、web/wasm | 批量与保密场景可用；RAG 细化见 [RAG 接入](DECISION-RAG.md) |
 

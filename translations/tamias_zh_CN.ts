@@ -5105,8 +5105,8 @@ tests failed (exit %1)
         <translation>模型名要按服务端要求原样填写</translation>
     </message>
     <message>
-        <source>Local models can leave this empty; the key stays in this session</source>
-        <translation>本地模型可留空；密钥只留在本次会话</translation>
+        <source>Leave empty to forget the saved key; local models need no key</source>
+        <translation>本地模型可留空；清空这一栏会删掉已保存的密钥</translation>
     </message>
     <message>
         <source>Service address</source>
@@ -5121,12 +5121,27 @@ tests failed (exit %1)
         <translation>API Key</translation>
     </message>
     <message>
-        <source>Service address and model are remembered; the API key stays in this session only and is never written to disk. Any OpenAI-compatible endpoint works (OpenAI / DeepSeek / Claude / Ollama / LM Studio ...).</source>
-        <translation>服务地址与模型会记住；API Key 只留在本次会话，不落盘。任何 OpenAI 兼容端点都行（OpenAI / DeepSeek / Claude / Ollama / LM Studio …）。</translation>
+        <source>Service address and model are remembered; the API key is saved to %1 so you don&apos;t have to retype it. Any OpenAI-compatible endpoint works (OpenAI / DeepSeek / Claude / Ollama / LM Studio ...).</source>
+        <translation>服务地址与模型会记住；API Key 存到 %1，下次不用重敲。任何 OpenAI 兼容端点都行（OpenAI / DeepSeek / Claude / Ollama / LM Studio …）。</translation>
     </message>
     <message>
         <source>Settings updated.</source>
         <translation>设置已更新。</translation>
+    </message>
+    <message>
+        <source>Could not save the API key (%1); it stays in this session only.</source>
+        <translation>API Key 没能存下来（%1），这次仍然只有本次会话有效。</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::SecretStore</name>
+    <message>
+        <source>Windows Credential Manager</source>
+        <translation>Windows 凭据管理器</translation>
+    </message>
+    <message>
+        <source>a per-user file in the app config directory</source>
+        <translation>本用户配置目录下的一个文件</translation>
     </message>
 </context>
 <context>

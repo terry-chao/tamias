@@ -102,6 +102,7 @@ void AppSettings::load() {
   ribbon_layout_ = settings.value(QStringLiteral("ui/ribbon_layout")).toStringList();
   ribbon_collapsed_ = settings.value(QStringLiteral("ui/ribbon_collapsed"), false).toBool();
   window_state_ = settings.value(QStringLiteral("ui/window_state")).toByteArray();
+  dock_layout_version_ = settings.value(QStringLiteral("ui/dock_layout_version"), 0).toInt();
   ai_base_url_ = settings.value(QStringLiteral("ai/base_url")).toString();
   ai_model_ = settings.value(QStringLiteral("ai/model")).toString();
   const QString disabled_key = QStringLiteral("plugins/disabled_ids");
@@ -143,6 +144,7 @@ void AppSettings::save() const {
   } else {
     settings.setValue(QStringLiteral("ui/window_state"), window_state_);
   }
+  settings.setValue(QStringLiteral("ui/dock_layout_version"), dock_layout_version_);
   settings.setValue(QStringLiteral("plugins/disabled_ids"), disabled_plugin_ids_);
   settings.setValue(QStringLiteral("plugins/ribbon_command_order"),
                     ribbon_command_order_);

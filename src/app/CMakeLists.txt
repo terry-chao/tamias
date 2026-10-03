@@ -6,6 +6,7 @@ add_executable(tamias
   main.cpp
   # 应用基础设施：设置、主题、翻译、最近文件、渲染后端登记
   base/app_settings.cpp
+  base/secret_store.cpp
   base/theme.cpp
   base/i18n.cpp
   base/recent_files.cpp
@@ -121,6 +122,8 @@ qt_add_translations(tamias
 
 if(WIN32)
   target_sources(tamias PRIVATE app.rc)
+  # AI 面板的 API key 落盘走凭据管理器（CredWrite/CredRead），在 advapi32 里。
+  target_link_libraries(tamias PRIVATE advapi32)
   # Debug keeps a console for stderr logs; packaged Release/RelWithDebInfo do not.
   set_target_properties(tamias PROPERTIES WIN32_EXECUTABLE $<NOT:$<CONFIG:Debug>>)
 endif()

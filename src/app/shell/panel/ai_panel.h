@@ -53,7 +53,7 @@ class AiPanel final : public QWidget {
   std::vector<ai::ChatMessage> history_;
   int rounds_ = 0;
   bool busy_ = false;
-  // 密钥只在内存里：不写进 QSettings，免得把凭据明文落到磁盘。
+  // 本次会话用的密钥。落盘在 SecretStore（Windows = 凭据管理器），不写进 QSettings。
   QString api_key_;
   QTimer* ready_timer_ = nullptr;
   QString pending_text_;
