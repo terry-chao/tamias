@@ -55,6 +55,8 @@ nav:
       - MCAD 与 BIM: DECISION-MCAD-BIM.md
       - 内嵌浏览器（决策）: DECISION-EMBEDDED-BROWSER.md
       - C++20 模块（试点）: DECISION-MODULES-MATH.md
+      - AI 接入（MCP）: DECISION-AI-INTEGRATION.md
+      - RAG 接入: DECISION-RAG.md
       - 架构: ARCHITECTURE.md
   - 入门教程:
       - 教程总览: tutorial/index.md

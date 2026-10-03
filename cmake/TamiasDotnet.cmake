@@ -111,6 +111,7 @@ function(tamias_publish_csharp target)
   set(_host_csproj "${CMAKE_SOURCE_DIR}/plugin-sdk/csharp/Tamias.Host/Tamias.Host.csproj")
   set(_hello_csproj "${CMAKE_SOURCE_DIR}/plugins/csharp/Tamias.Hello/Tamias.Hello.csproj")
   set(_nurbs_csproj "${CMAKE_SOURCE_DIR}/plugins/csharp/Tamias.Nurbs/Tamias.Nurbs.csproj")
+  set(_mcp_csproj "${CMAKE_SOURCE_DIR}/plugin-sdk/csharp/Tamias.Mcp/Tamias.Mcp.csproj")
   if(NOT EXISTS "${_host_csproj}")
     return()
   endif()
@@ -141,6 +142,11 @@ function(tamias_publish_csharp target)
             -c $<IF:$<CONFIG:Debug>,Debug,Release>
             --nologo
             -o $<TARGET_FILE_DIR:${target}>/plugins
+    # MCP stdio 转发器：AI 客户端拉起的独立进程，和 tamias.exe 并排摆。
+    COMMAND "${TAMIAS_DOTNET}" publish "${_mcp_csproj}"
+            -c $<IF:$<CONFIG:Debug>,Debug,Release>
+            --nologo
+            -o $<TARGET_FILE_DIR:${target}>
     # 目录式扩展示例：源码 + 清单直接摆进约定目录，加载时现编译。
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${CMAKE_SOURCE_DIR}/plugins/csharp/Tamias.Sample.Tools"

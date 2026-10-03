@@ -53,6 +53,14 @@ class AppSettings {
   [[nodiscard]] QByteArray window_state() const { return window_state_; }
   void set_window_state(const QByteArray& state);
 
+  // 内置 AI 面板：OpenAI 兼容端点（OpenAI / DeepSeek / Ollama / LM Studio …）。
+  // 注意**只存地址和模型名，不存 API key**——密钥只在本次会话的内存里，
+  // 免得把凭据明文写进注册表/配置文件。Keychain 集成见 docs/DECISION-AI-INTEGRATION.md。
+  [[nodiscard]] QString ai_base_url() const { return ai_base_url_; }
+  void set_ai_base_url(const QString& url);
+  [[nodiscard]] QString ai_model() const { return ai_model_; }
+  void set_ai_model(const QString& model);
+
   [[nodiscard]] QStringList disabled_plugin_ids() const {
     return disabled_plugin_ids_;
   }
@@ -100,6 +108,8 @@ class AppSettings {
   QStringList ribbon_layout_;
   bool ribbon_collapsed_ = false;
   QByteArray window_state_;
+  QString ai_base_url_;
+  QString ai_model_;
   QStringList disabled_plugin_ids_;
   QStringList ribbon_command_order_;
   std::optional<GraphicsBackend> resolved_backend_;

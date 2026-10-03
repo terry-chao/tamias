@@ -8,6 +8,7 @@
 #include "plugin/plugin_host.h"
 #include "plugin/plugin_manager.h"
 #include "app/base/recent_files.h"
+#include "app/mcp/mcp_policy.h"
 
 #include <QMainWindow>
 #include <QString>
@@ -38,6 +39,7 @@ class HandleInspector;
 class SceneDebuggerWindow;
 class TextureLibraryPanel;
 class TimingPanel;
+class AiPanel;
 class ConsolePanel;
 class PluginManager;
 class RibbonBar;
@@ -45,6 +47,7 @@ class RibbonGroup;
 class DrawPanel;
 class DrawingView;
 class ExtensionWatcher;
+class McpService;
 
 class MainWindow final : public QMainWindow {
   Q_OBJECT
@@ -53,6 +56,12 @@ class MainWindow final : public QMainWindow {
   ~MainWindow() override;
 
   void open_paths(const QStringList& paths);
+  // 开启 / 关闭内置 MCP 服务（loopback HTTP）。port = 0 时自动选端口。
+  // 命令行 --mcp 在 main 里调它；服务跟着当前活动文档重新绑定。
+  void set_mcp_enabled(bool enabled, quint16 port = 0, bool allow_evaluate = false,
+                       McpPolicy policy = McpPolicy::kReadOnly);
+  // 打开 AI 面板并把这句话发出去（--ai-prompt）。等文档打开后再发。
+  void ask_ai(const QString& prompt);
 
  private slots:
   void open_file();
@@ -249,10 +258,15 @@ class MainWindow final : public QMainWindow {
   // 命令控制台：每次执行的内核命令的一行等价 C# 调用（默认收起）。
   ConsolePanel* console_panel_ = nullptr;
   QDockWidget* console_dock_ = nullptr;
+  // AI 对话面板：进程内助手，工具直接调 SessionMcpBackend，不经 MCP 传输。
+  AiPanel* ai_panel_ = nullptr;
+  QDockWidget* ai_dock_ = nullptr;
+  QAction* ai_toggle_ = nullptr;
   // 停靠布局的存盘节流（拖动面板时 LayoutRequest 连发，见 persist_window_state）。
   QTimer* window_state_timer_ = nullptr;
   bool window_state_ready_ = false;
   PluginHost plugin_host_;
+  std::unique_ptr<McpService> mcp_;
   PluginManager plugin_manager_;
   struct PluginRibbonButton {
     std::string command_id;

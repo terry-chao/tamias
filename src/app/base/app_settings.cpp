@@ -102,6 +102,8 @@ void AppSettings::load() {
   ribbon_layout_ = settings.value(QStringLiteral("ui/ribbon_layout")).toStringList();
   ribbon_collapsed_ = settings.value(QStringLiteral("ui/ribbon_collapsed"), false).toBool();
   window_state_ = settings.value(QStringLiteral("ui/window_state")).toByteArray();
+  ai_base_url_ = settings.value(QStringLiteral("ai/base_url")).toString();
+  ai_model_ = settings.value(QStringLiteral("ai/model")).toString();
   const QString disabled_key = QStringLiteral("plugins/disabled_ids");
   disabled_plugin_ids_ =
       settings.contains(disabled_key)
@@ -144,6 +146,8 @@ void AppSettings::save() const {
   settings.setValue(QStringLiteral("plugins/disabled_ids"), disabled_plugin_ids_);
   settings.setValue(QStringLiteral("plugins/ribbon_command_order"),
                     ribbon_command_order_);
+  settings.setValue(QStringLiteral("ai/base_url"), ai_base_url_);
+  settings.setValue(QStringLiteral("ai/model"), ai_model_);
   if (last_good_backend_.has_value()) {
     settings.setValue(QStringLiteral("render/last_good_backend"),
                       backend_to_key(*last_good_backend_));
@@ -185,6 +189,10 @@ void AppSettings::set_ribbon_layout(const QStringList& entries) { ribbon_layout_
 void AppSettings::set_ribbon_collapsed(bool collapsed) { ribbon_collapsed_ = collapsed; }
 
 void AppSettings::set_window_state(const QByteArray& state) { window_state_ = state; }
+
+void AppSettings::set_ai_base_url(const QString& url) { ai_base_url_ = url; }
+
+void AppSettings::set_ai_model(const QString& model) { ai_model_ = model; }
 
 void AppSettings::set_disabled_plugin_ids(const QStringList& ids) {
   disabled_plugin_ids_ = ids;

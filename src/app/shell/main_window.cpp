@@ -1,7 +1,9 @@
 #include "app/shell/main_window.h"
 
 #include "app/shell/dialog/about_dialog.h"
+#include "app/mcp/mcp_service.h"
 #include "app/shell/panel/console_panel.h"
+#include "app/shell/panel/ai_panel.h"
 #include "app/shell/panel/extension_watcher.h"
 #include "app/shell/dialog/graphics_diagnostics_dialog.h"
 #include "app/base/app_settings.h"
@@ -939,6 +941,23 @@ MainWindow::MainWindow(QWidget* parent)
     }
   });
 
+  // AI 对话面板：和命令控制台同一层，右侧停靠，默认收起。
+  ai_panel_ = new AiPanel(this);
+  ai_dock_ = new QDockWidget(tr("AI Assistant"), this);
+  ai_dock_->setObjectName(QStringLiteral("aiDock"));
+  ai_dock_->setWidget(ai_panel_);
+  ai_dock_->setWindowIcon(QIcon(QStringLiteral(":/icons/ai_assistant.svg")));
+  ai_dock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea |
+                            Qt::BottomDockWidgetArea);
+  addDockWidget(Qt::RightDockWidgetArea, ai_dock_);
+  ai_dock_->hide();
+  ai_toggle_ = ai_dock_->toggleViewAction();
+  ai_toggle_->setText(tr("AI Assistant"));
+  ai_toggle_->setIcon(ribbon_icon(QStringLiteral(":/icons/ai_assistant.svg")));
+  ai_toggle_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+A")));
+  ai_toggle_->setToolTip(tr("Chat with an AI that can read and edit the current document"));
+  addAction(ai_toggle_);
+
   connect(timing_record_action_, &QAction::toggled, this, [this](bool checked) {
     if (checked) {
       timing_dock_->show();
@@ -1142,6 +1161,7 @@ MainWindow::MainWindow(QWidget* parent)
   panels_group->add_action(debug_scene_action_);
   panels_group->add_action(timing_toggle_);
   panels_group->add_action(console_toggle_);
+  panels_group->add_action(ai_toggle_);
 
   RibbonGroup* workspace_group =
       view_page->add_group(QStringLiteral("workspace"), tr("Workspace"));
@@ -1350,6 +1370,9 @@ MainWindow::MainWindow(QWidget* parent)
 }
 
 MainWindow::~MainWindow() {
+  if (mcp_) {
+    mcp_->stop();  // 先停服务：留着发现文件会让客户端连到一个正在关闭的进程
+  }
   if (tabs_ != nullptr) {
     for (int i = 0; i < tabs_->count(); ++i) {
       if (auto* vp = qobject_cast<DocumentViewport*>(tabs_->widget(i))) {
@@ -2892,6 +2915,18 @@ void MainWindow::sync_bim_actions() {
 
 void MainWindow::bind_plugin_session() {
   auto* vp = current_viewport();
+  // AI 面板跟活动文档走；切文档会重置对话上下文（旧实体 id 在新文档里没意义）。
+  if (ai_panel_ != nullptr) {
+    ai_panel_->bind(vp == nullptr ? nullptr : &vp->session());
+  }
+  // MCP 与插件共用同一个「当前会话」概念：切页签时一起重绑，服务不用重启。
+  if (mcp_) {
+    if (vp == nullptr) {
+      mcp_->bind(nullptr, {});
+    } else {
+      mcp_->bind(&vp->session(), [vp] { vp->refresh_after_edit(); });
+    }
+  }
   if (vp == nullptr) {
     plugin_host_.unbind();
     plugin_host_.set_point_input_handlers({}, {});
@@ -2909,6 +2944,45 @@ void MainWindow::bind_plugin_session() {
       [vp](std::uint64_t request_id) {
         vp->cancel_plugin_point_input(request_id);
       });
+}
+
+void MainWindow::set_mcp_enabled(bool enabled, quint16 port, bool allow_evaluate,
+                                 McpPolicy policy) {
+  if (!enabled) {
+    if (mcp_) {
+      mcp_->stop();
+    }
+    return;
+  }
+  if (!mcp_) {
+    mcp_ = std::make_unique<McpService>(QCoreApplication::applicationVersion(), this);
+    connect(mcp_.get(), &McpService::message, this, [this](const QString& text) {
+      if (console_panel_ != nullptr) {
+        console_panel_->append_line(text);
+      }
+    });
+    if (allow_evaluate) {
+      // 全信任逃生舱：和命令控制台共用同一个求值器，脚本看到的 IHost 一模一样。
+      mcp_->set_evaluator(
+          [this](std::string_view code) { return plugin_host_.evaluate(code); });
+    }
+    bind_plugin_session();  // 顺便把当前打开的文档绑上
+  }
+  mcp_->set_policy(policy);
+  if (!mcp_->running()) {
+    mcp_->start(port);
+  }
+}
+
+void MainWindow::ask_ai(const QString& prompt) {
+  if (ai_panel_ == nullptr || prompt.trimmed().isEmpty()) {
+    return;
+  }
+  if (ai_dock_ != nullptr) {
+    ai_dock_->show();
+    ai_dock_->raise();
+  }
+  ai_panel_->submit_text_when_ready(prompt);
 }
 
 void MainWindow::activate_viewport(DocumentViewport* vp) {

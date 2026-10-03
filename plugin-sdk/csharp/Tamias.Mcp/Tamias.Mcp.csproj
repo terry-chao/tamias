@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Tamias.Mcp</RootNamespace>
+    <!-- 客户端配置里写的就是这个文件名：tamias-mcp(.exe) -->
+    <AssemblyName>tamias-mcp</AssemblyName>
+    <RollForward>LatestMajor</RollForward>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+</Project>

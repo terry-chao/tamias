@@ -17,7 +17,8 @@ if(NOT EMSCRIPTEN)
   if(TAMIAS_ENABLE_VULKAN_BACKEND)
     find_package(Vulkan REQUIRED)
   endif()
-  find_package(Qt6 REQUIRED COMPONENTS Widgets Gui Svg LinguistTools)
+  # Network: 内置 MCP 服务的 loopback HTTP 传输（见 docs/DECISION-AI-INTEGRATION.md）。
+  find_package(Qt6 REQUIRED COMPONENTS Widgets Gui Svg LinguistTools Network)
 endif()
 
 set(TAMIAS_THIRDPARTY_DIR "${CMAKE_SOURCE_DIR}/3rdparty")

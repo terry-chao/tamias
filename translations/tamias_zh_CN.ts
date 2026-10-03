@@ -366,6 +366,16 @@ draw %1  tri %2  gpu %3MB  tess %4</source>
 <context>
     <name>tamias::MainWindow</name>
     <message>
+        <location filename="../src/app/shell/main_window.cpp" line="946"/>
+        <source>AI Assistant</source>
+        <translation>AI 助手</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/main_window.cpp" line="956"/>
+        <source>Chat with an AI that can read and edit the current document</source>
+        <translation>与能读写当前文档的 AI 对话</translation>
+    </message>
+    <message>
         <source>Trace Drawing</source>
         <translation>翻模</translation>
     </message>
@@ -4997,6 +5007,157 @@ tests failed (exit %1)
     <message>
         <source>Copies are laid out along world +X. Select one object and use the Move/Copy tool if you need another direction.</source>
         <translation>副本沿世界 +X 方向排布；需要别的方向时，用「移动 / 复制」工具交互放置。</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::AiPanel</name>
+    <message>
+        <location filename="../src/app/shell/panel/ai_panel.cpp" line="89"/>
+        <source>Try asking what is in this document, or where to create a wall.</source>
+        <translation>问点什么试试：文档里有哪些构件，或在哪儿建一面墙。</translation>
+    </message>
+    <message>
+        <source>Ctrl+Enter to send</source>
+        <translation>Ctrl+Enter 发送</translation>
+    </message>
+    <message>
+        <source>Send</source>
+        <translation>发送</translation>
+    </message>
+    <message>
+        <source>Send (Ctrl+Enter)</source>
+        <translation>发送（Ctrl+Enter）</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>停止</translation>
+    </message>
+    <message>
+        <source>Abort this request</source>
+        <translation>中断这一轮请求</translation>
+    </message>
+    <message>
+        <source>Settings</source>
+        <translation>设置</translation>
+    </message>
+    <message>
+        <source>Service address, model, API key</source>
+        <translation>服务地址、模型、API Key</translation>
+    </message>
+    <message>
+        <source>System</source>
+        <translation>系统</translation>
+    </message>
+    <message>
+        <source>Chat ready. Edits take effect right away and Ctrl+Z undoes them. Use Settings to fill in the service address and model first.</source>
+        <translation>对话面板已就绪。写操作直接生效，用 Ctrl+Z 可撤销；先用「设置」填服务地址和模型。</translation>
+    </message>
+    <message>
+        <source>Document changed: the conversation context was reset.</source>
+        <translation>已切换文档，对话上下文重置。</translation>
+    </message>
+    <message>
+        <source>Requesting...</source>
+        <translation>正在请求…</translation>
+    </message>
+    <message>
+        <source>No model configured</source>
+        <translation>未配置模型</translation>
+    </message>
+    <message>
+        <source>Model %1</source>
+        <translation>模型 %1</translation>
+    </message>
+    <message>
+        <source>You</source>
+        <translation>你</translation>
+    </message>
+    <message>
+        <source>Stopped after %1 tool rounds, the limit.</source>
+        <translation>工具调用轮数超过上限（%1），停下来了。</translation>
+    </message>
+    <message>
+        <source>Assistant</source>
+        <translation>助手</translation>
+    </message>
+    <message>
+        <source>Tool</source>
+        <translation>工具</translation>
+    </message>
+    <message>
+        <source>failed</source>
+        <translation>失败</translation>
+    </message>
+    <message>
+        <source>done</source>
+        <translation>完成</translation>
+    </message>
+    <message>
+        <source>AI Settings</source>
+        <translation>AI 设置</translation>
+    </message>
+    <message>
+        <source>Root of an OpenAI-compatible API, e.g. https://api.openai.com/v1</source>
+        <translation>OpenAI 兼容接口的根地址，例如 https://api.openai.com/v1</translation>
+    </message>
+    <message>
+        <source>Model name exactly as the service expects it</source>
+        <translation>模型名要按服务端要求原样填写</translation>
+    </message>
+    <message>
+        <source>Local models can leave this empty; the key stays in this session</source>
+        <translation>本地模型可留空；密钥只留在本次会话</translation>
+    </message>
+    <message>
+        <source>Service address</source>
+        <translation>服务地址</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>模型</translation>
+    </message>
+    <message>
+        <source>API Key</source>
+        <translation>API Key</translation>
+    </message>
+    <message>
+        <source>Service address and model are remembered; the API key stays in this session only and is never written to disk. Any OpenAI-compatible endpoint works (OpenAI / DeepSeek / Claude / Ollama / LM Studio ...).</source>
+        <translation>服务地址与模型会记住；API Key 只留在本次会话，不落盘。任何 OpenAI 兼容端点都行（OpenAI / DeepSeek / Claude / Ollama / LM Studio …）。</translation>
+    </message>
+    <message>
+        <source>Settings updated.</source>
+        <translation>设置已更新。</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::ai::AiClient</name>
+    <message>
+        <source>No model configured yet: open Settings in the AI panel and fill in the service address and model name.</source>
+        <translation>还没配置模型：打开 AI 面板里的「设置」，填服务地址和模型名。</translation>
+    </message>
+    <message>
+        <source>Cannot reach %1: %2</source>
+        <translation>连不上 %1：%2</translation>
+    </message>
+    <message>
+        <source>Service returned %1: %2</source>
+        <translation>服务返回 %1：%2</translation>
+    </message>
+    <message>
+        <source>Response is not valid JSON: %1</source>
+        <translation>响应不是合法 JSON：%1</translation>
+    </message>
+    <message>
+        <source>Service error: %1</source>
+        <translation>服务报错：%1</translation>
+    </message>
+    <message>
+        <source>Response contains no choices.</source>
+        <translation>响应里没有 choices。</translation>
+    </message>
+    <message>
+        <source>The model returned no content.</source>
+        <translation>模型没有返回内容。</translation>
     </message>
 </context>
 </TS>

@@ -35,7 +35,10 @@ add_executable(tamias
   shell/dialog/plugin_manager_dialog.cpp
   shell/dialog/plugin_prompt_dialog.cpp
   shell/panel/console_panel.cpp
+  shell/panel/ai_panel.cpp
   shell/panel/extension_watcher.cpp
+  # 内置 AI 助手：OpenAI 兼容客户端（对话面板在 shell/panel/ai_panel.cpp）
+  ai/ai_client.cpp
   # 三维视口：画布本体 / 画布上的浮层 / 右侧工具列 / 录制回放
   viewport/canvas/document_viewport.cpp
   viewport/overlay/view_cube_widget.cpp
@@ -74,6 +77,9 @@ add_executable(tamias
   debug/selection_accent_delegate.cpp
   debug/timing_panel.cpp
   debug/timing_timeline_widget.cpp
+  # 内置 MCP 服务：AI/Agent 走 loopback HTTP 驱动当前文档（写仍走 dispatch + 事务）
+  mcp/mcp_http_server.cpp
+  mcp/mcp_service.cpp
   resources.qrc
 )
 
@@ -142,11 +148,14 @@ target_link_libraries(tamias
     tamias::modeling
     tamias::command
       tamias::interaction
+    tamias::host
+    tamias::mcp
     tamias::plugin
     tamias::ifc
     Qt6::Widgets
     Qt6::Gui
     Qt6::Svg
+    Qt6::Network
 )
 
 # PDF 图纸需要 Qt PDF 模块（Qt 6 下是 GPLv3 / 商业双许可，未随本仓库分发）。

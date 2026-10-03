@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="4 6 56 56">
+  <defs>
+    <linearGradient id="bubble" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#5a6a86"/>
+      <stop offset="0.5" stop-color="#3c4859"/>
+      <stop offset="1" stop-color="#28313d"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="0.3" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.42" stop-color="#a9f7bf"/>
+      <stop offset="1" stop-color="#4ed77c"/>
+    </linearGradient>
+  </defs>
+  <path d="M17 12H47A7 7 0 0 1 54 19V37A7 7 0 0 1 47 44H31L20 54V44H17A7 7 0 0 1 10 37V19A7 7 0 0 1 17 12Z"
+        fill="url(#bubble)" stroke="#000000" stroke-width="2.3" stroke-linejoin="round"/>
+  <path d="M16.6 18.6C17.7 16 19.7 14.7 22.4 14.5" fill="none" stroke="#ffffff"
+        stroke-width="2.2" stroke-linecap="round" opacity="0.32"/>
+  <path d="M32 17.5C32.9 25 34.7 26.9 42.2 28C34.7 29.1 32.9 31 32 38.5C31.1 31 29.3 29.1 21.8 28C29.3 26.9 31.1 25 32 17.5Z"
+        fill="url(#spark)"/>
+</svg>

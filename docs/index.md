@@ -24,6 +24,7 @@ Qt 做壳，自研 RHI 跑 Vulkan / OpenGL，OCCT 提供 BRep，IfcOpenShell 提
 
 - [路线图](ROADMAP.md) —— 一句话定位、分层关系、里程碑
 - [MCAD 与 BIM](DECISION-MCAD-BIM.md) —— 为什么做一个 app、编辑深度怎么分层
+- [AI 接入（MCP）](DECISION-AI-INTEGRATION.md) —— 把文档/命令/特征树交给 AI，写仍走 `dispatch` + 事务
 - [架构](ARCHITECTURE.md) —— 引擎 / 宿主 / 胶水 / 界面
 
 ## 想学 C++ 3D 开发

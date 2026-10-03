@@ -268,12 +268,57 @@ int main(int argc, char* argv[]) {
     tamias::MainWindow window;
     QStringList startup_paths;
     const QStringList arguments = QCoreApplication::arguments();
+    // --mcp 打开内置的 loopback MCP 服务（--mcp-port=7333 指定端口，默认自动选）。
+    // 服务地址与 token 写在 <AppData>/mcp.json，AI 客户端读它来连接。
+    bool mcp_enabled = false;
+    quint16 mcp_port = 0;
+    bool mcp_allow_evaluate = false;
+    tamias::McpPolicy mcp_policy = tamias::McpPolicy::kReadOnly;
+    QString ai_prompt;
     for (int i = 1; i < arguments.size(); ++i) {
+      if (arguments[i] == QLatin1String("--mcp")) {
+        mcp_enabled = true;
+        continue;
+      }
+      if (arguments[i] == QLatin1String("--mcp-allow-evaluate")) {
+        mcp_enabled = true;
+        mcp_allow_evaluate = true;
+        continue;
+      }
+      if (arguments[i].startsWith(QLatin1String("--mcp-port="))) {
+        bool ok = false;
+        const uint parsed = arguments[i].mid(11).toUInt(&ok);
+        if (ok && parsed > 0 && parsed <= 65535) {
+          mcp_port = static_cast<quint16>(parsed);
+          mcp_enabled = true;
+        }
+        continue;
+      }
+      if (arguments[i].startsWith(QLatin1String("--mcp-policy="))) {
+        const QString value = arguments[i].mid(13);
+        if (!tamias::parse_mcp_policy(value.toStdString(), mcp_policy)) {
+          tamias::log_warn("未知的 --mcp-policy 值： " + value.toStdString() +
+                           "（可选 read-only / ask / auto，回退到 read-only）");
+          mcp_policy = tamias::McpPolicy::kReadOnly;
+        }
+        mcp_enabled = true;
+        continue;
+      }
+      if (arguments[i].startsWith(QLatin1String("--ai-prompt="))) {
+        ai_prompt = arguments[i].mid(12);
+        continue;
+      }
       if (!arguments[i].startsWith(QLatin1Char('-'))) {
         startup_paths.push_back(arguments[i]);
       }
     }
     window.show();
+    if (mcp_enabled) {
+      window.set_mcp_enabled(true, mcp_port, mcp_allow_evaluate, mcp_policy);
+    }
+    if (!ai_prompt.isEmpty()) {
+      window.ask_ai(ai_prompt);
+    }
     // 界面起来了 = 这次启动走通了：清掉启动标记（下次启动直接信任记住的后端）。
     QTimer::singleShot(1500, &window, [&startup_guard] { startup_guard.mark_started_ok(); });
     if (!startup_paths.isEmpty()) {
