@@ -11,6 +11,7 @@
 #include <QStandardPaths>
 #include <QWidget>
 
+#include <filesystem>
 #include <utility>
 
 namespace tamias {
@@ -64,13 +65,24 @@ namespace {
   return text.size() <= limit ? text : text.left(limit) + QStringLiteral("…");
 }
 
+// 检索资源是跟着可执行文件走的（POST_BUILD 会把 resources/rag 拷到 exe 旁）。
+std::filesystem::path application_directory() {
+  const QString directory = QCoreApplication::applicationDirPath();
+#if defined(Q_OS_WIN)
+  return std::filesystem::path(directory.toStdWString());
+#else
+  return std::filesystem::path(directory.toStdString());
+#endif
+}
+
 }  // namespace
 
 McpService::McpService(QString server_version, QObject* parent)
     : QObject(parent),
       backend_(nullptr),
-      server_(backend_, "tamias", server_version.toStdString()),
+      server_(composite_, "tamias", server_version.toStdString()),
       server_version_(std::move(server_version)) {
+  compose_backends();
   server_.set_tool_gate(
       [this](std::string_view tool, const mcp::Json& args) { return gate_tool(tool, args); });
   server_.set_tool_observer([this](std::string_view tool, const mcp::Json& args,
@@ -80,6 +92,39 @@ McpService::McpService(QString server_version, QObject* parent)
 }
 
 McpService::~McpService() { stop(); }
+
+void McpService::compose_backends() {
+  std::string error;
+  if (!composite_.add(backend_, &error)) {
+    // 空组合加第一个后端不可能重名；真发生了说明工具表里有重复项，是 bug。
+    index_status_ = tr("MCP: 装配失败 —— %1").arg(QString::fromStdString(error));
+    return;
+  }
+
+  std::string alias_warning;
+  rag_index_ = rag::load_from_application(application_directory(), &error, &alias_warning);
+  if (!rag_index_) {
+    index_status_ = tr("MCP: 没有检索索引，tamias_search_docs 不可用 —— %1")
+                        .arg(QString::fromStdString(error));
+    return;
+  }
+
+  docs_backend_.emplace(*rag_index_, rag::build_git_rev());
+  std::string clash;
+  if (!composite_.add(*docs_backend_, &clash)) {
+    docs_backend_.reset();
+    index_status_ = tr("MCP: 检索后端与文档后端重名，已跳过 —— %1")
+                        .arg(QString::fromStdString(clash));
+    return;
+  }
+
+  index_status_ = tr("MCP: 检索索引已载入 %1 块（rev %2）")
+                      .arg(rag_index_->chunks().size())
+                      .arg(QString::fromStdString(rag_index_->git_rev()));
+  if (!alias_warning.empty()) {
+    index_status_ += tr("；别名表没读到：%1").arg(QString::fromStdString(alias_warning));
+  }
+}
 
 void McpService::bind(Session* session, std::function<void()> after_edit) {
   backend_.set_session(session);
@@ -109,6 +154,9 @@ bool McpService::start(quint16 port) {
   }
   port_ = http_.port();
   running_ = true;
+  if (!index_status_.isEmpty()) {
+    emit message(index_status_);  // 构造期还没有连接，索引状态攒到这里报
+  }
   write_discovery_file();
   emit message(tr("MCP: 已监听 %1（写策略 %2）")
                    .arg(endpoint(), QString::fromLatin1(mcp_policy_name(policy_))));

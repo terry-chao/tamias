@@ -153,6 +153,7 @@ target_link_libraries(tamias
       tamias::interaction
     tamias::host
     tamias::mcp
+    tamias::rag
     tamias::plugin
     tamias::ifc
     Qt6::Widgets
@@ -199,7 +200,17 @@ add_custom_command(TARGET tamias POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
           ${CMAKE_SOURCE_DIR}/assets/samples
           $<TARGET_FILE_DIR:tamias>/assets/samples
-  COMMENT "Copying shaders and sample assets next to tamias"
+  COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:tamias>/assets/rag
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          ${CMAKE_SOURCE_DIR}/assets/rag
+          $<TARGET_FILE_DIR:tamias>/assets/rag
+  # 检索索引不是 qrc 资源：它是数据，会随文档更新，放 exe 旁才能单独替换
+  # （PLAN-RAG §11）。
+  COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:tamias>/resources/rag
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          ${CMAKE_SOURCE_DIR}/resources/rag
+          $<TARGET_FILE_DIR:tamias>/resources/rag
+  COMMENT "Copying shaders, sample assets, and the docs index next to tamias"
 )
 
 tamias_copy_runtime_dlls(tamias)

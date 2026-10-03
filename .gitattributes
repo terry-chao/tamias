@@ -1,0 +1,4 @@
+# RAG 索引产物是生成物，CI 靠「重跑脚本后 git diff --exit-code」查新鲜度
+# （PLAN-RAG §3 M4）。任何行尾转换都会让这个检查失去意义，所以明确关掉。
+resources/rag/chunks.jsonl -text
+resources/rag/manifest.json -text

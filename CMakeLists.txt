@@ -123,6 +123,8 @@ add_subdirectory(src/engine)
 add_subdirectory(src/entity)
 add_subdirectory(src/command)
 add_subdirectory(src/mcp)
+# 检索挂在 MCP 门面的读侧，所以排在 mcp 之后；无 Qt / 无 OCCT，wasm 分支也要它。
+add_subdirectory(src/rag)
 add_subdirectory(src/host)
 if(TAMIAS_ENABLE_OCCT)
   add_subdirectory(src/bim)

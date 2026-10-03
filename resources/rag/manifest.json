@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "git_rev": "077707b",
+  "built_at": "2026-10-03T17:00:43+08:00",
+  "chunks": 816,
+  "corpora": [
+    {
+      "name": "docs",
+      "files": 75,
+      "chunks": 816
+    }
+  ],
+  "embedding": null
+}

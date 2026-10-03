@@ -1,0 +1,47 @@
+name: rag-index
+
+# 索引产物入库（PLAN-RAG §9），代价是它可能与文档脱节：改了 docs/ 却忘了重跑
+# build_index.py，模型就会拿旧知识当新。这里把「忘了重跑」变成 CI 红。
+#
+# 只查新鲜度，不查检索质量 —— 金标集要编译 C++，那是 ctest 的活（tests/rag_golden）。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      # anchor 必须与官网一致，所以这里复用 mkdocs 的 markdown 与 PyYAML。
+      - name: Install MkDocs
+        run: pip install -r requirements.txt
+
+      - name: Rebuild the index
+        run: python scripts/rag/build_index.py --docs docs --out resources/rag
+
+      # 只比 chunks.jsonl，**不比 manifest.json**。
+      #
+      # manifest 里记的是「构建时那台机器的 HEAD」（git_rev）与那次提交的时间
+      # （built_at）。任何依赖 git 历史的值都不可能在自己所在的那次提交里自洽：
+      # 提交这份 manifest 就会改掉 HEAD，于是重跑必然 diff，检查永久红灯。
+      # 内容的真相在 chunks.jsonl，它完全由 docs 决定，跨提交稳定。
+      - name: Fail if the committed index is stale
+        run: |
+          if ! git diff --exit-code resources/rag/chunks.jsonl; then
+            echo "::error::resources/rag 与 docs/ 不同步。在本地跑一遍"
+            echo "::error::python scripts/rag/build_index.py --docs docs --out resources/rag 并提交产物。"
+            exit 1
+          fi

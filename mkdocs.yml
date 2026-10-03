@@ -98,10 +98,12 @@ nav:
       - AI 总览: ai/index.md
       - AI 接入（MCP）: DECISION-AI-INTEGRATION.md
       - RAG 接入: DECISION-RAG.md
+      - RAG 实施计划: PLAN-RAG.md
   - BIM:
       - BIM 总览: bim/index.md
       - BIM 业务层: BIM.md
       - 图纸 → BIM（翻模）: DRAWING-TO-BIM.md
+      - 图纸识别（YOLO）: PLAN-VISION.md
       - 关联关系: bim/relations.md
       - 墙-墙交接: bim/junctions.md
   - 场景图:

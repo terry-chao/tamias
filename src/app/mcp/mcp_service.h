@@ -3,12 +3,16 @@
 #include "app/mcp/mcp_http_server.h"
 #include "app/mcp/mcp_policy.h"
 #include "host/session_mcp_backend.h"
+#include "mcp/composite_backend.h"
 #include "mcp/mcp_server.h"
+#include "rag/docs_mcp_backend.h"
+#include "rag/lexical_provider.h"
 
 #include <QObject>
 #include <QString>
 
 #include <functional>
+#include <optional>
 
 namespace tamias {
 
@@ -48,6 +52,8 @@ class McpService : public QObject {
  private:
   [[nodiscard]] McpHttpResponse handle_http(const McpHttpRequest& request);
   [[nodiscard]] bool authorized(const McpHttpRequest& request) const;
+  // 把 SessionMcpBackend 与（若有索引的）DocsMcpBackend 合成一个门面。
+  void compose_backends();
   // 执行前的闸门：读放行；写按策略拒 / 问 / 放。
   [[nodiscard]] mcp::McpToolGateDecision gate_tool(std::string_view tool,
                                                    const mcp::Json& args);
@@ -60,9 +66,16 @@ class McpService : public QObject {
   void remove_discovery_file();
   [[nodiscard]] static QString discovery_path();
 
+  // 声明顺序即构造顺序：composite_ 必须早于 server_（server_ 持有它的引用），
+  // rag_index_ / docs_backend_ 必须早于 composite_（composite_ 持有后者的指针）。
   McpHttpServer http_;
   SessionMcpBackend backend_;
+  // 检索是可选能力：索引缺失时服务照跑，只是工具表里没有 tamias_search_docs。
+  std::optional<rag::LexicalProvider> rag_index_;
+  std::optional<rag::DocsMcpBackend> docs_backend_;
+  mcp::CompositeBackend composite_;
   mcp::McpServer server_;
+  QString index_status_;  // 构造期还没有连接，攒到 start() 再报
   QString server_version_;
   QString token_;
   QString document_name_;

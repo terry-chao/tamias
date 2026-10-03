@@ -2,10 +2,14 @@
 
 #include "app/ai/ai_client.h"
 #include "host/session_mcp_backend.h"
+#include "mcp/composite_backend.h"
+#include "rag/docs_mcp_backend.h"
+#include "rag/lexical_provider.h"
 
 #include <QJsonArray>
 #include <QWidget>
 
+#include <optional>
 #include <vector>
 
 class QLabel;
@@ -32,6 +36,11 @@ class AiPanel final : public QWidget {
   void submit_text_when_ready(const QString& text);
 
  private:
+  // 第一次真要发请求时才去载入检索索引。面板是无条件构造的（不像 McpService 要
+  // --mcp），不该让从不碰 AI 的人也在启动时付这份开销。
+  void ensure_index();
+  // 工具表缓存：模型每轮都要看它，不必每次都从后端问一遍。
+  void refresh_tool_schema();
   void submit();
   void request_next();
   void handle_reply(const ai::ChatReply& reply);
@@ -41,7 +50,12 @@ class AiPanel final : public QWidget {
   void set_busy(bool busy);
   void refresh_status();
 
+  // 声明顺序即构造顺序：composite_ 持有后面两者的指针。
   SessionMcpBackend backend_;
+  std::optional<rag::LexicalProvider> rag_index_;
+  std::optional<rag::DocsMcpBackend> docs_backend_;
+  mcp::CompositeBackend composite_;
+  bool index_resolved_ = false;
   ai::AiClient* client_ = nullptr;
   QPlainTextEdit* transcript_ = nullptr;
   QPlainTextEdit* input_ = nullptr;

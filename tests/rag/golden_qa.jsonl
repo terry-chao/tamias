@@ -1,0 +1,30 @@
+{"id":"q001","question":"怎么建一面墙","expect_paths":["plugin/api/commands.md","BIM.md"],"corpus":"docs"}
+{"id":"q002","question":"插件怎么改文档、改完怎么撤销","expect_paths":["plugin/tutorial/03-edit-and-undo.md"],"corpus":"docs"}
+{"id":"q003","question":"IHost 接口有哪些方法","expect_paths":["plugin/api/host.md"],"corpus":"docs"}
+{"id":"q004","question":"撤销和重做是怎么实现的","expect_paths":["tutorial/07-commands-and-undo.md","EDIT-OPERATIONS.md"],"corpus":"docs"}
+{"id":"q005","question":"特征树求值器是怎么工作的","expect_paths":["FEATURE-TREE-EVALUATOR.md"],"corpus":"docs"}
+{"id":"q006","question":"墙和墙交接的地方怎么处理","expect_paths":["bim/junctions.md"],"corpus":"docs"}
+{"id":"q007","question":"图纸怎么转成 BIM 模型","expect_paths":["DRAWING-TO-BIM.md"],"corpus":"docs"}
+{"id":"q008","question":"怎么减少 draw call、做合批","expect_paths":["INSTANCING.md"],"corpus":"docs"}
+{"id":"q009","question":"视锥剔除是怎么做的","expect_paths":["FRUSTUM-CULLING.md"],"corpus":"docs"}
+{"id":"q010","question":"启动时怎么选图形后端、选不到怎么办","expect_paths":["RHI-STARTUP.md"],"corpus":"docs"}
+{"id":"q011","question":"场景图是什么样的树结构","expect_paths":["SCENE-GRAPH.md"],"corpus":"docs"}
+{"id":"q012","question":"点选和框选是怎么加速的","expect_paths":["SPATIAL-INDEX.md"],"corpus":"docs"}
+{"id":"q013","question":"命令控制台能干什么","expect_paths":["SCRIPTING.md"],"corpus":"docs"}
+{"id":"q014","question":"怎么跑单元测试","expect_paths":["TESTING.md"],"corpus":"docs"}
+{"id":"q015","question":"性能分析工具怎么接入","expect_paths":["PROFILING.md"],"corpus":"docs"}
+{"id":"q016","question":"场景里的文字是怎么渲染的","expect_paths":["TEXT.md"],"corpus":"docs"}
+{"id":"q017","question":"内置 AI 助手面板怎么配置服务地址和密钥","expect_paths":["DECISION-AI-INTEGRATION.md","ai/index.md"],"corpus":"docs"}
+{"id":"q018","question":"外部 AI 客户端想改文档需要什么条件","expect_paths":["DECISION-AI-INTEGRATION.md"],"corpus":"docs"}
+{"id":"q019","question":"怎么写第一个插件扩展","expect_paths":["plugin/tutorial/01-first-extension.md","plugin/usage.md"],"corpus":"docs"}
+{"id":"q020","question":"插件的 C ABI 长什么样","expect_paths":["plugin/api/abi.md"],"corpus":"docs"}
+{"id":"q021","question":"插件怎么弹出宿主提供的对话框","expect_paths":["plugin/api/ui.md"],"corpus":"docs"}
+{"id":"q022","question":"插件怎么拿到用户在视口里点的位置","expect_paths":["plugin/api/input.md"],"corpus":"docs"}
+{"id":"q023","question":"插件能读到文档的哪些快照","expect_paths":["plugin/api/document.md"],"corpus":"docs"}
+{"id":"q024","question":"MCAD 和 BIM 的内核是共享还是各做各的","expect_paths":["DECISION-MCAD-BIM.md"],"corpus":"docs"}
+{"id":"q025","question":"建模内核用的什么几何库","expect_paths":["MODELING-KERNEL.md"],"corpus":"docs"}
+{"id":"q026","question":"Web 查看器怎么构建、怎么起本地服务","expect_paths":["WEB.md"],"corpus":"docs"}
+{"id":"q027","question":"wgpu 后端接进来没有","expect_paths":["WGPU.md"],"corpus":"docs"}
+{"id":"q028","question":"渲染管线分成哪几个阶段","expect_paths":["RENDERING.md","tutorial/08-rendering-pipeline.md"],"corpus":"docs"}
+{"id":"q029","question":"超大规模三角面怎么扛住","expect_paths":["MASSIVE-GEOMETRY.md"],"corpus":"docs"}
+{"id":"q030","question":"接下来打算做什么","expect_paths":["ROADMAP.md"],"corpus":"docs"}

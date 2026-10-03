@@ -3,6 +3,7 @@
 #include "app/base/app_settings.h"
 #include "app/base/secret_store.h"
 
+#include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QComboBox>
@@ -19,6 +20,7 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
+#include <filesystem>
 #include <utility>
 
 namespace tamias {
@@ -125,18 +127,14 @@ AiPanel::AiPanel(QWidget* parent) : QWidget(parent) {
   connect(settings_button_, &QToolButton::clicked, this, &AiPanel::open_settings);
   connect(client_, &ai::AiClient::finished, this, &AiPanel::handle_reply);
 
-  // 工具表只抓一次：面板不挂逃生舱，所以永远是那 13 个结构化工具。
-  for (const mcp::McpTool& tool : backend_.tools()) {
-    tool_schema_.append(QJsonObject{
-        {QStringLiteral("type"), QStringLiteral("function")},
-        {QStringLiteral("function"),
-         QJsonObject{
-             {QStringLiteral("name"), QString::fromStdString(tool.name)},
-             {QStringLiteral("description"), QString::fromStdString(tool.description)},
-             {QStringLiteral("parameters"), ai::to_qt(tool.input_schema)},
-         }},
-    });
+  // 文档后端先挂上；检索后端在 ensure_index() 里懒加（面板不挂逃生舱，
+  // 所以这里永远是那 13 个结构化工具，加了索引就是 14 个）。
+  std::string compose_error;
+  if (!composite_.add(backend_, &compose_error)) {
+    append(tr("System"),
+           tr("Tool table could not be assembled: %1").arg(QString::fromStdString(compose_error)));
   }
+  refresh_tool_schema();
 
   const auto& settings = AppSettings::instance();
   // 密钥从凭据管理器捞回来，省得每次启动重敲一遍。
@@ -148,6 +146,64 @@ AiPanel::AiPanel(QWidget* parent) : QWidget(parent) {
   append(tr("System"),
          tr("Chat ready. Edits take effect right away and Ctrl+Z undoes them. "
             "Use Settings to fill in the service address and model first."));
+}
+
+void AiPanel::refresh_tool_schema() {
+  tool_schema_ = QJsonArray();
+  for (const mcp::McpTool& tool : composite_.tools()) {
+    tool_schema_.append(QJsonObject{
+        {QStringLiteral("type"), QStringLiteral("function")},
+        {QStringLiteral("function"),
+         QJsonObject{
+             {QStringLiteral("name"), QString::fromStdString(tool.name)},
+             {QStringLiteral("description"), QString::fromStdString(tool.description)},
+             {QStringLiteral("parameters"), ai::to_qt(tool.input_schema)},
+         }},
+    });
+  }
+}
+
+void AiPanel::ensure_index() {
+  if (index_resolved_) {
+    return;
+  }
+  index_resolved_ = true;
+
+  std::string error;
+  std::string alias_warning;
+  // 用 u16string 构造 path：UTF-16 在所有平台上都能被 std::filesystem 正确转换，
+  // 而 toStdString() 在 Windows 上会被当成 ANSI 代码页，中文路径就坏了。
+  rag_index_ = rag::load_from_application(
+      std::filesystem::path(QCoreApplication::applicationDirPath().toStdU16String()), &error,
+      &alias_warning);
+  if (!rag_index_) {
+    // 缺索引不是错误：面板照常读写文档，只是没得查文档。
+    append(tr("System"),
+           tr("No docs index, so tamias_search_docs is unavailable: %1")
+               .arg(QString::fromStdString(error)));
+    return;
+  }
+
+  docs_backend_.emplace(*rag_index_, rag::build_git_rev());
+  std::string clash;
+  if (!composite_.add(*docs_backend_, &clash)) {
+    docs_backend_.reset();
+    append(tr("System"),
+           tr("Docs backend conflicts with the document backend: %1")
+               .arg(QString::fromStdString(clash)));
+    return;
+  }
+  refresh_tool_schema();
+  append(tr("System"),
+         tr("Docs index ready: %1 chunks (rev %2). The assistant can now look things up "
+            "instead of guessing.")
+             .arg(rag_index_->chunks().size())
+             .arg(QString::fromStdString(rag_index_->git_rev())));
+  if (!alias_warning.empty()) {
+    append(tr("System"),
+           tr("Alias table could not be read (search still works): %1")
+               .arg(QString::fromStdString(alias_warning)));
+  }
 }
 
 void AiPanel::bind(Session* session) {
@@ -193,6 +249,7 @@ void AiPanel::submit() {
   }
   input_->clear();
   append(tr("You"), text);
+  ensure_index();  // 第一次真要发请求时才把检索索引载进来
   history_.push_back(ai::ChatMessage{QStringLiteral("user"), text, {}, {}});
   rounds_ = 0;
   request_next();
@@ -298,8 +355,9 @@ void AiPanel::handle_reply(const ai::ChatReply& reply) {
 void AiPanel::run_tool_calls(const std::vector<ai::ToolCall>& calls) {
   for (const ai::ToolCall& call : calls) {
     // 直接调后端，不过协议层也不过写策略闸门——这里是人自己在敲。
+    // 走组合后端：文档读写与文档检索在这里合流。
     const mcp::McpToolResult result =
-        backend_.call_tool(call.name.toStdString(), call.arguments);
+        composite_.call_tool(call.name.toStdString(), call.arguments);
     append(tr("Tool"), QStringLiteral("%1 %2").arg(
                            call.name, result.is_error ? tr("failed") : tr("done")));
     if (result.is_error) {

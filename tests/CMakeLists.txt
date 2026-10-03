@@ -12,7 +12,9 @@ add_executable(tamias_tests smoke_tests.cpp location_tests.cpp ifc_spatial_tree_
   length_text_tests.cpp grid_dimensions_tests.cpp annotation_layout_tests.cpp
   text_annotation_tests.cpp vulkan_loader_tests.cpp rhi_startup_tests.cpp
   offscreen_render_tests.cpp scene_capture_tests.cpp edit_operations_tests.cpp
-  interaction_tests.cpp mcp_server_tests.cpp mcp_session_backend_tests.cpp)
+  interaction_tests.cpp mcp_server_tests.cpp mcp_session_backend_tests.cpp
+  rag_tokenizer_tests.cpp rag_bm25_tests.cpp rag_lexical_provider_tests.cpp
+  rag_composite_tests.cpp rag_docs_backend_tests.cpp)
 
 # Vulkan 加载路径（volk）的冒烟测试：只在建了 Vulkan 后端时链进来。
 if(TARGET tamias::rhi_vulkan)
@@ -32,6 +34,7 @@ target_link_libraries(tamias_tests
     tamias::document
     tamias::command
     tamias::mcp
+    tamias::rag
     tamias::host
     tamias::interaction
     tamias::plugin
@@ -87,4 +90,22 @@ if(TARGET tamias::math_module)
   )
   gtest_discover_tests(tamias_math_module_tests DISCOVERY_MODE PRE_TEST)
   tamias_copy_runtime_dlls(tamias_math_module_tests)
+endif()
+
+# ---------------------------------------------------------------------------
+# RAG 金标集门禁（PLAN-RAG §3 M4）：驱动真正的 tamias_rag_cli 算 recall@5，
+# 低于门槛即失败。
+#
+# 评测**不重实现分词** —— Python 与 C++ 双实现必然漂移，那样测过的不一定是发出去的。
+# 缺 Python 或缺索引就跳过而不是失败：否则没装 Python 的开发机上整个套件跑不起来。
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(NOT EMSCRIPTEN AND Python3_Interpreter_FOUND
+   AND EXISTS "${CMAKE_SOURCE_DIR}/resources/rag/chunks.jsonl")
+  add_dependencies(tamias_tests tamias_rag_cli)
+  add_test(NAME rag_golden
+    COMMAND ${Python3_EXECUTABLE}
+            "${CMAKE_SOURCE_DIR}/scripts/rag/eval.py"
+            --cli $<TARGET_FILE:tamias_rag_cli>
+            --golden "${CMAKE_SOURCE_DIR}/tests/rag/golden_qa.jsonl"
+            --show-misses)
 endif()
