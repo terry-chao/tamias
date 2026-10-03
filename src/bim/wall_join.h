@@ -45,6 +45,7 @@ struct WallJoint {
                                                const std::vector<WallJoint>& joints);
 
 // 造型/网格用的墙模型：墙-墙倒角 + 宿主开口切减。非墙实体原样返回。
+// 这是墙专用实现；面向任意实体的通用入口是 Document::render_model。
 [[nodiscard]] FeatureModel wall_render_model(const Entity& wall, const Document& document);
 
 // 与本墙交接的墙 id（含自己）。交接变了这些墙都要重新造型。

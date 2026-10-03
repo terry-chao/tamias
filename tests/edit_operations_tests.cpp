@@ -60,7 +60,7 @@ int opening_cut_count(const Document& document, std::uint64_t wall_id) {
   if (wall == nullptr) {
     return 0;
   }
-  const FeatureModel model = wall_render_model(*wall, document);
+  const FeatureModel model = document.render_model(*wall);
   int cuts = 0;
   for (const Feature& feature : model.features()) {
     if (feature.kind == FeatureKind::Boolean) {

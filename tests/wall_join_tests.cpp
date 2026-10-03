@@ -313,7 +313,7 @@ TEST(WallJunction, JoinedModelKeepsHostedOpeningCuts) {
 
   const Entity* wall = walls.document.entity(walls.a);
   ASSERT_NE(wall, nullptr);
-  const FeatureModel model = wall_render_model(*wall, walls.document);
+  const FeatureModel model = walls.document.render_model(*wall);
   bool has_miter_profile = false;
   bool has_cut = false;
   for (const Feature& feature : model.features()) {
@@ -349,7 +349,7 @@ TEST(WallJunction, JoinedModelKeepsFilletResolvable) {
   refresh_edge_fingerprint(wall->model, fillet_id);
   ASSERT_TRUE(has_edge_fingerprint(wall->model.find(fillet_id)->params));
 
-  const FeatureModel model = wall_render_model(*wall, walls.document);
+  const FeatureModel model = walls.document.render_model(*wall);
   bool has_fillet = false;
   for (const Feature& feature : model.features()) {
     if (feature.kind == FeatureKind::Fillet) {

@@ -12,8 +12,7 @@ Result<void> rebuild_entity_mesh(Document& document, std::uint64_t entity_id) {
   if (entity == nullptr) {
     return Err("rebuild_entity_mesh: entity not found");
   }
-  // 墙要带上墙-墙倒角（以及宿主开口切减），其余实体就是自己的特征树。
-  FeatureModel model = wall_render_model(*entity, document);
+  FeatureModel model = document.render_model(*entity);
   auto mesh = geometry_builder().build(model, 0.05);
   if (!mesh) {
     return Err(mesh.error());

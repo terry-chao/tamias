@@ -370,6 +370,13 @@ void Document::bind_work_lod(std::uint64_t geometry_id) {
   tess_cache_.bind(geometry_id, MeshLod::Work, geometry_id);
 }
 
+FeatureModel Document::render_model(const Entity& entity) const {
+  if (!is_wall_host(entity)) {
+    return entity.model;
+  }
+  return wall_render_model(entity, *this);
+}
+
 void Document::ensure_feature_coarse_lod(Entity& entity) {
   if (entity.mesh_asset_id == 0 || entity.is_sketch_entity()) {
     return;
@@ -384,7 +391,7 @@ void Document::ensure_feature_coarse_lod(Entity& entity) {
   }
   // 粗档同样按「墙-墙倒角 + 开口切减」造型，否则远处会退回硬拼的墙。
   Result<MeshCpu> coarse =
-      geometry_builder().build(wall_render_model(entity, *this), kMeshLodCoarseDeflection);
+      geometry_builder().build(render_model(entity), kMeshLodCoarseDeflection);
   if (!coarse) {
     return;
   }
@@ -416,8 +423,7 @@ void Document::invalidate_geometry_lods(std::uint64_t geometry_id) {
 std::function<Result<MeshCpu>()> Document::make_tess_fn(std::uint64_t geometry_id,
                                                         MeshLod lod) const {
   if (const Entity* e = entity_for_mesh(geometry_id); e != nullptr && !e->is_sketch_entity()) {
-    // 墙：墙-墙交接倒角 + 宿主开口切减；其它实体就是自己的特征树。
-    FeatureModel model = wall_render_model(*e, *this);
+    FeatureModel model = render_model(*e);
     const double deflection = mesh_lod_deflection(lod, false);
     return [model = std::move(model), deflection]() {
       return geometry_builder().build(model, deflection);

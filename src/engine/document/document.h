@@ -294,6 +294,10 @@ class Document {
     return nullptr;
   }
 
+  // 通用造型入口：实体 → 渲染特征树。墙附带墙-墙倒角 + 宿主开口切减；
+  // 其余实体原样返回自身特征树。调用方不必知道哪种构件需要特殊处理。
+  [[nodiscard]] FeatureModel render_model(const Entity& entity) const;
+
   [[nodiscard]] const std::unordered_map<std::uint64_t, std::unique_ptr<Entity>>& entities() const {
     return entities_;
   }
