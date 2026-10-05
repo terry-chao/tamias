@@ -91,6 +91,10 @@ void AppSettings::load() {
       settings.value(QStringLiteral("modeling/kernel"), QStringLiteral("occt")).toString();
   ui_language_ = normalize_ui_language_preference(
       settings.value(QStringLiteral("ui/language"), default_ui_language()).toString());
+  ui_backend_ = settings.value(QStringLiteral("ui/backend"), QStringLiteral("qt")).toString();
+  if (ui_backend_.isEmpty()) {
+    ui_backend_ = QStringLiteral("qt");
+  }
   ui_color_scheme_ = color_scheme_from_key(
       settings.value(QStringLiteral("ui/color_scheme"), QStringLiteral("system")).toString());
   zoom_to_mouse_position_ =
@@ -125,6 +129,7 @@ void AppSettings::save() const {
   settings.setValue(QStringLiteral("render/backend"), backend_to_key(graphics_backend_));
   settings.setValue(QStringLiteral("modeling/kernel"), kernel_backend_);
   settings.setValue(QStringLiteral("ui/language"), ui_language_);
+  settings.setValue(QStringLiteral("ui/backend"), ui_backend_);
   settings.setValue(QStringLiteral("ui/color_scheme"), color_scheme_to_key(ui_color_scheme_));
   settings.setValue(QStringLiteral("viewport/zoom_to_mouse_position"), zoom_to_mouse_position_);
   settings.setValue(QStringLiteral("ui/ribbon_style"), ribbon_style_);
@@ -168,6 +173,10 @@ void AppSettings::set_kernel_backend(const QString& backend) {
 
 void AppSettings::set_ui_language(const QString& language) {
   ui_language_ = normalize_ui_language_preference(language);
+}
+
+void AppSettings::set_ui_backend(const QString& backend) {
+  ui_backend_ = backend.isEmpty() ? QStringLiteral("qt") : backend;
 }
 
 void AppSettings::set_ui_color_scheme(UiColorScheme scheme) {

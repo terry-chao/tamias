@@ -19,6 +19,8 @@
 #include "engine/modeling/linked_kernels.h"
 #include "engine/modeling/occt/occt_shape_ops.h"
 #include "engine/profile/profiling.h"
+#include "ui/qt/backend.h"
+#include "ui/tac/backend.h"
 
 #include <QApplication>
 #include <QIcon>
@@ -261,6 +263,28 @@ int main(int argc, char* argv[]) {
                      std::to_string(request.width) + "x" + std::to_string(request.height) + ")");
     tamias::RenderThreadPool::instance().shutdown();
     return 0;
+  }
+
+  // ===== 界面库后端：qt（默认）/ tac（自研，尚未落地）=====
+  // 启动时选一次，改了要重启——和渲染后端、建模内核一样。壳当前仍是 Qt 代码，
+  // 所以这里只把选择落定、记日志；迁移完成后壳从这里取 PlatformServices。
+  tac::qt::register_qt_backend();
+  QString ui_backend_requested = tamias::AppSettings::instance().ui_backend();
+  for (const QString& argument : QCoreApplication::arguments()) {
+    if (argument.startsWith(QLatin1String("--ui-backend="))) {
+      ui_backend_requested = argument.mid(13);
+    }
+  }
+  std::string ui_backend_used;
+  auto ui_backend = tac::create_backend_or_fallback(ui_backend_requested.toStdString(), "qt",
+                                                    &ui_backend_used);
+  if (ui_backend == nullptr) {
+    tamias::log_error("UI backend: 一个后端都没登记，界面起不来");
+  } else if (ui_backend_used == ui_backend_requested.toStdString()) {
+    tamias::log_info("UI backend: " + ui_backend_used + " " + ui_backend->info().version);
+  } else {
+    tamias::log_warn("UI backend: 请求 \"" + ui_backend_requested.toStdString() +
+                     "\" 不可用，回退到 \"" + ui_backend_used + "\"");
   }
 
   int code = 0;

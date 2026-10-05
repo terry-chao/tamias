@@ -4,6 +4,7 @@
 #include "engine/modeling/linked_kernels.h"
 #include "app/base/i18n.h"
 #include "app/shell/dialog/settings_section.h"
+#include "ui/tac/backend.h"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -208,6 +209,31 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
   ribbon_section->add_row(tr("Tools"), ribbon_style_combo_);
   ribbon_section->add_row(ribbon_hint);
 
+  // 界面库后端：qt（默认）/ tac（自研）。只列登记过的后端，改了要重启。
+  ui_backend_combo_ = new QComboBox(this);
+  for (const std::string& name : tac::backend_names()) {
+    const QString key = QString::fromStdString(name);
+    QString label = key;
+    if (key == QStringLiteral("qt")) {
+      label = tr("Qt");
+    } else if (key == QStringLiteral("tac")) {
+      label = tr("tac (self-built, experimental)");
+    }
+    ui_backend_combo_->addItem(label, key);
+  }
+  const int ui_backend_index =
+      ui_backend_combo_->findData(AppSettings::instance().ui_backend());
+  ui_backend_combo_->setCurrentIndex(ui_backend_index >= 0 ? ui_backend_index : 0);
+  auto* ui_backend_hint = new QLabel(this);
+  ui_backend_hint->setWordWrap(true);
+  ui_backend_hint->setObjectName(QStringLiteral("settingsHint"));
+  ui_backend_hint->setText(tr("\"Qt\" is the current default. \"tac\" is the in-house "
+                              "library and is not finished yet. Changes take effect after "
+                              "restarting Tamias."));
+  auto* ui_backend_section = new SettingsSection(tr("Toolkit"), this);
+  ui_backend_section->add_row(tr("UI backend"), ui_backend_combo_);
+  ui_backend_section->add_row(ui_backend_hint);
+
   zoom_to_mouse_check_ = new QCheckBox(this);
   zoom_to_mouse_check_->setChecked(AppSettings::instance().zoom_to_mouse_position());
   zoom_to_mouse_check_->setMinimumHeight(22);
@@ -258,7 +284,8 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
   kernel_section->add_row(tr("Kernel backend"), kernel_combo_);
   kernel_section->add_row(kernel_hint_);
 
-  stack->addWidget(wrap_page(make_page({translation_section, ribbon_section})));
+  stack->addWidget(
+      wrap_page(make_page({translation_section, ribbon_section, ui_backend_section})));
   stack->addWidget(wrap_page(make_page({theme_section})));
   stack->addWidget(wrap_page(make_page({zoom_section})));
   stack->addWidget(wrap_page(make_page({graphics_section})));
@@ -347,17 +374,20 @@ void SettingsDialog::accept() {
       static_cast<UiColorScheme>(theme_combo_->currentData().toInt());
   const QString kernel = kernel_combo_->currentData().toString();
   const QString ribbon_style = ribbon_style_combo_->currentData().toString();
+  const QString ui_backend = ui_backend_combo_->currentData().toString();
   auto& settings = AppSettings::instance();
   language_changed_ = language != settings.ui_language();
   backend_changed_ = backend != settings.graphics_backend();
   theme_changed_ = theme != settings.ui_color_scheme();
   kernel_changed_ = kernel != settings.kernel_backend();
   ribbon_style_changed_ = ribbon_style != settings.ribbon_style();
+  ui_backend_changed_ = ui_backend != settings.ui_backend();
   settings.set_graphics_backend(backend);
   settings.set_kernel_backend(kernel);
   settings.set_ui_language(language);
   settings.set_ui_color_scheme(theme);
   settings.set_ribbon_style(ribbon_style);
+  settings.set_ui_backend(ui_backend);
   settings.set_zoom_to_mouse_position(zoom_to_mouse_check_->isChecked());
   settings.save();
   if (theme_changed_) {

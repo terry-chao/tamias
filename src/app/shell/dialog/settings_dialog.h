@@ -20,6 +20,7 @@ class SettingsDialog final : public QDialog {
   [[nodiscard]] bool theme_changed() const { return theme_changed_; }
   [[nodiscard]] bool kernel_changed() const { return kernel_changed_; }
   [[nodiscard]] bool ribbon_style_changed() const { return ribbon_style_changed_; }
+  [[nodiscard]] bool ui_backend_changed() const { return ui_backend_changed_; }
 
  protected:
   void changeEvent(QEvent* event) override;
@@ -38,6 +39,7 @@ class SettingsDialog final : public QDialog {
   QComboBox* language_combo_ = nullptr;
   QComboBox* theme_combo_ = nullptr;
   QComboBox* ribbon_style_combo_ = nullptr;
+  QComboBox* ui_backend_combo_ = nullptr;
   QCheckBox* zoom_to_mouse_check_ = nullptr;
   QLabel* backend_hint_ = nullptr;
   QLabel* kernel_hint_ = nullptr;
@@ -46,6 +48,7 @@ class SettingsDialog final : public QDialog {
   bool theme_changed_ = false;
   bool kernel_changed_ = false;
   bool ribbon_style_changed_ = false;
+  bool ui_backend_changed_ = false;
   bool applying_stylesheet_ = false;
 };
 

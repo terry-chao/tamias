@@ -1635,6 +1635,9 @@ void MainWindow::open_settings() {
   if (dialog.backend_changed()) {
     notes << tr("Render backend changes take effect after restarting Tamias.");
   }
+  if (dialog.ui_backend_changed()) {
+    notes << tr("Interface toolkit changes take effect after restarting Tamias.");
+  }
   if (dialog.ribbon_style_changed() && ribbon_ != nullptr) {
     ribbon_->set_display_mode(AppSettings::instance().ribbon_style() == QStringLiteral("icons")
                                   ? RibbonDisplayMode::IconOnly

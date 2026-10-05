@@ -28,6 +28,11 @@ class AppSettings {
   [[nodiscard]] QString ui_language() const { return ui_language_; }
   void set_ui_language(const QString& language);
 
+  // 界面库后端（"qt" / "tac"）。默认 qt。启动时选一次，改了要重启——
+  // 和渲染后端、建模内核一样。只有登记过的后端才可用，见 ui/tac/backend.h。
+  [[nodiscard]] QString ui_backend() const { return ui_backend_; }
+  void set_ui_backend(const QString& backend);
+
   [[nodiscard]] UiColorScheme ui_color_scheme() const { return ui_color_scheme_; }
   void set_ui_color_scheme(UiColorScheme scheme);
 
@@ -105,6 +110,7 @@ class AppSettings {
   GraphicsBackend graphics_backend_ = GraphicsBackend::Vulkan;
   QString kernel_backend_ = QStringLiteral("occt");
   QString ui_language_ = QStringLiteral("system");
+  QString ui_backend_ = QStringLiteral("qt");
   UiColorScheme ui_color_scheme_ = UiColorScheme::System;
   bool zoom_to_mouse_position_ = true;
   QString ribbon_style_ = QStringLiteral("text");

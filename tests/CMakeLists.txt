@@ -14,7 +14,7 @@ add_executable(tamias_tests smoke_tests.cpp location_tests.cpp ifc_spatial_tree_
   offscreen_render_tests.cpp scene_capture_tests.cpp edit_operations_tests.cpp
   interaction_tests.cpp mcp_server_tests.cpp mcp_session_backend_tests.cpp
   rag_tokenizer_tests.cpp rag_bm25_tests.cpp rag_lexical_provider_tests.cpp
-  rag_composite_tests.cpp rag_docs_backend_tests.cpp)
+  rag_composite_tests.cpp rag_docs_backend_tests.cpp tac_backend_tests.cpp)
 
 # Vulkan 加载路径（volk）的冒烟测试：只在建了 Vulkan 后端时链进来。
 if(TARGET tamias::rhi_vulkan)
@@ -41,6 +41,7 @@ target_link_libraries(tamias_tests
     tamias::modeling
     tamias::render
     tamias::ifc
+    tamias::tac
     GTest::gtest_main
 )
 target_compile_definitions(tamias_tests PRIVATE TAMIAS_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
