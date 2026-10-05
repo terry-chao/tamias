@@ -1067,6 +1067,11 @@ Overwrite scene.trscn and sidecar files?</source>
         <translation>渲染后端更改将在重启 Tamias 后生效。</translation>
     </message>
     <message>
+        <location filename="../src/app/shell/main_window.cpp" line="1639"/>
+        <source>Interface toolkit changes take effect after restarting Tamias.</source>
+        <translation>界面库更改将在重启 Tamias 后生效。</translation>
+    </message>
+    <message>
         <location filename="../src/app/shell/main_window.cpp" line="402"/>
         <source>Render</source>
         <translation>渲染</translation>
@@ -2884,6 +2889,26 @@ Plugin ID: %4</source>
     <message>
         <source>Vulkan documents with the same settings share one render thread. Backend changes take effect after restarting Tamias.</source>
         <translation>相同设置的 Vulkan 文档共享一个渲染线程。后端更改将在重启 Tamias 后生效。</translation>
+    </message>
+    <message>
+        <source>Toolkit</source>
+        <translation>界面库</translation>
+    </message>
+    <message>
+        <source>UI backend</source>
+        <translation>界面后端</translation>
+    </message>
+    <message>
+        <source>Qt</source>
+        <translation>Qt</translation>
+    </message>
+    <message>
+        <source>tac (self-built, experimental)</source>
+        <translation>tac（自研，实验性）</translation>
+    </message>
+    <message>
+        <source>&quot;Qt&quot; is the current default. &quot;tac&quot; is the in-house library and is not finished yet. Changes take effect after restarting Tamias.</source>
+        <translation>「Qt」是当前默认；「tac」是自研界面库，尚未完成。更改将在重启 Tamias 后生效。</translation>
     </message>
 </context>
 <context>
