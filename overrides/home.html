@@ -67,7 +67,7 @@
     <div class="tm-wrap">
       <header class="tm-section-head">
         <p class="tm-eyebrow">功能</p>
-        <h2 class="tm-section-title">从「看得懂」到「改得动」的八件事</h2>
+        <h2 class="tm-section-title">从「看得懂」到「改得动」的九件事</h2>
         <p class="tm-section-sub">
           查看、编辑、业务语义、渲染、扩展各自分层，互相之间只走稳定的边界：语义树与渲染场景图用 ID 关联，
           几何统一走几何边界（IShapeOps），编辑一律是可撤销命令。
@@ -133,6 +133,17 @@
             可挂 Ribbon 命令、弹宿主对话框、在视口取输入；控制台能直接敲 C#。
           </p>
           <a class="tm-card-link" href="{{ 'plugin/'|url }}">插件与 SDK <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
+        </article>
+
+        <article class="tm-card">
+          <div class="tm-card-icon"><img src="{{ 'img/icons/ai.svg'|url }}" alt="" width="32" height="32"></div>
+          <h3 class="tm-card-title">AI 助手与 Agent</h3>
+          <p class="tm-card-text">
+            内置对话面板（<code>Ctrl+Shift+A</code>），也能以 MCP 接 Claude Desktop / Cursor / Codex：
+            把文档、命令与特征树交给 AI，但<strong>不新开编辑通道</strong>——AI 和工具条发的是同一条命令，
+            写只走 <code>dispatch</code> + 事务，默认只读、可审批，一次 <code>Ctrl+Z</code> 能全退回。
+          </p>
+          <a class="tm-card-link" href="{{ 'ai/'|url }}">AI 系列 <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
         </article>
 
         <article class="tm-card">
