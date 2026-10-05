@@ -11,12 +11,19 @@ engine/             headless 核心：document / entity / command / undo / scene
 src/host/           Session + CameraController + 命令参数文本协议
                     （会话层：文档 + 命令系统 + 选择 + 工具模式 + 相机 + 事件）
     ↑ 每壳一个薄胶水
-src/app/            Qt 适配：MainWindow / DocumentViewport 只保留 Qt 控件、事件转发、信号映射
+src/app/            桌面壳：MainWindow / DocumentViewport —— 发命令、转发事件、显示结果
+    ↑ 界面能力走抽象接口
+src/ui/tac/         界面抽象层：两套 UI 共用的契约（无 Qt）
+src/ui/qt/          Qt 那套：tac 契约的 Qt 6 实现
 src/wasm/           embind 适配：WebHost = Session 的 1:1 导出
 src/plugin/         HostApi C ABI：能力面与 Session 对齐，实现读 Session 的文档/命令
     ↑
 web/ (React + TS)   壳：工具栏、拖放、状态栏、键盘快捷键
 ```
+
+界面层是后加的一刀：桌面壳不再直接绑死 Qt，而是走 [`src/ui/tac/`](https://github.com/terry-chao/tamias/tree/main/src/ui/tac)
+的接口；今天接的是 [`src/ui/qt/`](https://github.com/terry-chao/tamias/tree/main/src/ui/qt)（Qt 那套），
+以后接自研实现。选择和迁移计划见 [界面层（tac / Qt）](TAC.md)。
 
 两条硬规则：
 

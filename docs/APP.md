@@ -4,6 +4,10 @@
 
 代码在 [`src/app/`](https://github.com/terry-chao/tamias/tree/main/src/app)。命令与实体紧贴这一层，但不属于 Qt：[`src/command/`](https://github.com/terry-chao/tamias/tree/main/src/command)、[`src/entity/`](https://github.com/terry-chao/tamias/tree/main/src/entity)。BIM 命令落地后应调 `src/bim`，而不是在窗口里写宿主规则。
 
+界面库本身不在这一层：`src/app/` 是**用界面**的壳，两套界面实现（`tac` 契约与 Qt 后端）在
+[`src/ui/`](https://github.com/terry-chao/tamias/tree/main/src/ui)，见 [界面层（tac / Qt）](TAC.md)。
+用哪套由设置 `ui/backend` 决定，默认 Qt、改了要重启；也可以用 `tamias --ui-backend=` 临时覆盖。
+
 目录按职责分组（只留 `main.cpp`、`qt_pch.h`、`resources.qrc`、`app.rc` 在 `src/app/` 根下）：
 
 ```
