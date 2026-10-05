@@ -126,12 +126,16 @@ add_subdirectory(src/mcp)
 # 检索挂在 MCP 门面的读侧，所以排在 mcp 之后；无 Qt / 无 OCCT，wasm 分支也要它。
 add_subdirectory(src/rag)
 add_subdirectory(src/host)
+# tac：自研界面库（契约层），无 Qt 无 OCCT，wasm 分支也可以要它（见 docs/TAC.md）。
+add_subdirectory(src/ui/tac)
 if(TAMIAS_ENABLE_OCCT)
   add_subdirectory(src/bim)
 endif()
 if(NOT EMSCRIPTEN)
   include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/TamiasDotnet.cmake")
   tamias_find_nethost()
+  # qt：tac 契约的 Qt 实现，桌面今天在跑的那套。
+  add_subdirectory(src/ui/qt)
   add_subdirectory(src/plugin)
   add_subdirectory(src/app)
 endif()

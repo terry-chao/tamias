@@ -156,6 +156,9 @@ target_link_libraries(tamias
     tamias::rag
     tamias::plugin
     tamias::ifc
+    # 界面抽象层与当前 Qt 后端（迁移中：见 docs/TAC.md）。
+    tamias::tac
+    tamias::qt
     Qt6::Widgets
     Qt6::Gui
     Qt6::Svg
