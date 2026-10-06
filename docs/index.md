@@ -15,6 +15,7 @@ Qt 做壳，自研 RHI 跑 Vulkan / OpenGL，OCCT 提供 BRep，IfcOpenShell 提
 | **BIM 业务层** | 楼层、轴网、墙梁板柱、门窗宿主与关联关系；墙-墙转角自动斜接 | [BIM 业务层](BIM.md) |
 | **大模型查看** | 语义树与渲染场景图分离，空间索引点选 / 框选，视锥剔除 + LOD + 合批 | [空间索引](SPATIAL-INDEX.md) |
 | **自研 RHI** | Vulkan 主 / OpenGL 副（独立线程），启动探测、失败降级、驱动块名单；浏览器走 WASM + WebGPU | [RHI 启动](RHI-STARTUP.md) |
+| **界面抽象层** | 界面库不写死在壳里：对话框 / 主题 / 文本度量 / 窗口 / 画布先过一层自研契约 `tac`，Qt 只是两套实现之一，设置里选、重启生效 | [tac / Qt](TAC.md) |
 | **参考图纸** | PDF / DXF / DWF / SVG / 位图贴进三维视口当底图，另有只读二维图纸页 | [参考图纸](DRAWING.md) |
 | **插件与脚本** | C# 扩展：约定目录热加载 `main.cs` / `.dll`，Ribbon 命令、视口输入、宿主对话框 | [插件](plugin/index.md) |
 | **AI 助手 / Agent** | 内置对话面板，或以 MCP 接 Claude Desktop / Cursor / Codex；写只走 `dispatch` + 事务，可审批可审计 | [AI 系列](ai/index.md) |
@@ -46,6 +47,7 @@ Qt 做壳，自研 RHI 跑 Vulkan / OpenGL，OCCT 提供 BRep，IfcOpenShell 提
 
 ```
 ┌────────────── Qt 客户端 (app) ──────────────┐
+├────────── 界面抽象层 (ui/tac · ui/qt) ───────┤
 ├────────────── 插件 / 脚本宿主 (plugin) ────────┤
 ├────────────── BIM 业务层 (bim) ──────────────┤
 ├────────────── 场景图 (document/scene) ────────┤

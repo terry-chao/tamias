@@ -67,7 +67,7 @@
     <div class="tm-wrap">
       <header class="tm-section-head">
         <p class="tm-eyebrow">功能</p>
-        <h2 class="tm-section-title">从「看得懂」到「改得动」的九件事</h2>
+        <h2 class="tm-section-title">从「看得懂」到「改得动」的十件事</h2>
         <p class="tm-section-sub">
           查看、编辑、业务语义、渲染、扩展各自分层，互相之间只走稳定的边界：语义树与渲染场景图用 ID 关联，
           几何统一走几何边界（IShapeOps），编辑一律是可撤销命令。
@@ -113,6 +113,16 @@
             驱动块名单，GPU 不合适也不会打不开软件。
           </p>
           <a class="tm-card-link" href="{{ 'RHI-STARTUP/'|url }}">RHI 启动与降级 <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
+        </article>
+
+        <article class="tm-card">
+          <div class="tm-card-icon"><img src="{{ 'img/icons/ribbon_style.svg'|url }}" alt="" width="32" height="32"></div>
+          <h3 class="tm-card-title">界面抽象层（tac）</h3>
+          <p class="tm-card-text">
+            界面库不写死在壳里：对话框、主题、文本度量、窗口与画布先过一层自研契约，
+            Qt 只是两套实现之一；换界面库不用改上层，设置里选、重启生效。
+          </p>
+          <a class="tm-card-link" href="{{ 'TAC/'|url }}">tac 界面层 <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
         </article>
 
         <article class="tm-card">
@@ -228,7 +238,7 @@
     <div class="tm-wrap">
       <header class="tm-section-head">
         <p class="tm-eyebrow">架构</p>
-        <h2 class="tm-section-title">六层，各管一件事</h2>
+        <h2 class="tm-section-title">七层，各管一件事</h2>
         <p class="tm-section-sub">
           每一层都有独立的文档与测试。想深挖哪一层，直接点进去。
         </p>
@@ -241,32 +251,38 @@
           <span class="tm-arch-desc">窗口、三维视口、属性面板、大纲树与工具带；几何真相不在这层。</span>
           <span class="tm-arch-go"><i class="fas fa-arrow-right" aria-hidden="true"></i></span>
         </a>
-        <a class="tm-arch-row" href="{{ 'plugin/'|url }}">
+        <a class="tm-arch-row" href="{{ 'TAC/'|url }}">
           <span class="tm-arch-idx">02</span>
+          <span class="tm-arch-name">界面层 tac / Qt<em>src/ui</em></span>
+          <span class="tm-arch-desc">两套 UI 共用一份契约（无 Qt 的抽象 + Qt 实现）；接口 / 对话框 / 主题 / 窗口 / 画布。</span>
+          <span class="tm-arch-go"><i class="fas fa-arrow-right" aria-hidden="true"></i></span>
+        </a>
+        <a class="tm-arch-row" href="{{ 'plugin/'|url }}">
+          <span class="tm-arch-idx">03</span>
           <span class="tm-arch-name">插件 / 脚本宿主<em>src/plugin</em></span>
           <span class="tm-arch-desc">C# 扩展与命令控制台，挂在壳上；编辑仍走已有命令。</span>
           <span class="tm-arch-go"><i class="fas fa-arrow-right" aria-hidden="true"></i></span>
         </a>
         <a class="tm-arch-row" href="{{ 'BIM/'|url }}">
-          <span class="tm-arch-idx">03</span>
+          <span class="tm-arch-idx">04</span>
           <span class="tm-arch-name">BIM 业务层<em>src/bim</em></span>
           <span class="tm-arch-desc">楼层、轴网、墙梁板柱、门窗宿主与关联关系 —— 建筑规则都在这。</span>
           <span class="tm-arch-go"><i class="fas fa-arrow-right" aria-hidden="true"></i></span>
         </a>
         <a class="tm-arch-row" href="{{ 'SCENE-GRAPH/'|url }}">
-          <span class="tm-arch-idx">04</span>
+          <span class="tm-arch-idx">05</span>
           <span class="tm-arch-name">场景图<em>src/engine/document</em></span>
           <span class="tm-arch-desc">语义树：层级、变换、包围盒缓存、IFC 属性与材质引用。</span>
           <span class="tm-arch-go"><i class="fas fa-arrow-right" aria-hidden="true"></i></span>
         </a>
         <a class="tm-arch-row" href="{{ 'MCAD-PIPELINE/'|url }}">
-          <span class="tm-arch-idx">05</span>
+          <span class="tm-arch-idx">06</span>
           <span class="tm-arch-name">造型<em>src/engine/modeling</em></span>
           <span class="tm-arch-desc">特征树 · 求值器 · 几何边界（IShapeOps）：OCCT 与 IfcOpenShell。</span>
           <span class="tm-arch-go"><i class="fas fa-arrow-right" aria-hidden="true"></i></span>
         </a>
         <a class="tm-arch-row" href="{{ 'RENDERING/'|url }}">
-          <span class="tm-arch-idx">06</span>
+          <span class="tm-arch-idx">07</span>
           <span class="tm-arch-name">渲染<em>src/engine/render</em></span>
           <span class="tm-arch-desc">draw list、RHI（Vulkan / OpenGL / WebGPU）、视锥剔除、合批与 LOD。</span>
           <span class="tm-arch-go"><i class="fas fa-arrow-right" aria-hidden="true"></i></span>

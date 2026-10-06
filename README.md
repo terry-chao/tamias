@@ -22,7 +22,8 @@ cmake --build --preset relwithdebinfo --parallel
 - [测试](docs/TESTING.md) —— `ctest` / GoogleTest、覆盖面与缺口
 - [脚本与命令控制台](docs/SCRIPTING.md) —— 面板里敲 C#、命令回显、脚本文件与「全信任」的边界
 - [通用编辑](docs/EDIT-OPERATIONS.md) —— 移动 / 复制 / 旋转 / 镜像 / 阵列：选择集 → 一条可撤销命令
-- 模块文档 —— 按 [客户端](docs/APP.md) / [插件](docs/plugin/index.md) / [BIM](docs/BIM.md) / [场景图](docs/SCENE-GRAPH.md) / [造型](docs/FEATURE-TREE-EVALUATOR.md) / [渲染](docs/RENDERING.md) 分类
+- [界面层（tac / Qt）](docs/TAC.md) —— 自研界面契约 + Qt 后端：壳只依赖抽象，换界面库不动上层
+- 模块文档 —— 按 [客户端](docs/APP.md) / [界面层](docs/TAC.md) / [插件](docs/plugin/index.md) / [BIM](docs/BIM.md) / [场景图](docs/SCENE-GRAPH.md) / [造型](docs/FEATURE-TREE-EVALUATOR.md) / [渲染](docs/RENDERING.md) 分类
 
 在线站点：https://terry-chao.github.io/tamias/
 

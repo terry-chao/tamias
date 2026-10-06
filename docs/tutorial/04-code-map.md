@@ -14,6 +14,9 @@ src/
 │   ├── drawing/  参考图纸：加载、二维图纸页、图纸管理页、图纸设置（摆放）
 │   ├── texture/  贴图：库面板、检查对话框、图片解码
 │   └── debug/    调试诊断：句柄检查、渲染场景检查、金样、计时
+├── ui/          界面层：两套 UI 共用一份契约（app 只用这里，不直接用界面库）
+│   ├── tac/      自研界面库：值类型 / 输入事件 / 平台服务 / 外壳模型 / 画布 / 后端契约（禁止 include Qt）
+│   └── qt/       Qt 那套：同一份契约的 Qt 6 实现（对话框、主题、文本度量、后端登记）
 ├── command/     命令系统：每个编辑操作 = 一个可撤销的 Command
 │   ├── core/    命令接口、撤销栈、命令系统、登记入口
 │   ├── create/  创建：构件 / 曲线 / 基础体 / 轴网 / 楼层
@@ -102,21 +105,23 @@ Scene（谁在哪）
 
 ## 4.5 从 main() 开始（5 分钟读代码）
 
-打开 [`src/app/main.cpp`](https://github.com/terry-chao/tamias/blob/main/src/app/main.cpp)，`main()` 只做四件事：
+打开 [`src/app/main.cpp`](https://github.com/terry-chao/tamias/blob/main/src/app/main.cpp)，`main()` 只做六件事：
 
 ```cpp
 QApplication app(argc, argv);          // 1. Qt 应用（AA_NativeWindows）
 register_linked_rhi_backends();        // 2. 登记渲染后端（Vulkan/OpenGL…）
 register_commands(command_registry()); // 3. 登记所有命令（盒子/墙/参数…）
 register_occt_shape_ops();             // 4. 登记几何内核（STEP/IGES 读取）
-MainWindow window; window.show();      // 5. 显示主窗口
+tac::qt::register_qt_backend();        // 5. 登记界面后端（qt；自研 tac 落地后也能选它）
+MainWindow window; window.show();      // 6. 显示主窗口
 ```
 
-后面所有功能都是这四样东西的排列组合：**命令 + 渲染后端 + 几何内核 + 窗口**。
+后面所有功能都是这几样东西的排列组合：**命令 + 渲染后端 + 几何内核 + 界面后端 + 窗口**。
+界面后端由设置 `ui/backend` 或 `--ui-backend=` 选，默认 Qt、改完要重启，规则见 [界面层（tac / Qt）](../TAC.md)。
 
 ## 4.6 动手练习
 
-1. 在 `main.cpp` 里找到上面四个调用，读一遍周围代码，确认你理解每一行。
+1. 在 `main.cpp` 里找到上面这些调用，读一遍周围代码，确认你理解每一行。
 2. 打开 [`render_types.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_types.h)，找出 `SceneDrawItem` 有哪些字段。数一数：渲染侧是不是真的不知道「这是墙」？
 3. 用调试器（或 `log`）在 `SetFeatureParamCommand::execute()` 断一次，走一遍 4.3 的链路。
 
