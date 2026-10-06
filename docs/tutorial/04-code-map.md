@@ -112,7 +112,8 @@ QApplication app(argc, argv);          // 1. Qt 应用（AA_NativeWindows）
 register_linked_rhi_backends();        // 2. 登记渲染后端（Vulkan/OpenGL…）
 register_commands(command_registry()); // 3. 登记所有命令（盒子/墙/参数…）
 register_occt_shape_ops();             // 4. 登记几何内核（STEP/IGES 读取）
-tac::qt::register_qt_backend();        // 5. 登记界面后端（qt；自研 tac 落地后也能选它）
+tac::qt::register_qt_backend();        // 5. 登记界面后端（qt + 骨架 tac）
+tac::register_native_backend();
 MainWindow window; window.show();      // 6. 显示主窗口
 ```
 

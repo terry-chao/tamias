@@ -228,8 +228,9 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
   ui_backend_hint->setWordWrap(true);
   ui_backend_hint->setObjectName(QStringLiteral("settingsHint"));
   ui_backend_hint->setText(tr("\"Qt\" is the current default. \"tac\" is the in-house "
-                              "library and is not finished yet. Changes take effect after "
-                              "restarting Tamias."));
+                              "library; it is selectable now but still a skeleton, so the "
+                              "window remains Qt until its widgets land. Changes take effect "
+                              "after restarting Tamias."));
   auto* ui_backend_section = new SettingsSection(tr("Toolkit"), this);
   ui_backend_section->add_row(tr("UI backend"), ui_backend_combo_);
   ui_backend_section->add_row(ui_backend_hint);

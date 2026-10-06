@@ -1,6 +1,7 @@
 // tac 后端登记表：默认/回退/缺失的行为（见 docs/TAC.md §6）。
 
 #include "ui/tac/backend.h"
+#include "ui/tac/native_backend.h"
 
 #include <gtest/gtest.h>
 
@@ -110,4 +111,18 @@ TEST(TacBackend, ReportsEmptyWhenNothingIsAvailable) {
 TEST(TacBackend, RegisteredFactoryCanDecline) {
   tac::register_backend("tac-test-declines", [] { return std::unique_ptr<tac::UiBackend>(); });
   EXPECT_EQ(tac::create_backend("tac-test-declines"), nullptr);
+}
+
+// 设置里要能列出并选中 tac，所以 "tac" 必须是登记过的后端（骨架也算）。
+TEST(TacBackend, NativeBackendIsListedAndSelectable) {
+  tac::register_native_backend();
+  const auto names = tac::backend_names();
+  EXPECT_NE(std::find(names.begin(), names.end(), "tac"), names.end());
+
+  auto backend = tac::create_backend("tac");
+  ASSERT_NE(backend, nullptr);
+  EXPECT_EQ(backend->info().name, "tac");
+  // 骨架阶段：窗口与画布明确"暂不支持"，而不是假装能用。
+  EXPECT_EQ(backend->create_window(tac::WindowDesc{}), nullptr);
+  EXPECT_EQ(backend->create_surface(tac::SurfaceDesc{}), nullptr);
 }

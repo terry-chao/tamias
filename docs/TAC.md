@@ -104,14 +104,19 @@ pwsh -File scripts/check-tac-boundary.ps1
 
 启动时用 `tac::create_backend_or_fallback(requested, "qt", &used)` 落地：请求的后端
 没登记就回退到 qt，并打一条 `log_warn`。所以就算配置里写了 `tac` 而 `tac`
-还没落地，程序照常启动、只是回退到 qt。设置界面只列出**登记过**的后端，
-`tac` 落地后会自动出现在下拉框里。
+还没落地，程序照常启动、只是回退到 qt。设置界面只列出**登记过**的后端。
+
+`tac` 现在已登记（`ui/tac/native_backend.cpp` 的 `tac::register_native_backend()`），
+所以下拉框里能选中它；但那是个**骨架后端**：自研控件 / 绘制还没落地，平台服务返回
+「不支持」，`create_window` / `create_surface` 返回 `nullptr`。阶段 5 把自研实现长进
+`src/ui/tac/` 后，替换 `native_backend.cpp` 里的工厂即可，设置项不用动。
 
 ```cpp
 #include "ui/tac/backend.h"
 #include "ui/qt/backend.h"
 
 tac::qt::register_qt_backend();  // 自研那套落地后加 tac::register_native_backend()
+tac::register_native_backend();  // 登记 "tac"（当前是骨架，界面仍是 Qt）
 std::string used;
 auto backend = tac::create_backend_or_fallback("qt", "qt", &used);
 if (backend) {

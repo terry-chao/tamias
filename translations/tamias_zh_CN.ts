@@ -2907,8 +2907,8 @@ Plugin ID: %4</source>
         <translation>tac（自研，实验性）</translation>
     </message>
     <message>
-        <source>&quot;Qt&quot; is the current default. &quot;tac&quot; is the in-house library and is not finished yet. Changes take effect after restarting Tamias.</source>
-        <translation>「Qt」是当前默认；「tac」是自研界面库，尚未完成。更改将在重启 Tamias 后生效。</translation>
+        <source>&quot;Qt&quot; is the current default. &quot;tac&quot; is the in-house library; it is selectable now but still a skeleton, so the window remains Qt until its widgets land. Changes take effect after restarting Tamias.</source>
+        <translation>「Qt」是当前默认；「tac」是自研界面库，现在可以选中，但仍是骨架，自研控件落地前窗口仍是 Qt。更改将在重启 Tamias 后生效。</translation>
     </message>
 </context>
 <context>

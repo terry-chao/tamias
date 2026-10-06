@@ -8,5 +8,6 @@
 - `shell/` 声明式外壳模型：命令元数据、菜单 / 工具带 / 停靠面板描述
 - `surface.h` 渲染画布：只要拿得出 `NativeWindowHandle` 就能挂渲染线程
 - `backend.h` `UiBackend` 契约与后端登记表
+- `native_backend.cpp` `tac` 后端骨架（登记到设置里可选，自研控件待补）
 
 规则与迁移计划见 `docs/TAC.md`。

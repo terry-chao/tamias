@@ -4,6 +4,7 @@
 # 门禁：scripts/check-tac-boundary.ps1
 add_library(tamias_tac STATIC
   backend.cpp
+  native_backend.cpp
   platform/prompt_form.cpp
 )
 add_library(tamias::tac ALIAS tamias_tac)

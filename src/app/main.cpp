@@ -21,6 +21,7 @@
 #include "engine/profile/profiling.h"
 #include "ui/qt/backend.h"
 #include "ui/tac/backend.h"
+#include "ui/tac/native_backend.h"
 
 #include <QApplication>
 #include <QIcon>
@@ -269,6 +270,7 @@ int main(int argc, char* argv[]) {
   // 启动时选一次，改了要重启——和渲染后端、建模内核一样。壳当前仍是 Qt 代码，
   // 所以这里只把选择落定、记日志；迁移完成后壳从这里取 PlatformServices。
   tac::qt::register_qt_backend();
+  tac::register_native_backend();
   QString ui_backend_requested = tamias::AppSettings::instance().ui_backend();
   for (const QString& argument : QCoreApplication::arguments()) {
     if (argument.startsWith(QLatin1String("--ui-backend="))) {
