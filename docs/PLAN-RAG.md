@@ -18,7 +18,7 @@
 5. **不改写路径**：写仍然只有 `dispatch` 一条路，RAG 不参与。
 
 与 [DECISION-RAG.md](DECISION-RAG.md) 的四处有意偏离，理由见 [§9](#9-与决策文档的偏离及理由)：
-索引产物入库 + CI 新鲜度检查、新增独立评测入口 `tamias_rag_cli`、BM25 改字段加权、
+索引产物入库（新鲜度本地自查）、新增独立评测入口 `tamias_rag_cli`、BM25 改字段加权、
 不写 Python 检索原型。
 
 ## 2. 交付物清单
@@ -96,14 +96,15 @@
 
 **验收**：`tamias.exe --mcp` + `tamias-mcp` 全链路，客户端问「怎么建墙」拿到带 `url` 的片段。
 
-### M4 评测与 CI 门禁（0.5 人日）
+### M4 评测门禁（0.5 人日）
 
 目标：质量可回归，不是靠手感。
 
 - [ ] `tests/rag/golden_qa.jsonl`：30 题，字段 `question` / `expect_paths` / `corpus`。
 - [ ] `scripts/rag/eval.py`：驱动 `tamias_rag_cli` 算 recall@5，**不重实现分词**。
 - [ ] ctest 增加 `rag_golden`，低于门槛即失败。
-- [ ] CI 增加「索引新鲜度」检查：重跑 `build_index.py` 后 `git diff --exit-code resources/rag`。
+- [ ] 索引新鲜度**本地自查**（不进 GitHub Actions）：重跑 `build_index.py` 后
+      `git diff --exit-code resources/rag`。
 
 **验收**：recall@5 ≥ 0.8；断网可跑；索引过期（`git_rev` 不符）时工具结果带提示。
 
@@ -210,7 +211,7 @@ ctest --test-dir build -R rag
 | 策略 | `read-only` 下 RAG 读工具放行；RAG 工具不在 `mutates` 名单里 |
 | 端到端 | `tamias_search_docs` 经 `McpServer` 返回带 `url` 的片段 |
 | 金标集 | recall@5 ≥ 0.8，进 ctest 当门禁 |
-| 新鲜度 | 重跑索引脚本后工作区无 diff |
+| 新鲜度 | 本地重跑索引脚本后工作区无 diff |
 
 金标集条目格式：
 
@@ -222,7 +223,7 @@ ctest --test-dir build -R rag
 
 | 风险 | 对策 |
 |---|---|
-| 索引过期，模型拿旧知识当新 | 结果带 `git_rev`；与本地版本不符时附「索引可能过期」提示；CI 查新鲜度 |
+| 索引过期，模型拿旧知识当新 | 结果带 `git_rev`；与本地版本不符时附「索引可能过期」提示；本地自查新鲜度 |
 | anchor 与官网对不上，链接点不开 | 直接复用 mkdocs 的 `slugify`，不自己重实现 |
 | 中文分词错导致召回崩 | unigram + bigram 双写；金标集量化，不靠感觉 |
 | 提示注入（文档里藏指令） | `<untrusted_doc>` 包裹 + 工具描述声明不执行片段内指令 |
@@ -234,7 +235,7 @@ ctest --test-dir build -R rag
 
 | 偏离 | 决策文档原口径 | 本文口径 | 理由 |
 |---|---|---|---|
-| 索引产物 | 「构建期产出」 | **入库** + CI 新鲜度检查 | 构建期生成把 Python/mkdocs 变成构建依赖，各机器配置不同会产出不同索引；入库则可 diff、可校验、离线可建 |
+| 索引产物 | 「构建期产出」 | **入库** + 本地新鲜度自查 | 构建期生成把 Python/mkdocs 变成构建依赖，各机器配置不同会产出不同索引；入库则可 diff、可校验、离线可建 |
 | 评测入口 | 无 | 新增 `tamias_rag_cli` | 金标集必须跑**真代码**；Python 与 C++ 双实现的分词必然漂移，测过的不一定是发布的 |
 | BM25 权重 | 未指明实现 | **字段加权打分** | 「重复 token」在长正文里权重几乎被淹没，字段级 tf 才有效 |
 | 检索原型 | 无 | **不写 Python 原型** | 同上：单一实现，避免双份算法 |
