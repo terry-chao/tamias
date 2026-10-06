@@ -1,5 +1,5 @@
 {# 产品官网顶栏：官网与文档共用。
-   - 产品导航（功能 / 工作流 / 架构 / 文档 / 快速开始）指回首页锚点，
+   - 产品导航（功能 / 工作流 / 架构 / 快速开始）指回首页锚点，
      所以从任意文档页点这些链接都会回到首页对应小节。
    - 文档页的完整目录在左侧栏（overrides/docs-layout.html），不塞进顶栏。 #}
 {%- set tm_home = nav.homepage.url|url if nav.homepage else base_url -%}
@@ -22,7 +22,6 @@
       <a class="tm-nav-link" href="{{ tm_home }}#features">功能</a>
       <a class="tm-nav-link" href="{{ tm_home }}#workflow">工作流</a>
       <a class="tm-nav-link" href="{{ tm_home }}#architecture">架构</a>
-      <a class="tm-nav-link" href="{{ tm_home }}#docs">文档</a>
       <a class="tm-nav-link" href="{{ tm_home }}#quickstart">快速开始</a>
       <span class="tm-nav-sep" aria-hidden="true"></span>
       <a class="tm-nav-link tm-nav-gh" href="{{ config.repo_url }}" target="_blank" rel="noopener">
