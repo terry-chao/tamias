@@ -1,5 +1,7 @@
 #include "app/base/recent_files.h"
 
+#include "app/base/app_settings.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -48,7 +50,7 @@ void remove_thumbnail_file(const QString& path) {
 
 void RecentFilesStore::load() {
   items_.clear();
-  QSettings settings;
+  QSettings settings = open_settings();
   const QVariantList list = settings.value(QStringLiteral("recent/items")).toList();
   for (const QVariant& entry : list) {
     const QVariantMap map = entry.toMap();
@@ -84,7 +86,7 @@ void RecentFilesStore::save() const {
     map.insert(QStringLiteral("thumbnailPath"), item.thumbnail_path);
     list.push_back(map);
   }
-  QSettings settings;
+  QSettings settings = open_settings();
   settings.setValue(QStringLiteral("recent/items"), list);
 }
 

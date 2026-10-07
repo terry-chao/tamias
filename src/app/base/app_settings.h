@@ -6,6 +6,7 @@
 #include <QString>
 #include <QStringList>
 #include <QByteArray>
+#include <QSettings>
 
 namespace tamias {
 
@@ -129,6 +130,33 @@ class AppSettings {
   bool safe_mode_ = false;
   bool backend_locked_ = false;
 };
+
+// 设置落盘在哪儿。
+//
+// 优先级：
+//   1. <exe 目录>/config/tamias.ini —— 便携；源码树里每个构建目录各一份，
+//      所以 Debug / Release / RelWithDebInfo 和安装版互不干扰。
+//   2. 那个目录建不出来或不可写（典型是装在 Program Files 的 MSI），
+//      退到 <AppConfigLocation>/tamias.ini —— 每用户一份。
+//
+// 刻意不用 QSettings 的默认（原生）格式：Windows 上那是注册表
+// HKCU\Software\tamias\tamias，全机器所有版本共用一份设置，在开发构建里
+// 拖一下面板、安装版也跟着变。
+
+// 选定设置文件、建好目录，必要时把旧位置（原生格式：Windows 是注册表，
+// 其它平台是旧的 .conf）里的设置搬过来。必须在**任何** QSettings 之前调用。
+// 返回最终使用的 ini 路径。
+QString init_settings_storage();
+
+// init_settings_storage() 定下来的路径。
+[[nodiscard]] const QString& app_settings_file_path();
+
+// 所有设置读写都从这里拿，保证「读哪份」和「写哪份」是同一个文件。
+//
+// QSettings 继承 QObject 且 Q_DISABLE_COPY，但 C++17 起返回 prvalue 保证
+// 不调用拷贝构造，所以这个按值返回是合法的：
+//     QSettings settings = tamias::open_settings();
+[[nodiscard]] QSettings open_settings();
 
 void apply_ui_color_scheme(UiColorScheme scheme);
 

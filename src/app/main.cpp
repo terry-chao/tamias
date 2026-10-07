@@ -50,6 +50,8 @@ int main(int argc, char* argv[]) {
 
   tamias::init_logging(tamias::LogLevel::Info);
   tamias::install_log_buffer();  // 诊断面板要用的最近日志（不替换 stderr 输出）
+  // 设置文件位置必须在这里定下来：后面 AppSettings::instance().load() 就会读它。
+  tamias::init_settings_storage();
   tamias::profiling::set_program_name("Tamias");
   tamias::profiling::set_thread_name("ui");
   tamias::register_linked_rhi_backends();

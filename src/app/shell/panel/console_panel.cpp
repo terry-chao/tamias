@@ -2,6 +2,7 @@
 
 #include "app/base/theme.h"
 #include "app/base/script_store.h"
+#include "app/base/app_settings.h"
 #include "app/shell/widget/code_editor.h"
 
 #include <QCheckBox>
@@ -19,7 +20,6 @@
 #include <QPlainTextEdit>
 #include <QRegularExpression>
 #include <QScrollBar>
-#include <QSettings>
 #include <QShortcut>
 #include <QSplitter>
 #include <QTextCharFormat>
@@ -177,7 +177,7 @@ ConsolePanel::ConsolePanel(QWidget* parent) : QWidget(parent) {
 
   refresh_script_list();
   // 上次编辑的脚本还在就接着编；否则给一段能立刻跑的示例当起手式。
-  const QString last = QSettings().value(QStringLiteral("console/script")).toString();
+  const QString last = open_settings().value(QStringLiteral("console/script")).toString();
   if (!last.isEmpty() && QFileInfo::exists(last)) {
     open_script(last);
   } else {
@@ -328,7 +328,7 @@ void ConsolePanel::open_script(const QString& path) {
   saved_text_ = editor_->toPlainText();  // 读进来不算改动
   refresh_script_list();
   select_script(path);
-  QSettings().setValue(QStringLiteral("console/script"), path);
+  open_settings().setValue(QStringLiteral("console/script"), path);
 }
 
 bool ConsolePanel::save_script() {
@@ -348,7 +348,7 @@ bool ConsolePanel::save_script() {
   saved_text_ = editor_->toPlainText();
   refresh_script_list();
   select_script(current_path_);
-  QSettings().setValue(QStringLiteral("console/script"), current_path_);
+  open_settings().setValue(QStringLiteral("console/script"), current_path_);
   append_line(tr("Saved %1").arg(current_path_));
   return true;
 }
