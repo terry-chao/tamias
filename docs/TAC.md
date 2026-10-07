@@ -99,7 +99,7 @@ pwsh -File scripts/check-tac-boundary.ps1
 | 方式 | 做法 |
 |---|---|
 | 设置界面 | 设置 → Interface → Toolkit → UI backend |
-| 配置文件 | `QSettings` 的 `ui/backend`（Windows 在 `HKCU\Software\tamias\tamias`） |
+| 配置文件 | 设置文件里的 `ui/backend` 键（`<exe 目录>/config/tamias.ini`，见 [app 文档](APP.md#设置落盘在哪儿)） |
 | 命令行 | `tamias --ui-backend=tac`，临时覆盖、不写回设置 |
 
 启动时用 `tac::create_backend_or_fallback(requested, "qt", &used)` 落地：请求的后端

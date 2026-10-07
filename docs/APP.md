@@ -203,6 +203,24 @@ Ribbon「开始 → 插件」由 `PluginHost` 在启动时加载 C# 插件。插
 
 ---
 
+## 设置落盘在哪儿
+
+设置是 exe 旁边的一份 ini：**`<exe 目录>/config/tamias.ini`**。
+
+- **开发构建**：`build/bin/<配置>/config/tamias.ini`。每个构建目录各一份，所以 Debug /
+  Release / RelWithDebInfo 和安装版**互不覆盖**——在开发构建里拖一下面板，安装版照旧。
+- **安装版**：`C:\Program Files\Tamias\config\` 对普通用户不可写，退到
+  `%APPDATA%\tamias\tamias\tamias.ini`（每用户一份）。启动日志里的 `Settings file:` 一行
+  会写明这次实际用的是哪个文件。
+- 以前走 `QSettings` 的默认格式，也就是注册表 `HKCU\Software\tamias\tamias`——一份设置被
+  全机器所有版本共用。现在**第一次**用 ini 启动时会把旧值搬过来一次（18 个键上下），
+  旧位置保留不删。
+
+API key 不在 ini 里，走 Windows 凭据管理器；缩略图、脚本、用户装的扩展仍在
+`%APPDATA%\tamias\tamias\` 下。
+
+---
+
 ## 现在有 / 还没有
 
 **有：** 打开 `.tdoc` / `.trscn` / 导入网格、转相机、点选、挤出等特征的属性编辑、墙工具预览线、线框/着色/真实模式、**开始 → 轴网设置**（按间距生成正交轴网 / 逐根增删改名，确定后在视口里**点击放置**）、**视图 → 渲染场景**（`Ctrl+Shift+I`：对照 draw list、写 `.trscn` / 钉金样 / 导出 OBJ；`Ctrl+Shift+P` 钉进 `assets/samples/render/`，调试步骤见 [渲染场景快照](RENDER-SCENE.md#调试步骤)）、**Ctrl+D 句柄检查窗口**（点选构件显示 `.tdoc` 里的 id、所在楼层）、**构件显隐页**（`Ctrl+L`，按类别一键显隐）、**楼层面板**（`Ctrl+Shift+L`，视口右列一张楼层清单，一层一行：勾选框只管显隐；点行本身 = **在新标签页里打开这一层**——那张页签钉死这一层、只显示这一层，本层底面就是原点 (0, 0, 0)，并沿用源页签的看法（2D/3D、三维角度）与工具列面板，切 2D/3D 换的只是看法，切回三维就是**该层的三维**；第一行「全局三维」= 回到文档页签；齿轮开「楼层设置」改标高 / 层高 / 夹层）、**开始 → 插件**（C# 示例：列出选择 / 删除所选）、**设置 → Modeling → Kernel backend**（选建模内核：OCCT 完整 / Truck 实验性，重启生效，见 [建模内核](MODELING-KERNEL.md)）。
