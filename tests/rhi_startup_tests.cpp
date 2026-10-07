@@ -1,6 +1,7 @@
-#include "engine/render/rhi/rhi_blocklist.h"
-#include "engine/render/rhi/rhi_probe.h"
-#include "engine/render/rhi/rhi_startup_decision.h"
+#include "rhi_startup/blocklist.h"
+#include "rhi_startup/decision.h"
+#include "rhi_startup/device.h"
+#include "rhi_startup/probe.h"
 
 #include <gtest/gtest.h>
 
@@ -13,15 +14,13 @@
 namespace tamias {
 namespace {
 
-// 假设备：只实现探测用得到的那几个方法，其余（Vulkan/GL 才用的）一律报 "unused"。
+// 假设备：只实现探测用得到的那几个方法（身份 / 空提交 / 离屏像素），其余一律不碰。
 // 有了它，「Vulkan 失败 → OpenGL 成功」这种降级路径不用真 GPU 就能测。
-class FakeDevice final : public RHIDevice {
+class FakeDevice final : public IBackendDevice {
  public:
-  FakeDevice(GraphicsBackend backend, RhiGpuIdentity identity, bool submit_ok)
-      : backend_(backend), identity_(std::move(identity)), submit_ok_(submit_ok) {}
+  FakeDevice(RhiGpuIdentity identity, bool submit_ok)
+      : identity_(std::move(identity)), submit_ok_(submit_ok) {}
 
-  [[nodiscard]] GraphicsBackend backend() const override { return backend_; }
-  [[nodiscard]] Mat4 clip_space_correction_matrix() const override { return Mat4::identity(); }
   [[nodiscard]] RhiGpuIdentity gpu_identity() const override { return identity_; }
   [[nodiscard]] Result<void> submit_noop() override {
     ++submit_calls;
@@ -30,34 +29,16 @@ class FakeDevice final : public RHIDevice {
     }
     return Err("fake: queue submit failed");
   }
+  // 模拟「后端不支持离屏」：C 档要如实报原因并降级，而不是崩。
+  [[nodiscard]] Result<void> render_pixel_probe() override {
+    return Err("offscreen target: not supported");
+  }
   void wait_idle() override { ++wait_calls; }
-
-  Result<std::unique_ptr<Buffer>> create_buffer(const BufferDesc&) override {
-    return Err("unused");
-  }
-  Result<std::unique_ptr<Texture>> create_texture(const TextureDesc&) override {
-    return Err("unused");
-  }
-  Result<std::unique_ptr<ShaderModule>> create_shader_module(const ShaderModuleDesc&) override {
-    return Err("unused");
-  }
-  Result<std::unique_ptr<PipelineState>> create_pipeline(const PipelineDesc&) override {
-    return Err("unused");
-  }
-  Result<std::unique_ptr<CommandList>> create_command_list() override { return Err("unused"); }
-  Result<std::unique_ptr<SwapChain>> create_swap_chain(const SwapChainDesc&) override {
-    return Err("unused");
-  }
-  Result<std::unique_ptr<Fence>> create_fence() override { return Err("unused"); }
-  Result<void> begin_frame(SwapChain&) override { return Err("unused"); }
-  Result<void> execute(CommandList&) override { return Err("unused"); }
-  Result<void> end_frame(SwapChain&) override { return Err("unused"); }
 
   int submit_calls = 0;
   int wait_calls = 0;
 
  private:
-  GraphicsBackend backend_;
   RhiGpuIdentity identity_;
   bool submit_ok_;
 };
@@ -252,13 +233,13 @@ TEST(RhiStartupDecision, PriorityChain) {
 // ---------------------------------------------------------------- 探测
 
 TEST(RhiProbe, FallsBackWhenFirstBackendFails) {
-  const RhiDeviceFactory factory = [](const DeviceCreateInfo& info)
-      -> Result<std::unique_ptr<RHIDevice>> {
+  const BackendDeviceFactory factory = [](const BackendRequest& info)
+      -> Result<std::unique_ptr<IBackendDevice>> {
     if (info.backend == GraphicsBackend::Vulkan) {
       return Err("vkCreateInstance failed");
     }
-    return std::unique_ptr<RHIDevice>(
-        new FakeDevice(info.backend, make_identity(0x8086, 0x1234, "31.0.0.0"), true));
+    return std::unique_ptr<IBackendDevice>(
+        new FakeDevice(make_identity(0x8086, 0x1234, "31.0.0.0"), true));
   };
   RhiProbeOptions options{};
   const RhiProbeReport report = probe_rhi(options, factory);
@@ -274,7 +255,8 @@ TEST(RhiProbe, FallsBackWhenFirstBackendFails) {
 }
 
 TEST(RhiProbe, ReportsNoBackendWhenAllFail) {
-  const RhiDeviceFactory factory = [](const DeviceCreateInfo&) -> Result<std::unique_ptr<RHIDevice>> {
+  const BackendDeviceFactory factory =
+      [](const BackendRequest&) -> Result<std::unique_ptr<IBackendDevice>> {
     return Err("no runtime");
   };
   const RhiProbeReport report = probe_rhi(RhiProbeOptions{}, factory);
@@ -285,12 +267,12 @@ TEST(RhiProbe, ReportsNoBackendWhenAllFail) {
 
 TEST(RhiProbe, HonorsSubmitDepth) {
   int submits = 0;
-  const RhiDeviceFactory factory = [&submits](const DeviceCreateInfo& info)
-      -> Result<std::unique_ptr<RHIDevice>> {
+  const BackendDeviceFactory factory = [&submits](const BackendRequest& info)
+      -> Result<std::unique_ptr<IBackendDevice>> {
     auto device = std::make_unique<FakeDevice>(
-        info.backend, make_identity(0x10DE, 0x1234, "566.0.3.0"),
+        make_identity(0x10DE, 0x1234, "566.0.3.0"),
         /*submit_ok=*/info.backend != GraphicsBackend::Vulkan);
-    return std::unique_ptr<RHIDevice>(device.release());
+    return std::unique_ptr<IBackendDevice>(device.release());
   };
   (void)submits;
 
@@ -313,11 +295,11 @@ TEST(RhiProbe, HonorsSubmitDepth) {
 TEST(RhiProbe, BlocklistSkipsBlockedBackend) {
   const RhiBlocklist blocklist = parse_rhi_blocklist(
       R"({ "entries": [ { "id": "nvidia-no-vk", "vendor": 4318, "skip": "vulkan" } ] })");
-  const RhiDeviceFactory factory = [](const DeviceCreateInfo& info)
-      -> Result<std::unique_ptr<RHIDevice>> {
+  const BackendDeviceFactory factory = [](const BackendRequest& info)
+      -> Result<std::unique_ptr<IBackendDevice>> {
     const std::uint32_t vendor = info.backend == GraphicsBackend::Vulkan ? 0x10DE : 0x8086;
-    return std::unique_ptr<RHIDevice>(
-        new FakeDevice(info.backend, make_identity(vendor, 0, "1.0.0.0"), true));
+    return std::unique_ptr<IBackendDevice>(
+        new FakeDevice(make_identity(vendor, 0, "1.0.0.0"), true));
   };
   RhiProbeOptions options{};
   options.blocklist = &blocklist;
@@ -332,11 +314,11 @@ TEST(RhiProbe, BlocklistSkipsBlockedBackend) {
 TEST(RhiProbe, BlocklistForceRedirectsToAnotherBackend) {
   const RhiBlocklist blocklist = parse_rhi_blocklist(
       R"({ "entries": [ { "id": "nvidia-use-gl", "vendor": 4318, "force": "opengl" } ] })");
-  const RhiDeviceFactory factory = [](const DeviceCreateInfo& info)
-      -> Result<std::unique_ptr<RHIDevice>> {
+  const BackendDeviceFactory factory = [](const BackendRequest& info)
+      -> Result<std::unique_ptr<IBackendDevice>> {
     const std::uint32_t vendor = info.backend == GraphicsBackend::Vulkan ? 0x10DE : 0x8086;
-    return std::unique_ptr<RHIDevice>(
-        new FakeDevice(info.backend, make_identity(vendor, 0, "1.0.0.0"), true));
+    return std::unique_ptr<IBackendDevice>(
+        new FakeDevice(make_identity(vendor, 0, "1.0.0.0"), true));
   };
   RhiProbeOptions options{};
   options.blocklist = &blocklist;
@@ -349,10 +331,10 @@ TEST(RhiProbe, BlocklistForceRedirectsToAnotherBackend) {
 TEST(RhiProbe, PolicyOverrideIgnoresBlocklist) {
   const RhiBlocklist blocklist = parse_rhi_blocklist(
       R"({ "entries": [ { "id": "nvidia-no-vk", "vendor": 4318, "skip": "vulkan" } ] })");
-  const RhiDeviceFactory factory = [](const DeviceCreateInfo& info)
-      -> Result<std::unique_ptr<RHIDevice>> {
-    return std::unique_ptr<RHIDevice>(
-        new FakeDevice(info.backend, make_identity(0x10DE, 0, "1.0.0.0"), true));
+  const BackendDeviceFactory factory = [](const BackendRequest&)
+      -> Result<std::unique_ptr<IBackendDevice>> {
+    return std::unique_ptr<IBackendDevice>(
+        new FakeDevice(make_identity(0x10DE, 0, "1.0.0.0"), true));
   };
   RhiProbeOptions options{};
   options.blocklist = &blocklist;
@@ -364,10 +346,10 @@ TEST(RhiProbe, PolicyOverrideIgnoresBlocklist) {
 
 // C 档（离屏画一个像素）在后端不支持离屏时，要如实报原因并继续降级，而不是崩。
 TEST(RhiProbe, PixelDepthReportsMissingOffscreenSupport) {
-  const RhiDeviceFactory factory = [](const DeviceCreateInfo& info)
-      -> Result<std::unique_ptr<RHIDevice>> {
-    return std::unique_ptr<RHIDevice>(
-        new FakeDevice(info.backend, make_identity(0x10DE, 0x1234, "566.0.3.0"), true));
+  const BackendDeviceFactory factory = [](const BackendRequest&)
+      -> Result<std::unique_ptr<IBackendDevice>> {
+    return std::unique_ptr<IBackendDevice>(
+        new FakeDevice(make_identity(0x10DE, 0x1234, "566.0.3.0"), true));
   };
   RhiProbeOptions options{};
   options.depth = RhiProbeDepth::Pixel;
@@ -381,13 +363,13 @@ TEST(RhiProbe, PixelDepthReportsMissingOffscreenSupport) {
 
 // 面板「复制到剪贴板」用的就是 to_text()：它得把关键信息都写进去（诊断靠这段文本）。
 TEST(RhiProbe, TextReportCarriesDiagnostics) {
-  const RhiDeviceFactory factory = [](const DeviceCreateInfo& info)
-      -> Result<std::unique_ptr<RHIDevice>> {
+  const BackendDeviceFactory factory = [](const BackendRequest& info)
+      -> Result<std::unique_ptr<IBackendDevice>> {
     if (info.backend == GraphicsBackend::Vulkan) {
       return Err("vkCreateInstance failed");
     }
-    return std::unique_ptr<RHIDevice>(
-        new FakeDevice(info.backend, make_identity(0x8086, 0x1234, "31.0.101.4502"), true));
+    return std::unique_ptr<IBackendDevice>(
+        new FakeDevice(make_identity(0x8086, 0x1234, "31.0.101.4502"), true));
   };
   RhiProbeOptions options{};
   const std::string text = probe_rhi(options, factory).to_text();
@@ -400,10 +382,10 @@ TEST(RhiProbe, TextReportCarriesDiagnostics) {
 }
 
 TEST(RhiProbe, JsonReportMentionsChosenBackendAndAdapter) {
-  const RhiDeviceFactory factory = [](const DeviceCreateInfo& info)
-      -> Result<std::unique_ptr<RHIDevice>> {
-    return std::unique_ptr<RHIDevice>(
-        new FakeDevice(info.backend, make_identity(0x10DE, 0x2684, "566.0.3.0"), true));
+  const BackendDeviceFactory factory = [](const BackendRequest&)
+      -> Result<std::unique_ptr<IBackendDevice>> {
+    return std::unique_ptr<IBackendDevice>(
+        new FakeDevice(make_identity(0x10DE, 0x2684, "566.0.3.0"), true));
   };
   RhiProbeOptions options{};
   options.candidates = {GraphicsBackend::Vulkan};

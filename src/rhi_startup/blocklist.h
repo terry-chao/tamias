@@ -1,8 +1,8 @@
 #pragma once
 
-#include "engine/graphics/graphics_backend.h"
-#include "engine/render/rhi/rhi_gpu_identity.h"
-#include "engine/render/rhi/rhi_os.h"
+#include "rhi_startup/backend.h"
+#include "rhi_startup/identity.h"
+#include "rhi_startup/os.h"
 
 #include <cstdint>
 #include <optional>

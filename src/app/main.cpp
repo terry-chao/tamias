@@ -9,8 +9,8 @@
 #include "tamias_version.h"
 #include "command/core/command_system.h"
 #include "engine/base/log.h"
-#include "engine/render/rhi/rhi_probe.h"
-#include "engine/render/rhi/rhi_startup_decision.h"
+#include "engine/render/rhi/rhi_selection_device.h"
+#include "rhi_startup/startup.h"
 #include "engine/document/scene_capture.h"
 #include "engine/io/mesh_io.h"
 #include "engine/render/runtime/render_runtime.h"
@@ -94,7 +94,8 @@ int main(int argc, char* argv[]) {
     } else if (cli.safe_mode) {
       options.candidates = {tamias::GraphicsBackend::OpenGL};
     }
-    const tamias::RhiProbeReport report = tamias::probe_rhi(options);
+    const tamias::RhiProbeReport report =
+        tamias::probe_rhi(options, tamias::make_rhi_device_factory());
     const std::string output = cli.json ? report.to_json() : report.summary;
     std::fputs(output.c_str(), stdout);
     std::fputc('\n', stdout);
@@ -106,23 +107,22 @@ int main(int argc, char* argv[]) {
     tamias::log_warn("上次启动没走完（可能在建设备/首帧崩了），本次强制安全模式");
   }
   tamias::AppSettings& settings = tamias::AppSettings::instance();
-  tamias::RhiStartupInput startup_input{};
-  startup_input.cli_backend = cli.backend;
-  startup_input.cli_safe_mode = cli.safe_mode;
-  startup_input.policy = policy;
-  startup_input.last_good_backend = settings.last_good_backend();
-  startup_input.last_good_trusted = !startup_guard.previous_startup_incomplete();
-  startup_input.previous_startup_incomplete = startup_guard.previous_startup_incomplete();
-  startup_input.preferred_backend = settings.graphics_backend();
-  const tamias::RhiStartupDecision decision = tamias::decide_rhi_startup(startup_input);
+  // 决策 + 探测一步到位（组件入口，见 src/rhi_startup/startup.h）。
+  tamias::RhiStartupEnvironment startup_env{};
+  startup_env.cli_backend = cli.backend;
+  startup_env.cli_safe_mode = cli.safe_mode;
+  startup_env.policy = policy;
+  startup_env.last_good_backend = settings.last_good_backend();
+  startup_env.last_good_trusted = !startup_guard.previous_startup_incomplete();
+  startup_env.previous_startup_incomplete = startup_guard.previous_startup_incomplete();
+  startup_env.preferred_backend = settings.graphics_backend();
+  startup_env.blocklist = &blocklist;
+  startup_env.depth = tamias::RhiProbeDepth::Device;  // 正常启动走 A 档：快
+  const tamias::RhiStartupOutcome outcome =
+      tamias::run_rhi_startup(startup_env, tamias::make_rhi_device_factory());
+  const tamias::RhiStartupDecision& decision = outcome.decision;
+  const tamias::RhiProbeReport& report = outcome.report;
   tamias::log_info("RHI startup: " + decision.why);
-
-  tamias::RhiProbeOptions probe{};
-  probe.candidates = decision.candidates;
-  probe.depth = tamias::RhiProbeDepth::Device;  // 正常启动走 A 档：快
-  probe.blocklist = &blocklist;
-  probe.blocklist_override = decision.blocklist_override;
-  const tamias::RhiProbeReport report = tamias::probe_rhi(probe);
   tamias::log_info(report.summary);
   if (!report.chosen.has_value()) {
     // 以前这里是静默 return 1；现在必须让人知道为什么，并给一条可操作的路。

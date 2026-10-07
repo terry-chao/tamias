@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/render/rhi/rhi_probe.h"
+#include "rhi_startup/probe.h"
 
 #include <cstddef>
 #include <optional>

@@ -4,7 +4,7 @@
 #include "engine/base/result.h"
 #include "engine/graphics/graphics_backend.h"
 #include "engine/math/math.h"
-#include "engine/render/rhi/rhi_gpu_identity.h"
+#include "rhi_startup/identity.h"
 
 #include <cstdint>
 #include <functional>
@@ -272,7 +272,7 @@ class RHIDevice {
   [[nodiscard]] virtual RhiGpuIdentity gpu_identity() const { return {}; }
   // 提交一次空命令并等它完成：验证「队列 / 提交路径」真的能用。
   // 建得出设备 ≠ 能提交——坏驱动、TDR 之后的设备、远程会话下的提交路径都栽在这一步。
-  // 默认不支持；Vulkan / OpenGL 实现了它（启动探测的 B 档用；见 rhi_probe.h）。
+  // 默认不支持；Vulkan / OpenGL 实现了它（启动探测的 B 档用；见 rhi_startup/probe.h）。
   [[nodiscard]] virtual Result<void> submit_noop() {
     return Err(std::string("submit_noop: not supported by ") + to_string(backend()));
   }

@@ -1,4 +1,4 @@
-#include "engine/render/rhi/rhi_probe.h"
+#include "rhi_startup/probe.h"
 
 #include <algorithm>
 #include <sstream>
@@ -30,43 +30,6 @@ void complete_identity(RhiGpuIdentity& identity) {
 }
 
 }  // namespace
-
-// C 档：离屏画 1×1、读回、核对颜色。返回空字符串 = 通过，否则是失败原因。
-std::string pixel_check(RHIDevice& device) {
-  auto target = device.create_offscreen_swap_chain(1, 1);
-  if (!target.has_value()) {
-    return "offscreen target: " + target.error();
-  }
-  auto commands = device.create_command_list();
-  if (!commands.has_value()) {
-    return "offscreen command list: " + commands.error();
-  }
-  const float reference[4] = {0.f, 1.f, 0.f, 1.f};  // 纯绿：读回来最好判
-  if (auto began = device.begin_frame(**target); !began) {
-    return "offscreen begin_frame: " + began.error();
-  }
-  (*commands)->begin();
-  (*commands)->begin_render_pass(**target, reference, 1.f);
-  (*commands)->end_render_pass();
-  (*commands)->end();
-  if (auto executed = device.execute(**commands); !executed) {
-    return "offscreen execute: " + executed.error();
-  }
-  if (auto ended = device.end_frame(**target); !ended) {
-    return "offscreen end_frame: " + ended.error();
-  }
-  std::vector<std::uint8_t> pixels;
-  if (auto read = (*target)->read_back_rgba(pixels); !read) {
-    return "offscreen read back: " + read.error();
-  }
-  if (pixels.size() != 4) {
-    return "offscreen read back returned " + std::to_string(pixels.size()) + " bytes";
-  }
-  if (pixels[0] > 40 || pixels[1] < 200 || pixels[2] > 40) {
-    return "offscreen pixel check got unexpected color";
-  }
-  return {};
-}
 
 std::string RhiProbeReport::to_text() const {
   std::ostringstream out;
@@ -129,7 +92,8 @@ std::string RhiProbeReport::to_json() const {
   return out.str();
 }
 
-RhiProbeReport probe_rhi(const RhiProbeOptions& options, const RhiDeviceFactory& create_device) {
+RhiProbeReport probe_rhi(const RhiProbeOptions& options,
+                         const BackendDeviceFactory& create_device) {
   RhiProbeReport report;
   std::vector<GraphicsBackend> queue = options.candidates;
   std::vector<GraphicsBackend> tried;
@@ -147,12 +111,12 @@ RhiProbeReport probe_rhi(const RhiProbeOptions& options, const RhiDeviceFactory&
     RhiProbeResult attempt;
     attempt.backend = backend;
 
-    DeviceCreateInfo info{};
-    info.backend = backend;
-    info.enable_validation = options.enable_validation;
-    info.app_name = "tamias-rhi-probe";
+    BackendRequest request{};
+    request.backend = backend;
+    request.enable_validation = options.enable_validation;
+    request.app_name = "rhi-startup-probe";
     // 设备活不过这一轮：下一轮之前必须销毁（volk 的 device 表是进程全局的，不能并存）。
-    Result<std::unique_ptr<RHIDevice>> device = create_device(info);
+    Result<std::unique_ptr<IBackendDevice>> device = create_device(request);
     if (!device.has_value()) {
       attempt.reason = device.error();
       report.attempts.push_back(std::move(attempt));
@@ -192,8 +156,8 @@ RhiProbeReport probe_rhi(const RhiProbeOptions& options, const RhiDeviceFactory&
       }
     }
     if (options.depth == RhiProbeDepth::Pixel) {
-      if (std::string failure = pixel_check(**device); !failure.empty()) {
-        attempt.reason = std::move(failure);
+      if (auto rendered = (*device)->render_pixel_probe(); !rendered) {
+        attempt.reason = rendered.error();
         (*device)->wait_idle();
         report.attempts.push_back(std::move(attempt));
         continue;

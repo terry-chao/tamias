@@ -1,10 +1,10 @@
 #pragma once
 
 #include "engine/base/result.h"
-#include "engine/graphics/graphics_backend.h"
-#include "engine/render/rhi/device.h"
-#include "engine/render/rhi/rhi_blocklist.h"
-#include "engine/render/rhi/rhi_gpu_identity.h"
+#include "rhi_startup/backend.h"
+#include "rhi_startup/blocklist.h"
+#include "rhi_startup/device.h"
+#include "rhi_startup/identity.h"
 
 #include <cstdint>
 #include <functional>
@@ -57,14 +57,13 @@ struct RhiProbeReport {
   [[nodiscard]] std::string to_text() const;
 };
 
-// 设备工厂可注入：单测里造「Vulkan 失败 → OpenGL 成功」，不用真 GPU。
-using RhiDeviceFactory =
-    std::function<Result<std::unique_ptr<RHIDevice>>(const DeviceCreateInfo&)>;
-
-// 按 candidates 顺序试：建设备 → 读 GPU 身份 → 查块名单 → 按 depth 决定要不要空提交。
-// 失败不抛异常、不提前放弃，一律记进 attempts —— 这就是「可降级」的全部含义。
-// 每个候选的设备在试下一个之前一定会被销毁（volk 的表是进程全局的，不能并存）。
+// 设备工厂由宿主注入（见 device.h 的 BackendDeviceFactory）：单测里造「Vulkan 失败 →
+// OpenGL 成功」，不用真 GPU；生产里接当前渲染后端。
+//
+// 按 candidates 顺序试：建设备 → 读 GPU 身份 → 查块名单 → 按 depth 决定要不要空提交 /
+// 离屏出图。失败不抛异常、不提前放弃，一律记进 attempts —— 这就是「可降级」的全部含义。
+// 每个候选的设备在试下一个之前一定会被销毁（Vulkan 函数表常是进程全局的，不能并存）。
 [[nodiscard]] RhiProbeReport probe_rhi(const RhiProbeOptions& options,
-                                       const RhiDeviceFactory& create_device = RHIDevice::create);
+                                       const BackendDeviceFactory& create_device);
 
 }  // namespace tamias

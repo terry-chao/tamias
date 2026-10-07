@@ -1,4 +1,4 @@
-#include "engine/render/rhi/rhi_startup_decision.h"
+#include "rhi_startup/decision.h"
 
 namespace tamias {
 namespace {

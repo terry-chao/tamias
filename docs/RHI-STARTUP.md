@@ -6,6 +6,25 @@
 
 ---
 
+## 0. 代码在哪：`tamias::rhi_startup` 组件
+
+这套选择逻辑已经抽成一个**与宿主无关的组件**，放在 [`src/rhi_startup/`](../src/rhi_startup/README.md)，
+CMake 目标 `tamias::rhi_startup`。它只依赖标准库（加一个 12 行的 `result.h`），不认识 Qt、
+不认识具体渲染 API，所以**别的软件也能直接拿去用**。
+
+| 层 | 位置 | 职责 |
+|---|---|---|
+| 组件：决策 | `src/rhi_startup/decision.*` | `decide_rhi_startup()`（纯函数）：排候选顺序 |
+| 组件：探测 | `src/rhi_startup/probe.*` | `probe_rhi()`：按序试、降级、块名单在此生效 |
+| 组件：数据 | `src/rhi_startup/{identity,blocklist,os,backend}.*` | GPU 身份 / 块名单 / 策略 / 后端枚举 |
+| 组件：入口 | `src/rhi_startup/startup.*` | `run_rhi_startup()`：决策 + 探测一步到位 |
+| 组件：接入点 | `src/rhi_startup/device.h` | `IBackendDevice` / `BackendDeviceFactory` |
+| tamias 适配 | `src/engine/render/rhi/rhi_selection_device.*` | 把 `RHIDevice` 适配成 `IBackendDevice` |
+| 宿主胶水 | `src/app/base/rhi_startup.*`、`startup_guard.*`、`main.cpp` | 读命令行 / 策略 / 设置 / 标记，写回记忆 |
+
+组件怎么被别的程序接入，见 [`src/rhi_startup/README.md`](../src/rhi_startup/README.md)。
+下面正文里说的 `decide_rhi_startup()` / `probe_rhi()` 都在这个组件里。
+
 ## 0. 先分清三类失败
 
 | 失败 | 例子 | 进程内探测能不能兜住 |
