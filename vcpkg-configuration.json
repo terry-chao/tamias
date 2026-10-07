@@ -1,0 +1,11 @@
+{
+  "registries": [
+    {
+      "kind": "git",
+      "repository": "https://github.com/terry-chao/TacUI",
+      "reference": "main",
+      "baseline": "e71e9ea36881b8fd6f41fef6af2e0d481b43791b",
+      "packages": ["tacui"]
+    }
+  ]
+}

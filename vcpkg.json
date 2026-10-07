@@ -38,6 +38,10 @@
       "features": ["on-demand"]
     },
     {
+      "name": "tacui",
+      "platform": "windows & x64"
+    },
+    {
       "name": "zlib"
     },
     {
