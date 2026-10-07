@@ -37,6 +37,7 @@ Dependencies resolved via:
 
 - System Qt / Vulkan SDK
 - vcpkg `opencascade` 7.9.3 (manifest)
+- vcpkg `tacui` 0.1.0 (manifest, Windows x64) — from TacUI's own git registry, see `vcpkg-configuration.json`
 - Vendored headers in `3rdparty/` (VMA, rapidobj, stb_truetype, volk)
 - FetchContent zip for GoogleTest (tests only)
 
@@ -74,6 +75,35 @@ cmake --build --preset debug --parallel --target tamias_ifc_dump
 Opening a `.ifc` in the app shows the same tree. Geometry import (IfcGeom) is not wired yet.
 
 On Windows, POST_BUILD copies Qt runtime (`windeployqt`) and OCCT / freetype DLLs into `build/bin/<Config>/` next to `tamias.exe`, so double-click / F5 works without Qt or OCCT on `PATH`.
+
+### TacUI (Windows x64)
+
+[TacUI](https://github.com/terry-chao/TacUI) is the GPU-rendered UI library behind the `tac`
+interface layer. There are two ways in, and both hand out the same `TacUI::` target names:
+
+**Local checkout** — the `msvc` preset sets `TAMIAS_TACUI_SOURCE_DIR` to `C:/dev/TacUI`. TacUI
+is pulled in with `add_subdirectory(... EXCLUDE_FROM_ALL)`, so editing TacUI sources takes
+effect on the next `cmake --build` with no reinstall step. Point the option at your checkout if
+it lives elsewhere, or set it to empty to use the vcpkg copy — same as `TAMIAS_QT_PREFIX`.
+
+**vcpkg package** — when `TAMIAS_TACUI_SOURCE_DIR` is empty, `find_package(TacUI CONFIG)`
+resolves the copy vcpkg installed. TacUI's port is not in the builtin registry, so
+`vcpkg-configuration.json` points vcpkg at TacUI's own **git registry** (port + `versions/`,
+pinned by a baseline commit); `vcpkg.json` gates the dependency to `windows & x64`, matching the
+port's `supports`, so the Linux and WASM presets never resolve it. An overlay port would *not*
+give a live local loop — its portfile builds the `v0.1.0` tag tarball, not your working tree.
+
+```cmake
+find_package(TacUI CONFIG REQUIRED)
+target_link_libraries(<target> PRIVATE TacUI::tacui_host)  # C++ side (core/rhi/text/platform)
+target_link_libraries(<target> PRIVATE TacUI::tacui)       # C ABI only (tacui.dll)
+```
+
+TacUI's exported targets do not carry `cxx_std_17`, so the consumer has to set the C++ standard
+itself — tamias already does, globally, at C++23. Nothing links TacUI yet, so the local
+subproject is `EXCLUDE_FROM_ALL` and costs no build time; the dependency is in place for
+[docs/TAC.md](docs/TAC.md) phase 5. `cmake/TamiasTacUI.cmake` sets `TAMIAS_TACUI_TARGET` to
+`TacUI::tacui_host` from either source — that is what phase 5 has to link.
 
 ## Windows MSI
 

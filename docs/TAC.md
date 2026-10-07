@@ -135,3 +135,13 @@ if (backend) {
 - **插件**：`HostApi.show_dialog` 的实现从 `app/shell/dialog/plugin_prompt_dialog.*`
   切到 `tac::DialogService`，插件二进制与 C# 侧零改动。
 - **wasm**：`src/ui/tac` 无 Qt，wasm 分支也构建它；`src/ui/qt` 只在桌面构建。
+- **TacUI**：自研那套的实现库，两条来源二选一，target 名一样（`TacUI::tacui_host` /
+  `TacUI::tacui`），都记在 `TAMIAS_TACUI_TARGET` 里：
+  - `TAMIAS_TACUI_SOURCE_DIR` 指向本地 checkout（`msvc` preset 默认 `C:/dev/TacUI`）——
+    当子工程编，改 TacUI 源码下次 `cmake --build` 就生效，不用重装；
+  - 留空 —— vcpkg 按 `vcpkg.json` 装的那份（`vcpkg-configuration.json` 指向 TacUI
+    自己的 git registry，依赖限定 `windows & x64`）。
+
+  Linux / wasm 不解析这个依赖。现在还没有目标链它，所以本地那份是 `EXCLUDE_FROM_ALL`、不占
+  编译时间；阶段 5 把自研实现长进 `src/ui/tac/` 时接上。见 [BUILD.md](../BUILD.md) 的
+  TacUI 一节。
