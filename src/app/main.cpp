@@ -4,7 +4,7 @@
 #include "app/base/qt_path.h"
 #include "app/base/log_buffer.h"
 #include "app/base/rhi_diagnostics.h"
-#include "app/base/rhi_startup.h"
+#include "app/base/rhi_cli.h"
 #include "app/base/startup_guard.h"
 #include "tamias_version.h"
 #include "command/core/command_system.h"

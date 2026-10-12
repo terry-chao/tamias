@@ -13,7 +13,7 @@ add_executable(tamias
   base/script_store.cpp
   base/rhi_backends.cpp
   base/qt_event_source.cpp
-  base/rhi_startup.cpp
+  base/rhi_cli.cpp
   base/startup_guard.cpp
   base/log_buffer.cpp
   base/rhi_diagnostics.cpp
