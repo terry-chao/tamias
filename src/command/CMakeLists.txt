@@ -41,6 +41,7 @@ add_library(tamias_command STATIC
   delete/delete_text_command.cpp
   # 导入
   import/import_drawing_command.cpp
+  import/import_mesh_command.cpp
   import/import_texture_command.cpp
 )
 add_library(tamias::command ALIAS tamias_command)

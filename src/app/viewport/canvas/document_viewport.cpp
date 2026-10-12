@@ -6,6 +6,8 @@
 #include "bim/host_geometry.h"
 #include "bim/wall_size.h"
 #include "command/edit/feature/edit_entity_grip_command.h"
+#include "app/texture/texture_image.h"
+#include "command/import/import_mesh_command.h"
 #include "command/import/import_texture_command.h"
 #include "command/import/import_drawing_command.h"
 #include "command/edit/material/replace_texture_command.h"
@@ -17,6 +19,7 @@
 #include "bim/length_text.h"
 #include "engine/base/log.h"
 #include "engine/document/picking.h"
+#include "engine/io/mesh_io.h"
 #include "engine/interaction/drag.h"
 #include "engine/interaction/drag_manager.h"
 #include "engine/render/text/font_fallback.h"
@@ -2035,6 +2038,60 @@ std::uint64_t DocumentViewport::import_texture(TextureAsset asset) {
   request_redraw();
   emit document_changed();
   return id;
+}
+
+std::uint64_t DocumentViewport::import_mesh_file(const std::string& path, const std::string& name) {
+  const std::filesystem::path source = path_from_utf8(path);
+  auto model = load_mesh_model(source);
+  if (!model) {
+    log_error(model.error());
+    return 0;
+  }
+
+  // 贴图解码留在 app 层：引擎只存 RGBA8，命令层不碰 Qt（见 engine/io/imported_model.h）。
+  // GLB 给的是内嵌压缩字节，OBJ 给的是外链路径——两条都走这里。
+  const auto decode_slot = [](const std::string& external_path,
+                              const std::vector<std::uint8_t>& bytes, const std::string& slot_name,
+                              TextureUsage usage, bool srgb) -> TextureAsset {
+    if (!bytes.empty()) {
+      const QByteArray raw(reinterpret_cast<const char*>(bytes.data()),
+                           static_cast<int>(bytes.size()));
+      if (auto asset = decode_texture_image(raw, slot_name, usage, srgb); asset) {
+        return std::move(*asset);
+      }
+      return {};
+    }
+    if (!external_path.empty()) {
+      if (auto asset = load_texture_image(path_to_qstring(path_from_utf8(external_path)), usage,
+                                          srgb);
+          asset) {
+        return std::move(*asset);
+      }
+    }
+    return {};
+  };
+
+  const std::string mesh_name = name.empty() ? path_to_utf8(source.filename()) : name;
+  ImportMeshCommand::Textures textures;
+  textures.albedo =
+      decode_slot(model->albedo_path, model->albedo_bytes, mesh_name, TextureUsage::Albedo, true);
+  textures.normal =
+      decode_slot(model->normal_path, model->normal_bytes, mesh_name, TextureUsage::Normal, false);
+  textures.orm = decode_slot(model->orm_path, model->orm_bytes, mesh_name, TextureUsage::Orm,
+                             false);
+
+  auto cmd = std::make_unique<ImportMeshCommand>(*document_, std::move(*model), mesh_name,
+                                                 Mat4::identity(), std::move(textures));
+  ImportMeshCommand* raw = cmd.get();
+  if (auto r = raw->execute(); !r) {
+    log_error(r.error());
+    return 0;
+  }
+  const std::uint64_t node_id = raw->node_id();
+  session_->command_system().push_executed(std::move(cmd));
+  request_redraw();
+  emit document_changed();
+  return node_id;
 }
 
 void DocumentViewport::replace_texture(std::uint64_t id, TextureAsset asset) {

@@ -29,6 +29,7 @@
 #include "command/edit/transform/transform_tool_command.h"
 #include "command/edit/reference/update_grid_command.h"
 #include "command/edit/annotation/update_text_command.h"
+#include "command/import/import_mesh_command.h"
 #include "bim/wall_size.h"
 #include "entity/family/host/structural/column/column_entity.h"
 
@@ -616,6 +617,22 @@ void register_commands(CommandRegistry& registry) {
   registry.register_command("delete_text", [](Document& doc, const CommandArgs& args) {
     return std::make_unique<DeleteTextCommand>(
         doc, static_cast<std::uint64_t>(arg_int(args, "text_id", 0)));
+  });
+
+  // ---- 导入网格（参考几何 / 占位体，不是构件）----
+  // 把 .obj / .glb 作为**导入网格**插进当前文档，一次一条撤销。
+  // 只走几何：命令层不带 Qt，GLB 内嵌贴图要在 app 层用 QImage 解（见
+  // DocumentViewport::import_mesh_file 与 docs/PLAN-MESHY.md）。
+  registry.register_command("import_mesh", [](Document& doc, const CommandArgs& args) {
+    Mat4 transform = Mat4::identity();
+    const Vec3 origin = arg_vec3(args, "origin").value_or(Vec3{});
+    const double uniform_scale = arg_double(args, "scale", 1.0);
+    if (origin.x != 0.f || origin.y != 0.f || origin.z != 0.f || uniform_scale != 1.0) {
+      const float s = static_cast<float>(uniform_scale);
+      transform = translate(origin) * scale(Vec3{s, s, s});
+    }
+    return std::make_unique<ImportMeshCommand>(doc, arg_string(args, "path", ""),
+                                              arg_string(args, "name", ""), transform);
   });
 }
 

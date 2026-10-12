@@ -192,6 +192,9 @@ class Document {
   void set_next_material_id(std::uint64_t id) {
     next_material_id_ = std::max<std::uint64_t>(1, id);
   }
+  // 从材质库摘掉一个材质（供命令 undo 用）。返回它是否存在。
+  // 调用方负责确认没有实体 / 场景节点还在引用它——擅自删会让那些引用变成悬空 id。
+  bool remove_material(std::uint64_t id) { return materials_.erase(id) != 0; }
 
   // ===== 纹理库（共享 RGBA8 资产，材质槽存 texture_id）=====
 

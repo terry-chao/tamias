@@ -185,6 +185,10 @@ class DocumentViewport final : public QWidget {
   void set_entity_material(std::uint64_t entity_id, const Material& material);
   std::uint64_t import_texture(TextureAsset asset);
   void replace_texture(std::uint64_t id, TextureAsset asset);
+  // 把本地网格文件（.obj / .glb）作为导入网格插进**当前**文档，一条撤销。
+  // 内嵌贴图在 app 层用 QImage 解码后一起落地（命令层不带 Qt）。
+  // 返回新建场景节点的 id；0 = 失败（错误已经进日志）。
+  std::uint64_t import_mesh_file(const std::string& path, const std::string& name = {});
   void update_library_material(const Material& material);
   void create_storey(const std::string& name, double elevation);
   void set_active_storey(std::uint64_t storey_id);
