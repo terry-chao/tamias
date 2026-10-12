@@ -210,6 +210,7 @@ OIT / 深度剥离——以及 UE 并不提供的 Hidden Line、剖切、构件�
 
 - [渲染管线与 RHI](RENDERING.md)：Tamias 完整版（含 shader、材质、总图）
 - [场景图](SCENE-GRAPH.md)：语义树与渲染侧投影
+- [Qt3D 对照](QT3D-VS-TAMIAS.md)：留存式实体树 + 声明式帧图那一端的对照
 - [视锥剔除](FRUSTUM-CULLING.md)：屏外不发 draw
 - [合批 / Instancing](INSTANCING.md)：G1 的 L0/L1/L2 三层
 - [超大规模三角](MASSIVE-GEOMETRY.md)：几十亿三角的路线

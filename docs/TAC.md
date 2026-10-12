@@ -145,3 +145,6 @@ if (backend) {
   Linux / wasm 不解析这个依赖。现在还没有目标链它，所以本地那份是 `EXCLUDE_FROM_ALL`、不占
   编译时间；阶段 5 把自研实现长进 `src/ui/tac/` 时接上。见 [BUILD.md](../BUILD.md) 的
   TacUI 一节。
+
+- **别和渲染侧混**：场景图与渲染器从来没用过 Qt（自研 RHI + 自研渲染线程），
+  这一刀换的只是 Qt Widgets 那一层。两者的定位差别见 [Qt3D 对照](QT3D-VS-TAMIAS.md)。
