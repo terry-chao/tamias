@@ -126,6 +126,8 @@ add_subdirectory(src/engine)
 add_subdirectory(src/entity)
 add_subdirectory(src/command)
 add_subdirectory(src/mcp)
+# AI 协议层（Meshy 等外部生成的请求 / 回包）：纯 C++，无 Qt，排在 mcp 之后（要用它的 Json）。
+add_subdirectory(src/ai)
 # 检索挂在 MCP 门面的读侧，所以排在 mcp 之后；无 Qt / 无 OCCT，wasm 分支也要它。
 add_subdirectory(src/rag)
 add_subdirectory(src/host)

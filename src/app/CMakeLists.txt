@@ -40,6 +40,8 @@ add_executable(tamias
   shell/panel/extension_watcher.cpp
   # 内置 AI 助手：OpenAI 兼容客户端（对话面板在 shell/panel/ai_panel.cpp）
   ai/ai_client.cpp
+  # AI 生成 3D：Meshy 客户端（建任务 → 轮询 → 下载；协议在 src/ai/meshy_protocol）
+  ai/meshy_client.cpp
   # 三维视口：画布本体 / 画布上的浮层 / 右侧工具列 / 录制回放
   viewport/canvas/document_viewport.cpp
   viewport/overlay/view_cube_widget.cpp
@@ -153,6 +155,7 @@ target_link_libraries(tamias
       tamias::interaction
     tamias::host
     tamias::mcp
+    tamias::ai
     tamias::rag
     tamias::plugin
     tamias::ifc
