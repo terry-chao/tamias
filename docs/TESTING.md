@@ -138,7 +138,7 @@ CMake 用 `gtest_discover_tests(... DISCOVERY_MODE PRE_TEST)`，并给 OCCT DLL 
 
 5. **没有像素级回归。** Mock RHI 能证明「会提交这些 draw」，不能证明「屏幕上长什么样」。离屏 PNG + 金样图后置，见 [RENDER-SCENE.md](RENDER-SCENE.md)。
 6. **Pin 金样目录约定已落地。** 完整夹具是 `assets/samples/render/<name>/{scene.trscn,scene.meta.json}`；裸 `.trscn` 不算金样。像素对比仍未做。
-7. **三个 RHI 后端都没有设备测试。** 创建 swapchain / 上传网格 / 编译 shader / `draw_channel` 真实路径未覆盖。WebGL 线框降级成实体着色也无人断言。
+7. **三个 RHI 后端都没有设备测试。** 创建 swapchain / 上传网格 / 编译 shader / `draw_channel` 真实路径未覆盖。WebGL 线框降级成实体着色也无人断言。已有的那条离屏测试（`tests/offscreen_render_tests.cpp`）**只断言清屏色**——所以「帧内解绑上下文、draw 全被丢」这类缺陷能一路绿灯通过（真实案例见 [RHI 卡死 / 崩溃定位](RHI-TRIAGE.md) §6.1）。补一条「画一个已知三角 + 断言像素」的门槛很低。
 
 ### 格式与造型
 

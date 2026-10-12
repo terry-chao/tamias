@@ -6,6 +6,7 @@
 - [UE5 对照](../UE5-VS-TAMIAS.md) —— UE5 管线与 Tamias 的逐维度异同
 - [Qt3D 对照](../QT3D-VS-TAMIAS.md) —— 框架式场景图（Aspect / FrameGraph）与投影式渲染的异同
 - [RHI 启动](../RHI-STARTUP.md) —— 探测 / 降级 / 块名单 / 安全模式（`--probe-rhi`）
+- [卡死 / 崩溃定位](../RHI-TRIAGE.md) —— 一次 NVIDIA 驱动现场复盘 + RHI 层通用定位手法
 - [视锥、NDC 与屏幕](../NDC.md) —— MVP 之后是立方体，不是一张纸
 - [OpenGL 后端](../OPENGL.md) —— 窗口、VBO/IBO、draw、贴图绑定
 - [浏览器 WebGPU](../WGPU.md) —— WASM 查看器的 RHI（桌面不做 wgpu-native）

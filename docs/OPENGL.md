@@ -26,7 +26,10 @@ OpenGL 后端  → 把这些动词变成 glBind* / glDrawElements / SwapBuffers
 
 Windows 上 Qt 控件本身不当 GL 表面。UI 线程在视口里再开一个**子 HWND**（`create_opengl_surface_hwnd`），像素格式带深度、双缓冲。这个 HWND 设成 `HTTRANSPARENT`，鼠标仍给下面的 Qt 视口（旋转、点选）。
 
-每帧 `DocumentViewport::native_handle()` 交出这个 HWND。渲染线程 `begin_frame`：`GetDC` + `wglMakeCurrent`，画完 `SwapBuffers`。资源创建（缓冲、贴图、shader）走一个隐藏 dummy 窗口上的**同一上下文**。
+每帧 `DocumentViewport::native_handle()` 交出这个 HWND。渲染线程 `begin_frame`：`GetDC` + `wglMakeCurrent`，画完 `SwapBuffers`。
+资源创建（缓冲、贴图、shader）与离屏出图借用**同一个上下文**，只是换一个 drawable ——
+那个 drawable 是隐藏 dummy 窗口（自有 `CS_OWNDC` 窗口类，不用系统 `STATIC` 的共享 DC）。
+切换规则见 §6。
 
 Linux 是 GLX + X11 窗口，逻辑一样。
 
@@ -98,7 +101,7 @@ Clip：CPU 的 `perspective` 按 Vulkan 的 Z∈[0,1] 算。OpenGL 要 NDC Z∈[
 
 ## 4. 纹理怎么绑
 
-上传（渲染线程，dummy 上下文）：
+上传（渲染线程；只要求「有 current context」，帧内不会把窗口上下文切走，见 §6）：
 
 - `glGenTextures` → `glTexImage2D` 整张 RGBA8
 - albedo 用 `GL_SRGB8_ALPHA8`（采样时硬件转线性）
@@ -132,3 +135,34 @@ Shader：HLSL → SPIR-V。OpenGL 加载 `*.gl.spv`，`glShaderBinary` + `glSpec
 | 它不管什么 | 特征树、OCCT、点选、视锥剔除、合批 |
 
 换 Vulkan 时，上面 `draw_channel` 一行都不用改；变的是 `opengl_device.cpp` 里那些 `gl*` 换成 `vkCmd*`。OpenGL 在项目里就是「同一套绘制剧本的 GL 方言」。
+
+---
+
+## 6. 上下文怎么管：少切、别切错时候
+
+一个文档 = 一条渲染线程 = **一个 GL 4.5 Core 上下文**，dummy / 子 HWND 两块 drawable 共用它。
+麻烦在于 `wglMakeCurrent` / `glXMakeCurrent` **每次都要进驱动的全局锁**，所以规则是：
+**只在目标真的变化时才切**。
+
+设备内部记一个状态（`CurrentTarget`：`None` / `Dummy` / `Window`）与当前 HDC / XID，三个入口都幂等：
+
+| 入口 | 语义 | 谁用 |
+|---|---|---|
+| `ensure_current()` | 「本设备的上下文在这个线程上 current」即可，挂在哪个 drawable 上都行；若已经 current 则**一次驱动调用都不发** | 建/写/删缓冲、贴图、shader、管线；离屏 readback |
+| `make_current_dummy()` | 明确切到 dummy 窗口 | 探测、需要脱离窗口时 |
+| `make_current_hdc()` / `make_current_window()` | 明确切到某个窗口 drawable | 呈现（`SwapBuffers` 必须发生在窗口 DC 上） |
+| `release_current()` | 解绑（幂等） | 帧边界、销毁设备 |
+
+于是**一帧只切几次**：`begin_frame` 切到窗口 drawable → `end_frame` 呈现后解绑；
+中间的实例数据写入、纹理切换、draw 都在同一个 current context 下完成。
+
+> 这条规则是有教训的：早期版本的每个 GL 操作都「切进 dummy → 干活 → 解绑」，
+> 结果**帧内写一次实例缓冲就把窗口上下文解绑了**，其后的 `draw_indexed` 全在
+> 「没有 current context」的状态下发出（GL 调用静默失效），OpenGL 后端实际上只画出清屏色。
+> 完整复盘与定位方法见 [RHI 卡死 / 崩溃定位](RHI-TRIAGE.md)。
+
+## 延伸阅读
+
+- [RHI 卡死 / 崩溃定位](RHI-TRIAGE.md)：一次 NVIDIA 驱动现场的完整证据链，以及 RHI 层的通用定位手法
+- [RHI 启动](RHI-STARTUP.md)：探测、降级、块名单、安全模式
+- [管线与 RHI](RENDERING.md)：一帧的绘制顺序与 RHI 抽象
