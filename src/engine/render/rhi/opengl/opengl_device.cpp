@@ -311,9 +311,9 @@ class OpenGLDevice final : public RHIDevice {
 
   [[nodiscard]] RhiGpuIdentity gpu_identity() const override {
     RhiGpuIdentity identity{};
-    // 读 GL 字符串需要当前上下文；探测阶段没有窗口，借用 dummy context。
+    // 读 GL 字符串需要当前上下文；探测阶段没有窗口，用 dummy context 顶上。
     auto* self = const_cast<OpenGLDevice*>(this);
-    if (!self->make_current_dummy()) {
+    if (!self->ensure_current()) {
       return identity;
     }
     const auto read_string = [](GLenum name) -> std::string {
@@ -348,7 +348,7 @@ class OpenGLDevice final : public RHIDevice {
 
   // 空提交：GL 的提交是隐式的，glFinish 逼驱动把已排队的命令真的跑完并报错。
   Result<void> submit_noop() override {
-    if (auto r = make_current_dummy(); !r) {
+    if (auto r = ensure_current(); !r) {
       return Err(r.error());
     }
     gl::Finish();
@@ -362,12 +362,11 @@ class OpenGLDevice final : public RHIDevice {
 
   Result<std::unique_ptr<Buffer>> create_buffer(const BufferDesc& desc) override;
   Result<std::unique_ptr<Texture>> create_texture(const TextureDesc& desc) override {
-    if (auto r = make_current_dummy(); !r) {
+    if (auto r = ensure_current(); !r) {
       return Err(r.error());
     }
     GLuint texture = 0;
     gl::GenTextures(1, &texture);
-    release_current();
     if (texture == 0) {
       return Err("glGenTextures failed");
     }
@@ -388,12 +387,24 @@ class OpenGLDevice final : public RHIDevice {
   Result<void> execute(CommandList&) override { return {}; }
   Result<void> end_frame(SwapChain& swap_chain) override;
   void wait_idle() override {
-    if (make_current_dummy()) {
+    if (ensure_current()) {
       gl::Finish();
       release_current();
     }
   }
 
+  // 上下文切换：wglMakeCurrent / glXMakeCurrent 每次都要进驱动的全局锁（Windows 上
+  // 实测就是卡在 nvoglv64 里等锁），所以下面三个入口都做成幂等的——目标没变就一次
+  // 驱动调用都不发。
+  //
+  // - ensure_current()：只要求「本设备的上下文在这个线程上 current」，挂在哪个
+  //   drawable 上无所谓。资源创建 / 写入 / 销毁都走它，于是它们不会把帧内已经建好的
+  //   窗口上下文踢掉（踢掉之后紧跟的 draw 就没有 current context 了）。
+  // - make_current_dummy()：切到隐藏的 dummy 窗口，离屏出图和探测用。
+  // - make_current_hdc() / make_current_window()：切到某个窗口的 drawable，呈现要用它。
+  //
+  // 只有帧边界（begin_frame / end_frame）才真的来回切。
+  Result<void> ensure_current();
   Result<void> make_current_dummy();
   Result<void> make_current_hdc(HDC hdc);
   Result<void> make_current_window(const NativeWindowHandle& window
@@ -418,10 +429,15 @@ class OpenGLDevice final : public RHIDevice {
   GLuint vao_ = 0;
   bool procs_loaded_ = false;
 
+  // 上下文现在挂在哪个 drawable 上。只记状态：目标没变就不碰驱动。
+  enum class CurrentTarget : std::uint8_t { None, Dummy, Window };
+  CurrentTarget current_ = CurrentTarget::None;
+
 #if defined(_WIN32)
   HWND dummy_hwnd_ = nullptr;
   HDC dummy_hdc_ = nullptr;
   HGLRC context_ = nullptr;
+  HDC current_hdc_ = nullptr;  // current_ == Window 时的具体 HDC
 #else
   Display* display_ = nullptr;
   Window dummy_window_ = 0;
@@ -429,6 +445,7 @@ class OpenGLDevice final : public RHIDevice {
   Colormap colormap_ = 0;
   XVisualInfo* visual_ = nullptr;
   bool owns_display_ = false;
+  Window current_window_ = 0;  // current_ == Window 时的具体 XID
 #endif
 };
 
@@ -439,9 +456,8 @@ OpenGLBuffer::~OpenGLBuffer() {
   if (!buffer_ || !device_) {
     return;
   }
-  if (device_->make_current_dummy()) {
+  if (device_->ensure_current()) {
     gl::DeleteBuffers(1, &buffer_);
-    device_->release_current();
   }
   buffer_ = 0;
 }
@@ -453,13 +469,12 @@ Result<void> OpenGLBuffer::write(std::uint64_t offset, std::span<const std::byte
   if (!device_) {
     return Err("OpenGL buffer has no device");
   }
-  if (auto r = device_->make_current_dummy(); !r) {
+  if (auto r = device_->ensure_current(); !r) {
     return Err(r.error());
   }
   gl::BindBuffer(target_, buffer_);
   gl::BufferSubData(target_, static_cast<GLintptr>(offset), static_cast<GLsizeiptr>(data.size()),
                     data.data());
-  device_->release_current();
   return {};
 }
 
@@ -467,9 +482,8 @@ OpenGLTexture::~OpenGLTexture() {
   if (!texture_ || !device_) {
     return;
   }
-  if (device_->make_current_dummy()) {
+  if (device_->ensure_current()) {
     gl::DeleteTextures(1, &texture_);
-    device_->release_current();
   }
   texture_ = 0;
 }
@@ -527,7 +541,7 @@ Result<void> OpenGLTexture::write_subresource(std::uint32_t mip, std::uint32_t l
   if (data.size() < expected) {
     return Err("OpenGL texture write data too small");
   }
-  if (auto r = device_->make_current_dummy(); !r) {
+  if (auto r = device_->ensure_current(); !r) {
     return Err(r.error());
   }
   const GLenum target = gl_texture_target(desc_);
@@ -559,7 +573,6 @@ Result<void> OpenGLTexture::write_subresource(std::uint32_t mip, std::uint32_t l
       desc_.format != TextureDesc::Format::R16G16_SFLOAT) {
     gl::TexParameteri(target, GL_TEXTURE_MAX_ANISOTROPY_EXT, 8);
   }
-  device_->release_current();
   return {};
 }
 
@@ -615,8 +628,27 @@ Result<void> set_pixel_format(HDC hdc) {
   return {};
 }
 
+// dummy 窗口的窗口类：**必须**是 CS_OWNDC 的自有类。用 "STATIC" 拿到的 DC 来自系统的
+// 公用 DC 缓存，驱动会把这个 DC 当 drawable 记账；它之后被别的窗口借走，驱动自己的
+// buffer / present 线程就会踩到已经失效的映射（Windows 上表现为在 nvoglv64 的 present
+// 路径里 0xC0000005 崩掉）。GL 子窗口那边（tamias_gl_surface_class）本来就是 OWNDC。
+const char* dummy_window_class() {
+  static const char* kName = [] {
+    WNDCLASSEXA wc{};
+    wc.cbSize = sizeof(wc);
+    wc.style = CS_OWNDC;
+    wc.lpfnWndProc = DefWindowProcA;
+    wc.hInstance = GetModuleHandleA(nullptr);
+    wc.lpszClassName = "tamias_gl_dummy";
+    RegisterClassExA(&wc);
+    return wc.lpszClassName;
+  }();
+  return kName;
+}
+
 Result<void> OpenGLDevice::create_dummy_context() {
-  dummy_hwnd_ = CreateWindowExA(0, "STATIC", "tamias_gl_dummy", WS_POPUP, 0, 0, 1, 1, nullptr,
+  dummy_hwnd_ = CreateWindowExA(0, dummy_window_class(), "tamias_gl_dummy", WS_POPUP, 0, 0, 1, 1,
+                                nullptr,
                                 nullptr, GetModuleHandleA(nullptr), nullptr);
   if (!dummy_hwnd_) {
     return Err("CreateWindowEx for OpenGL dummy failed");
@@ -666,8 +698,8 @@ Result<void> OpenGLDevice::create_dummy_context() {
   if (!context_) {
     return Err("wglCreateContextAttribsARB failed (need OpenGL 4.5)");
   }
-  if (!wglMakeCurrent(dummy_hdc_, context_)) {
-    return Err("wglMakeCurrent dummy failed");
+  if (auto current = make_current_dummy(); !current) {
+    return Err(current.error());
   }
 
   gl::GenBuffers(1, &push_ubo_);
@@ -675,14 +707,26 @@ Result<void> OpenGLDevice::create_dummy_context() {
   gl::BufferData(GL_UNIFORM_BUFFER, 256, nullptr, GL_DYNAMIC_DRAW);
   gl::GenVertexArrays(1, &vao_);
 
-  wglMakeCurrent(nullptr, nullptr);
+  release_current();
   return {};
 }
 
+Result<void> OpenGLDevice::ensure_current() {
+  if (current_ != CurrentTarget::None) {
+    return {};
+  }
+  return make_current_dummy();
+}
+
 Result<void> OpenGLDevice::make_current_dummy() {
+  if (current_ == CurrentTarget::Dummy) {
+    return {};
+  }
   if (!wglMakeCurrent(dummy_hdc_, context_)) {
     return Err("wglMakeCurrent dummy failed");
   }
+  current_ = CurrentTarget::Dummy;
+  current_hdc_ = nullptr;
   return {};
 }
 
@@ -690,9 +734,14 @@ Result<void> OpenGLDevice::make_current_hdc(HDC hdc) {
   if (!hdc) {
     return Err("OpenGL make_current missing HDC");
   }
+  if (current_ == CurrentTarget::Window && current_hdc_ == hdc) {
+    return {};
+  }
   if (!wglMakeCurrent(hdc, context_)) {
     return Err("wglMakeCurrent swapchain failed");
   }
+  current_ = CurrentTarget::Window;
+  current_hdc_ = hdc;
   return {};
 }
 
@@ -717,11 +766,18 @@ Result<void> OpenGLDevice::make_current_window(const NativeWindowHandle& window,
   return {};
 }
 
-void OpenGLDevice::release_current() { wglMakeCurrent(nullptr, nullptr); }
+void OpenGLDevice::release_current() {
+  if (current_ == CurrentTarget::None) {
+    return;
+  }
+  wglMakeCurrent(nullptr, nullptr);
+  current_ = CurrentTarget::None;
+  current_hdc_ = nullptr;
+}
 
 void OpenGLDevice::destroy() {
   if (context_) {
-    wglMakeCurrent(dummy_hdc_, context_);
+    (void)make_current_dummy();  // 删 GL 对象得有 current context
     if (vao_) {
       gl::DeleteVertexArrays(1, &vao_);
       vao_ = 0;
@@ -730,7 +786,7 @@ void OpenGLDevice::destroy() {
       gl::DeleteBuffers(1, &push_ubo_);
       push_ubo_ = 0;
     }
-    wglMakeCurrent(nullptr, nullptr);
+    release_current();
     wglDeleteContext(context_);
     context_ = nullptr;
   }
@@ -824,11 +880,11 @@ Result<void> OpenGLDevice::create_dummy_context() {
   if (!context_) {
     return Err("glXCreateContextAttribsARB failed (need OpenGL 4.5)");
   }
-  if (!glXMakeCurrent(display_, dummy_window_, context_)) {
-    return Err("glXMakeCurrent dummy failed");
+  if (auto current = make_current_dummy(); !current) {
+    return Err(current.error());
   }
   if (!gl::load_procs()) {
-    glXMakeCurrent(display_, None, nullptr);
+    release_current();
     return Err("failed to load OpenGL entry points");
   }
   procs_loaded_ = true;
@@ -838,14 +894,26 @@ Result<void> OpenGLDevice::create_dummy_context() {
   gl::BufferData(GL_UNIFORM_BUFFER, 256, nullptr, GL_DYNAMIC_DRAW);
   gl::GenVertexArrays(1, &vao_);
 
-  glXMakeCurrent(display_, None, nullptr);
+  release_current();
   return {};
 }
 
+Result<void> OpenGLDevice::ensure_current() {
+  if (current_ != CurrentTarget::None) {
+    return {};
+  }
+  return make_current_dummy();
+}
+
 Result<void> OpenGLDevice::make_current_dummy() {
+  if (current_ == CurrentTarget::Dummy) {
+    return {};
+  }
   if (!glXMakeCurrent(display_, dummy_window_, context_)) {
     return Err("glXMakeCurrent dummy failed");
   }
+  current_ = CurrentTarget::Dummy;
+  current_window_ = 0;
   return {};
 }
 
@@ -854,24 +922,36 @@ Result<void> OpenGLDevice::make_current_window(const NativeWindowHandle& window)
     return Err("OpenGL swapchain missing X11 display/window");
   }
   auto* display = static_cast<Display*>(window.display);
+  const auto xid = static_cast<Window>(window.window);
+  if (current_ == CurrentTarget::Window && current_window_ == xid) {
+    // 同一个窗口：display_ 还是那份，不必再进驱动。
+    return {};
+  }
   if (!glXMakeCurrent(display, static_cast<Window>(window.window), context_)) {
     return Err("glXMakeCurrent swapchain failed");
   }
   // Prefer the view's display for present; keep a pointer for SwapBuffers.
   display_ = display;
   owns_display_ = false;
+  current_ = CurrentTarget::Window;
+  current_window_ = xid;
   return {};
 }
 
 void OpenGLDevice::release_current() {
+  if (current_ == CurrentTarget::None) {
+    return;
+  }
   if (display_) {
     glXMakeCurrent(display_, None, nullptr);
   }
+  current_ = CurrentTarget::None;
+  current_window_ = 0;
 }
 
 void OpenGLDevice::destroy() {
   if (context_ && display_) {
-    glXMakeCurrent(display_, dummy_window_, context_);
+    (void)make_current_dummy();  // 删 GL 对象得有 current context
     if (vao_) {
       gl::DeleteVertexArrays(1, &vao_);
       vao_ = 0;
@@ -880,7 +960,7 @@ void OpenGLDevice::destroy() {
       gl::DeleteBuffers(1, &push_ubo_);
       push_ubo_ = 0;
     }
-    glXMakeCurrent(display_, None, nullptr);
+    release_current();
     glXDestroyContext(display_, context_);
     context_ = nullptr;
   }
@@ -913,7 +993,7 @@ Result<void> OpenGLDevice::initialize() {
 }
 
 Result<std::unique_ptr<Buffer>> OpenGLDevice::create_buffer(const BufferDesc& desc) {
-  if (auto r = make_current_dummy(); !r) {
+  if (auto r = ensure_current(); !r) {
     return Err(r.error());
   }
   GLenum target = GL_ARRAY_BUFFER;
@@ -927,7 +1007,6 @@ Result<std::unique_ptr<Buffer>> OpenGLDevice::create_buffer(const BufferDesc& de
   gl::BindBuffer(target, buffer);
   gl::BufferData(target, static_cast<GLsizeiptr>(desc.size), nullptr,
                  desc.host_visible ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW);
-  release_current();
   return std::make_unique<OpenGLBuffer>(this, buffer, desc, target);
 }
 
@@ -939,7 +1018,7 @@ Result<std::unique_ptr<ShaderModule>> OpenGLDevice::create_shader_module(
   if (!gl::ShaderBinary || !gl::SpecializeShader) {
     return Err("OpenGL SPIR-V unsupported (need GL_ARB_gl_spirv / glSpecializeShader)");
   }
-  if (auto r = make_current_dummy(); !r) {
+  if (auto r = ensure_current(); !r) {
     return Err(r.error());
   }
   const GLenum type =
@@ -949,7 +1028,6 @@ Result<std::unique_ptr<ShaderModule>> OpenGLDevice::create_shader_module(
   gl::ShaderBinary(1, &shader, GL_SHADER_BINARY_FORMAT_SPIR_V, desc.spirv.data(), byte_size);
   if (GLenum err = gl::GetError(); err != 0) {
     gl::DeleteShader(shader);
-    release_current();
     return Err("glShaderBinary failed (GL error " + std::to_string(err) + ")");
   }
   const GLchar* entry = desc.entry.empty() ? "main" : desc.entry.c_str();
@@ -962,10 +1040,8 @@ Result<std::unique_ptr<ShaderModule>> OpenGLDevice::create_shader_module(
     std::string log(static_cast<std::size_t>(std::max(log_len, 1)), '\0');
     gl::GetShaderInfoLog(shader, log_len, nullptr, log.data());
     gl::DeleteShader(shader);
-    release_current();
     return Err(std::string("SPIR-V specialize failed: ") + log.c_str());
   }
-  release_current();
   return std::make_unique<OpenGLShaderModule>(shader);
 }
 
@@ -975,7 +1051,7 @@ Result<std::unique_ptr<PipelineState>> OpenGLDevice::create_pipeline(const Pipel
   if (!vs || !fs) {
     return Err("pipeline requires vertex and fragment shaders");
   }
-  if (auto r = make_current_dummy(); !r) {
+  if (auto r = ensure_current(); !r) {
     return Err(r.error());
   }
   const GLuint program = gl::CreateProgram();
@@ -990,10 +1066,8 @@ Result<std::unique_ptr<PipelineState>> OpenGLDevice::create_pipeline(const Pipel
     std::string log(static_cast<std::size_t>(std::max(log_len, 1)), '\0');
     gl::GetProgramInfoLog(program, log_len, nullptr, log.data());
     gl::DeleteProgram(program);
-    release_current();
     return Err(std::string("program link failed: ") + log.c_str());
   }
-  release_current();
   return std::make_unique<OpenGLPipeline>(program, desc.wireframe, desc.depth_test,
                                           desc.depth_write, desc.blend, desc.topology,
                                           desc.instanced);
@@ -1013,7 +1087,7 @@ OpenGLSwapChain::~OpenGLSwapChain() {
 }
 
 Result<void> OpenGLOffscreenTarget::make_current_and_bind() {
-  if (auto r = device_->make_current_dummy(); !r) {
+  if (auto r = device_->ensure_current(); !r) {
     return Err(r.error());
   }
   gl::BindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
@@ -1035,7 +1109,7 @@ Result<void> OpenGLOffscreenTarget::create() {
   if (device_ == nullptr || !entries_ready) {
     return Err("offscreen target: OpenGL framebuffer entry points unavailable");
   }
-  if (auto r = device_->make_current_dummy(); !r) {
+  if (auto r = device_->ensure_current(); !r) {
     return Err(r.error());
   }
   gl::GenFramebuffers(1, &framebuffer_);
@@ -1057,7 +1131,6 @@ Result<void> OpenGLOffscreenTarget::create() {
 
   const GLenum status = gl::CheckFramebufferStatus(GL_FRAMEBUFFER);
   gl::BindFramebuffer(GL_FRAMEBUFFER, 0);
-  device_->release_current();
   if (status != GL_FRAMEBUFFER_COMPLETE) {
     destroy();
     return Err("offscreen framebuffer incomplete");
@@ -1072,7 +1145,7 @@ void OpenGLOffscreenTarget::destroy() {
   if (framebuffer_ == 0 && color_ == 0 && depth_ == 0) {
     return;
   }
-  if (!device_->make_current_dummy()) {
+  if (!device_->ensure_current()) {
     return;  // 没有上下文就删不掉 GL 对象，只能留给驱动回收
   }
   if (depth_ != 0) {
@@ -1087,7 +1160,6 @@ void OpenGLOffscreenTarget::destroy() {
     gl::DeleteFramebuffers(1, &framebuffer_);
     framebuffer_ = 0;
   }
-  device_->release_current();
 }
 
 Result<void> OpenGLOffscreenTarget::read_back_rgba(std::vector<std::uint8_t>& out) {
@@ -1100,7 +1172,6 @@ Result<void> OpenGLOffscreenTarget::read_back_rgba(std::vector<std::uint8_t>& ou
   out.resize(static_cast<std::size_t>(width_) * height_ * 4);
   gl::ReadPixels(0, 0, static_cast<GLsizei>(width_), static_cast<GLsizei>(height_), GL_RGBA,
                  GL_UNSIGNED_BYTE, out.data());
-  device_->release_current();
   // GL 的原点在左下：翻成左上原点，和 Vulkan 那边保持同一套约定。
   const std::size_t row = static_cast<std::size_t>(width_) * 4;
   for (std::uint32_t y = 0; y < height_ / 2; ++y) {
