@@ -1,4 +1,4 @@
-# rhi_startup —— 图形后端启动选择组件
+# rhi_selection —— 图形后端选择组件
 
 一个**与宿主无关**的小组件，只干一件事：**这台机器上该用哪个图形后端，怎么决定，
 坏了怎么办。** 它不参与任何实际渲染——只负责「选」，选完把后端名字交回去。
@@ -17,7 +17,7 @@
                  └───────────────┬───────────────────────────────────────────┬──────────────────┘
                                  │ 提供输入                                   │ 实现 IBackendDevice
                  ┌───────────────▼───────────────────────────────────────────▼──────────────────┐
-                 │                          tamias::rhi_startup                                     │
+                 │                          tamias::rhi_selection                                   │
                  │                                                                                 │
                  │  decide_startup()  决策链：安全模式 > 策略 > 命令行 > 偏好 > 上次可用 > 兜底   │
                  │  probe_rhi()       按候选顺序试：建设备 → 查块名单 → 空提交 → 离屏像素         │
@@ -30,14 +30,14 @@
 
 | 头文件 | 内容 |
 |---|---|
-| `rhi_startup/backend.h` | `GraphicsBackend` 枚举 + 名字互转 |
-| `rhi_startup/os.h` | 平台枚举（块名单要按平台区分驱动版本号写法） |
-| `rhi_startup/identity.h` | `RhiGpuIdentity`（厂商 / 设备号 / 驱动版本…）+ 指纹 |
-| `rhi_startup/blocklist.h` | `RhiBlocklist` / `RhiPolicy` + 解析（JSON 扁平子集） |
-| `rhi_startup/decision.h` | `RhiStartupInput` / `RhiStartupDecision` / `decide_rhi_startup()` |
-| `rhi_startup/device.h` | `IBackendDevice` + `BackendDeviceFactory`（**宿主接入点**） |
-| `rhi_startup/probe.h` | `RhiProbeOptions` / `RhiProbeReport` / `probe_rhi()` |
-| `rhi_startup/startup.h` | `RhiStartupEnvironment` / `run_rhi_startup()`（决策 + 探测） |
+| `rhi_selection/backend.h` | `GraphicsBackend` 枚举 + 名字互转 |
+| `rhi_selection/os.h` | 平台枚举（块名单要按平台区分驱动版本号写法） |
+| `rhi_selection/identity.h` | `RhiGpuIdentity`（厂商 / 设备号 / 驱动版本…）+ 指纹 |
+| `rhi_selection/blocklist.h` | `RhiBlocklist` / `RhiPolicy` + 解析（JSON 扁平子集） |
+| `rhi_selection/decision.h` | `RhiStartupInput` / `RhiStartupDecision` / `decide_rhi_startup()` |
+| `rhi_selection/device.h` | `IBackendDevice` + `BackendDeviceFactory`（**宿主接入点**） |
+| `rhi_selection/probe.h` | `RhiProbeOptions` / `RhiProbeReport` / `probe_rhi()` |
+| `rhi_selection/startup.h` | `RhiStartupEnvironment` / `run_rhi_startup()`（决策 + 探测） |
 
 ## 接入步骤（给另一个程序用）
 
@@ -56,6 +56,6 @@
 
 这个目录不依赖 tamias 的其它源码（除 `engine/base/result.h`）。把它拷进你的工程，
 带上 `result.h`（或换成你自己的错误类型），用 `add_subdirectory` 或
-`FetchContent` 接进来即可，目标名 `tamias::rhi_startup`。
+`FetchContent` 接进来即可，目标名 `tamias::rhi_selection`。
 
-架构与行为细节：`docs/RHI-STARTUP.md`。测试：`tests/rhi_startup_tests.cpp`（17 条，全部不需要 GPU）。
+架构与行为细节：`docs/RHI-STARTUP.md`。测试：`tests/rhi_selection_tests.cpp`（17 条，全部不需要 GPU）。

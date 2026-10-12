@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rhi_startup/probe.h"
+#include "rhi_selection/probe.h"
 
 #include <cstddef>
 #include <optional>

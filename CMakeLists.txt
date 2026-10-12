@@ -120,8 +120,8 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/TamiasDependencies.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/TamiasTacUI.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/TamiasTracy.cmake")
 
-# 图形后端启动选择组件：引擎的 RHI 依赖它，所以要排在 engine 之前。
-add_subdirectory(src/rhi_startup)
+# 图形后端选择组件（决策 / 探测 / 降级）：引擎的 RHI 依赖它，所以要排在 engine 之前。
+add_subdirectory(src/rhi_selection)
 add_subdirectory(src/engine)
 add_subdirectory(src/entity)
 add_subdirectory(src/command)

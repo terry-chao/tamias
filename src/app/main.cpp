@@ -10,7 +10,7 @@
 #include "command/core/command_system.h"
 #include "engine/base/log.h"
 #include "engine/render/rhi/rhi_selection_device.h"
-#include "rhi_startup/startup.h"
+#include "rhi_selection/startup.h"
 #include "engine/document/scene_capture.h"
 #include "engine/io/mesh_io.h"
 #include "engine/render/runtime/render_runtime.h"
@@ -107,7 +107,7 @@ int main(int argc, char* argv[]) {
     tamias::log_warn("上次启动没走完（可能在建设备/首帧崩了），本次强制安全模式");
   }
   tamias::AppSettings& settings = tamias::AppSettings::instance();
-  // 决策 + 探测一步到位（组件入口，见 src/rhi_startup/startup.h）。
+  // 决策 + 探测一步到位（组件入口，见 src/rhi_selection/startup.h）。
   tamias::RhiStartupEnvironment startup_env{};
   startup_env.cli_backend = cli.backend;
   startup_env.cli_safe_mode = cli.safe_mode;

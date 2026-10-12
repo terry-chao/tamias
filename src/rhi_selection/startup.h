@@ -1,9 +1,9 @@
 #pragma once
 
-#include "rhi_startup/blocklist.h"
-#include "rhi_startup/decision.h"
-#include "rhi_startup/device.h"
-#include "rhi_startup/probe.h"
+#include "rhi_selection/blocklist.h"
+#include "rhi_selection/decision.h"
+#include "rhi_selection/device.h"
+#include "rhi_selection/probe.h"
 
 #include <optional>
 

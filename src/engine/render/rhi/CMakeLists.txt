@@ -1,14 +1,14 @@
 add_library(tamias_rhi STATIC
   device_factory.cpp
-  # 把 RHIDevice 适配成启动选择组件的 IBackendDevice。
-  # 选择逻辑（GPU 身份 / 块名单 / 策略 / 决策 / 探测）本身在 tamias::rhi_startup，
-  # 见 src/rhi_startup/ 与 docs/RHI-STARTUP.md。
+  # 把 RHIDevice 适配成后端选择组件的 IBackendDevice。
+  # 选择逻辑（GPU 身份 / 块名单 / 策略 / 决策 / 探测）本身在 tamias::rhi_selection，
+  # 见 src/rhi_selection/ 与 docs/RHI-STARTUP.md。
   rhi_selection_device.cpp
 )
 add_library(tamias::rhi ALIAS tamias_rhi)
 target_include_directories(tamias_rhi PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tamias_rhi PUBLIC
-  tamias::base tamias::math tamias::graphics tamias::rhi_startup)
+  tamias::base tamias::math tamias::graphics tamias::rhi_selection)
 
 if(TAMIAS_ENABLE_VULKAN_BACKEND)
   add_subdirectory(vulkan)
