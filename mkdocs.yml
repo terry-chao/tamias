@@ -100,6 +100,7 @@ nav:
       - AI 接入（MCP）: DECISION-AI-INTEGRATION.md
       - RAG 接入: DECISION-RAG.md
       - RAG 实施计划: PLAN-RAG.md
+      - AI 生成 3D（Meshy）: PLAN-MESHY.md
   - BIM:
       - BIM 总览: bim/index.md
       - BIM 业务层: BIM.md
