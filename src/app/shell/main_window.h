@@ -34,6 +34,10 @@ class QTimer;
 
 namespace tamias {
 
+namespace ai {
+class MeshyClient;
+}
+
 class PropertyPanel;
 class HandleInspector;
 class SceneDebuggerWindow;
@@ -62,6 +66,9 @@ class MainWindow final : public QMainWindow {
                        McpPolicy policy = McpPolicy::kReadOnly);
   // 打开 AI 面板并把这句话发出去（--ai-prompt）。等文档打开后再发。
   void ask_ai(const QString& prompt);
+  // 用 Meshy 生成一个网格并导入当前文档（--meshy-prompt）。
+  // 生成是分钟级：进度走状态栏，成功后才出现一次可撤销的导入。
+  void generate_mesh_with_meshy(const QString& prompt);
 
  private slots:
   void open_file();
@@ -260,6 +267,9 @@ class MainWindow final : public QMainWindow {
   QDockWidget* console_dock_ = nullptr;
   // AI 对话面板：进程内助手，工具直接调 SessionMcpBackend，不经 MCP 传输。
   AiPanel* ai_panel_ = nullptr;
+  ai::MeshyClient* meshy_client_ = nullptr;
+  // 最近一次生成用的提示词：导入时当网格名（前 40 字），好在大纲里认出来源。
+  QString last_meshy_prompt_;
   QDockWidget* ai_dock_ = nullptr;
   QAction* ai_toggle_ = nullptr;
   // 停靠布局的存盘节流（拖动面板时 LayoutRequest 连发，见 persist_window_state）。

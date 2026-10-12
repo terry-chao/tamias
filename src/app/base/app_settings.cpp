@@ -145,6 +145,8 @@ void AppSettings::load() {
   dock_layout_version_ = settings.value(QStringLiteral("ui/dock_layout_version"), 0).toInt();
   ai_base_url_ = settings.value(QStringLiteral("ai/base_url")).toString();
   ai_model_ = settings.value(QStringLiteral("ai/model")).toString();
+  meshy_base_url_ = settings.value(QStringLiteral("meshy/base_url")).toString();
+  meshy_model_ = settings.value(QStringLiteral("meshy/model")).toString();
   const QString disabled_key = QStringLiteral("plugins/disabled_ids");
   disabled_plugin_ids_ =
       settings.contains(disabled_key)
@@ -191,6 +193,8 @@ void AppSettings::save() const {
                     ribbon_command_order_);
   settings.setValue(QStringLiteral("ai/base_url"), ai_base_url_);
   settings.setValue(QStringLiteral("ai/model"), ai_model_);
+  settings.setValue(QStringLiteral("meshy/base_url"), meshy_base_url_);
+  settings.setValue(QStringLiteral("meshy/model"), meshy_model_);
   if (last_good_backend_.has_value()) {
     settings.setValue(QStringLiteral("render/last_good_backend"),
                       backend_to_key(*last_good_backend_));
@@ -240,6 +244,10 @@ void AppSettings::set_window_state(const QByteArray& state) { window_state_ = st
 void AppSettings::set_ai_base_url(const QString& url) { ai_base_url_ = url; }
 
 void AppSettings::set_ai_model(const QString& model) { ai_model_ = model; }
+
+void AppSettings::set_meshy_base_url(const QString& url) { meshy_base_url_ = url; }
+
+void AppSettings::set_meshy_model(const QString& model) { meshy_model_ = model; }
 
 void AppSettings::set_disabled_plugin_ids(const QStringList& ids) {
   disabled_plugin_ids_ = ids;

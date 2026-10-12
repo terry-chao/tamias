@@ -4,6 +4,8 @@
 #include "app/mcp/mcp_service.h"
 #include "app/shell/panel/console_panel.h"
 #include "app/shell/panel/ai_panel.h"
+#include "app/ai/meshy_client.h"
+#include "app/base/secret_store.h"
 #include "app/shell/panel/extension_watcher.h"
 #include "app/shell/dialog/graphics_diagnostics_dialog.h"
 #include "app/base/app_settings.h"
@@ -3001,6 +3003,86 @@ void MainWindow::ask_ai(const QString& prompt) {
     ai_dock_->raise();
   }
   ai_panel_->submit_text_when_ready(prompt);
+}
+
+void MainWindow::generate_mesh_with_meshy(const QString& prompt) {
+  const QString text = prompt.trimmed();
+  if (text.isEmpty()) {
+    return;
+  }
+
+  if (meshy_client_ == nullptr) {
+    meshy_client_ = new ai::MeshyClient(this);
+    connect(meshy_client_, &ai::MeshyClient::stage_changed, this,
+            [this](ai::MeshyClient::Stage stage) {
+              QString label;
+              switch (stage) {
+                case ai::MeshyClient::Stage::kCreating:
+                  label = tr("Meshy: creating the task…");
+                  break;
+                case ai::MeshyClient::Stage::kGenerating:
+                  label = tr("Meshy: generating…");
+                  break;
+                case ai::MeshyClient::Stage::kDownloading:
+                  label = tr("Meshy: downloading the model…");
+                  break;
+                default:
+                  break;
+              }
+              if (!label.isEmpty()) {
+                statusBar()->showMessage(label);
+              }
+            });
+    connect(meshy_client_, &ai::MeshyClient::progress_changed, this, [this](int percent) {
+      if (meshy_client_ != nullptr && meshy_client_->busy()) {
+        statusBar()->showMessage(tr("Meshy: %1%").arg(percent));
+      }
+    });
+    connect(meshy_client_, &ai::MeshyClient::failed, this, [this](const QString& message) {
+      log_error("Meshy: " + message.toStdString());
+      statusBar()->showMessage(tr("Meshy failed: %1").arg(message), 15000);
+    });
+    connect(meshy_client_, &ai::MeshyClient::succeeded, this,
+            [this](const QString& path, const QString& thumbnail) {
+              Q_UNUSED(thumbnail);
+              DocumentViewport* viewport = current_viewport();
+              if (viewport == nullptr) {
+                // 没有打开的文档：文件已经落地，别丢掉它——把路径写进日志，人自己导入。
+                log_warn("Meshy: no open document; the model is at " + path.toStdString());
+                statusBar()->showMessage(tr("Meshy finished — open a document, then import %1")
+                                             .arg(path),
+                                         15000);
+                return;
+              }
+              // 名字取提示词的前 40 个字符：大纲/属性面板里要能认出这是哪次生成的。
+              const std::string name = last_meshy_prompt_.left(40).toStdString();
+              const std::uint64_t node_id = viewport->import_mesh_file(path.toStdString(), name);
+              if (node_id == 0) {
+                log_error("Meshy: the downloaded model could not be imported: " + path.toStdString());
+                statusBar()->showMessage(tr("Meshy finished, but the model could not be imported."),
+                                         15000);
+                return;
+              }
+              // 生成是外部动作、且花了钱：留一行审计，和人手点按钮的导入区分开。
+              log_info("Meshy: imported " + path.toStdString() + " as node " +
+                       std::to_string(node_id) + " (one undo step)");
+              statusBar()->showMessage(tr("Meshy: model imported (Ctrl+Z to undo)."), 8000);
+            });
+  }
+
+  const auto& settings = AppSettings::instance();
+  QString base_url = settings.meshy_base_url().trimmed();
+  if (base_url.isEmpty()) {
+    base_url = QString::fromStdString(std::string(ai::kDefaultMeshyBaseUrl));
+  }
+  const QString api_key = SecretStore::load(QLatin1String(ai::kMeshyApiKeySlot));
+  meshy_client_->set_config({base_url, api_key});
+
+  last_meshy_prompt_ = text;
+  ai::MeshyTextTo3dRequest request;
+  request.prompt = text.toStdString();
+  request.ai_model = settings.meshy_model().trimmed().toStdString();
+  meshy_client_->generate(request);
 }
 
 void MainWindow::activate_viewport(DocumentViewport* vp) {

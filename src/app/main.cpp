@@ -303,6 +303,7 @@ int main(int argc, char* argv[]) {
     bool mcp_allow_evaluate = false;
     tamias::McpPolicy mcp_policy = tamias::McpPolicy::kReadOnly;
     QString ai_prompt;
+    QString meshy_prompt;
     for (int i = 1; i < arguments.size(); ++i) {
       if (arguments[i] == QLatin1String("--mcp")) {
         mcp_enabled = true;
@@ -336,6 +337,11 @@ int main(int argc, char* argv[]) {
         ai_prompt = arguments[i].mid(12);
         continue;
       }
+      // --meshy-prompt="…"：用 Meshy 生成一个模型并导入当前文档（调试与自动化用）。
+      if (arguments[i].startsWith(QLatin1String("--meshy-prompt="))) {
+        meshy_prompt = arguments[i].mid(15);
+        continue;
+      }
       if (!arguments[i].startsWith(QLatin1Char('-'))) {
         startup_paths.push_back(arguments[i]);
       }
@@ -346,6 +352,12 @@ int main(int argc, char* argv[]) {
     }
     if (!ai_prompt.isEmpty()) {
       window.ask_ai(ai_prompt);
+    }
+    if (!meshy_prompt.isEmpty()) {
+      // 等启动路径（如同时给了 .tdoc）先落定，再开始生成——生成要分钟级，不差这 300ms。
+      QTimer::singleShot(300, &window, [&window, meshy_prompt] {
+        window.generate_mesh_with_meshy(meshy_prompt);
+      });
     }
     // 界面起来了 = 这次启动走通了：清掉启动标记（下次启动直接信任记住的后端）。
     QTimer::singleShot(1500, &window, [&startup_guard] { startup_guard.mark_started_ok(); });

@@ -70,6 +70,12 @@ class AppSettings {
   void set_ai_base_url(const QString& url);
   [[nodiscard]] QString ai_model() const { return ai_model_; }
   void set_ai_model(const QString& model);
+  // AI 生成 3D（Meshy）：服务地址、模型名；API key 同样走 SecretStore。
+  // 空地址 = 用 src/ai/meshy_protocol.h 里的默认值（https://api.meshy.ai/openapi/v2）。
+  [[nodiscard]] QString meshy_base_url() const { return meshy_base_url_; }
+  void set_meshy_base_url(const QString& url);
+  [[nodiscard]] QString meshy_model() const { return meshy_model_; }
+  void set_meshy_model(const QString& model);
 
   [[nodiscard]] QStringList disabled_plugin_ids() const {
     return disabled_plugin_ids_;
@@ -122,6 +128,8 @@ class AppSettings {
   int dock_layout_version_ = 0;
   QString ai_base_url_;
   QString ai_model_;
+  QString meshy_base_url_;
+  QString meshy_model_;
   QStringList disabled_plugin_ids_;
   QStringList ribbon_command_order_;
   std::optional<GraphicsBackend> resolved_backend_;
