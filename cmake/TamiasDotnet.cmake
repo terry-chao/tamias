@@ -100,6 +100,48 @@ function(tamias_copy_nethost target)
   )
 endfunction()
 
+# 服务端服务壳（server/csharp/Tamias.Server）：独立进程，**反过来** P/Invoke 原生
+# tamias_server.dll。所以发布到原生库所在目录，按约定名就能解析到。
+# 与 tamias_publish_csharp 的区别：那个是 C++ 宿主往进程里装 .NET，这个是 .NET 宿主
+# 往进程里装 C++——方向相反，见 docs/DECISION-SERVER-LANGUAGE.md §2。
+function(tamias_publish_server target)
+  if(NOT TAMIAS_DOTNET)
+    message(STATUS "Tamias server shell: dotnet not found, skipping")
+    return()
+  endif()
+  if(NOT TARGET ${target})
+    return()
+  endif()
+
+  set(_csproj "${CMAKE_SOURCE_DIR}/server/csharp/Tamias.Server/Tamias.Server.csproj")
+  if(NOT EXISTS "${_csproj}")
+    return()
+  endif()
+
+  # CONFIGURE_DEPENDS：新加的 .cs 也要算依赖，否则改了源码却不 republish
+  # （和 tamias_publish_csharp 踩过的是同一个坑）。
+  file(GLOB_RECURSE _cs_inputs CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/server/csharp/*.cs"
+    "${CMAKE_SOURCE_DIR}/server/csharp/*.csproj"
+    "${CMAKE_SOURCE_DIR}/server/csharp/*.json"
+  )
+  set(_stamp "${CMAKE_CURRENT_BINARY_DIR}/tamias_server_shell-$<CONFIG>.stamp")
+  add_custom_command(
+    OUTPUT "${_stamp}"
+    COMMAND "${TAMIAS_DOTNET}" publish "${_csproj}"
+            -c $<IF:$<CONFIG:Debug>,Debug,Release>
+            --nologo
+            -o $<TARGET_FILE_DIR:${target}>
+    COMMAND ${CMAKE_COMMAND} -E touch "${_stamp}"
+    DEPENDS ${_cs_inputs}
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/server/csharp"
+    COMMENT "Publishing the .NET server shell next to tamias_server"
+    VERBATIM
+  )
+  add_custom_target(tamias_server_shell DEPENDS "${_stamp}")
+  add_dependencies(${target} tamias_server_shell)
+endfunction()
+
 function(tamias_publish_csharp target)
   if(NOT TAMIAS_DOTNET)
     return()

@@ -63,11 +63,23 @@ set(TAMIAS_SHADER_OUTPUT_DIR "${CMAKE_BINARY_DIR}/shaders")
 
 option(TAMIAS_ENABLE_VULKAN_BACKEND "Build the Vulkan RHI backend." ON)
 option(TAMIAS_ENABLE_OPENGL_BACKEND "Build the OpenGL RHI backend." ON)
-option(TAMIAS_ENABLE_WEBGL_BACKEND "Build the WebGL2 RHI backend (Emscripten)." OFF)
-option(TAMIAS_ENABLE_WEBGPU_BACKEND "Build the browser WebGPU RHI backend (Emscripten)." OFF)
+# 浏览器两条后端：**WebGL 是默认**，WebGPU 是实验（见 docs/WEB.md、docs/WGPU.md）。
+# 默认值做成 EMSCRIPTEN 感知，好让裸 emcmake（不带预设）也能编出一个能跑的后端。
+if(EMSCRIPTEN)
+  set(_tamias_webgl_default ON)
+else()
+  set(_tamias_webgl_default OFF)
+endif()
+option(TAMIAS_ENABLE_WEBGL_BACKEND "Build the WebGL2 RHI backend (Emscripten; the WASM default)." ${_tamias_webgl_default})
+option(TAMIAS_ENABLE_WEBGPU_BACKEND "Build the browser WebGPU RHI backend (Emscripten; experimental)." OFF)
+unset(_tamias_webgl_default)
 option(TAMIAS_ENABLE_OCCT "Build OCCT modeling and IfcOpenShell." ON)
 option(TAMIAS_ENABLE_TRUCK_KERNEL "Build the Truck (Rust) modeling kernel backend." OFF)
 option(TAMIAS_BUILD_TESTS "Build unit tests." ON)
+# 服务端宿主：把 Session 暴露成扁平 C ABI 的共享库，给 .NET 服务壳 P/Invoke。
+# 见 docs/DECISION-SERVER-LANGUAGE.md。缺省关，不影响桌面 / wasm 两条产线。
+option(TAMIAS_BUILD_SERVER "Build the headless server host (tamias_server shared library)." OFF)
+option(TAMIAS_BUILD_SERVER_SHELL "Also publish the .NET server shell next to tamias_server." OFF)
 option(TAMIAS_USE_FETCHCONTENT "Fetch third-party libs with FetchContent when not found." ON)
 option(TAMIAS_COMPILER_CACHE "Use sccache/ccache as compiler launcher when found." ON)
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/TamiasPch.cmake")
@@ -142,6 +154,10 @@ if(NOT EMSCRIPTEN)
   # qt：tac 契约的 Qt 实现，桌面今天在跑的那套。
   add_subdirectory(src/ui/qt)
   add_subdirectory(src/plugin)
+  # 服务端宿主：Session 的第四个宿主（Qt / embind / 应用内 MCP 之外的第四个）。
+  if(TAMIAS_BUILD_SERVER)
+    add_subdirectory(src/server)
+  endif()
   add_subdirectory(src/app)
 endif()
 if(EMSCRIPTEN)
