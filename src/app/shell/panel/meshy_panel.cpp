@@ -168,7 +168,9 @@ MeshyPanel::MeshyPanel(QWidget* parent) : QWidget(parent) {
   show_stage(ai::MeshyClient::Stage::kIdle);
   note(tr("Write a prompt and press Generate. The model is downloaded, then added to the "
           "current document as one undoable step. Generation costs credits and takes a "
-          "few minutes."));
+          "few minutes. Experimental: the API shape has not been verified against the "
+          "live service, only text-to-3D is wired, and the result is reference geometry "
+          "(not parametric)."));
 }
 
 void MeshyPanel::set_import_handler(ImportHandler handler) {

@@ -977,7 +977,7 @@ MainWindow::MainWindow(QWidget* parent)
         }
         return viewport->import_mesh_file(path.toStdString(), name.toStdString());
       });
-  meshy_dock_ = new QDockWidget(tr("AI 3D Generation"), this);
+  meshy_dock_ = new QDockWidget(tr("AI 3D Generation (Experimental)"), this);
   meshy_dock_->setObjectName(QStringLiteral("meshyDock"));
   meshy_dock_->setWidget(meshy_panel_);
   meshy_dock_->setWindowIcon(QIcon(QStringLiteral(":/icons/box.svg")));
@@ -986,7 +986,7 @@ MainWindow::MainWindow(QWidget* parent)
   addDockWidget(Qt::RightDockWidgetArea, meshy_dock_);
   meshy_dock_->hide();
   meshy_toggle_ = meshy_dock_->toggleViewAction();
-  meshy_toggle_->setText(tr("AI 3D Generation"));
+  meshy_toggle_->setText(tr("AI 3D Generation (Experimental)"));
   meshy_toggle_->setIcon(ribbon_icon(QStringLiteral(":/icons/box.svg")));
   meshy_toggle_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+M")));
   meshy_toggle_->setToolTip(tr("Generate a mesh with Meshy and add it to the document"));

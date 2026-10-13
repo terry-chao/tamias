@@ -376,8 +376,8 @@ draw %1  tri %2  gpu %3MB  tess %4</source>
         <translation>与能读写当前文档的 AI 对话</translation>
     </message>
     <message>
-        <source>AI 3D Generation</source>
-        <translation>AI 生成 3D</translation>
+        <source>AI 3D Generation (Experimental)</source>
+        <translation>AI 生成 3D（实验性）</translation>
     </message>
     <message>
         <source>Generate a mesh with Meshy and add it to the document</source>
@@ -5253,8 +5253,8 @@ tests failed (exit %1)
         <translation>剩余额度：取不到</translation>
     </message>
     <message>
-        <source>Write a prompt and press Generate. The model is downloaded, then added to the current document as one undoable step. Generation costs credits and takes a few minutes.</source>
-        <translation>写一句提示词、按「生成」。模型下载完会作为一步撤销加进当前文档。生成要消耗额度，通常几分钟，中途可以取消。</translation>
+        <source>Write a prompt and press Generate. The model is downloaded, then added to the current document as one undoable step. Generation costs credits and takes a few minutes. Experimental: the API shape has not been verified against the live service, only text-to-3D is wired, and the result is reference geometry (not parametric).</source>
+        <translation>写一句提示词、按「生成」。模型下载完会作为一步撤销加进当前文档。生成要消耗额度，通常几分钟，中途可以取消。实验性功能：接口字段还没对着真实服务核过，目前只接了文字生成 3D，生成结果是参考几何（不可参数化）。</translation>
     </message>
     <message>
         <source>Write a prompt first.</source>
