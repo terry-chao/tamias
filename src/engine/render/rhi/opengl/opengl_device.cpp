@@ -1091,6 +1091,9 @@ Result<void> OpenGLOffscreenTarget::make_current_and_bind() {
     return Err(r.error());
   }
   gl::BindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
+  // 颜色附件是 sRGB：shader 写线性值，这里让驱动做线性→sRGB 编码（默认是关的）。
+  // 不打开的话 --render-view / 缩略图会比 Vulkan 那边暗一大截。
+  gl::Enable(GL_FRAMEBUFFER_SRGB);
   return {};
 }
 
@@ -1117,7 +1120,7 @@ Result<void> OpenGLOffscreenTarget::create() {
 
   gl::GenTextures(1, &color_);
   gl::BindTexture(GL_TEXTURE_2D, color_);
-  gl::TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, static_cast<GLsizei>(width_),
+  gl::TexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, static_cast<GLsizei>(width_),
                  static_cast<GLsizei>(height_), 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
   gl::TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   gl::TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
