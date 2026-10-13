@@ -14,18 +14,24 @@
 [[vk::binding(0, 5)]] Texture2D orm_tex;
 [[vk::binding(1, 5)]] SamplerState orm_samp;
 #else
-Texture2D albedo_tex : register(t0);
-SamplerState albedo_samp : register(s0);
-Texture2D normal_tex : register(t1);
-SamplerState normal_samp : register(s1);
-TextureCube irradiance_tex : register(t2);
-SamplerState irradiance_samp : register(s2);
-TextureCube prefilter_tex : register(t3);
-SamplerState prefilter_samp : register(s3);
-Texture2D brdf_lut : register(t4);
-SamplerState brdf_samp : register(s4);
-Texture2D orm_tex : register(t5);
-SamplerState orm_samp : register(s5);
+// OpenGL 只认**合并**的 image+sampler（ARB_gl_spirv：不允许分开的采样器变量，
+// 且 DescriptorSet 必须是 0）。binding 就是纹理单元号，和 RHI 的 kTextureSlot* 对齐：
+// 0=albedo 1=normal 2=IBL 辐照 3=IBL 预滤 4=BRDF LUT 5=ORM。
+// 用 register(t0)/register(s0) 那种写法时 dxc 会把 t0..t5 摆成 DescriptorSet 0..5、
+// 每个 set 里一个纹理 + 一个独立采样器；NVIDIA 的 GL 驱动会接受这种不合规的 SPIR-V，
+// 然后在第一次 glUseProgram 时崩在自己的内部线程里（见 docs/RHI-TRIAGE.md §10）。
+[[vk::combinedImageSampler]] [[vk::binding(0, 0)]] Texture2D albedo_tex;
+[[vk::combinedImageSampler]] [[vk::binding(0, 0)]] SamplerState albedo_samp;
+[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] Texture2D normal_tex;
+[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] SamplerState normal_samp;
+[[vk::combinedImageSampler]] [[vk::binding(2, 0)]] TextureCube irradiance_tex;
+[[vk::combinedImageSampler]] [[vk::binding(2, 0)]] SamplerState irradiance_samp;
+[[vk::combinedImageSampler]] [[vk::binding(3, 0)]] TextureCube prefilter_tex;
+[[vk::combinedImageSampler]] [[vk::binding(3, 0)]] SamplerState prefilter_samp;
+[[vk::combinedImageSampler]] [[vk::binding(4, 0)]] Texture2D brdf_lut;
+[[vk::combinedImageSampler]] [[vk::binding(4, 0)]] SamplerState brdf_samp;
+[[vk::combinedImageSampler]] [[vk::binding(5, 0)]] Texture2D orm_tex;
+[[vk::combinedImageSampler]] [[vk::binding(5, 0)]] SamplerState orm_samp;
 #endif
 
 float3 shaded_simple(float3 n, float3 l, float3 base) {

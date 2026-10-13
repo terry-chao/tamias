@@ -4,8 +4,9 @@
 [[vk::binding(0, 0)]] Texture2D albedo_tex;
 [[vk::binding(1, 0)]] SamplerState albedo_samp;
 #else
-Texture2D albedo_tex : register(t0);
-SamplerState albedo_samp : register(s0);
+// GL：合并 image+sampler，binding = 纹理单元（见 mesh.frag.hlsl 里的说明）。
+[[vk::combinedImageSampler]] [[vk::binding(0, 0)]] Texture2D albedo_tex;
+[[vk::combinedImageSampler]] [[vk::binding(0, 0)]] SamplerState albedo_samp;
 #endif
 
 struct OverlayVsOutput {

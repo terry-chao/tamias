@@ -8,7 +8,12 @@ endif()
 # tamias_compile_hlsl(<target> <hlsl_relpath> <profile> <out_basename>)
 # Produces:
 #   <out_basename>.spv     (Vulkan, -DTAMIAS_VULKAN=1)
-#   <out_basename>.gl.spv  (OpenGL / universal1.5)
+#   <out_basename>.gl.spv  (OpenGL / SPIR-V 1.0)
+#
+# GL 变体为什么用 vulkan1.0 这个 target：dxc 没有 OpenGL 目标，而 ARB_gl_spirv 只认
+# **SPIR-V 1.0**（universal1.5 会产出 1.5 的模块：spirv-val --target-env opengl4.5 直接
+# 判非法，驱动侧也会走歪，见 docs/RHI-TRIAGE.md §10）。vulkan1.0 是 dxc 里唯一能出
+# 1.0 的档；采样器仍然按 GL 的规矩写成合并的 image+sampler（见 *.hlsl 里的 #else 分支）。
 function(tamias_compile_hlsl TARGET_NAME SHADER_PATH PROFILE OUT_BASENAME)
   set(SRC_ABS "${TAMIAS_SHADER_SOURCE_DIR}/${SHADER_PATH}")
   set(HLSLI_ABS "${TAMIAS_SHADER_SOURCE_DIR}/mesh.hlsli")
@@ -38,7 +43,7 @@ function(tamias_compile_hlsl TARGET_NAME SHADER_PATH PROFILE OUT_BASENAME)
               -T ${PROFILE}
               -E main
               -spirv
-              -fspv-target-env=universal1.5
+              -fspv-target-env=vulkan1.0
               -I "${TAMIAS_SHADER_SOURCE_DIR}"
               -Fo "${OUT_GL}"
               "${SRC_ABS}"

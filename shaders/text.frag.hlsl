@@ -2,8 +2,9 @@
 [[vk::binding(0, 0)]] Texture2D atlas_tex;
 [[vk::binding(1, 0)]] SamplerState atlas_samp;
 #else
-Texture2D atlas_tex : register(t0);
-SamplerState atlas_samp : register(s0);
+// GL：合并 image+sampler，binding = 纹理单元（见 mesh.frag.hlsl 里的说明）。
+[[vk::combinedImageSampler]] [[vk::binding(0, 0)]] Texture2D atlas_tex;
+[[vk::combinedImageSampler]] [[vk::binding(0, 0)]] SamplerState atlas_samp;
 #endif
 
 struct TextVsOutput {
