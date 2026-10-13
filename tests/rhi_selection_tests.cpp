@@ -134,6 +134,41 @@ TEST(RhiBlocklist, MatchesAdapterSubstringAndSoftwareFlag) {
   EXPECT_EQ(list.match(gpu)->id, "software");
 }
 
+// 拦 OpenGL 的条目只能按「OpenGL 侧报得出来的字段」写：vendor + 驱动版本。
+// 两个后端报的驱动字符串**不是同一个**（Vulkan 公开编码 / OpenGL 的 WDDM 值），
+// 而且 OpenGL 拿不到 device_id —— 这条测试把这个坑钉住。
+TEST(RhiBlocklist, OpenGLOnlyIdentityMatchesVendorAndWddmDriverVersion) {
+  const std::string text = R"({
+  "entries": [
+    { "id": "nvidia-610.88-opengl-frame", "why": "OpenGL 路径画帧必死",
+      "os": "windows", "vendor": 4318, "driver_exact": "32.0.16.1088", "force": "vulkan" }
+  ]
+})";
+  std::vector<std::string> warnings;
+  const RhiBlocklist list = parse_rhi_blocklist(text, &warnings);
+  ASSERT_EQ(list.entries.size(), 1u) << (warnings.empty() ? "" : warnings.front());
+  EXPECT_TRUE(warnings.empty());
+
+  // OpenGL 侧的身份：device_id 恒 0、驱动是注册表里的 WDDM 版本 → 命中。
+  RhiGpuIdentity gl = make_identity(0x10DE, 0, "32.0.16.1088");
+  gl.adapter_name = "NVIDIA GeForce RTX 5070/PCIe/SSE2";
+  gl.driver_name = "NVIDIA Corporation";
+  ASSERT_NE(list.match(gl), nullptr);
+  EXPECT_EQ(list.match(gl)->id, "nvidia-610.88-opengl-frame");
+  EXPECT_EQ(list.match(gl)->action, RhiBlockActionKind::ForceBackend);
+  EXPECT_EQ(list.match(gl)->backend, GraphicsBackend::Vulkan);
+
+  // Vulkan 侧报的是公开编码（610.88），和同一条驱动的 WDDM 值不是一个字符串：
+  // 这条条目不该在 Vulkan 上报「命中」（否则 Vulkan 自己也会被改道）。
+  RhiGpuIdentity vk = make_identity(0x10DE, 0x2F04, "610.88.0.0");
+  vk.adapter_name = "NVIDIA GeForce RTX 5070";
+  EXPECT_EQ(list.match(vk), nullptr);
+
+  // 换了驱动（或换了卡）就不该再命中。
+  RhiGpuIdentity newer = make_identity(0x10DE, 0, "32.0.16.1200");
+  EXPECT_EQ(list.match(newer), nullptr);
+}
+
 TEST(RhiBlocklist, SkipsBadLinesButKeepsTheRest) {
   const std::string text = R"({
   "entries": [
@@ -199,13 +234,35 @@ TEST(RhiStartupDecision, PriorityChain) {
   EXPECT_EQ(decision.candidates[1], GraphicsBackend::Vulkan);
   EXPECT_TRUE(decision.remember_result);
 
-  // 启动标记还在（上次死在启动期）→ 按设计强制安全模式，别拿同一块驱动再赌一次。
+  // 启动标记还在（上次死在启动期）→ 安全模式：候选顺序照自然顺序，不写记忆。
   input.previous_startup_incomplete = true;
   decision = decide_rhi_startup(input);
-  ASSERT_EQ(decision.candidates.size(), 1u);
-  EXPECT_EQ(decision.candidates[0], GraphicsBackend::OpenGL);
+  ASSERT_EQ(decision.candidates.size(), 2u);
+  EXPECT_EQ(decision.candidates[0], GraphicsBackend::OpenGL);  // 标记里没记后端 → 不动顺序
+  EXPECT_EQ(decision.candidates[1], GraphicsBackend::Vulkan);
   EXPECT_TRUE(decision.safe_mode);
   EXPECT_FALSE(decision.remember_result);  // 被迫走的这条路不该被记成「上次可用」
+
+  // 标记里记着上次用的是 OpenGL → 它排到最后（别再拿同一块驱动赌）。
+  input.previous_startup_backend = GraphicsBackend::OpenGL;
+  decision = decide_rhi_startup(input);
+  ASSERT_EQ(decision.candidates.size(), 2u);
+  EXPECT_EQ(decision.candidates[0], GraphicsBackend::Vulkan);
+  EXPECT_EQ(decision.candidates[1], GraphicsBackend::OpenGL);
+  EXPECT_TRUE(decision.safe_mode);
+  EXPECT_FALSE(decision.remember_result);
+
+  // 命令行压过标记：显式指定是人在现场给的证据，自动判断不该压过它。
+  // （标记一旦留下，--gpu-backend 都救不回来是 2026-10-13 那次自锁的直接原因。）
+  input.cli_backend = GraphicsBackend::Vulkan;
+  decision = decide_rhi_startup(input);
+  ASSERT_EQ(decision.candidates.size(), 1u);
+  EXPECT_EQ(decision.candidates[0], GraphicsBackend::Vulkan);
+  EXPECT_FALSE(decision.safe_mode);
+  EXPECT_FALSE(decision.remember_result);
+  input.cli_backend.reset();
+
+  input.previous_startup_backend.reset();
   input.previous_startup_incomplete = false;
 
   input.cli_backend = GraphicsBackend::OpenGL;
@@ -224,10 +281,12 @@ TEST(RhiStartupDecision, PriorityChain) {
 
   input.cli_safe_mode = true;
   decision = decide_rhi_startup(input);
-  ASSERT_EQ(decision.candidates.size(), 1u);
-  EXPECT_EQ(decision.candidates[0], GraphicsBackend::OpenGL);  // 安全模式最高优先
+  ASSERT_EQ(decision.candidates.size(), 2u);
+  EXPECT_EQ(decision.candidates[0], GraphicsBackend::OpenGL);  // 安全模式最高优先（压过策略与命令行）
+  EXPECT_EQ(decision.candidates[1], GraphicsBackend::Vulkan);
   EXPECT_TRUE(decision.safe_mode);
   EXPECT_FALSE(decision.remember_result);
+  EXPECT_NE(decision.why.find("safe mode"), std::string::npos);
 }
 
 // ---------------------------------------------------------------- 探测

@@ -12,6 +12,7 @@ RhiStartupOutcome run_rhi_startup(const RhiStartupEnvironment& environment,
   input.last_good_backend = environment.last_good_backend;
   input.last_good_trusted = environment.last_good_trusted;
   input.previous_startup_incomplete = environment.previous_startup_incomplete;
+  input.previous_startup_backend = environment.previous_startup_backend;
 
   RhiStartupOutcome outcome;
   outcome.decision = decide_rhi_startup(input);

@@ -104,7 +104,7 @@ int main(int argc, char* argv[]) {
 
   tamias::StartupGuard startup_guard;
   if (startup_guard.previous_startup_incomplete()) {
-    tamias::log_warn("上次启动没走完（可能在建设备/首帧崩了），本次强制安全模式");
+    tamias::log_warn("上次启动没走完（可能在建设备/首帧崩了），本次走安全模式");
   }
   tamias::AppSettings& settings = tamias::AppSettings::instance();
   // 决策 + 探测一步到位（组件入口，见 src/rhi_selection/startup.h）。
@@ -115,6 +115,7 @@ int main(int argc, char* argv[]) {
   startup_env.last_good_backend = settings.last_good_backend();
   startup_env.last_good_trusted = !startup_guard.previous_startup_incomplete();
   startup_env.previous_startup_incomplete = startup_guard.previous_startup_incomplete();
+  startup_env.previous_startup_backend = startup_guard.previous_startup_backend();
   startup_env.preferred_backend = settings.graphics_backend();
   startup_env.blocklist = &blocklist;
   startup_env.depth = tamias::RhiProbeDepth::Device;  // 正常启动走 A 档：快
@@ -188,10 +189,6 @@ int main(int argc, char* argv[]) {
     tamias::RenderThreadPool::instance().shutdown();
     return 0;
   }
-
-  // 启动标记只保护**开窗口**的那条路：从这里到首帧之间崩了，下次就强制安全模式。
-  // 上面那些命令行模式不建窗口、跑完就退出，标记不该被它们碰（否则污染下次启动）。
-  startup_guard.begin();
 
   if (cli.render_view_path.has_value()) {
     QStringList positional;
@@ -267,6 +264,12 @@ int main(int argc, char* argv[]) {
     tamias::RenderThreadPool::instance().shutdown();
     return 0;
   }
+
+  // 启动标记只保护**开窗口**的那条路：从这里到首帧之间崩了，下次就走安全模式
+  // （并且把这次用的后端排到最后，见 decide_rhi_startup）。
+  // 必须放在上面那些命令行模式**之后**：它们不建窗口、跑完就退出，留个标记下来只会
+  // 把下一次 GUI 启动推进安全模式（docs/RHI-TRIAGE.md §7.2）。
+  startup_guard.begin(*report.chosen);
 
   // ===== 界面库后端：qt（默认）/ tac（自研，尚未落地）=====
   // 启动时选一次，改了要重启——和渲染后端、建模内核一样。壳当前仍是 Qt 代码，

@@ -19,6 +19,8 @@ struct RhiStartupEnvironment {
   std::optional<GraphicsBackend> last_good_backend;  // 上次跑通的后端
   bool last_good_trusted = true;   // 上次是干净退出
   bool previous_startup_incomplete = false;  // 上次死在启动期 → 强制安全模式
+  // 启动标记里记着的后端：上次死在启动期时用的就是它，安全模式把它排到最后。
+  std::optional<GraphicsBackend> previous_startup_backend;
   const RhiBlocklist* blocklist = nullptr;   // 可空
   // 探测深度：正常启动 A 档（快），体检 / 自检走 B / C 档。
   RhiProbeDepth depth = RhiProbeDepth::Device;
