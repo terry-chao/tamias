@@ -9,7 +9,10 @@
   "cmake.debugConfig": {
     "type": "cppvsdbg",
     "preLaunchTask": "Tamias: 编译",
-    "preRestartTask": "Tamias: 编译"
+    "preRestartTask": "Tamias: 编译",
+    "logging": {
+      "exceptions": false
+    }
   },
   "cmake.outputLogEncoding": "auto",
   "cmake.environment": {
