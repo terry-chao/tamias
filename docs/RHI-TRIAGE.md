@@ -250,6 +250,9 @@ dummy 窗口原来用 `STATIC` 类建（`CreateWindowExA(0, "STATIC", ...)`）�
 
 ## 7. 两个策略坑：安全模式会把机器推向更坏的那条路
 
+> **2026-10-13 复查：两处都已修掉**（[决策顺序](RHI-STARTUP.md) §1 / §5、标记内容、CLI 不写标记）。
+> 下面保留当时的现场描述与推理——它是这两处改动的理由，也是「为什么命令行必须压过标记」的原始证据。
+
 ### 7.1 启动标记强制 OpenGL，而且压过命令行
 
 [RHI 启动](RHI-STARTUP.md) §5 的启动标记本来是好事（坏驱动不该变成「每次开机都崩」），
@@ -288,12 +291,24 @@ GL 崩一次 → 留下 startup.marker → 下次启动无条件走「安全模�
 
 | 项 | 说明 | 归属 |
 |---|---|---|
-| 块名单加一条 | 该 GPU / 驱动版本 + OpenGL → 改走 Vulkan，自动避开 | `assets/rhi_blocklist.json` |
-| 安全模式优先 `last_good_backend` | 别硬编码 OpenGL；这台机器记的是 Vulkan | [decision.cpp](https://github.com/terry-chao/tamias/blob/main/src/rhi_selection/decision.cpp) |
-| CLI 出图不写启动标记 | 把 `startup_guard.begin()` 移到 `--render-view` 之后（或该分支返回前清掉） | [main.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/main.cpp) |
-| 命令行优先于标记 | 显式指定的后端应当压过自动安全模式 | [decision.cpp](https://github.com/terry-chao/tamias/blob/main/src/rhi_selection/decision.cpp) |
+| ~~块名单加一条~~ ✅ 2026-10-13 | NVIDIA 610.88 + OpenGL → `force: vulkan`，自动避开。**注意两个后端报的驱动字符串不同**（Vulkan `610.88.0.0` / OpenGL `32.0.16.1088`），OpenGL 侧 `device_id` 恒 0 所以条目不能填 `device` | `assets/rhi_blocklist.json` |
+| ~~安全模式优先 `last_good_backend`~~ ✅ 2026-10-13 | 改成「按自然顺序 + 把标记里那个后端排到最后」：标记现在记着「当时用的是哪个后端」，不用再猜，也不再硬编码 OpenGL | [decision.cpp](https://github.com/terry-chao/tamias/blob/main/src/rhi_selection/decision.cpp)、[startup_guard.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/base/startup_guard.cpp) |
+| ~~CLI 出图不写启动标记~~ ✅ 2026-10-13 | `startup_guard.begin()` 移到 `--render-view` 分支之后 | [main.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/main.cpp) |
+| ~~命令行优先于标记~~ ✅ 2026-10-13 | 顺序改为：`--safe-mode` > 策略 > `--gpu-backend` > 标记 > 偏好 / 记忆 | [decision.cpp](https://github.com/terry-chao/tamias/blob/main/src/rhi_selection/decision.cpp) |
 | **GL 端加像素级测试** | 现有离屏测试只断言**清屏色**，所以 §6.1「draw 全被丢」能一路绿灯——补一条「画一个已知三角，断言像素」 | [offscreen_render_tests.cpp](https://github.com/terry-chao/tamias/blob/main/tests/offscreen_render_tests.cpp) |
 | 驱动侧复核 | 换 WHQL 稳定版后重跑 `--probe-rhi --gpu-backend=opengl` 与 `--render-view` | 人工 |
+
+**改完怎么验（本机实测，2026-10-13）**：
+
+```powershell
+# 1) 让 OpenGL 成为首选：报告里应当出现 redirect，最后选 Vulkan，且不画帧
+& tamias.exe --probe-rhi --gpu-backend=opengl --json
+#    "chosen": "Vulkan",
+#    summary: ... OpenGL -> redirected to Vulkan by blocklist entry "nvidia-610.88-opengl-frame"
+
+# 2) 纯决策层的回归（无需 GPU）
+& tamias_tests.exe --gtest_filter="Rhi*"
+```
 
 ---
 
