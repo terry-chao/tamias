@@ -91,8 +91,18 @@ try {
   if (Test-Path -LiteralPath $ini) { $iniOriginal = Get-Content -LiteralPath $ini -Raw }
   $kept = New-Object System.Collections.Generic.List[string]
   $skipping = $false
+  $section = ''
   foreach ($line in ($iniOriginal -split "`r?`n")) {
-    if ($line -match '^\s*\[') { $skipping = $line -match '^\s*\[meshy\]' }
+    if ($line -match '^\s*\[(?<name>[^\]]+)\]') {
+      $section = $Matches['name']
+      $skipping = $section -eq 'meshy'
+    } elseif ($section -eq 'render') {
+      # 显式钉住 Vulkan：这块驱动的 OpenGL 路径已知会崩（不带 Meshy 也一样，
+      # 见 docs/RHI-TRIAGE.md；本机已由 assets/rhi_blocklist.json 挡掉）。
+      # 验证要考的是 Meshy，后端选择这一层不该掺进来。
+      if ($line -match '^backend=') { $line = 'backend=Vulkan' }
+      elseif ($line -match '^last_good_backend=') { $line = 'last_good_backend=Vulkan' }
+    }
     if (-not $skipping) { $kept.Add($line) }
   }
   $kept.Add('[meshy]')
