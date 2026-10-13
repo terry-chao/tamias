@@ -1,7 +1,8 @@
 # Meshy.ai 接入（AI 生成 3D）：方案
 
-> 状态：**M0 / M2 已落地**（可撤销导入 + 协议层 + Qt 客户端 + 设置 + 调试入口 + 端到端脚本），
-> **M1（真素材对账）与 M3（面板 / 线程）还没做**。
+> 状态：**M0 / M2 / M3 已落地**（可撤销导入 + 协议层 + Qt 客户端 + **面板与完整交互** +
+> 端到端脚本）。**M1（拿真素材量尺度/朝向）与 M4（MCP 工具）还没做**；
+> M3 里「解析挪出 UI 线程」一条**有意缓做**，理由见 [§6](#6-分期实施)。
 >
 > 一句话：**Meshy 出的是美术向三角汤，进 Tamias 只能是「导入网格」**（参考几何 / 占位体），
 > 没有 Entity、不进特征树、不可参数化。生成由**人操作的应用内客户端**发起，
@@ -98,16 +99,19 @@ Meshy 的输出是**美术向**网格：几万个三角、PBR 贴图、没有拓
 | **Qt 客户端**：建任务 → 轮询 → 下载到本地文件；可取消、可查额度 | [`meshy_client.h`](https://github.com/terry-chao/tamias/blob/main/src/app/ai/meshy_client.h) |
 | 设置项与密钥：`meshy/base_url`、`meshy/model`、凭据槽位 `meshy/api-key` | [`app_settings.h`](https://github.com/terry-chao/tamias/blob/main/src/app/base/app_settings.h) |
 | 调试入口 `--meshy-prompt="…"`：生成一个模型并导入当前文档 | [`main_window.cpp`](https://github.com/terry-chao/tamias/blob/main/src/app/shell/main_window.cpp) |
+| **面板**：提示词 / 风格 / 目标面数 / 进度条 / 阶段 / 取消 / **细化**（用 `preview_task_id` 出精模）/ 额度查询 / 设置对话框（服务地址、模型、API 密钥进凭据管理器） | [`meshy_panel.h`](https://github.com/terry-chao/tamias/blob/main/src/app/shell/panel/meshy_panel.h) |
+| 面板停靠与入口：视图 → 面板 → AI 生成 3D，`Ctrl+Shift+M` | [`main_window.cpp`](https://github.com/terry-chao/tamias/blob/main/src/app/shell/main_window.cpp) |
 | 端到端脚本：假 Meshy 服务端 + 真 tamias.exe | [`scripts/check-meshy.ps1`](https://github.com/terry-chao/tamias/blob/main/scripts/check-meshy.ps1)、[`scripts/fake-meshy.py`](https://github.com/terry-chao/tamias/blob/main/scripts/fake-meshy.py) |
+| 密钥写入脚本（面板之外的手工路径，CI / 无界面场景用） | [`scripts/set-meshy-key.ps1`](https://github.com/terry-chao/tamias/blob/main/scripts/set-meshy-key.ps1) |
 
 **还缺：**
 
 | # | 缺口 | 不做的后果 | 落点 |
 |---|---|---|---|
-| 1 | 生成面板（提示词 / 进度 / 取消 / 缩略图 / 额度 / 设置入口） | 交互只能靠 `--meshy-prompt` 这类命令行入口 | `src/app/shell/panel/` |
-| 2 | 下载与解析不冻界面 | 几十 MB 的 GLB 解析会卡住 UI | 见 [§7](#7-四个真实的坑) |
-| 3 | 单位与朝向实测（真素材） | 模型缩放错、躺倒 | 先拿一个真实 GLB 对（见 [§7](#7-四个真实的坑)） |
-| 4 | MCP 工具（可选，B 路线） | Agent 不能端到端生成并插入 | [`session_mcp_backend.cpp`](https://github.com/terry-chao/tamias/blob/main/src/host/session_mcp_backend.cpp) |
+| 1 | 单位与朝向实测（真素材） | 模型缩放错、躺倒 | 先拿一个真实 GLB 对（见 [§7](#7-四个真实的坑)） |
+| 2 | MCP 工具（可选，B 路线） | Agent 不能端到端生成并插入 | [`session_mcp_backend.cpp`](https://github.com/terry-chao/tamias/blob/main/src/host/session_mcp_backend.cpp) |
+| 3 | 解析挪出 UI 线程 | 大模型导入时界面会卡一下（量级见 [§6](#6-分期实施)） | `DocumentViewport::import_mesh_file` |
+| 4 | 缩略图 | 不做也不缺：生成结果直接进视口，人本来就看得见 | — |
 
 ## 6. 分期实施
 
@@ -116,8 +120,8 @@ Meshy 的输出是**美术向**网格：几万个三角、PBR 贴图、没有拓
 | **M0** ✅ | 可撤销导入（命令 + app 入口 + 单测） | 导入一个 GLB，`Ctrl+Z` 一次全退（节点 / 网格 / 材质 / 贴图） |
 | **M1** | 真实素材对账：拿 Meshy 导出的 GLB 走 `import_mesh_file`，量尺度 / 朝向 / 贴图 | 尺寸与朝向正确，或明确记下要补的换算 |
 | **M2** ✅ | `meshy_protocol` + `meshy_client`（建任务 → 轮询 → 下载）+ 设置项 + `--meshy-prompt` | 一句提示词产出 GLB 并作为导入网格进当前文档（端到端脚本已跑通） |
-| **M3** | 面板 UI：进度 / 取消 / 缩略图 / 额度显示；下载与解析挪出 UI 线程 | 生成期间界面不冻；能中途取消 |
-| **M3+** | refine（用 `preview_task_id` 出一版精模）+ 额度显示 | 首轮花了多少、精修花了多少，界面上看得见 |
+| **M3** ✅ | 面板 UI：提示词 / 风格 / 面数 / 进度 / 阶段 / 取消 / 额度 / 设置（密钥进凭据管理器）+ refine | 面板里一句提示词能产出并导入；生成期间界面不冻（下载是流式的、轮询是定时器）；能中途取消 |
+| **M3 遗留** | 解析挪出 UI 线程 | **故意缓做**：唯一会阻塞的是「下载完之后解析文件 + 解码贴图」这一步，量级在几百毫秒（无节点变换、单 primitive 的文件更快），而把 `ImportedModel` 递回 UI 线程要引入跨线程投递。**先按 M1 拿真素材量一次**，超过 0.5 秒再连加载器一起改，别为猜出来的耗时加复杂度 |
 | **M4**（可选） | MCP 工具 `tamias_generate_3d` + `tamias_import_mesh`（写工具，受 `ask` 策略） | 外部 Agent 能生成并插入，且每次调用在命令控制台留痕 |
 
 **M1 必须排在 M2 前面**：加载器的真实能力只有拿真素材才能定，先写网络代码会把
@@ -141,6 +145,16 @@ Meshy 的输出是**美术向**网格：几万个三角、PBR 贴图、没有拓
    走 B 路线时先补一条纪律：MCP 侧要么只接受**应用自己下载**的 URL / 受控临时路径，
    要么把这条命令列进文件类黑名单。今天代码里**还没有**命令黑名单，
    [AI 接入](DECISION-AI-INTEGRATION.md) §7 那条"默认禁掉文件导入导出"仍只是纪律。
+5. **显卡驱动会假装成"Meshy 的 bug"。** 走端到端脚本时遇到过一次 `tamias.exe` 以
+   `0xC0000005` 退出。对照实验说明它**与 Meshy 无关**：把 ini 的 `render/backend`
+   改成 `OpenGL`、**不带任何 Meshy 参数**纯启动（只开 `assets/samples/cube.obj`），
+   同样 5 秒内以同一个退出码崩掉；而"上一次进程不是正常退出（脚本里 `Stop-Process`
+   收尾就会这样）"正好会把下一次启动降级到 OpenGL，于是它披着 Meshy 的外衣出现。
+   根因与修法见 [RHI 卡死 / 崩溃定位](RHI-TRIAGE.md)，本机那块驱动已由
+   [`rhi_blocklist.json`](https://github.com/terry-chao/tamias/blob/main/assets/rhi_blocklist.json)
+   登记为 `force: vulkan`。
+   [`check-meshy.ps1`](https://github.com/terry-chao/tamias/blob/main/scripts/check-meshy.ps1)
+   跑之前仍会**显式**把后端钉成 Vulkan：验证要考的是 Meshy，不该受任何一层的后端选择影响。
 
 ## 8. 安全与成本
 
