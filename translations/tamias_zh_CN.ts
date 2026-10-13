@@ -376,6 +376,14 @@ draw %1  tri %2  gpu %3MB  tess %4</source>
         <translation>与能读写当前文档的 AI 对话</translation>
     </message>
     <message>
+        <source>AI 3D Generation</source>
+        <translation>AI 生成 3D</translation>
+    </message>
+    <message>
+        <source>Generate a mesh with Meshy and add it to the document</source>
+        <translation>用 Meshy 生成网格并加进当前文档</translation>
+    </message>
+    <message>
         <source>Trace Drawing</source>
         <translation>翻模</translation>
     </message>
@@ -5156,6 +5164,181 @@ tests failed (exit %1)
     <message>
         <source>Could not save the API key (%1); it stays in this session only.</source>
         <translation>API Key 没能存下来（%1），这次仍然只有本次会话有效。</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::MeshyPanel</name>
+    <message>
+        <source>Describe the object to generate, e.g. &quot;a wooden chair with four legs&quot;</source>
+        <translation>描述要生成的物体，例如「四条腿的木椅子」</translation>
+    </message>
+    <message>
+        <source>Art style the service should aim for</source>
+        <translation>生成时追求的美术风格</translation>
+    </message>
+    <message>
+        <source>Target triangle count for the generated mesh</source>
+        <translation>生成网格的目标三角面数</translation>
+    </message>
+    <message>
+        <source>Style</source>
+        <translation>风格</translation>
+    </message>
+    <message>
+        <source>Triangles</source>
+        <translation>面数</translation>
+    </message>
+    <message>
+        <source>Generate</source>
+        <translation>生成</translation>
+    </message>
+    <message>
+        <source>Start a generation (Ctrl+Enter)</source>
+        <translation>开始一次生成（Ctrl+Enter）</translation>
+    </message>
+    <message>
+        <source>Refine</source>
+        <translation>细化</translation>
+    </message>
+    <message>
+        <source>Spend another pass on the last preview result</source>
+        <translation>在上一次粗模的基础上再花一轮细化</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>取消</translation>
+    </message>
+    <message>
+        <source>Stop waiting; the file is discarded</source>
+        <translation>停止等待，已下到一半的文件会被丢弃</translation>
+    </message>
+    <message>
+        <source>Credits</source>
+        <translation>额度</translation>
+    </message>
+    <message>
+        <source>Ask the service for the remaining credits</source>
+        <translation>问服务端还剩多少额度</translation>
+    </message>
+    <message>
+        <source>Settings</source>
+        <translation>设置</translation>
+    </message>
+    <message>
+        <source>Service address, model, API key</source>
+        <translation>服务地址、模型名、API 密钥</translation>
+    </message>
+    <message>
+        <source>Failed: %1</source>
+        <translation>失败：%1</translation>
+    </message>
+    <message>
+        <source>Canceled. Nothing was added to the document.</source>
+        <translation>已取消，文档里没有加任何东西。</translation>
+    </message>
+    <message>
+        <source>Generated, but it could not be added to the document: %1</source>
+        <translation>生成成功，但没能加进文档：%1</translation>
+    </message>
+    <message>
+        <source>Added to the document as node %1 (Ctrl+Z undoes it). File: %2</source>
+        <translation>已加进文档（节点 %1，Ctrl+Z 一步撤销）。文件：%2</translation>
+    </message>
+    <message>
+        <source>Credits: %1</source>
+        <translation>剩余额度：%1</translation>
+    </message>
+    <message>
+        <source>Credits: unavailable</source>
+        <translation>剩余额度：取不到</translation>
+    </message>
+    <message>
+        <source>Write a prompt and press Generate. The model is downloaded, then added to the current document as one undoable step. Generation costs credits and takes a few minutes.</source>
+        <translation>写一句提示词、按「生成」。模型下载完会作为一步撤销加进当前文档。生成要消耗额度，通常几分钟，中途可以取消。</translation>
+    </message>
+    <message>
+        <source>Write a prompt first.</source>
+        <translation>先写一句提示词。</translation>
+    </message>
+    <message>
+        <source>Generating… this can take a few minutes.</source>
+        <translation>正在生成…可能要几分钟。</translation>
+    </message>
+    <message>
+        <source>Refining the last preview…</source>
+        <translation>正在细化上一次粗模…</translation>
+    </message>
+    <message>
+        <source>Credits: checking…</source>
+        <translation>剩余额度：查询中…</translation>
+    </message>
+    <message>
+        <source>Idle</source>
+        <translation>空闲</translation>
+    </message>
+    <message>
+        <source>Creating the task…</source>
+        <translation>正在建任务…</translation>
+    </message>
+    <message>
+        <source>Generating on Meshy…</source>
+        <translation>Meshy 正在生成…</translation>
+    </message>
+    <message>
+        <source>Downloading the model…</source>
+        <translation>正在下载模型…</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>完成</translation>
+    </message>
+    <message>
+        <source>Failed</source>
+        <translation>失败</translation>
+    </message>
+    <message>
+        <source>Canceled</source>
+        <translation>已取消</translation>
+    </message>
+    <message>
+        <source>3D Generation Settings</source>
+        <translation>3D 生成设置</translation>
+    </message>
+    <message>
+        <source>Leave empty to use the default service address</source>
+        <translation>留空则用默认服务地址</translation>
+    </message>
+    <message>
+        <source>Leave empty for the service default model</source>
+        <translation>留空则用服务端的默认模型</translation>
+    </message>
+    <message>
+        <source>Leave empty to forget the saved key</source>
+        <translation>留空则忘掉已保存的密钥</translation>
+    </message>
+    <message>
+        <source>Service address</source>
+        <translation>服务地址</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>模型名</translation>
+    </message>
+    <message>
+        <source>API Key</source>
+        <translation>API 密钥</translation>
+    </message>
+    <message>
+        <source>Service address and model are remembered. The API key is saved to %1 so you don&apos;t have to retype it. This panel only drives text-to-3D; the key never goes into the document.</source>
+        <translation>服务地址与模型名会被记住；API 密钥存到 %1，不用每次重敲。这个面板只驱动「文字生成 3D」，密钥不会写进文档。</translation>
+    </message>
+    <message>
+        <source>Settings updated.</source>
+        <translation>设置已更新。</translation>
+    </message>
+    <message>
+        <source>Settings updated, but the API key could not be saved (%1); it stays in this session only.</source>
+        <translation>设置已更新，但密钥没能保存（%1），只在本次会话有效。</translation>
     </message>
 </context>
 <context>

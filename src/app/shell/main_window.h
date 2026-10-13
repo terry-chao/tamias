@@ -34,16 +34,13 @@ class QTimer;
 
 namespace tamias {
 
-namespace ai {
-class MeshyClient;
-}
-
 class PropertyPanel;
 class HandleInspector;
 class SceneDebuggerWindow;
 class TextureLibraryPanel;
 class TimingPanel;
 class AiPanel;
+class MeshyPanel;
 class ConsolePanel;
 class PluginManager;
 class RibbonBar;
@@ -267,11 +264,11 @@ class MainWindow final : public QMainWindow {
   QDockWidget* console_dock_ = nullptr;
   // AI 对话面板：进程内助手，工具直接调 SessionMcpBackend，不经 MCP 传输。
   AiPanel* ai_panel_ = nullptr;
-  ai::MeshyClient* meshy_client_ = nullptr;
-  // 最近一次生成用的提示词：导入时当网格名（前 40 字），好在大纲里认出来源。
-  QString last_meshy_prompt_;
+  MeshyPanel* meshy_panel_ = nullptr;
   QDockWidget* ai_dock_ = nullptr;
   QAction* ai_toggle_ = nullptr;
+  QDockWidget* meshy_dock_ = nullptr;
+  QAction* meshy_toggle_ = nullptr;
   // 停靠布局的存盘节流（拖动面板时 LayoutRequest 连发，见 persist_window_state）。
   QTimer* window_state_timer_ = nullptr;
   bool window_state_ready_ = false;

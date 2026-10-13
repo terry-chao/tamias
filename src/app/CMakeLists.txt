@@ -37,6 +37,7 @@ add_executable(tamias
   shell/dialog/plugin_prompt_dialog.cpp
   shell/panel/console_panel.cpp
   shell/panel/ai_panel.cpp
+  shell/panel/meshy_panel.cpp
   shell/panel/extension_watcher.cpp
   # 内置 AI 助手：OpenAI 兼容客户端（对话面板在 shell/panel/ai_panel.cpp）
   ai/ai_client.cpp

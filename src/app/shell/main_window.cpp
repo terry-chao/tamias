@@ -4,8 +4,7 @@
 #include "app/mcp/mcp_service.h"
 #include "app/shell/panel/console_panel.h"
 #include "app/shell/panel/ai_panel.h"
-#include "app/ai/meshy_client.h"
-#include "app/base/secret_store.h"
+#include "app/shell/panel/meshy_panel.h"
 #include "app/shell/panel/extension_watcher.h"
 #include "app/shell/dialog/graphics_diagnostics_dialog.h"
 #include "app/base/app_settings.h"
@@ -964,6 +963,35 @@ MainWindow::MainWindow(QWidget* parent)
   ai_toggle_->setToolTip(tr("Chat with an AI that can read and edit the current document"));
   addAction(ai_toggle_);
 
+  // AI 生成 3D 面板：和 AI 助手同一层、同样紧凑。生成是分钟级的外部动作，
+  // 进度与取消都在面板自己那一行里，不占视口。
+  meshy_panel_ = new MeshyPanel(this);
+  // 面板不碰文档：导入交给宿主（只有它知道当前页签是哪个文档）。
+  meshy_panel_->set_import_handler(
+      [this](const QString& path, const QString& name) -> std::uint64_t {
+        DocumentViewport* viewport = current_viewport();
+        if (viewport == nullptr) {
+          // 没有打开的文档：文件已经落地，别丢掉它——把路径写进日志，人自己导入。
+          log_warn("Meshy: no open document; the model is at " + path.toStdString());
+          return 0;
+        }
+        return viewport->import_mesh_file(path.toStdString(), name.toStdString());
+      });
+  meshy_dock_ = new QDockWidget(tr("AI 3D Generation"), this);
+  meshy_dock_->setObjectName(QStringLiteral("meshyDock"));
+  meshy_dock_->setWidget(meshy_panel_);
+  meshy_dock_->setWindowIcon(QIcon(QStringLiteral(":/icons/box.svg")));
+  meshy_dock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea |
+                               Qt::BottomDockWidgetArea);
+  addDockWidget(Qt::RightDockWidgetArea, meshy_dock_);
+  meshy_dock_->hide();
+  meshy_toggle_ = meshy_dock_->toggleViewAction();
+  meshy_toggle_->setText(tr("AI 3D Generation"));
+  meshy_toggle_->setIcon(ribbon_icon(QStringLiteral(":/icons/box.svg")));
+  meshy_toggle_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+M")));
+  meshy_toggle_->setToolTip(tr("Generate a mesh with Meshy and add it to the document"));
+  addAction(meshy_toggle_);
+
   connect(timing_record_action_, &QAction::toggled, this, [this](bool checked) {
     if (checked) {
       timing_dock_->show();
@@ -1168,6 +1196,7 @@ MainWindow::MainWindow(QWidget* parent)
   panels_group->add_action(timing_toggle_);
   panels_group->add_action(console_toggle_);
   panels_group->add_action(ai_toggle_);
+  panels_group->add_action(meshy_toggle_);
 
   RibbonGroup* workspace_group =
       view_page->add_group(QStringLiteral("workspace"), tr("Workspace"));
@@ -1282,7 +1311,8 @@ MainWindow::MainWindow(QWidget* parent)
   // 带版本号：布局本身改设计时（比如 AI 面板从窄条改成右侧整列）把版本 +1，
   // 老布局就作废一次、按新默认重排——不然用户看到的永远是旧的那套。窗口几何不受影响。
   // v4：AI 面板收回普通停靠（v3 那版把它做成了右侧整列，太占视口）。
-  constexpr int kDockLayoutVersion = 4;
+  // v5：多了一个 AI 生成 3D 面板（Meshy），同一列、同样默认收起。
+  constexpr int kDockLayoutVersion = 5;
   {
     auto& settings = AppSettings::instance();
     if (settings.dock_layout_version() != kDockLayoutVersion) {
@@ -3007,82 +3037,14 @@ void MainWindow::ask_ai(const QString& prompt) {
 
 void MainWindow::generate_mesh_with_meshy(const QString& prompt) {
   const QString text = prompt.trimmed();
-  if (text.isEmpty()) {
+  if (text.isEmpty() || meshy_panel_ == nullptr) {
     return;
   }
-
-  if (meshy_client_ == nullptr) {
-    meshy_client_ = new ai::MeshyClient(this);
-    connect(meshy_client_, &ai::MeshyClient::stage_changed, this,
-            [this](ai::MeshyClient::Stage stage) {
-              QString label;
-              switch (stage) {
-                case ai::MeshyClient::Stage::kCreating:
-                  label = tr("Meshy: creating the task…");
-                  break;
-                case ai::MeshyClient::Stage::kGenerating:
-                  label = tr("Meshy: generating…");
-                  break;
-                case ai::MeshyClient::Stage::kDownloading:
-                  label = tr("Meshy: downloading the model…");
-                  break;
-                default:
-                  break;
-              }
-              if (!label.isEmpty()) {
-                statusBar()->showMessage(label);
-              }
-            });
-    connect(meshy_client_, &ai::MeshyClient::progress_changed, this, [this](int percent) {
-      if (meshy_client_ != nullptr && meshy_client_->busy()) {
-        statusBar()->showMessage(tr("Meshy: %1%").arg(percent));
-      }
-    });
-    connect(meshy_client_, &ai::MeshyClient::failed, this, [this](const QString& message) {
-      log_error("Meshy: " + message.toStdString());
-      statusBar()->showMessage(tr("Meshy failed: %1").arg(message), 15000);
-    });
-    connect(meshy_client_, &ai::MeshyClient::succeeded, this,
-            [this](const QString& path, const QString& thumbnail) {
-              Q_UNUSED(thumbnail);
-              DocumentViewport* viewport = current_viewport();
-              if (viewport == nullptr) {
-                // 没有打开的文档：文件已经落地，别丢掉它——把路径写进日志，人自己导入。
-                log_warn("Meshy: no open document; the model is at " + path.toStdString());
-                statusBar()->showMessage(tr("Meshy finished — open a document, then import %1")
-                                             .arg(path),
-                                         15000);
-                return;
-              }
-              // 名字取提示词的前 40 个字符：大纲/属性面板里要能认出这是哪次生成的。
-              const std::string name = last_meshy_prompt_.left(40).toStdString();
-              const std::uint64_t node_id = viewport->import_mesh_file(path.toStdString(), name);
-              if (node_id == 0) {
-                log_error("Meshy: the downloaded model could not be imported: " + path.toStdString());
-                statusBar()->showMessage(tr("Meshy finished, but the model could not be imported."),
-                                         15000);
-                return;
-              }
-              // 生成是外部动作、且花了钱：留一行审计，和人手点按钮的导入区分开。
-              log_info("Meshy: imported " + path.toStdString() + " as node " +
-                       std::to_string(node_id) + " (one undo step)");
-              statusBar()->showMessage(tr("Meshy: model imported (Ctrl+Z to undo)."), 8000);
-            });
+  if (meshy_dock_ != nullptr) {
+    meshy_dock_->show();
+    meshy_dock_->raise();
   }
-
-  const auto& settings = AppSettings::instance();
-  QString base_url = settings.meshy_base_url().trimmed();
-  if (base_url.isEmpty()) {
-    base_url = QString::fromStdString(std::string(ai::kDefaultMeshyBaseUrl));
-  }
-  const QString api_key = SecretStore::load(QLatin1String(ai::kMeshyApiKeySlot));
-  meshy_client_->set_config({base_url, api_key});
-
-  last_meshy_prompt_ = text;
-  ai::MeshyTextTo3dRequest request;
-  request.prompt = text.toStdString();
-  request.ai_model = settings.meshy_model().trimmed().toStdString();
-  meshy_client_->generate(request);
+  meshy_panel_->generate(text);
 }
 
 void MainWindow::activate_viewport(DocumentViewport* vp) {
