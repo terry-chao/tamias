@@ -37,6 +37,19 @@ target_link_options(tamias_viewer PRIVATE
   --bind
 )
 
+# 必须显式抬到 WebGL 2：Emscripten 的 src/settings.js 里 MIN/MAX_WEBGL_VERSION 缺省都是 1
+# （只面向 WebGL 1），而 rhi/webgl 用的是 WebGL2 才有的一族函数——
+# glBindBufferBase / glGetUniformBlockIndex / glUniformBlockBinding（UBO）。
+# 不抬的话编译全过、**最后一步链接**才报 undefined symbol，很容易被当成"后端写错了"。
+# 只在真链了 WebGL 后端时加：WebGPU 预设用不上，免得白带一份 WebGL 胶水。
+if(TARGET tamias::rhi_webgl)
+  target_link_options(tamias_viewer PRIVATE
+    "SHELL:-sMIN_WEBGL_VERSION=2"
+    "SHELL:-sMAX_WEBGL_VERSION=2"
+  )
+  target_compile_definitions(tamias_viewer PRIVATE TAMIAS_WASM_WEBGL2=1)
+endif()
+
 # Web UI（Vite + React + TypeScript，工程根在 web/）：构建 dist 并拷到 wasm 输出目录，
 # 与 tamias_viewer.js/.wasm 同目录。找不到 node/npm 时跳过 UI（只产出 wasm 文件）。
 #

@@ -2,18 +2,18 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "浏览器：WASM 预览 (F5)",
+      "name": "WebGL + .NET Server",
       "type": "pwa-chrome",
       "request": "launch",
       "url": "http://localhost:3000",
       "webRoot": "${workspaceFolder}/web",
       "sourceMaps": true,
       "smartStep": true,
-      "preLaunchTask": "Tamias: WASM 预览（构建 + 起服务）",
-      "detail": "构建 build/wasm 的 tamias_viewer → 在独立窗口起预览服务 → 打开浏览器并附上 JS 调试器。不依赖状态栏当前选中的 preset。关掉 TamiasWasmServe 窗口即停止预览。"
+      "preLaunchTask": "Tamias: WASM 预览（WebGL + 几何服务）",
+      "detail": "构建 build/wasm 的 tamias_viewer（WebGL 后端，wasm 预设的默认）→ 起 .NET 几何服务（127.0.0.1:5199，窗口 TamiasGeometryServe）→ 在独立窗口起静态预览（:3000，窗口 TamiasWasmServe）→ 打开浏览器并附上 JS 调试器。调试 WebGL 一律连几何服务一起起；确实不想要它时用脚本（scripts\\wasm-preview.ps1 不带 -WithGeometryServer）。关掉对应窗口即停止对应服务。"
     },
     {
-      "name": "桌面：调试 tamias (CMake Launch Target)",
+      "name": "Tamias (CMake Launch Target)",
       "type": "cppvsdbg",
       "request": "launch",
       "preLaunchTask": "Tamias: 编译",

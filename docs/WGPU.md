@@ -1,6 +1,9 @@
 # 浏览器 WebGPU：WASM 查看器的 RHI
 
-> **状态：浏览器后端已落地。** 桌面 **不做** wgpu-native。WebGPU 只出现在引擎 WASM 查看器里，和桌面 Vulkan / OpenGL 并列，都实现同一份 [`device.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/device.h)。一帧剧本见 [管线与 RHI](RENDERING.md)；浏览器产品线见 [Web 查看器](WEB.md)。
+> **状态：实验特性，不是默认后端。** 浏览器线的**默认是 WebGL2**（[Web 查看器](WEB.md)）；
+> WebGPU 只在实验预设 `wasm-webgpu` 里编出来，**不保证与 WebGL 对齐**：功能面、稳定性、
+> 以及下面的 shader 覆盖面都可能落后。页面在 WebGPU 下会显示橙色「实验」角标。
+> 桌面 **不做** wgpu-native。WebGPU 只出现在引擎 WASM 查看器里，和桌面 Vulkan / OpenGL 并列，都实现同一份 [`device.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/device.h)。一帧剧本见 [管线与 RHI](RENDERING.md)；浏览器产品线见 [Web 查看器](WEB.md)。
 
 ---
 
@@ -19,7 +22,7 @@ draw_channel → RHI → wgpu-native → Vulkan（或 DX12）
 | 产品线 | 后端 |
 |---|---|
 | 桌面 Qt | Vulkan 主、OpenGL 兼容老卡 |
-| 浏览器 | **WebGPU**（`rhi/webgpu`）；WebGL2 仍可作可选回退 |
+| 浏览器 | **WebGL2**（`rhi/webgl`，默认）；WebGPU（`rhi/webgpu`）是实验预设 `wasm-webgpu` |
 
 ---
 

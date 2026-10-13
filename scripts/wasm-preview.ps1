@@ -7,11 +7,16 @@
 #
 # -NoBuild: only start the server (no configure/build).
 # -NoBrowser: do not open the browser (VS Code's F5 debug config opens it itself).
+# -WithGeometryServer: ALSO start the .NET geometry service (server/csharp/Tamias.Server)
+#   on -GeometryPort, in its own "TamiasGeometryServe" window. F5 uses this: the browser
+#   debugging session then has a local geometry backend next to the static preview.
 # NOTE: keep this file ASCII-only. Windows PowerShell reads .ps1 as ANSI (GBK here)
 # unless it has a UTF-8 BOM, so non-ASCII text without a BOM breaks parsing.
 param(
   [switch]$NoBuild,
-  [switch]$NoBrowser
+  [switch]$NoBrowser,
+  [switch]$WithGeometryServer,
+  [int]$GeometryPort = 5199
 )
 
 $Port = 3000
@@ -37,6 +42,58 @@ function Stop-Preview {
   } catch {
     # nothing to stop
   }
+}
+
+function Resolve-GeometryDir {
+  # tamias_server.dll and the published Tamias.Server.exe MUST sit in the SAME directory:
+  # P/Invoke resolves the conventional name "tamias_server" against the app base
+  # directory, so keeping them apart is a DllNotFoundException at startup.
+  $candidates = @(
+    (Join-Path $Root "build\bin\RelWithDebInfo"),
+    (Join-Path $Root "build\bin\Release"),
+    (Join-Path $Root "build\bin\Debug")
+  )
+  foreach ($dir in $candidates) {
+    if ((Test-Path (Join-Path $dir "tamias_server.dll")) -and
+        (Test-Path (Join-Path $dir "Tamias.Server.exe"))) {
+      return $dir
+    }
+  }
+  throw ("geometry server artifacts not found: need tamias_server.dll AND Tamias.Server.exe " +
+         "in the same directory. Build them first with: " +
+         "powershell -File scripts\build-server.ps1 -WithShell")
+}
+
+function Stop-GeometryServer {
+  # Stop by process name: the .NET shell's host process is literally "Tamias.Server",
+  # which is more reliable than matching a window title. The cmd window created by
+  # Start-Process disappears on its own once the child exits.
+  Get-Process -Name "Tamias.Server" -ErrorAction SilentlyContinue | ForEach-Object {
+    Write-Host "Stopping Tamias.Server PID $($_.Id)"
+    Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+  }
+}
+
+function Start-GeometryServer([string]$Dir, [int]$Port) {
+  Start-Process -FilePath (Join-Path $PSScriptRoot "serve-geometry.cmd") `
+    -ArgumentList "`"$Dir`"", $Port | Out-Null
+
+  # Wait for /health. That endpoint IS the startup handshake: when the native ABI and
+  # the shell disagree the process refuses to start, so failing here tells us
+  # immediately instead of at the first request from the browser.
+  for ($i = 0; $i -lt 80; $i++) {
+    try {
+      $resp = Invoke-WebRequest "http://127.0.0.1:$Port/health" -UseBasicParsing -TimeoutSec 1
+      if ($resp.StatusCode -eq 200) {
+        Write-Host "geometry server ready: http://127.0.0.1:$Port"
+        Write-Host "  $($resp.Content)"
+        return
+      }
+    } catch {
+      Start-Sleep -Milliseconds 250
+    }
+  }
+  throw "geometry server did not come up on port $Port (see the TamiasGeometryServe window)"
 }
 
 $wasmDir = Join-Path $Root "build\wasm"
@@ -69,6 +126,14 @@ if (-not $NoBuild) {
 
 Stop-Preview
 
+# Geometry service: the .NET shell over tamias_server.dll, so the page has a local
+# geometry backend. Only started when asked, and only then is an old one stopped -
+# do not kill a server the user started on purpose.
+if ($WithGeometryServer) {
+  Stop-GeometryServer
+  Start-GeometryServer (Resolve-GeometryDir) $GeometryPort
+}
+
 # Spawn the preview window with Start-Process: the new process must NOT inherit our
 # stdio. With `start ... cmd /k` the child keeps the parent's pipe open, so this
 # script (and VS Code's preLaunchTask) would hang until the window is closed.
@@ -89,7 +154,22 @@ for ($i = 0; $i -lt 60; $i++) {
 if (-not $ready) { throw "preview server did not come up on port $Port" }
 
 Write-Host "preview ready: http://localhost:$Port"
+if ($WithGeometryServer) {
+  Write-Host "geometry server: http://127.0.0.1:$GeometryPort (window: TamiasGeometryServe)"
+}
 Write-Host "close the TamiasWasmServe window to stop the preview"
+
+# Say which backend this tree was built with. When debugging WebGL the worst failure
+# mode is believing you are on WebGL while actually running WebGPU: the artifacts look
+# almost identical, only "was rhi/webgl linked in" differs.
+$cachePath = Join-Path $wasmDir "CMakeCache.txt"
+if (Test-Path $cachePath) {
+  if (Select-String -Path $cachePath -Pattern "^TAMIAS_ENABLE_WEBGL_BACKEND:BOOL=ON" -Quiet) {
+    Write-Host "RHI backend: WebGL2 (default)"
+  } elseif (Select-String -Path $cachePath -Pattern "^TAMIAS_ENABLE_WEBGPU_BACKEND:BOOL=ON" -Quiet) {
+    Write-Host "RHI backend: WebGPU (experimental - page shows an orange badge)"
+  }
+}
 
 if (-not $NoBrowser) {
   Start-Process "http://localhost:$Port"

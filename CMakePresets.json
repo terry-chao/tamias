@@ -41,8 +41,18 @@
       }
     },
     {
+      "name": "server",
+      "displayName": "MSVC x64 服务端宿主（tamias_server + .NET 服务壳）",
+      "inherits": "msvc",
+      "binaryDir": "${sourceDir}/build/server",
+      "cacheVariables": {
+        "TAMIAS_BUILD_SERVER": "ON",
+        "TAMIAS_BUILD_SERVER_SHELL": "ON"
+      }
+    },
+    {
       "name": "wasm",
-      "displayName": "Emscripten WebGPU viewer",
+      "displayName": "Emscripten WebGL viewer",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/wasm",
       "toolchainFile": "C:/dev/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
@@ -62,8 +72,8 @@
         "VCPKG_MANIFEST_MODE": "OFF",
         "TAMIAS_ENABLE_VULKAN_BACKEND": "OFF",
         "TAMIAS_ENABLE_OPENGL_BACKEND": "OFF",
-        "TAMIAS_ENABLE_WEBGL_BACKEND": "OFF",
-        "TAMIAS_ENABLE_WEBGPU_BACKEND": "ON",
+        "TAMIAS_ENABLE_WEBGL_BACKEND": "ON",
+        "TAMIAS_ENABLE_WEBGPU_BACKEND": "OFF",
         "TAMIAS_ENABLE_OCCT": "OFF",
         "TAMIAS_ENABLE_TRUCK_KERNEL": "ON",
         "TAMIAS_BUILD_TESTS": "OFF",
@@ -73,6 +83,16 @@
         "microsoft.com/VisualStudioSettings/CMake/1.0": {
           "hostOS": [ "Windows" ]
         }
+      }
+    },
+    {
+      "name": "wasm-webgpu",
+      "displayName": "Emscripten WebGPU viewer (实验)",
+      "inherits": "wasm",
+      "binaryDir": "${sourceDir}/build/wasm-webgpu",
+      "cacheVariables": {
+        "TAMIAS_ENABLE_WEBGL_BACKEND": "OFF",
+        "TAMIAS_ENABLE_WEBGPU_BACKEND": "ON"
       }
     },
     {
@@ -126,9 +146,22 @@
       "configurePreset": "linux"
     },
     {
+      "name": "server-build",
+      "displayName": "构建服务端宿主",
+      "configurePreset": "server",
+      "configuration": "RelWithDebInfo",
+      "targets": ["tamias_server"]
+    },
+    {
       "name": "wasm-build",
-      "displayName": "构建 WASM 查看器",
+      "displayName": "构建 WASM 查看器（WebGL，默认）",
       "configurePreset": "wasm",
+      "targets": ["tamias_viewer"]
+    },
+    {
+      "name": "wasm-webgpu-build",
+      "displayName": "构建 WASM 查看器（WebGPU，实验）",
+      "configurePreset": "wasm-webgpu",
       "targets": ["tamias_viewer"]
     }
   ],

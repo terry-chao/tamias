@@ -10,6 +10,8 @@
   --error: #ff6b6b;
   --ok: #4fd68c;
   --warn: #f0b429;
+  /* 实验特性角标（今天只有 WebGPU 后端）：比 warn 更"警示"一档，和施工中区分开 */
+  --exp: #ff9f43;
 }
 
 * {
@@ -70,6 +72,12 @@ header {
   padding: 0 5px;
   font-size: 11px;
   letter-spacing: 1px;
+}
+
+/* 实验后端角标（WebGPU）：比「施工中」更警示一档，别让用户以为它和 WebGL 等价。 */
+.brand .wip.exp {
+  color: var(--exp);
+  border-color: var(--exp);
 }
 
 .actions {

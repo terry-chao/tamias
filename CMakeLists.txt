@@ -103,11 +103,18 @@ endif()
 if(EMSCRIPTEN)
   set(TAMIAS_ENABLE_VULKAN_BACKEND OFF CACHE BOOL "Vulkan is unavailable on WebAssembly." FORCE)
   set(TAMIAS_ENABLE_OPENGL_BACKEND OFF CACHE BOOL "Desktop OpenGL is unavailable on WebAssembly." FORCE)
-  set(TAMIAS_ENABLE_WEBGL_BACKEND OFF CACHE BOOL "WebGL2 is the optional WASM fallback." FORCE)
-  set(TAMIAS_ENABLE_WEBGPU_BACKEND ON CACHE BOOL "WebGPU is the WASM RHI." FORCE)
+  # WebGL / WebGPU 这两个**不能 FORCE**：wasm 与 wasm-webgpu 两个预设就是靠这两个开关
+  # 选后端的，FORCE 会把预设的选择直接盖掉。老版本正是这么写的，结果 wasm 被钉死在
+  # WebGPU 上，rhi/webgl 从来没在这个预设下编过（产物里 GLctx 零命中）。
   set(TAMIAS_ENABLE_OCCT OFF CACHE BOOL "OCCT is not linked in the phase-1 viewer." FORCE)
   set(TAMIAS_BUILD_TESTS OFF CACHE BOOL "Desktop tests are not built for WASM." FORCE)
   set(TAMIAS_USE_FETCHCONTENT OFF CACHE BOOL "No FetchContent on the WASM viewer path." FORCE)
+  if(NOT TAMIAS_ENABLE_WEBGL_BACKEND AND NOT TAMIAS_ENABLE_WEBGPU_BACKEND)
+    message(FATAL_ERROR
+      "No WASM RHI backend selected. The `wasm` preset builds WebGL (the default); "
+      "the `wasm-webgpu` preset builds the experimental WebGPU backend. Pass "
+      "-DTAMIAS_ENABLE_WEBGL_BACKEND=ON (or ...WEBGPU_BACKEND=ON) to pick one.")
+  endif()
 endif()
 
 # CMAKE_TOOLCHAIN_FILE in the cache does not mean the toolchain ran.

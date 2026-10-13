@@ -58,6 +58,9 @@ void frame_all() { host().frame_all(); }
 void render_frame() { host().render(); }
 std::string status() { return host().status(); }
 std::string document_name() { return host().document_name(); }
+// 页面顶栏的读数：跑在哪个后端上、它是不是实验特性。
+std::string backend_name() { return host().backend_name(); }
+bool backend_experimental() { return host().backend_experimental(); }
 
 bool dispatch_command(const std::string& command, const std::string& args) {
   return host().dispatch(command, args);
@@ -118,6 +121,8 @@ EMSCRIPTEN_BINDINGS(tamias_viewer) {
   emscripten::function("renderFrame", &render_frame);
   emscripten::function("status", &status);
   emscripten::function("documentName", &document_name);
+  emscripten::function("backendName", &backend_name);
+  emscripten::function("backendExperimental", &backend_experimental);
   emscripten::function("dispatch", &dispatch_command);
   emscripten::function("undo", &undo_viewer);
   emscripten::function("redo", &redo_viewer);

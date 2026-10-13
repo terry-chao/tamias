@@ -159,12 +159,21 @@ Result<void> ViewerHost::start(const char* canvas_selector) {
     canvas_selector_ = canvas_selector;
   }
   RenderDeviceConfig config{};
-#if defined(TAMIAS_HAS_RHI_WEBGPU)
-  register_webgpu_backend();
-  config.backend = GraphicsBackend::WebGPU;
-#elif defined(TAMIAS_HAS_RHI_WEBGL)
+  // WebGL 优先：它是浏览器线的**默认**后端。WebGPU 是实验预设（wasm-webgpu），
+  // 功能与稳定性都还没和 WebGL 对齐——见 WEBGL-EXP-IMPLEMENTATION-PLAN.md 与 docs/WGPU.md。
+  // 顺序不能反：原来 WebGPU 在前，等于让"实验后端"当了默认。
+#if defined(TAMIAS_HAS_RHI_WEBGL)
   register_webgl_backend();
   config.backend = GraphicsBackend::WebGL;
+  backend_name_ = "WebGL2";
+  backend_experimental_ = false;
+#elif defined(TAMIAS_HAS_RHI_WEBGPU)
+  register_webgpu_backend();
+  config.backend = GraphicsBackend::WebGPU;
+  backend_name_ = "WebGPU";
+  backend_experimental_ = true;
+  // 进 log_text()，页面的日志面板自动看得见。
+  log_warn("WebGPU 后端为实验特性，功能与稳定性尚未与 WebGL 对齐");
 #else
   return Err("no WASM RHI backend was compiled");
 #endif
@@ -183,6 +192,14 @@ Result<void> ViewerHost::start(const char* canvas_selector) {
   upload_document();
   status_ = "ready";
   return {};
+}
+
+std::string ViewerHost::backend_name() const {
+  return backend_name_;
+}
+
+bool ViewerHost::backend_experimental() const {
+  return backend_experimental_;
 }
 
 void ViewerHost::upload_document() {

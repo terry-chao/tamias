@@ -23,6 +23,10 @@ export interface TamiasViewerModule {
   renderFrame(): void;
   status(): string;
   documentName(): string;
+  // 实际编进来的浏览器后端："WebGL2"（默认）或 "WebGPU"（实验预设 wasm-webgpu）。
+  backendName(): string;
+  // 该后端是不是实验特性（今天只有 WebGPU 是）。页面据此打「（实验）」角标。
+  backendExperimental(): boolean;
   // 会话层能力（Session 的 embind 导出）
   dispatch(command: string, argsText?: string): boolean;
   undo(): void;

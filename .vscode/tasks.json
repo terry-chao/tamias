@@ -2,9 +2,9 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Tamias: WASM 预览（构建 + 起服务）",
+      "label": "Tamias: WASM 预览（WebGL + 几何服务）",
       "type": "shell",
-      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/scripts/wasm-preview.ps1\" -NoBrowser",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/scripts/wasm-preview.ps1\" -NoBrowser -WithGeometryServer",
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -15,7 +15,7 @@
         "clear": true
       },
       "problemMatcher": [],
-      "detail": "按需配置并构建 tamias_viewer，然后在独立窗口起预览服务；关掉 TamiasWasmServe 窗口即停止预览"
+      "detail": "按需配置并构建 tamias_viewer（WebGL 后端）→ 起 .NET 几何服务（:5199）→ 在独立窗口起预览服务（:3000）。调试 WebGL 一律连服务端一起起；关掉对应窗口即停止对应服务"
     },
     {
       "label": "Tamias: 结束调试进程",

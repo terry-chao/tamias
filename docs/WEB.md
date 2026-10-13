@@ -2,12 +2,12 @@
 
 > **状态：⚠️ 施工中（WIP）。** 查看器、轻编辑、Truck 建模已经能跑，但**和桌面端远未对齐**：
 > 功能在陆续补，embind 接口与交互细节随时可能变，别当成品对外承诺。页面左上角有「施工中」角标。
-> 桌面仍是 Qt 壳；浏览器走另一条产品线：无 Qt 的引擎交叉编译到 WebAssembly，新 Web UI 画在 HTML canvas 上。图形默认 [WebGPU](WGPU.md)（`rhi/webgpu`）。桌面不做 wgpu-native。
+> 桌面仍是 Qt 壳；浏览器走另一条产品线：无 Qt 的引擎交叉编译到 WebAssembly，新 Web UI 画在 HTML canvas 上。图形**默认 WebGL2**（`rhi/webgl`）；[WebGPU](WGPU.md)（`rhi/webgpu`）是**实验**预设 `wasm-webgpu`，功能与稳定性尚未与 WebGL 对齐。桌面不做 wgpu-native。
 
 实现入口：
 
 - 契约：[`native_window_handle.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/base/native_window_handle.h)、[`document_io.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document_io.h)、[`mesh_io.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/io/mesh_io.h)
-- RHI：[`src/engine/render/rhi/webgpu/`](https://github.com/terry-chao/tamias/tree/main/src/engine/render/rhi/webgpu)（默认）；可选 [`src/engine/render/rhi/webgl/`](https://github.com/terry-chao/tamias/tree/main/src/engine/render/rhi/webgl)
+- RHI：[`src/engine/render/rhi/webgl/`](https://github.com/terry-chao/tamias/tree/main/src/engine/render/rhi/webgl)（**默认**，GLSL ES 3.00）；实验可选 [`src/engine/render/rhi/webgpu/`](https://github.com/terry-chao/tamias/tree/main/src/engine/render/rhi/webgpu)（WGSL，预设 `wasm-webgpu`）
 - 宿主：[`ViewerHost`](https://github.com/terry-chao/tamias/blob/main/src/wasm/viewer_host.h) + [`web/index.html`](https://github.com/terry-chao/tamias/blob/main/web/index.html)
 
 ---
@@ -66,7 +66,7 @@ Document / io       与桌面同一套 .tdoc / .trscn / OBJ
     ▼
 RenderThread        synchronous=true，主线程 pump()
     ▼
-WebGPU RHI          emdawnwebgpu，绑 #viewport
+WebGL2 RHI           rhi/webgl，绑 #viewport
 ```
 
 描边层是新写的；Document / 命令模型 / `draw_channel` 剧本与桌面相同。
@@ -93,7 +93,7 @@ WebGPU RHI          emdawnwebgpu，绑 #viewport
 
 ## 4. 阶段 1 查看器
 
-**图形。** 默认 `GraphicsBackend::WebGPU`。实现藏在 `rhi/webgpu`，对外仍是 `device.h`。着色器是内嵌 WGSL（`webgpu_shaders.h`），不走 DXC / SPIR-V。Clip 校正与 Vulkan 相同（翻 Y，Z ∈ [0, 1]）。标准 WebGPU 没有 polygon mode，线框模式先走片元 `mode` 分支。可选回退：`TAMIAS_ENABLE_WEBGL_BACKEND` 编 `rhi/webgl`（GLSL ES 3.00）。详见 [浏览器 WebGPU](WGPU.md)。
+**图形。** 默认 `GraphicsBackend::WebGL2`。实现藏在 `rhi/webgl`，对外仍是 `device.h`。着色器是内嵌 GLSL ES 3.00（`webgl_shaders.h`），不走 DXC / SPIR-V。**链接必须显式抬到 WebGL 2**：Emscripten 的 `MIN/MAX_WEBGL_VERSION` 缺省都是 1，而 rhi/webgl 用的 UBO 那一族（`glBindBufferBase` / `glGetUniformBlockIndex` / `glUniformBlockBinding`）是 WebGL2 才有的——不抬的话编译全过、**最后一步链接**才报 undefined symbol。实验可选：`wasm-webgpu` 预设编 `rhi/webgpu`（内嵌 WGSL `webgpu_shaders.h`，emdawnwebgpu）。详见 [浏览器 WebGPU](WGPU.md)。
 
 **线程。** `RenderDeviceConfig.synchronous = true` 时不建 `std::thread`。上传和 `pump()` 都在调用线程跑，避开 SharedArrayBuffer / COOP-COEP。
 
@@ -121,11 +121,19 @@ WebGPU RHI          emdawnwebgpu，绑 #viewport
 
 | 想做的事 | 怎么做 |
 |---|---|
-| 浏览器预览（推荐） | Run and Debug → **Tamias: WASM 预览 (F5)** |
-| 停止预览 | 关掉 `TamiasWasmServe` 窗口 |
+| 浏览器预览 + 本地几何服务（推荐） | Run and Debug → **浏览器：WebGL 查看器 + 几何服务 (F5)** |
+| 停止 | 关掉 `TamiasWasmServe`（预览）和 `TamiasGeometryServe`（几何服务）两个窗口；或 `powershell -File scripts/wasm-stop.ps1` 一次收掉 |
 | 桌面调试 | Run and Debug → **CMake Launch Target**（照旧用 CMake Tools 的 preset） |
 | 只构建、不开浏览器 | `powershell -File scripts/wasm-preview.ps1 -NoBrowser` |
 | 只构建 wasm | `powershell -File scripts/wasm.ps1` |
+| 实验后端（WebGPU） | `cmake --preset wasm-webgpu` + `cmake --build build/wasm-webgpu --target tamias_viewer` |
+
+F5 那条链路做三件事：编 `build/wasm` 的 `tamias_viewer`（**WebGL2**）→ 起 .NET 几何服务
+（`127.0.0.1:5199`，见 [服务端语言决策](DECISION-SERVER-LANGUAGE.md)）→ 起静态预览
+（`:3000`）→ 用浏览器调试器打开页面。**调试 WebGL 一律连几何服务一起起**，VS Code 里只有
+这一个浏览器配置；确实不要它时走脚本（`scripts/wasm-preview.ps1` 不带
+`-WithGeometryServer`）。脚本最后会打印一行 `RHI backend: ...`——
+调试 WebGL 时最怕的就是"以为在调 WebGL，其实在跑 WebGPU"，两个产物长得几乎一样。
 
 命令行（等价于 F5，只是不开浏览器）：
 
@@ -153,8 +161,8 @@ wasm 构建会自动构建 `web/`（首次若缺少 `node_modules` 会先跑 `np
 |---|---|---|
 | `TAMIAS_ENABLE_VULKAN_BACKEND` | ON | OFF |
 | `TAMIAS_ENABLE_OPENGL_BACKEND` | ON | OFF |
-| `TAMIAS_ENABLE_WEBGL_BACKEND` | OFF | OFF（可选回退） |
-| `TAMIAS_ENABLE_WEBGPU_BACKEND` | OFF | ON |
+| `TAMIAS_ENABLE_WEBGL_BACKEND` | OFF | **ON**（默认后端） |
+| `TAMIAS_ENABLE_WEBGPU_BACKEND` | OFF | OFF（只由 `wasm-webgpu` 实验预设打开） |
 | `TAMIAS_ENABLE_OCCT` | ON | OFF |
 | `TAMIAS_BUILD_TESTS` | ON | OFF |
 

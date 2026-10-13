@@ -32,6 +32,12 @@ export default function App() {
   });
   // 引擎的 warn / error：桌面端在状态栏/对话框里报，web 端显示成页面上的面板。
   const [logText, setLogText] = useState("");
+  // 实际编进来的浏览器后端（"WebGL2" / "WebGPU"）+ 它是不是实验特性。
+  // 空串 = 还没 startViewer，顶栏先不显示。
+  const [backend, setBackend] = useState<{ name: string; experimental: boolean }>({
+    name: "",
+    experimental: false,
+  });
   // 相机朝向：右上角立方体用它画姿态，也用它做点面转场。
   const [viewAngles, setViewAngles] = useState<ViewAngles>({ yaw: 0.785398163, pitch: 0.35 });
   const viewAnglesRef = useRef(viewAngles);
@@ -65,6 +71,12 @@ export default function App() {
         setError(null);
         setStatus(await settle(module.status()));
         setDocName(await settle(module.documentName()));
+        // 跑在哪个后端上：顶栏读数 + 实验角标。别让用户靠猜（WebGL / WebGPU 的
+        // 画质与限制并不一样，见 docs/WEB.md）。
+        setBackend({
+          name: await settle(module.backendName()),
+          experimental: await settle(module.backendExperimental()),
+        });
 
         const stage = stageRef.current;
         if (!stage) return;
@@ -385,10 +397,22 @@ export default function App() {
       <header>
         <div className="brand">
           <strong>Tamias Viewer</strong>
-          <span>引擎 WASM · Web 查看器</span>
+          <span>
+            引擎 WASM · Web 查看器
+            {backend.name === "" ? "" : ` · ${backend.name}`}
+          </span>
           <span className="wip" title="和桌面端尚未对齐，功能与接口都会变">
             施工中
           </span>
+          {/* 实验后端角标：默认是 WebGL2；WebGPU 只在 wasm-webgpu 预设里出现。 */}
+          {backend.experimental && (
+            <span
+              className="wip exp"
+              title={`${backend.name} 后端为实验特性，功能与稳定性尚未与 WebGL 对齐`}
+            >
+              {backend.name} · 实验
+            </span>
+          )}
         </div>
         <div className="actions">
           <button
@@ -523,6 +547,7 @@ export default function App() {
           <span>draw {stats.draws}</span>
           <span>tri {stats.triangles}</span>
           <span>gpu {stats.gpuMeshMb.toFixed(1)}MB</span>
+          <span>backend {backend.name === "" ? "—" : backend.name}</span>
           <span>tess {stats.pendingTessellate}</span>
           <span>选中 {selectedCount}</span>
         </div>

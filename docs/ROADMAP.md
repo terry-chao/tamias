@@ -143,7 +143,7 @@ M6 已落地项：**层级树、transform 累加、世界包围盒缓存**（`Sc
 4. **透明度。** 玻璃/幕墙。不透明先画、透明按深度排序、per-material blend 状态。
 5. **选择/高亮/分类着色。** 现在是单 `selected` 单色高亮。升级：多选、轮廓高亮、按 IFC 类型/系统/专业分类着色（Appearance Profiler）。
 6. **显示模式补全。** realistic 接 PBR + 光照 + 阴影 + AO；补 Hidden Line（隐藏线）模式。
-7. **双后端对齐。** Vulkan 和 OpenGL 两套管线行为一致是持续成本点——材质 UBO 布局、纹理格式、clip 语义、instancing。shader 是 HLSL→SPIR-V，GL 端要走 SPIR-V 或另编 GLSL。浏览器 [WebGPU](WGPU.md) 按同一套 RHI 动词接入，**不**把 bind group / WGSL 抬到抽象层；桌面不做 wgpu-native。
+7. **双后端对齐。** Vulkan 和 OpenGL 两套管线行为一致是持续成本点——材质 UBO 布局、纹理格式、clip 语义、instancing。shader 是 HLSL→SPIR-V，GL 端要走 SPIR-V 或另编 GLSL。浏览器 [WebGPU](WGPU.md) 按同一套 RHI 动词接入，**不**把 bind group / WGSL 抬到抽象层；桌面不做 wgpu-native。浏览器线的**默认**是 WebGL2，WebGPU 已降为实验预设 `wasm-webgpu`——两者的 shader 覆盖面今天都不含 text / overlay，属于已知缺口。
 
 ---
 

@@ -72,6 +72,13 @@ class ViewerHost {
   [[nodiscard]] const std::string& status() const { return status_; }
   [[nodiscard]] std::string document_name() const;
 
+  // 实际编进来的浏览器后端名（"WebGL2" / "WebGPU"）；start() 之前是 "none"。
+  // 页面顶栏的读数用它——"我到底跑在哪个后端上"不该靠猜。
+  [[nodiscard]] std::string backend_name() const;
+  // 该后端是不是实验特性（今天：WebGPU 是，WebGL2 不是）。
+  // 页面据此打「（实验）」角标；见 docs/WGPU.md。
+  [[nodiscard]] bool backend_experimental() const;
+
   // Session 能力（embind 直出）。
   [[nodiscard]] bool dispatch(std::string_view command, std::string_view args_text);
   void undo();
@@ -89,6 +96,10 @@ class ViewerHost {
   std::unique_ptr<Session> session_;
   std::shared_ptr<RenderThread> render_thread_;
   std::unique_ptr<RenderChannel> channel_;
+  // start() 里选定并记下来，供 backend_name() / backend_experimental() 读。
+  // 不用 #if 在 getter 里重复判断一遍：那是两个真相来源，迟早会漂移。
+  std::string backend_name_ = "none";
+  bool backend_experimental_ = false;
   mutable std::mutex log_mutex_;
   std::vector<std::string> log_lines_;
   std::string canvas_selector_ = "#viewport";
