@@ -1,6 +1,9 @@
 {
-  "_readme": "已知问题名单（块名单）。命中即按动作处理：skip=别用这个后端，force=改走另一个后端。匹配项：os / vendor / device / driver_min / driver_max / driver_exact / remote / software / adapter_contains；不填的项表示不限。driver_version 用四段数字（如 NVIDIA 566.03 写作 566.0.3.0），见 docs/RHI-STARTUP.md。",
+  "_readme": "已知问题名单（块名单）。命中即按动作处理：skip=别用这个后端，force=改走另一个后端。匹配项：os / vendor / device / driver_min / driver_max / driver_exact / remote / software / adapter_contains；不填的项表示不限。driver_version 用四段数字，见 docs/RHI-STARTUP.md。注意两个后端报的**不是同一个字符串**：Vulkan 报公开编码（NVIDIA 610.88 → 610.88.0.0），OpenGL 报 WDDM/注册表值（同一条驱动 → 32.0.16.1088），条目要拦哪个后端就用那个后端报的写法；OpenGL 侧 device_id 拿不到（恒 0），所以拦 OpenGL 的条目别填 device。",
   "version": 1,
   "entries": [
+    { "id": "nvidia-610.88-opengl-frame",
+      "why": "NVIDIA 610.88（WDDM 32.0.16.1088，驱动自报 dev build）在 OpenGL 路径上画一帧就卡死或 0xC0000005，Vulkan 正常；见 docs/RHI-TRIAGE.md",
+      "os": "windows", "vendor": 4318, "driver_exact": "32.0.16.1088", "force": "vulkan" }
   ]
 }
