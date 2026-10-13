@@ -1,6 +1,9 @@
 # RHI 卡死 / 崩溃定位：一次 NVIDIA 驱动现场复盘
 
-> **状态**：现象已定位到驱动侧；由这次调查顺手修掉的两个 OpenGL 后端问题已落地。
+> **状态**：**已定位并修掉**——崩在 `nvoglv64` 里的直接原因是 GL 变体的 SPIR-V 不合
+> OpenGL 的规矩（分开的 image/sampler、SPIR-V 1.5），驱动接受后又在第一次
+> `glUseProgram` 时崩在自己的线程里；改着色器编译方式即可（见 §10）。加上这次顺手修掉的
+> 两个 OpenGL 后端问题与一处配色空间问题，OpenGL 后端在本机可以正常出图。
 > 本文分两半：**方法**（怎么定位 RHI 层的卡死与崩溃，可以照着抄）与**现场**
 > （2026-10-12/13 那次 RTX 5070 + NVIDIA 610.88 的完整证据链）。
 >
@@ -14,9 +17,13 @@
 
 同一份故障有两种表现：**先是卡住（驱动不返回），后是闪退（驱动自己线程里访问违例）**。
 两次的故障线程都**不是** tamias 的线程，而是**驱动自建的线程**；我们的线程当时正卡在驱动内部等它。
-最小 GL 探针（建设备 + 清一个像素 + 读回）能过，一画帧就死——**故障在驱动侧**，
-本机驱动（`nvoglv64.dll` 32.0.16.1088，自报 `PrivateBuild: dev build`）三天里另有 13 次
-`LiveKernelEvent 141`（视频引擎超时）。
+最小 GL 探针（建设备 + 清一个像素 + 读回）能过，一画帧就死；崩点固定在 `nvoglv64+0x75ac6b`，
+指令是拿一个**巨离谱的下标**去查表（`rax=0x29732528`）→ 读不可映射地址。
+继续二分到最后，触发链是：**我们喂给驱动的 GL SPIR-V 不合规**（分开的 image/sampler →
+`DescriptorSet 1..5`；模块还是 SPIR-V 1.5）→ 驱动 `glShaderBinary`/`glLinkProgram` 不报错
+→ 第一次 `glUseProgram` 时才真正处理它 → 崩在驱动自己的线程里（§10）。
+本机驱动（`nvoglv64.dll` 32.0.16.1088，自报 `PrivateBuild: dev build`）另有
+`LiveKernelEvent 141`（视频引擎超时）记录。
 
 ---
 
@@ -171,10 +178,11 @@ Get-Process -Id <pid> | ForEach-Object { $_.Threads } |
 
 | 结论 | 证据强度 |
 |---|---|
-| 故障发生在 **NVIDIA OpenGL 驱动（`nvoglv64.dll`）内部**，不在 tamias 代码里 | 强：故障线程栈里没有一帧 tamias 代码；同一崩点两次；与我们是否真发 draw 无关 |
+| 崩溃现场在 **NVIDIA OpenGL 驱动（`nvoglv64.dll`）自己的线程内部** | 强：故障线程栈里没有一帧 tamias 代码；同一崩点（`+0x75ac6b`）多次复现 |
+| 触发它的输入在 **我们（tamias）这边**：GL 变体的 SPIR-V 不合 ARB_gl_spirv | 强：§10 的二分——只保留链接好的程序 + 第一次 `glUseProgram` 就崩；改成合并 image/sampler 后不崩 |
 | 本机驱动版本 **32.0.16.1088（610.88）** 且自报 `dev build`，三天 13 次显示驱动超时 | 强（事实）|
-| 「OpenGL 路径在这台机器上不可用」是**当前**结论 | 强：探针过、画帧必死（挂或崩二选一）|
-| 驱动内部**具体**是哪个逻辑错了 | **未知**（转储只有驱动镜像，没有源码；`!` 后面的函数名不可信，见 §5.2）|
+| 「OpenGL 路径在这台机器上不可用」是**修之前**的结论 | 已作废：§10 修完后探针、离屏出图、GUI 三条路都正常 |
+| 驱动内部**具体**是哪个逻辑错了（为什么会从这个下标查表） | **未知**（转储只有驱动镜像；`!` 后面的函数名不可信，见 §5.2）。**驱动该做的是**：`glShaderBinary` / `glLinkProgram` 当场报 `GL_INVALID_VALUE`/链接失败，而不是接受后崩 |
 
 ---
 
@@ -281,9 +289,11 @@ GL 崩一次 → 留下 startup.marker → 下次启动无条件走「安全模�
 ## 8. 还没证实的
 
 1. 驱动内部到底哪一步错了（要 NVIDIA 侧的符号或源码，我们没有）。
-2. 我们的 GL 用法里有没有「合法但踩中该驱动缺陷」的组合：SPIR-V（`glShaderBinary` + `glSpecializeShader`）、
-   实例化属性、FBO 与窗口 drawable 共用同一个上下文——都还没有单独剥离验证。
-3. 换一份稳定驱动之后 OpenGL 是否可用：**没测**（需要换驱动）。
+2. ~~我们的 GL 用法里有没有「合法但踩中该驱动缺陷」的组合~~ → 已证伪：SPIR-V／实例化属性／
+   FBO 与窗口共用上下文都单独剥过（§10），触发点收敛到「**不合规**的 SPIR-V」。
+3. 换一份稳定驱动之后 OpenGL 是否可用：**没测**（需要换驱动）；现在不需要换驱动也能用（§10）。
+4. 这个驱动是不是对**任何**不合规 SPIR-V 都崩（我们只试出「分开的采样器」这一种不合规）：
+   给 NVIDIA 报的时候用 §10 的最小复现就够了，不用等答案。
 
 ---
 
@@ -291,7 +301,7 @@ GL 崩一次 → 留下 startup.marker → 下次启动无条件走「安全模�
 
 | 项 | 说明 | 归属 |
 |---|---|---|
-| ~~块名单加一条~~ ✅ 2026-10-13 | NVIDIA 610.88 + OpenGL → `force: vulkan`，自动避开。**注意两个后端报的驱动字符串不同**（Vulkan `610.88.0.0` / OpenGL `32.0.16.1088`），OpenGL 侧 `device_id` 恒 0 所以条目不能填 `device` | `assets/rhi_blocklist.json` |
+| ~~块名单加一条~~ ✅ 2026-10-13 → ❌ **2026-10-13 撤掉** | 当时按「OpenGL 一画帧就死」加了 NVIDIA 610.88 → `force: vulkan`。§10 找到真正原因（我们的 SPIR-V 不合规）并修好后，这条**已删除**（否则会把本来能用的 OpenGL 一直挡掉）。两个后端驱动字符串写法不同的经验保留在 [RHI 启动](RHI-STARTUP.md) §3 | `assets/rhi_blocklist.json` |
 | ~~安全模式优先 `last_good_backend`~~ ✅ 2026-10-13 | 改成「按自然顺序 + 把标记里那个后端排到最后」：标记现在记着「当时用的是哪个后端」，不用再猜，也不再硬编码 OpenGL | [decision.cpp](https://github.com/terry-chao/tamias/blob/main/src/rhi_selection/decision.cpp)、[startup_guard.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/base/startup_guard.cpp) |
 | ~~CLI 出图不写启动标记~~ ✅ 2026-10-13 | `startup_guard.begin()` 移到 `--render-view` 分支之后 | [main.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/main.cpp) |
 | ~~命令行优先于标记~~ ✅ 2026-10-13 | 顺序改为：`--safe-mode` > 策略 > `--gpu-backend` > 标记 > 偏好 / 记忆 | [decision.cpp](https://github.com/terry-chao/tamias/blob/main/src/rhi_selection/decision.cpp) |
@@ -301,14 +311,130 @@ GL 崩一次 → 留下 startup.marker → 下次启动无条件走「安全模�
 **改完怎么验（本机实测，2026-10-13）**：
 
 ```powershell
-# 1) 让 OpenGL 成为首选：报告里应当出现 redirect，最后选 Vulkan，且不画帧
+# 1) OpenGL 直选（不再被块名单改道）
 & tamias.exe --probe-rhi --gpu-backend=opengl --json
-#    "chosen": "Vulkan",
-#    summary: ... OpenGL -> redirected to Vulkan by blocklist entry "nvidia-610.88-opengl-frame"
+#    "chosen": "OpenGL",  "summary": "RHI: using OpenGL"
+
+# 1b) 真出一张图（反复跑都该 exit 0 并写出 PNG）
+& tamias.exe "--render-view=$env:TEMP\gl.png" --gpu-backend=opengl --render-size=480x270 assets\samples\cube.obj
+#    PNG 的亮度应当和 --gpu-backend=vulkan 那张一致（同场景 mean luminance 70.6，逐像素差 ≤1）
 
 # 2) 纯决策层的回归（无需 GPU）
 & tamias_tests.exe --gtest_filter="Rhi*"
+
+# 3) 离屏渲染回归（含 OpenGL 清屏 + 读回）
+& tamias_tests.exe --gtest_filter="OffscreenRender.*"
 ```
+
+---
+
+## 10. 真正的问题：GL 变体的 SPIR-V 不合 ARB_gl_spirv（2026-10-13 补）
+
+§1–§9 的结论「故障在驱动侧」只对了一半：**崩在现场的是驱动，把它推到那一步的输入是我们的**。
+把「喂什么给驱动」当作变量重新二分之后，触发点收敛到一行：**第一次对 SPIR-V 程序调
+`glUseProgram`**。
+
+### 10.1 怎么二分出来的
+
+临时在 GL 后端与渲染线程里插了按环境变量开关（`TAMIAS_GL_ABLATE=`）的砍刀，每组只砍一处：
+
+| 砍掉什么 | 结果 |
+|---|---|
+| 只留「绑 FBO → `glClear` → `glFinish`」两帧（不建 GL 对象、不发 draw） | **不崩**（写出 PNG） |
+| 建对象但**不发 draw** | 崩（第 2 帧 `glFinish` 处） |
+| 只跳过 `glCreateProgram` / `glAttachShader` / `glLinkProgram`（返回空管线） | **不崩** |
+| 只跳过 `glLinkProgram`（程序没链过，`glUseProgram` 是空操作） | **不崩** |
+| 正常链接，但跳过 `glUseProgram` | **不崩** |
+| 正常链接 + 正常 `glUseProgram` | 崩（第 1 帧 draw #2 附近） |
+
+结论：**必须是「链接成功的程序」+「第一次 `glUseProgram`」**，缺一不崩——这是驱动真正把
+SPIR-V 落地成可执行 GL 程序的时刻。
+
+### 10.2 独立复现（不含 tamias 的渲染代码）
+
+`build/glmin/glmin.cpp`：约 200 行 Win32 + WGL 的最小程序——隐藏窗口 → 4.5 Core 上下文 →
+FBO → 用 tamias 的 `mesh.vert.gl.spv` / `mesh.frag.gl.spv` 走
+`glShaderBinary` + `glSpecializeShader` + link → `glUseProgram`。
+
+- 不调 `glUseProgram`：正常（3 帧跑完、读回正常）。
+- 换成随手写三行 HLSL 编出来的 SPIR-V：正常。
+- 只把一侧（VS 或 FS）换成随手写的：接口对不上，链接就失败，不崩。
+- **两个模块都用 tamias 的**：崩，且和 tamias 里落在同一个地址 `nvoglv64+0x75ac6b`，
+  寄存器也是同型（拿一个巨大下标去查表）：
+
+```
+nvoglv64+0x75ac6b: mov rbx, qword ptr [rsi+rax*8+7EFC8h]     ; rax=0x29732528
+```
+
+「是不是 tamias 的绘制逻辑有问题」就此排除：驱动只看到两个 SPIR-V 模块和一次 `glUseProgram`。
+
+### 10.3 根因：模块不合 GL 的规矩
+
+三个片元着色器的 **GL 分支**（`#else`）原来写的是 `Texture2D ... : register(t0)` +
+`SamplerState ... : register(s0)`，dxc 会翻译成**分开的 image 变量与 sampler 变量**，
+并把 `t0..t5` 摆成 **`DescriptorSet 0..5`**：
+
+```spirv
+%albedo_tex  = OpVariable ... UniformConstant      ; OpTypeImage
+%albedo_samp = OpVariable ... UniformConstant      ; OpTypeSampler
+%161 = OpSampledImage %type_sampled_image %159 %160   ; 用的时候才临时合起来
+OpDecorate %normal_tex DescriptorSet 1  Binding 0
+```
+
+而 `ARB_gl_spirv` 要求：采样的 image+sampler 必须是**一个合并变量**
+（`OpTypeSampledImage` 类型的变量），`DescriptorSet` 只能是 0（GL 只认 binding = 纹理单元）。
+另外 GL 只接受 **SPIR-V 1.0**，GL 变体当时编的是 `-fspv-target-env=universal1.5`（1.5），
+`spirv-val --target-env opengl4.5` 直接判非法：
+
+```
+error: line 0: Invalid SPIR-V binary version 1.5 for target environment SPIR-V 1.0 (under OpenGL 4.5 semantics).
+```
+
+两处都不合规，而 NVIDIA 的 `glShaderBinary` / `glLinkProgram` 都没报错（这份驱动的缺陷：该拒的
+输入没拒），真正的处理被推到第一次 `glUseProgram`，然后崩在它自己的线程里。
+
+### 10.4 修法（三处，都在仓库里）
+
+1. `shaders/{mesh,overlay,text}.frag.hlsl` 的 GL 分支改成**合并**的 image+sampler，binding 就是
+   纹理单元，和 RHI 的 `kTextureSlot*` 对齐（0=albedo、1=normal、2=IBL 辐照、3=IBL 预滤、
+   4=BRDF LUT、5=ORM）：
+
+   ```hlsl
+   [[vk::combinedImageSampler]] [[vk::binding(0, 0)]] Texture2D albedo_tex;
+   [[vk::combinedImageSampler]] [[vk::binding(0, 0)]] SamplerState albedo_samp;
+   ```
+
+2. `cmake/TamiasShaders.cmake`：GL 变体的 `-fspv-target-env` 从 `universal1.5` 改成
+   `vulkan1.0`——dxc 没有 OpenGL 目标，`vulkan1.0` 是唯一能产出 **SPIR-V 1.0** 的档；换完之后
+   `spirv-val --target-env opengl4.5` 对 8 个 GL 模块全部通过。
+3. 顺带修掉一个被崩溃掩盖的显示问题：离屏 FBO 的颜色附件 `GL_RGBA8` → `GL_SRGB8_ALPHA8`，
+   并在绑 FBO 时 `glEnable(GL_FRAMEBUFFER_SRGB)`（sRGB 转换默认是关的）。此前 GL 出的图比
+   Vulkan 明显偏暗（同场景平均亮度 25 vs 71），修完两张图**逐像素差 ≤1、平均亮度都是 70.6**。
+
+### 10.5 修完怎么验（本机实测）
+
+```powershell
+& tamias.exe --probe-rhi --gpu-backend=opengl --json      # chosen: OpenGL（不再被改道）
+& tamias.exe "--render-view=$env:TEMP\gl.png" --gpu-backend=opengl --render-size=480x270 assets\samples\cube.obj
+                                                          # 连跑 3 次都 exit 0 并写出 PNG
+& tamias_tests.exe --gtest_filter="OffscreenRender.*"      # OpenGL 清屏 + 读回，过
+& tamias.exe assets\samples\cube.obj                      # GUI：建 GL 子窗口、上传纹理、连续出帧不崩
+```
+
+### 10.6 留给驱动侧的两件事
+
+- 报给 NVIDIA 的最小复现就是 `build/glmin/`：一个 exe + 两个 `.gl.spv`，10 秒内必崩在
+  `nvoglv64+0x75ac6b`（`0xC0000005`），附带那两条寄存器现场的记录。
+- 我们这边**不再**为它留块名单条目：输入已经合规、OpenGL 可用；真要强制某后端，用策略文件
+  （见 [RHI 启动](RHI-STARTUP.md) §4）比写死在块名单里合适。
+
+### 10.7 这次的教训
+
+1. **「驱动接受了」不等于「输入合法」**：SPIR-V 要过 `spirv-val --target-env opengl4.5`
+   这类目标环境校验，别拿「链接成功」当合格证。
+2. 两个后端共用一套 HLSL 时，**GL 变体不能照抄 Vulkan 的写法**：分开的 image/sampler、
+   非 0 的 descriptor set、SPIR-V 1.5，三样都是 GL 不认的。
+3. 崩在驱动里，先问「我喂了什么」：把输入当变量二分（这次的砍刀开关），比盯着驱动反汇编快得多。
 
 ---
 

@@ -121,6 +121,18 @@ glBindTexture(GL_TEXTURE_2D 或 CUBE_MAP, handle)
 
 Shader：HLSL → SPIR-V。OpenGL 加载 `*.gl.spv`，`glShaderBinary` + `glSpecializeShader`（要 `GL_ARB_gl_spirv`），链成 program。不是运行时编 GLSL。
 
+GL 变体有两条**不能照抄 Vulkan** 的规矩（踩过：见 [RHI 卡死 / 崩溃定位](RHI-TRIAGE.md) §10）：
+
+- 采样的 image + sampler 必须是**一个合并变量**（HLSL 写 `[[vk::combinedImageSampler]]`
+  `[[vk::binding(N, 0)]]`），binding 就是**纹理单元号**，和 `kTextureSlot*` 对齐
+  （0=albedo、1=normal、2=IBL 辐照、3=IBL 预滤、4=BRDF LUT、5=ORM）；`DescriptorSet` 只能是 0。
+- 模块必须是 **SPIR-V 1.0**：GL 变体用 dxc 的 `-fspv-target-env=vulkan1.0` 编
+  （`universal1.5` 会产出 1.5，`spirv-val --target-env opengl4.5` 判非法）。
+
+离屏目标（FBO）的颜色附件是 `GL_SRGB8_ALPHA8`，绑上时开 `GL_FRAMEBUFFER_SRGB`：
+shader 写线性值、驱动负责编码成 sRGB；不开的话 `--render-view` / 缩略图会比 Vulkan 那套
+（`B8G8R8A8_SRGB`）暗一大截。
+
 ---
 
 ## 5. 一句话对照
