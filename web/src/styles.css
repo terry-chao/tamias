@@ -9,9 +9,8 @@
   --accent: #4c8dff;
   --error: #ff6b6b;
   --ok: #4fd68c;
-  --warn: #f0b429;
-  /* 实验特性角标（今天只有 WebGPU 后端）：比 warn 更"警示"一档，和施工中区分开 */
-  --exp: #ff9f43;
+  /* 顶栏（菜单行 / 工具带 / 状态栏）是另一套桌面端配色，住在 ribbon.css 的 :root 里
+     （--tb-*）。两套色故意分开：视口周边保持查看器自己的观感，顶栏对齐桌面端。 */
 }
 
 * {
@@ -39,62 +38,7 @@ body {
   height: 100%;
 }
 
-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--line);
-  flex: none;
-}
-
-.brand {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.3;
-}
-
-.brand strong {
-  font-size: 15px;
-}
-
-.brand span {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-/* 「施工中」角标：这条产品线还在盖，和桌面端尚未对齐。 */
-.brand .wip {
-  color: var(--warn);
-  border: 1px solid var(--warn);
-  border-radius: 4px;
-  padding: 0 5px;
-  font-size: 11px;
-  letter-spacing: 1px;
-}
-
-/* 实验后端角标（WebGPU）：比「施工中」更警示一档，别让用户以为它和 WebGL 等价。 */
-.brand .wip.exp {
-  color: var(--exp);
-  border-color: var(--exp);
-}
-
-.actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-left: auto;
-}
-
-/* 分隔「查看」与「建模」两组按钮。 */
-.divider {
-  width: 1px;
-  align-self: stretch;
-  margin: 2px 2px;
-  background: var(--line);
-}
-
+/* ── 通用按钮（登录页的提交、关于框的关闭）──────────────────────────────── */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -113,55 +57,101 @@ header {
   border-color: var(--accent);
 }
 
-/* 放置模式选中的按钮。 */
-.btn.active {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--bg);
-}
-
 .btn:disabled {
   opacity: 0.5;
   cursor: default;
 }
 
-kbd {
-  font: 11px/1 ui-monospace, monospace;
+/* ── 登录页 ────────────────────────────────────────────────────────────────
+   门禁只是界面分栏，不是访问控制——理由见 web/src/auth.ts 顶部。 */
+.login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+  background: radial-gradient(circle at 50% 0%, #1b2028 0%, var(--bg) 60%);
+}
+
+.login-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(360px, 100%);
+  padding: 22px;
+  background: var(--panel);
   border: 1px solid var(--line);
-  border-bottom-width: 2px;
-  border-radius: 4px;
-  padding: 1px 5px;
-  color: var(--muted);
+  border-radius: 10px;
 }
 
-.doc-name {
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.login-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  margin-bottom: 6px;
+}
+
+.login-brand strong {
+  font-size: 20px;
+  letter-spacing: 0.5px;
+}
+
+.login-brand span {
   color: var(--muted);
   font-size: 12px;
-  border-left: 1px solid var(--line);
-  padding-left: 12px;
 }
 
-.status {
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.login-field span {
   color: var(--muted);
   font-size: 12px;
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.status.ready {
-  color: var(--ok);
+.login-field input {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: inherit;
 }
 
-.status.error {
+.login-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.login-error {
   color: var(--error);
+  font-size: 12px;
+  border: 1px solid var(--error);
+  border-radius: 6px;
+  padding: 6px 8px;
 }
 
+.login-submit {
+  justify-content: center;
+  padding: 9px 10px;
+}
+
+.login-note {
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.login-note code {
+  font: 11px/1 ui-monospace, monospace;
+  color: var(--text);
+}
+
+/* ── 视口 ──────────────────────────────────────────────────────────────── */
 .stage {
   flex: 1;
   min-height: 0;
@@ -206,7 +196,6 @@ kbd {
   padding: 4px 8px;
 }
 
-/* 引擎 warn / error 面板（右下角）。 */
 .view-cube {
   position: absolute;
   top: 12px;
@@ -224,6 +213,7 @@ kbd {
   cursor: grabbing;
 }
 
+/* 引擎 warn / error 面板（右下角，「视图 → 面板 → 引擎日志」开关）。 */
 .log-panel {
   position: absolute;
   right: 12px;
@@ -264,4 +254,341 @@ kbd {
   border-radius: 8px;
   margin: 8px;
   pointer-events: none;
+}
+
+/* ── 关于框（帮助 → 关于）───────────────────────────────────────────────── */
+.about-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.about-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 320px;
+  max-width: 440px;
+  padding: 18px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.about-title {
+  font-size: 15px;
+}
+
+.about-rows {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 5px 16px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.about-rows dt {
+  color: var(--muted);
+}
+
+.about-rows dd {
+  margin: 0;
+}
+
+.about-card .btn {
+  align-self: flex-end;
+}
+
+/* ── 文件管理页（登录后的落地页 / 当前没有打开的文档）────────────────────
+   盖住视口而不是卸载 canvas：引擎的渲染循环还在跑，卸载/隐藏 canvas 会把 WebGL
+   上下文的尺寸一起搞坏。单击选中、双击打开（桌面端同款）。 */
+.fm {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: var(--bg);
+}
+
+.fm-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+}
+
+.fm-title {
+  font-size: 15px;
+}
+
+.fm-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.fm-busy,
+.fm-error {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.fm-busy {
+  color: var(--accent);
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.fm-error {
+  color: var(--error);
+  border: 1px solid var(--error);
+}
+
+.fm-table {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+/* 表头和数据行共用同一套 grid 列定义，免得两处各写一份慢慢对不齐。 */
+.fm-head,
+.fm-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 2fr) 64px minmax(90px, 1fr) 72px 96px 88px;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+}
+
+.fm-head {
+  position: sticky;
+  top: 0;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 11px;
+  border-bottom: 1px solid var(--line);
+}
+
+.fm-row {
+  font-size: 12px;
+  cursor: default;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.fm-row:hover {
+  background: var(--panel-2);
+}
+
+.fm-row.selected {
+  background: rgba(76, 141, 255, 0.15);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.fm-row:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.fm-col-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.fm-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-col-where {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-col-size,
+.fm-col-time,
+.fm-col-source {
+  color: var(--muted);
+}
+
+/* 类型徽标：tdoc 是能编辑的文档、trscn 是烤好的快照、obj 是导入网格——用色分开。 */
+.fm-kind {
+  display: inline-block;
+  font: 10px/1.6 ui-monospace, monospace;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
+.fm-kind.k-tdoc {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.fm-kind.k-trscn {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.fm-kind.k-obj {
+  color: var(--muted);
+}
+
+.fm-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 24px;
+}
+
+.fm-empty-title {
+  font-size: 15px;
+}
+
+.fm-empty-note {
+  margin: 0;
+  max-width: 460px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.fm-empty-note code {
+  font: 12px/1 ui-monospace, monospace;
+  color: var(--text);
+}
+
+.fm-foot {
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.fm-foot strong {
+  color: var(--text);
+}
+
+/* ── 参数提示框（需要参数的命令）───────────────────────────────────────────
+   桌面端这些参数各有专门对话框/面板（轴网设置、阵列、楼层…），web 用通用小表单。 */
+.prompt-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.prompt-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(340px, 100%);
+  padding: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.prompt-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.prompt-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.prompt-field span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.prompt-field input {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+}
+
+.prompt-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.prompt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.prompt-ok {
+  border-color: var(--accent);
+}
+
+/* ── 放置橡皮筋（屏幕空间）────────────────────────────────────────────────
+   桌面端由 DragContext 画实时实体预览；web 没有那条链路，只画点与连线。 */
+.rubber-band {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.rb-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+
+.rb-dot {
+  fill: var(--accent);
+}
+
+.rb-dot-last {
+  fill: #ffffff;
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.rb-readout {
+  fill: var(--text);
+  font: 11px/1.2 ui-monospace, monospace;
+  paint-order: stroke;
+  stroke: rgba(20, 22, 26, 0.85);
+  stroke-width: 3;
 }

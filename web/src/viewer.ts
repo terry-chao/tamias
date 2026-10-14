@@ -14,6 +14,10 @@ export interface TamiasViewerModule {
   loadFile(name: string, bytes: string): boolean;
   // 新建文档：空文档 + 内置示例场景（几何由 wasm 里的建模内核求值）。
   newDocument(): boolean;
+  // 关闭文档：丢掉几何与 GPU 资产，回到「没有打开的文档」。web 端没有保存，关掉即丢弃。
+  closeDocument(): boolean;
+  // 有没有打开的文档。页面据此决定显示视口还是欢迎卡片，并把依赖文档的工具灰掉。
+  hasDocument(): boolean;
   resizeViewer(width: number, height: number): void;
   pointerDown(x: number, y: number, button: number): void;
   pointerMove(x: number, y: number): void;
@@ -27,6 +31,9 @@ export interface TamiasViewerModule {
   backendName(): string;
   // 该后端是不是实验特性（今天只有 WebGPU 是）。页面据此打「（实验）」角标。
   backendExperimental(): boolean;
+  // **实际生效**的造型内核："occt"（桌面/服务端的默认）、"truck"（可选回退）或 "none"。
+  // 和 backendName() 并列：想设的和真的用上的可能不一样（回退时引擎日志里有 warn）。
+  kernelName(): string;
   // 会话层能力（Session 的 embind 导出）
   dispatch(command: string, argsText?: string): boolean;
   undo(): void;

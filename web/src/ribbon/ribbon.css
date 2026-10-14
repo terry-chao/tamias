@@ -1,0 +1,513 @@
+/* 顶栏：菜单行 + 两段分区工具带。
+ *
+ * 配色与尺寸**取自桌面端**，不是自己调的：
+ *   - 菜单行 / 工具带底色、边框、文字、强调色 → src/app/base/theme.cpp 的暗色档
+ *     （surface #2b2d30 / border #3c3f41 / text #dcdcdc / muted #828891 / accent #6fa8f0）
+ *   - 工具带样式表 → src/app/shell/ribbon/ribbon_bar.cpp 的 ribbon_stylesheet(dark)
+ *     （工具带底 #313338、按钮 hover #3c3f41 / 按下 #45494b、组名 #8c8c8c 11px、
+ *      组悬浮 #3a3d41、搜索框 #26282b、搜索框聚焦 #6cb6ff）
+ *   - 段主色 → ribbon_bar.cpp 的 section_accent 暗色档：蓝 / 青绿 / 橙 / 紫，循环
+ *   - 一排高 92（图标 + 文字）/ 54（仅图标），图标 24px，见 docs/APP.md「顶栏」一节
+ *
+ * 改这里的任何一个色值，都要回去对一眼上面两个 C++ 文件——不然两边会慢慢长歪。 */
+
+/* 调色板挂在 :root 上：顶栏（.tb-root）和底部状态栏（.status-bar）都要用，
+ * 而它们不是同一个父容器的子树。 */
+:root {
+  --tb-surface: #2b2d30;
+  --tb-pages: #313338;
+  --tb-border: #3c3f41;
+  --tb-text: #dcdcdc;
+  --tb-muted: #828891;
+  --tb-hover: #3c3f41;
+  --tb-pressed: #45494b;
+  --tb-accent: #6fa8f0;
+  --tb-focus: #6cb6ff;
+  --tb-group-hover: #3a3d41;
+  --tb-group-title: #8c8c8c;
+  --tb-search-bg: #26282b;
+  --tb-search-border: #3f4245;
+  --tb-row: 92px;
+  --tb-font:
+    "Segoe UI", "Microsoft YaHei UI", system-ui, -apple-system, sans-serif;
+}
+
+.tb-root {
+  flex: none;
+  font-family: var(--tb-font);
+  color: var(--tb-text);
+  user-select: none;
+}
+
+/* 图标：桌面端那一套 SVG 走 <img>（全彩插画），少数装饰性字形走 <svg>，共用 .ico。
+   两者都不吃 currentColor——桌面端也不吃，别按单色字形去用。 */
+.ico {
+  display: block;
+  flex: none;
+}
+
+/* 图标名写错时的可见占位（并在控制台 warn 一次），不要静默成空白。 */
+.ico-missing {
+  background: repeating-linear-gradient(45deg, #6d7278 0 4px, #565b61 4px 8px);
+  border-radius: 3px;
+}
+
+/* ── 菜单行（顶上唯一的一行）────────────────────────────────────────────── */
+.tb-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 4px;
+  background: var(--tb-surface);
+  border-bottom: 1px solid var(--tb-border);
+  position: relative;
+}
+
+.tb-menu-titles {
+  display: flex;
+  align-items: center;
+}
+
+.tb-menu {
+  position: relative;
+}
+
+.tb-menu-title {
+  border: none;
+  background: transparent;
+  color: var(--tb-text);
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.tb-menu-title:hover {
+  background: var(--tb-hover);
+  color: #ffffff;
+}
+
+.tb-menu-title.open {
+  background: var(--tb-pressed);
+  color: #ffffff;
+}
+
+/* ── 下拉菜单 ──────────────────────────────────────────────────────────── */
+.tb-menu-popup {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  z-index: 40;
+  min-width: 208px;
+  padding: 4px;
+  background: var(--tb-surface);
+  border: 1px solid #4a4d50;
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.tb-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--tb-text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  padding: 5px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.tb-menu-item:hover:not(:disabled) {
+  background: var(--tb-hover);
+  color: #ffffff;
+}
+
+.tb-menu-item:disabled {
+  color: #6d7278;
+  cursor: default;
+}
+
+/* 勾选位固定宽：没有勾的行也不会让文字左右跳。 */
+.tb-menu-check {
+  width: 14px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  color: var(--tb-focus);
+}
+
+.tb-menu-label {
+  flex: 1;
+  white-space: nowrap;
+}
+
+.tb-menu-shortcut {
+  color: var(--tb-muted);
+  font-size: 11px;
+  margin-left: 16px;
+}
+
+.tb-menu-arrow {
+  color: var(--tb-muted);
+  margin-left: 16px;
+}
+
+.tb-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--tb-border);
+}
+
+.tb-menu-sub {
+  position: relative;
+}
+
+.tb-menu-sub > .tb-menu-popup {
+  top: -5px;
+  left: 100%;
+  display: none;
+}
+
+/* 子菜单：滑上去就展开（桌面端 QMenu 的手感），键盘 Tab 进去也展开。 */
+.tb-menu-sub:hover > .tb-menu-popup,
+.tb-menu-sub:focus-within > .tb-menu-popup {
+  display: block;
+}
+
+/* ── 菜单行右端（搜索 / 样式 / 卷起，以及 web 自己的角标）────────────────── */
+.tb-corner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.tb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--tb-muted);
+  border: 1px solid var(--tb-border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 实验后端（WebGPU）：比普通角标更警示一档——别让用户以为它和 WebGL2 等价。 */
+.tb-chip.exp {
+  color: #ff9f43;
+  border-color: #ff9f43;
+}
+
+/* 当前文档 chip：名字 + 关闭叉。桌面端文档名画在标签页上，这里等效。
+   放在 .tb-chip 之后，好盖掉它 160px 的 max-width。 */
+.tb-doc {
+  gap: 6px;
+  color: var(--tb-text);
+  max-width: 260px;
+}
+
+.tb-doc.empty {
+  color: var(--tb-muted);
+  border-style: dashed;
+}
+
+.tb-doc-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tb-doc-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--tb-muted);
+  border-radius: 3px;
+  padding: 1px;
+  cursor: pointer;
+}
+
+.tb-doc-close:hover {
+  background: var(--tb-hover);
+  color: #ffffff;
+}
+
+.tb-corner-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--tb-text);
+  border-radius: 4px;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.tb-corner-btn:hover {
+  background: var(--tb-hover);
+}
+
+.tb-search {
+  position: relative;
+}
+
+.tb-search-box {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--tb-search-bg);
+  border: 1px solid var(--tb-search-border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  color: var(--tb-muted);
+}
+
+.tb-search-box:focus-within {
+  border-color: var(--tb-focus);
+}
+
+.tb-search-box input {
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--tb-text);
+  font: inherit;
+  font-size: 11px;
+  width: 132px;
+  padding: 2px 0;
+}
+
+.tb-search-box input::placeholder {
+  color: var(--tb-muted);
+}
+
+.tb-search-popup {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 40;
+  min-width: 288px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 4px;
+  background: var(--tb-surface);
+  border: 1px solid #4a4d50;
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.tb-search-hit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--tb-text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  padding: 5px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+/* 现在不能用的命令照样列出来，只是灰着——「找得到、点不动」比「搜不着」好解释。 */
+.tb-search-hit:hover:not(:disabled) {
+  background: var(--tb-hover);
+}
+
+.tb-search-hit:disabled {
+  color: #6d7278;
+  cursor: default;
+}
+
+.tb-search-hit .where {
+  margin-left: auto;
+  color: var(--tb-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.tb-search-empty {
+  color: var(--tb-muted);
+  font-size: 11px;
+  padding: 6px 8px;
+}
+
+/* ── 工具带：段 → 组 → 按钮 ────────────────────────────────────────────── */
+.tb-pages {
+  background: var(--tb-pages);
+}
+
+.tb-root.collapsed .tb-pages {
+  display: none;
+}
+
+.tb-section {
+  display: flex;
+  align-items: stretch;
+  min-height: var(--tb-row);
+}
+
+/* 段左侧那条 3px 主色竖线 —— 认段全靠它（段名不画在带上）。 */
+.tb-section-bar {
+  width: 3px;
+  flex: none;
+}
+
+.tb-section-groups {
+  display: flex;
+  align-items: stretch;
+  padding: 2px 6px;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.tb-group {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.tb-group:hover {
+  background: var(--tb-group-hover);
+}
+
+.tb-group-btns {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 0;
+}
+
+.tb-group-title {
+  text-align: center;
+  color: var(--tb-group-title);
+  font-size: 11px;
+  padding-top: 2px;
+}
+
+.tb-group-sep {
+  width: 1px;
+  flex: none;
+  margin: 6px 4px;
+  background: var(--tb-border);
+}
+
+.tb-section-sep {
+  height: 1px;
+  background: var(--tb-border);
+}
+
+/* 工具带按钮：图标在上、名字在下（桌面端「图标 + 文字」形态）。 */
+.tb-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 52px;
+  max-width: 96px;
+  border: none;
+  background: transparent;
+  color: var(--tb-text);
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 8px 2px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.tb-btn:hover:not(:disabled) {
+  background: var(--tb-hover);
+}
+
+.tb-btn.checked,
+.tb-btn:active:not(:disabled) {
+  background: var(--tb-pressed);
+}
+
+.tb-btn:disabled {
+  color: #6d7278;
+  cursor: default;
+}
+
+.tb-btn .tb-btn-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* ── 「仅图标」形态 ────────────────────────────────────────────────────── */
+/* 桌面端：按钮不写字、**组名也不画**，整条带子矮下去（92 → 54，见 ribbon_group.cpp
+ * 的 title_->setVisible(!floating_ && !icon_only)），名字改走 tooltip。 */
+.tb-root.icons {
+  --tb-row: 54px;
+}
+
+.tb-root.icons .tb-btn-label,
+.tb-root.icons .tb-group-title {
+  display: none;
+}
+
+.tb-root.icons .tb-btn {
+  min-width: 0;
+  padding: 4px;
+}
+
+/* ── 底部状态栏 ──────────────────────────────────────────────────────── */
+/* 桌面端的状态消息走 QStatusBar（main_window 里满地的 statusBar()->showMessage）。
+ * 所以文档名和进度/错误都搬到这里，顶栏那一行只留菜单。 */
+.status-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 3px 10px;
+  background: var(--tb-surface);
+  border-top: 1px solid var(--tb-border);
+  font-family: var(--tb-font);
+  font-size: 12px;
+  color: var(--tb-muted);
+}
+
+.status-bar .sb-message {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-bar .sb-message.ready {
+  color: #4fd68c;
+}
+
+.status-bar .sb-message.error {
+  color: #ff6b6b;
+}
+
+.status-bar .sb-doc {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
