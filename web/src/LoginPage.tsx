@@ -158,21 +158,37 @@ function EngineWarmup({ engine }: { engine: EngineProgress }) {
       </div>
     );
   }
-  const total = engine.total;
-  if (total > 0 && engine.loaded >= total) {
+  // **按阶段判，不按字节数判。** 原来写的是 `total > 0 && loaded >= total`，那个条件
+  // 依赖"服务端给了 Content-Length"——而预览服务当时是流式发 .wasm、**不发**总长
+  // （total 恒为 0），于是条件永远不成立：引擎早就可用了，这一行还挂着"正在预热引擎…"。
+  // 何况字节下完也不等于引擎可用（还要实例化）。所以阶段由 promise 驱动，见 App.tsx。
+  // （预览服务现在也发 Content-Length 了，但"就绪"仍然不能靠它——换个部署就可能没有。）
+  if (engine.phase === "ready") {
     return (
       <div className="warmup" role="status">
         <span className="warmup-done">引擎已就绪</span>
       </div>
     );
   }
-  const determinate = total > 0;
-  const percent = determinate ? Math.min(100, Math.round((engine.loaded / total) * 100)) : 0;
+  if (engine.phase === "instantiate") {
+    return (
+      <div className="warmup" role="status">
+        <div className="warmup-text">正在启动引擎（编译 26 MB 的 wasm…）</div>
+        <div className="warmup-bar indeterminate">
+          <div className="warmup-fill" />
+        </div>
+      </div>
+    );
+  }
+  const determinate = engine.total > 0;
+  const percent = determinate
+    ? Math.min(100, Math.round((engine.loaded / engine.total) * 100))
+    : 0;
   return (
     <div className="warmup" role="status">
       <div className="warmup-text">
         正在预热引擎
-        {determinate ? ` ${formatMb(engine.loaded)} / ${formatMb(total)} MB` : "…"}
+        {determinate ? ` ${formatMb(engine.loaded)} / ${formatMb(engine.total)} MB` : "…"}
       </div>
       <div className={`warmup-bar${determinate ? "" : " indeterminate"}`}>
         <div className="warmup-fill" style={determinate ? { width: `${percent}%` } : undefined} />

@@ -44,6 +44,10 @@ const server = createServer(async (req, res) => {
     const body = await readFile(filePath);
     res.writeHead(200, {
       "Content-Type": types[extname(filePath).toLowerCase()] ?? "application/octet-stream",
+      // 显式给长度：只 writeHead + end(buffer) 时 Node 会走 chunked，**不发 Content-Length**，
+      // 于是前端拿不到总字节、26 MB 的引擎只能显示"不确定进度"。文件已经整个读进来了，
+      // 长度是已知的，没理由不告诉浏览器。
+      "Content-Length": String(info.size),
       "Cache-Control": "no-store",
     });
     res.end(body);

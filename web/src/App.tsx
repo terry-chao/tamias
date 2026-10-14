@@ -36,25 +36,48 @@ export default function App() {
 
   // **在登录页就开始拉引擎。** 产物 26 MB（含 OCCT），别等用户点完登录才开始下——
   // 登录那几秒正好拿来下。ViewerApp 之后调 loadViewer() 会复用同一个 promise。
-  const [engine, setEngine] = useState<EngineProgress>({ loaded: 0, total: 0, error: null });
+  const [engine, setEngine] = useState<EngineProgress>({
+    phase: "download",
+    loaded: 0,
+    total: 0,
+    error: null,
+  });
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     // 重试时先清掉错误，好让进度条重新出现。
-    setEngine((prev) => ({ ...prev, error: null }));
+    setEngine((prev) => ({ ...prev, phase: "download", error: null }));
     preloadViewer((progress) => {
       if (!cancelled) {
-        setEngine({ loaded: progress.loaded, total: progress.total, error: null });
+        setEngine({
+          phase: progress.phase,
+          loaded: progress.loaded,
+          total: progress.total,
+          error: null,
+        });
       }
-    }).catch((err: unknown) => {
-      if (!cancelled) {
-        setEngine((prev) => ({
-          ...prev,
-          error: err instanceof Error ? err.message : String(err),
-        }));
-      }
-    });
+    })
+      // **「就绪」必须由 promise 决定，不能靠字节数推。** 三条理由，以前每一条都会让
+      // 登录页永远停在「正在预热引擎…」：
+      //   1. 字节下完 ≠ 引擎可用（26 MB 还要实例化几秒）；
+      //   2. 总长是**部署相关**的：预览服务原先流式发 .wasm 不发 Content-Length，
+      //      total 恒为 0，「loaded >= total 且 total > 0」永远不成立；
+      //   3. 重复调用（比如 StrictMode 下 effect 跑两次）会命中缓存的 promise，
+      //      `onProgress` 一次都不回调。
+      .then(() => {
+        if (!cancelled) {
+          setEngine((prev) => ({ ...prev, phase: "ready" }));
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setEngine((prev) => ({
+            ...prev,
+            error: err instanceof Error ? err.message : String(err),
+          }));
+        }
+      });
     return () => {
       cancelled = true;
     };

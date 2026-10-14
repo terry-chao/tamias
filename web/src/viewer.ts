@@ -86,14 +86,27 @@ function loadScript(): Promise<string> {
   });
 }
 
-/** 预加载进度：已下字节 / 总字节（拿不到 Content-Length 时 total 为 0）。 */
+/**
+ * 引擎预加载的阶段。**显式阶段，不靠字节数推**——踩过的坑：预览服务原先用 `pipe` 流式发
+ * `.wasm`、**不发 Content-Length**，于是 `total` 恒为 0；而界面把"下完了"判定成
+ * `total > 0 && loaded >= total`，那个条件永远不成立，登录页就一直挂着"正在预热引擎…"，
+ * 哪怕引擎早就可用了。更根本的是：**字节下完 ≠ 引擎可用**（26 MB 还要实例化几秒）。
+ */
+export type EnginePhase = "download" | "instantiate" | "ready";
+
+/** 预加载进度：已下字节 / 总字节（**拿不到 Content-Length 时 total 为 0**）。 */
 export interface PreloadProgress {
+  /** `download` = 还在下；`instantiate` = 字节下完了，正在实例化/编译 wasm。 */
+  phase: "download" | "instantiate";
   loaded: number;
   total: number;
 }
 
 /** 预加载进度 + 失败原因。App 持有它，登录页和加载画面都读它。 */
-export interface EngineProgress extends PreloadProgress {
+export interface EngineProgress {
+  phase: EnginePhase;
+  loaded: number;
+  total: number;
   error: string | null;
 }
 
@@ -121,7 +134,7 @@ async function fetchWasmWithProgress(
   if (response.body === null) {
     // 极端情况下没有流（老浏览器）：退化成一次性读取，进度只有最后一下。
     const buffer = await response.arrayBuffer();
-    onProgress({ loaded: buffer.byteLength, total: buffer.byteLength });
+    onProgress({ phase: "download", loaded: buffer.byteLength, total: buffer.byteLength });
     return buffer;
   }
   const reader = response.body.getReader();
@@ -135,7 +148,7 @@ async function fetchWasmWithProgress(
     if (value !== undefined) {
       chunks.push(value);
       loaded += value.byteLength;
-      onProgress({ loaded, total: contentLength });
+      onProgress({ phase: "download", loaded, total: contentLength });
     }
   }
   const merged = new Uint8Array(loaded);
@@ -169,6 +182,14 @@ export function preloadViewer(
     }
     const wasmUrl = new URL("tamias_viewer.wasm", scriptUrl).href;
     const wasmBinary = await fetchWasmWithProgress(wasmUrl, onProgress);
+    // 字节下完 ≠ 引擎可用：26 MB 的 wasm 还要实例化/编译几秒，这一段**没有字节数可报**。
+    // 所以显式报一个阶段，别让界面靠"loaded === total"去猜（服务端不发 Content-Length
+    // 时那个条件永远不成立）。
+    onProgress({ phase: "instantiate", loaded: wasmBinary.byteLength, total: wasmBinary.byteLength });
+    // 让这一帧先画出来：下面就是重活，不给浏览器一次机会的话用户只看到"还没变过"。
+    await new Promise((resolve) => {
+      requestAnimationFrame(() => resolve(null));
+    });
     return window.createTamiasViewer({ wasmBinary });
   })().catch((err: unknown) => {
     modulePromise = null; // 允许重试

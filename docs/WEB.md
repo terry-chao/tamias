@@ -253,6 +253,14 @@ CSS 画的**（`repeating-linear-gradient` 叠三组线 + `mask` 淡出），不
 引擎没起来时视口位置显示 `src/engine/EngineLoading.tsx`（转圈 + 进度 + 失败可重试），
 不再是一块空白。
 
+**「下完了」由阶段决定，不由字节数推。** 预加载有 `download → instantiate → ready` 三个阶段
+（`EnginePhase`），`ready` 由**那个 promise 的兑现**置位。踩过的坑：原来把"下完了"判定成
+`total > 0 && loaded >= total`，而预览服务当时流式发 `.wasm`、**不发 `Content-Length`**
+（`total` 恒为 0），条件永远不成立——引擎早就可用了，登录页还一直挂着"正在预热引擎…"。
+另外两条同理：字节下完 ≠ 引擎可用（26 MB 还要实例化几秒），而重复调用会命中缓存的 promise
+（`onProgress` 一次都不回调）。预览服务现在会显式发 `Content-Length`（文件已经整个读进内存，
+长度是已知的），所以本地能看到真实百分比——但就绪判定**仍然不依赖它**。
+
 **文件管理页**（`src/files/`）在"没有打开的文档"时盖住视口，排版**照桌面端欢迎页**
 （`src/app/shell/home_page.cpp`）：不是表格，是**缩略图卡片墙** + 分区标题行（左粗体标签、
 右灰提示）。配色与几何逐条抄自 `home_page_stylesheet(dark)`——页面底 `#1e1f22`、卡片
