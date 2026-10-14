@@ -1,8 +1,10 @@
 # 引擎 WASM + Web 查看器
 
-> **状态：⚠️ 施工中（WIP）。** 查看器、轻编辑、Truck 建模已经能跑，但**和桌面端远未对齐**：
-> 功能在陆续补，embind 接口与交互细节随时可能变，别当成品对外承诺。页面顶栏已按桌面端
-> 重做（一行菜单 + 两段分区工具带 + 底部状态栏），但菜单里只放真的能用的命令。
+> **状态：⚠️ 施工中（WIP）。** 查看器、轻编辑、建模已经能跑，但**和桌面端远未对齐**：
+> 功能在陆续补，embind 接口与交互细节随时可能变，别当成品对外承诺。流程是
+> **登录 → 文件管理 → 双击一份文档 → 查看器**；顶栏照桌面端做的（一行菜单 + 两段分区
+> 工具带 + 底部状态栏），43 个工具，但菜单里只放真的能用的命令。
+> **造型内核默认 OCCT**（7.9.3 交叉编译进 wasm），Truck 是可选回退（预设 `wasm-truck`）。
 > 桌面仍是 Qt 壳；浏览器走另一条产品线：无 Qt 的引擎交叉编译到 WebAssembly，新 Web UI 画在 HTML canvas 上。图形**默认 WebGL2**（`rhi/webgl`）；[WebGPU](WGPU.md)（`rhi/webgpu`）是**实验**预设 `wasm-webgpu`，功能与稳定性尚未与 WebGL 对齐。桌面不做 wgpu-native。
 
 实现入口：
@@ -10,6 +12,7 @@
 - 契约：[`native_window_handle.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/base/native_window_handle.h)、[`document_io.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document_io.h)、[`mesh_io.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/io/mesh_io.h)
 - RHI：[`src/engine/render/rhi/webgl/`](https://github.com/terry-chao/tamias/tree/main/src/engine/render/rhi/webgl)（**默认**，GLSL ES 3.00）；实验可选 [`src/engine/render/rhi/webgpu/`](https://github.com/terry-chao/tamias/tree/main/src/engine/render/rhi/webgpu)（WGSL，预设 `wasm-webgpu`）
 - 宿主：[`ViewerHost`](https://github.com/terry-chao/tamias/blob/main/src/wasm/viewer_host.h) + [`web/index.html`](https://github.com/terry-chao/tamias/blob/main/web/index.html)
+- 前端：[`web/src/`](https://github.com/terry-chao/tamias/tree/main/web/src)——`App.tsx`（登录门禁 + 引擎预加载）、`ViewerApp.tsx`（查看器本体）、`files/`（文件管理页）、`ribbon/`（顶栏与工具带）、`engine/EngineLoading.tsx`（加载画面）、`modeling/catalog.ts`（工具目录）
 
 ---
 
@@ -29,7 +32,7 @@ Qt 官方文档同时写明这些限制（[Qt for WebAssembly](https://doc.qt.io
 | 渲染到单个 `<canvas>`，没有 DOM | 无障碍靠 shadow DOM 补且默认关闭；系统字体拿不到，字体要随包发 |
 | 多线程要 SharedArrayBuffer + 跨源隔离（COOP `same-origin` / COEP `require-corp`） | 部署要改响应头；Qt 计划长期保留无线程模式（[开发邮件列表，2024-06](https://lists.qt-project.org/pipermail/development/2024-June/045385.html)） |
 
-**体积。** Qt 官方给的典型下载量：Core+Gui 2.1 MB brotli、加 Widgets 3.2 MB、再加 Quick+Charts 6.3 MB。真实 CAD 量级看唯一能找到的整包 Qt 编译案例 LibreCAD-Web：约 **18 MB brotli**（39 MB 原始 wasm + 30 MB 数据包；爱好项目、作者自述非厂商验证，[magik.net/librecad](https://magik.net/librecad/)）。对标 Tamias 现在的产物：`tamias_viewer.wasm` 约 2.3 MB + 前端约 150 KB。
+**体积。** Qt 官方给的典型下载量：Core+Gui 2.1 MB brotli、加 Widgets 3.2 MB、再加 Quick+Charts 6.3 MB。真实 CAD 量级看唯一能找到的整包 Qt 编译案例 LibreCAD-Web：约 **18 MB brotli**（39 MB 原始 wasm + 30 MB 数据包；爱好项目、作者自述非厂商验证，[magik.net/librecad](https://magik.net/librecad/)）。对标 Tamias 现在的产物：`tamias_viewer.wasm` **26.2 MB**（25.0 MiB，含交叉编译进来的 OCCT）、前端脚本 + 样式约 290 KB、示例文档约 7 MB。**把 OCCT 关掉就回到 2.8 MB 量级**（预设 `wasm-truck`；OCCT 切换前实测 2.79 MB）——这份体积账是"要不要在浏览器里自己造型"的直接代价，见 §1 与 §6。
 
 **产业界怎么做的**（每条都能追到一手出处）：
 
@@ -56,30 +59,37 @@ Qt 官方文档同时写明这些限制（[Qt for WebAssembly](https://doc.qt.io
 | 阶段 | 目标 | 已做 / 未做 |
 |---|---|---|
 | **0. 契约** | 非 Qt 宿主能喂窗口和字节 | ✅ `NativeWindowHandle.canvas_selector`；`load_document_bytes` / `load_obj_bytes` |
-| **1. 查看器** | 浏览器打开 `.tdoc` / `.trscn` / `.obj` 能转 | ✅ WebGPU RHI、同步 `RenderThread::pump`、Vite + React + TS 单页 |
-| **2. 轻编辑** | 选中、夹点、撤销 | 🟡 选中（点选 BVH + 高亮）/ 撤销 / 重做 ✅；夹点、框选拖拽 ❌ |
-| **3. 建模** | 浏览器里布尔 / 拉伸 | ✅ 走 Truck 内核：柱 / 梁 / 板等命令 + 视口点击落点；圆角倒角 ❌（Truck 没有） |
-| **4. BIM** | IFC 浏览 | ❌ 仍走桌面 / 将来服务端 |
+| **1. 查看器** | 浏览器打开 `.tdoc` / `.trscn` / `.obj` 能转 | ✅ WebGL2 RHI（默认）、同步 `RenderThread::pump`、Vite + React + TS 单页、登录 → 文件管理 → 文档 |
+| **2. 轻编辑** | 选中、夹点、撤销 | 🟡 选中（点选 BVH + 高亮）/ 撤销 / 重做 / 删除选中 ✅；夹点、框选拖拽 ❌ |
+| **3. 建模** | 浏览器里拉伸 / 布尔 / 圆角 | ✅ **OCCT 交叉编译进 wasm**：43 个工具，按桌面端的分组排（文件 / 编辑 / 绘制 / 建筑 / 结构 / 修改 / 注释 / 导航 / 轴网 / 楼层 / 帮助，视图段 显示 / 面板）。点采集与 args 拼接在 web 侧完成（命令都支持"直给点"，所以引擎不需要 `feed_point`）；❌ 没有 `DragContext` 那种实时实体预览，只有屏幕空间橡皮筋 |
+| **4. BIM** | IFC 浏览 | ❌ 仍走桌面 / 将来服务端（IfcOpenShell 已从 OCCT 开关上解耦，见 §6） |
 
-阶段 1 **不做**：OCCT 布尔、IFC、多视口、线框 polygon mode。
+阶段 1 **不做**：IFC、多视口、线框 polygon mode。
 
 ### 对照桌面端：web 已经有什么
 
 | 能力 | 桌面 | web |
 |---|---|---|
-| 打开 `.tdoc` / `.trscn` / `.obj` | ✅ | ✅（拖放或选择文件） |
-| 转相机 / 框选全部 | ✅ | ✅（中键 / 右键 / F） |
-| 线框 / 着色 / 真实模式 | ✅ | ✅（顶栏三个按钮，同一套 `RenderMode`） |
-| X 光（半透明看穿） | ✅（显示模式旁边的开关，`Ctrl+4`） | ⏳ 只是跟着快照走：打开带 X-Ray 的 `.trscn` 会还原成同一个画面，还没有开关按钮 |
-| 点选 + 选中高亮 | ✅ | ✅（左键点击，物体级 BVH；点空白清空） |
-| 撤销 / 重做 | ✅ | ✅（`Ctrl+Z` / `Ctrl+Y`） |
-| 左下角读数 draw / tri / gpu / tess | ✅ | ✅（视口左下角，字段同名） |
-| 建模命令（柱 / 梁 / 板 / 布尔…） | ✅（OCCT / Truck 可选） | ✅（Truck；顶栏放置 + 点击落点） |
-| 新建文档 | ✅ | ✅（内置示例场景，几何由内核求值） |
-| 删除选中 | ✅ | ✅ |
-| 属性面板 / 大纲树 / 测量 / 楼层 / 构件显隐 / 句柄检查 / 渲染场景调试器 | ✅ | ❌ |
-| 夹点编辑、框选拖拽、墙工具预览 | ✅ | ❌ |
-| 插件（C#） | ✅ | ❌ |
+| 打开 `.tdoc` / `.trscn` / `.obj` | ✅ | ✅（文件管理页双击 / 拖放 / 顶栏「打开」） |
+| 转相机 / 框选全部 | ✅ | ✅（中键 / 右键 / `F`） |
+| 线框 / 着色 / 真实模式 | ✅ | ✅（工具带「显示」组，同一套 `RenderMode`） |
+| 点选 + 选中高亮 | ✅ | ✅（物体级 BVH；点空白清空） |
+| 撤销 / 重做 / 删除选中 | ✅ | ✅（`Ctrl+Z` / `Ctrl+Y`；删除支持多选） |
+| 左下角读数 draw / tri / gpu / tess | ✅ | ✅（字段同名，另加 backend / kernel 两个读数） |
+| **造型内核** | ✅ OCCT（Truck 可选） | ✅ **OCCT（默认）**，Truck 是可选回退 |
+| 绘制 / 建筑 / 结构构件 | ✅ | ✅ 墙 / 门 / 窗 / 幕墙 / 梁 / 柱 / 板 / 结构墙 / 基础 + 直线 / 折线 / 矩形 / 圆 / 圆弧 / 贝塞尔 / B 样条 / 文字 |
+| 修改（移动 / 复制 / 旋转 / 镜像 / 阵列） | ✅ | ✅（对当前选择集逐条发命令，逐条可撤销） |
+| 圆角 / 倒角 / 布尔 | ✅ | ✅（由 OCCT 提供） |
+| 轴网 / 楼层 | ✅ | 🟡 自动轴网 / 加轴线 / 柱网 / 新建楼层能建；**轴线 id 拿不到**，所以柱网只能按整张轴网布；没有楼层管理面板 |
+| 文档模型 | ✅ 多标签页 | 🟡 **一个网页标签页 = 一份文档**（有意不做页内多标签）。有新建 / 打开 / 关闭（`Ctrl+W`）/ 最近打开 / 文件管理页 |
+| 保存 / 另存为 / 导出快照 | ✅ | ❌ 浏览器不允许网页往磁盘写文件（要真做得上 `showSaveFilePicker`） |
+| X 光 / 正交 / 轴网显示 / 标注显示开关 | ✅ | ❌ 引擎侧还没有对应导出（X 光的**状态**在 `ViewerHost` 里有，缺一个 setter + 导出） |
+| 属性 / 材质 / 纹理 / 手柄 / 楼层 / 构件显隐面板 | ✅ | ❌ 桌面宿主专属 |
+| 打开图纸（DWF / DXF / PDF）、插件（C#）、命令控制台、AI 面板、图形诊断 | ✅ | ❌ 桌面宿主专属，或 web 侧没有对应入口 |
+| 夹点编辑、框选拖拽、实时实体预览 | ✅ | ❌（放置流程只有屏幕空间橡皮筋，见 §4） |
+| 跨刷新的「最近打开」 | ✅ | ❌ 存的是 `File` 句柄，不可序列化，只在本次会话内有效 |
+| 按路径导入网格（`import_mesh`） | ✅ | ❌ 沙箱里没有路径，只能靠选择文件或拖放 |
+| `create_beam` 的 T / I 断面 | ✅ | ❌ 那两个几何参数是交互态下算出来的，命令层没有对应入参 |
 
 ---
 
@@ -87,13 +97,20 @@ Qt 官方文档同时写明这些限制（[Qt for WebAssembly](https://doc.qt.io
 
 ```
 Web UI (web/, Vite + React + TypeScript)
-    │  embind：startViewer / loadFile / newDocument / pointer* / renderFrame
-    │          / dispatch / undo・redo / selection* / pickEntity / pickWorkPlane
-    │          / setRenderMode / stats
+    │  embind（34 个导出，按用途分组）：
+    │    生命周期  startViewer / newDocument / loadFile / closeDocument / hasDocument / documentName
+    │    读数      status / stats / renderMode / kernelName / backendName / backendExperimental / logText
+    │    交互      pointerDown / pointerMove / pointerUp / wheel / pickEntity / pickWorkPlane / resizeViewer
+    │    相机      frameAll / viewYaw / viewPitch / setViewAngles
+    │    命令      dispatch / undo / redo / canUndo / canRedo
+    │    选择      clearSelection / selectionCount / selectionIdAt
+    │    渲染      renderFrame / setRenderMode
     ▼
-ViewerHost          相机、文件、提交 FrameSubmission
+ViewerHost          相机、文档生命周期、提交 FrameSubmission
     ▼
 Document / io       与桌面同一套 .tdoc / .trscn / OBJ
+    ▼
+tamias::host        与桌面同一个宿主层（所以 src/command 也在 wasm 里）
     ▼
 RenderThread        synchronous=true，主线程 pump()
     ▼
@@ -209,19 +226,37 @@ Enter / 双击结束开放式工具（折线 / 墙 / 板），Esc 取消。
 最近打开」，顶栏右端是**当前文档 chip**（名字 + 关闭叉），底部状态栏只留消息。
 
 **登录页**默认把演示凭据填好（`auth.ts` 导出 `DEMO_USER` / `DEMO_PASSWORD`，登录页只管
-默认值，不另抄一份），进来直接回车即可。它仍然只是**纯前端 UI 门禁**，不是安全边界。
+默认值，不另抄一份），进来直接回车即可。排版是常规双栏：左侧大面积品牌展示（logo +
+定位句取 README 第一句 + 三条能力点），右侧账号密码；背景的品牌光晕与**等轴测网格是纯
+CSS 画的**（`repeating-linear-gradient` 叠三组线 + `mask` 淡出），不引额外素材。
+≤900px 堆成一列。它仍然只是**纯前端 UI 门禁**，不是安全边界。
 
-**文件管理页**（`src/files/`）在"没有打开的文档"时盖住视口，三个来源合成一张表：
+**引擎预加载提前到登录页。** `tamias_viewer.wasm` 26 MB，别等用户点完登录才开始下：
+`App` 一挂载就调 `preloadViewer()`，`ViewerApp` 之后调 `loadViewer()` 复用同一个 promise。
+进度是自己 `fetch` 读 `response.body` 报的（拿不到 `Content-Length` 就退化成不确定进度），
+拿到字节后通过 **`wasmBinary` 交给 MODULARIZE 工厂**——胶水里的 `getWasmBinary` 见到它就
+跳过自己的 fetch，所以不会白下第二遍（预览服务强制 `no-store`，这一点很关键）。
+引擎没起来时视口位置显示 `src/engine/EngineLoading.tsx`（转圈 + 进度 + 失败可重试），
+不再是一块空白。
+
+**文件管理页**（`src/files/`）在"没有打开的文档"时盖住视口，排版**照桌面端欢迎页**
+（`src/app/shell/home_page.cpp`）：不是表格，是**缩略图卡片墙** + 分区标题行（左粗体标签、
+右灰提示）。配色与几何逐条抄自 `home_page_stylesheet(dark)`——页面底 `#1e1f22`、卡片
+`#2b2d30` / 边 `#3c3f41` / 2px 圆角、悬浮与选中边 `#3d8bd4`；缩略图按 200×112 比例，
+web 没有真缩略图就用 `make_thumb_icon()` 的同款兜底（`#2d2f32` 底 + 居中 48×48 的 logo，
+同一份 `assets/branding/logo.png`）。**这一页没有工具栏**——桌面端的欢迎页也没有，
+新建 / 打开在顶栏「文件」组与文件菜单里。三个来源各成一节，空的来源不画：
 
 | 来源 | 从哪来 | 说明 |
 |---|---|---|
+| 最近打开 | 本次会话打开过的（存 `File` 句柄） | 右键可「从最近打开移除」；上限 8，与桌面端 `kMaxRecentFiles` 一致 |
+| 本地文件夹 | `showDirectoryPicker()`（Chromium 系） | 列出目录里的 `.tdoc / .trscn / .obj`。**没有这个 API 就整个不出现**（菜单项也不画） |
 | 示例 | `assets/samples/**` 的 `.tdoc` / `.trscn` / `.obj`，经 Vite glob 拿 URL | **双击时才 `fetch`**，不然一进页面就把那 3 个 2 MB 的 `.trscn` 全拉下来；`render/**/debug/` 下的测试夹具排除在外 |
-| 最近打开 | 本次会话打开过的（存 `File` 句柄） | 见下 |
-| 本地文件夹 | `showDirectoryPicker()`（Chromium 系） | 列出目录里的 `.tdoc / .trscn / .obj`。**没有这个 API 就不显示按钮**，不给点了必然报错的按钮 |
 
-交互照桌面端：**单击选中、双击打开**，选中后按 Enter 也行。仓库里**没有 `.tdoc` 示例**，
-所以列表里的 `.tdoc` 只会来自"打开文件 / 打开文件夹"。注意示例文档会作为独立资源打进
-`dist/assets/`（约 7 MB），随 wasm 一起发布。
+交互照桌面端：**单击选中、双击打开**，选中后按 Enter 也行。时间写法也是桌面端
+`format_opened_time()` 的同款：`今天, HH:mm` / `昨天, HH:mm` / 短日期。仓库里**没有
+`.tdoc` 示例**，所以卡片里的 `.tdoc` 只会来自"打开文件 / 打开文件夹"。注意示例文档会作为
+独立资源打进 `dist/assets/`（约 7 MB），随 wasm 一起发布。
 
 - **关闭文档**：丢掉几何与 GPU 资产，回到文件管理页。关之前会确认；如果这份文档有未撤销
   的改动，确认框会**明说改动会丢**——因为 web 端还不能保存（见下表）。
@@ -241,21 +276,15 @@ Enter / 双击结束开放式工具（折线 / 墙 / 板），Esc 取消。
   点它时再 `arrayBuffer()` 读一次，所以这条是真能用的。代价：只在本次会话内有效。
 - 顶栏文档名与状态栏的分工照桌面端：**名字在标签上**，状态栏只放消息。
 
-**web 端做不到的（有意不放死按钮）。** 想补之前先看这张表——它们不是"还没排上"，
-是这条路今天不通：
+**web 端做不到的（有意不放死按钮）。** 逐条清单与原因**并进了 §1 的「对照桌面端」表**——
+想补某一项之前先看那张表：它们不是"还没排上"，而是这条路今天不通（缺 embind 导出 /
+沙箱里没有文件系统 / 桌面宿主专属）。三条最容易误判的单独拎出来：
 
-| 桌面端能力 | 为什么 web 没有 |
-|---|---|
-| 保存 / 另存为 / 导出快照 | wasm 侧没有任何保存导出（`viewer_main.cpp` 只导出加载） |
-| 打开图纸 / 描图（DWF / DXF / PDF） | 没有对应的 embind 入口 |
-| 设置 / 插件管理 / 命令控制台 / AI 面板 | 桌面壳专属（Qt / .NET 宿主），web 没有宿主 |
-| 属性 / 材质 / 纹理 / 手柄 / 楼层面板 | 同上；`set_param` / `set_material` / `set_location` 在 web 上等于没有 UI 可挂 |
-| 图形诊断 / 调试这一帧 / 钉进测试 | 桌面排障工具 |
-| 最近打开 / 窗口标签页 | web **有意**是"一个网页标签页 = 一份文档"，不做页内多标签；跨刷新的最近打开要 File System Access API 的句柄 + IndexedDB（只在 Chromium 系可用），现在只保证本次会话内有效 |
-| X 光 / 正交 / 轴网显示开关 / 标注开关 | 引擎侧没有对应 embind 导出（要补得先加导出） |
-| `create_beam` 的 T/I 断面 | 命令注释明说"带点的 T/I 走 interactive"，web 喂不了点 |
-| `import_mesh`（按路径导入） | 命令只实现了"从真实文件系统读"，web 没有 FS 挂载（web 用自己的 .obj/.tdoc/.trscn 加载器） |
-| 轴网轴线 id（`a:axis_ids`） | web 拿不到轴线 id（没有导出），所以「柱网」只能按整张轴网布 |
+- **保存 / 另存为**：wasm 侧**根本没有保存导出**（`viewer_main.cpp` 只有加载），不是 UI 没画。
+  要真做得上 File System Access API 的 `showSaveFilePicker`。
+- **跨刷新的「最近打开」**：存的是 `File` 句柄本身（不可序列化），要跨刷新得换 File System
+  Access 的句柄 + IndexedDB 存句柄，且只在 Chromium 系可用。现在只保证本次会话内有效。
+- **轴网轴线 id**：没有对应导出，所以「柱网」只能按整张轴网布，不能只挑几根轴线。
 
 ---
 
@@ -276,8 +305,8 @@ Enter / 双击结束开放式工具（折线 / 墙 / 板），Esc 取消。
 | 停止 | 关掉 `TamiasWasmServe`（预览）和 `TamiasGeometryServe`（几何服务）两个窗口；或 `powershell -File scripts/wasm-stop.ps1` 一次收掉 |
 | 桌面调试 | Run and Debug → **CMake Launch Target**（照旧用 CMake Tools 的 preset） |
 | 只构建、不开浏览器 | `powershell -File scripts/wasm-preview.ps1 -NoBrowser` |
-| 只构建 wasm | `powershell -File scripts/wasm.ps1` |
-| 只构建 wasm（轻量，仅 Truck） | `cmake --preset wasm-truck` + `cmake --build build/wasm-truck --target tamias_viewer` |
+| 只构建 wasm（默认，**含 OCCT**，26 MB） | `powershell -File scripts/wasm.ps1` |
+| 只构建 wasm（轻量，仅 Truck，2.8 MB 量级） | `cmake --preset wasm-truck` + `cmake --build build/wasm-truck --target tamias_viewer` |
 | 编 wasm 用的 OCCT（一次性） | `powershell -File scripts/occt-wasm.ps1` → 默认装到 `C:\dev\occt-wasm\prefix` |
 | 实验后端（WebGPU） | `cmake --preset wasm-webgpu` + `cmake --build build/wasm-webgpu --target tamias_viewer` |
 
@@ -298,7 +327,13 @@ CMake Tools 的状态栏里，wasm 只保留一个**构建**预设「构建 WASM
 preset 选 `wasm`）——预览统一走 F5，不再有「停止预览」这种预设。想从命令行单独起服务：
 `cmake --build build/wasm --target serve_viewer`。产物在 `build/wasm/bin/`。
 
-浏览器里：中键旋转，右键平移，滚轮缩放。顶栏打开 `.tdoc`、`.trscn` 或 `.obj`。没有文件时画演示立方体。`.trscn` 的含义见 [渲染场景快照](RENDER-SCENE.md)。
+浏览器里：中键旋转，右键平移，滚轮缩放。进来先是**登录页**，登录后落在**文件管理页**，
+双击一份 `.tdoc` / `.trscn` / `.obj` 才进查看器（也可以拖放，或用顶栏「打开」）。**没有默认
+文档**——引擎起来时 `has_document()` 是 false，视口提交空帧。`.trscn` 的含义见
+[渲染场景快照](RENDER-SCENE.md)。
+
+第一次打开要下 26 MB 的 wasm，所以引擎**在登录页就开始预加载**（带进度条）；如果
+`tamias_viewer.wasm` 在 Network 面板里出现了两条请求，那是预加载那条路坏了——正常只有一条。
 
 wasm 构建会自动构建 `web/`（首次若缺少 `node_modules` 会先跑 `npm ci`），
 把 Vite 产物 `index.html` + `assets/` 拷到 `build/wasm/bin/`。
@@ -310,31 +345,51 @@ wasm 构建会自动构建 `web/`（首次若缺少 `node_modules` 会先跑 `np
 
 ## 6. 构建开关
 
-| CMake 选项 | 桌面默认 | WASM |
-|---|---|---|
-| `TAMIAS_ENABLE_VULKAN_BACKEND` | ON | OFF |
-| `TAMIAS_ENABLE_OPENGL_BACKEND` | ON | OFF |
-| `TAMIAS_ENABLE_WEBGL_BACKEND` | OFF | **ON**（默认后端） |
-| `TAMIAS_ENABLE_WEBGPU_BACKEND` | OFF | OFF（只由 `wasm-webgpu` 实验预设打开） |
-| `TAMIAS_ENABLE_OCCT` | ON | OFF |
-| `TAMIAS_BUILD_TESTS` | ON | OFF |
+| CMake 选项 | 桌面默认 | WASM 默认 | `wasm` 预设 |
+|---|---|---|---|
+| `TAMIAS_ENABLE_VULKAN_BACKEND` | ON | OFF | OFF |
+| `TAMIAS_ENABLE_OPENGL_BACKEND` | ON | OFF | OFF |
+| `TAMIAS_ENABLE_WEBGL_BACKEND` | OFF | **ON**（`EMSCRIPTEN` 时的默认后端） | ON |
+| `TAMIAS_ENABLE_WEBGPU_BACKEND` | OFF | OFF | OFF（只由 `wasm-webgpu` 实验预设打开） |
+| `TAMIAS_ENABLE_OCCT` | ON | OFF | **ON** |
+| `TAMIAS_ENABLE_TRUCK_KERNEL` | OFF | OFF | ON（回退内核） |
+| `TAMIAS_OCCT_DATA_EXCHANGE` | ON | OFF | OFF |
+| `TAMIAS_ENABLE_IFC` | ON | OFF | OFF |
+| `TAMIAS_BUILD_TESTS` | ON | OFF | OFF |
 
-`src/app`、`src/command`、IfcOpenShell 在 EMSCRIPTEN 下不进构建。
+**注意内核这一列**：`TAMIAS_ENABLE_OCCT` 在裸 `emcmake` 下是 OFF，是 **`wasm` 预设**把它
+打开的——老版本在 `EMSCRIPTEN` 分支里 `FORCE` 成 OFF，所以预设怎么设都没用（见 §0 与
+[建模内核](MODELING-KERNEL.md)）。wasm 上 OCCT 需要一份交叉编译产物（`TAMIAS_OCCT_PREFIX`，
+默认 `C:/dev/occt-wasm/prefix`，用 `scripts/occt-wasm.ps1` 生成）。
+
+`TAMIAS_OCCT_DATA_EXCHANGE` 关掉是因为 STEP / IGES / BREP 那条路要 XCAF，而 XCAF 在 OCCT 7.9
+上会把 Visualization 一起拖进来；`TAMIAS_ENABLE_IFC` 则从 OCCT 开关上**解耦**了（以前挂在
+它上面，于是"wasm 想要 OCCT"会顺带把 Boost 1.87 + IfcOpenShell 的 FetchContent 拉进来）。
+
+`src/app`（Qt 壳）与 IfcOpenShell 在 EMSCRIPTEN 下不进构建。**`src/command` 是进的**——
+wasm 链了 `tamias::host`，而 `tamias_host` PUBLIC 链 `tamias::command`，所以 web 端
+`dispatch` 走的是和桌面同一套命令层。
 
 ---
 
-## 7. 明确不做（阶段 1）
+## 7. 明确不做
 
-- 不把现有 Qt Ribbon / 属性面板编进 WASM
-- 不在客户端链 OCCT / IfcOpenShell / Boost
+- 不把现有 Qt Ribbon / 属性面板编进 WASM（重画在 HTML 上）
+- 不挖 OCCT 的**导入**路径（STEP / IGES / BREP）：`TAMIAS_OCCT_DATA_EXCHANGE=OFF`
+- 不链 IfcOpenShell / Boost：IFC 仍走桌面，或将来走服务端
 - 不上 Vulkan / 桌面 OpenGL 4.5
 - 不要求 SharedArrayBuffer
-- 不在这一阶段做服务端网格下发（那是另一条可选路径）
+- 不在这一阶段做服务端网格下发（那是另一条可选路径，见 [几何服务方案](https://github.com/terry-chao/tamias/blob/main/GEOMETRY-SERVICE-PLAN.md)）
+
+> 这里**曾经**写着"不在客户端链 OCCT"。那条已经在阶段 3 被推翻了：OCCT 现在就是 wasm 的
+> 默认内核（体积代价 2.8 MB → 26 MB，见 §0）。
 
 ---
 
 ## 8. 下一步
 
-1. 阶段 2：embind `CommandSystem` + CPU 拾取（现有 BVH）。
-2. 阶段 3：裁剪 OCCT 交叉编译，求值放 Worker。
-3. 阶段 4：大 IFC 走服务端，或按需加载独立 wasm 模块。
+1. **补齐"空着的能力"**：X 光 / 正交 / 轴网显示的开关（引擎侧要先加导出；X 光的状态
+   `ViewerHost` 里已经有了，缺 setter）。
+2. **放置流程的实时预览**：现在只有屏幕空间橡皮筋，桌面端是 `DragContext` 驱动的实体预览。
+3. **保存**：`showSaveFilePicker`（Chromium 系），否则 web 永远只是只读查看。
+4. **大 IFC 走服务端**，或按需加载独立 wasm 模块。

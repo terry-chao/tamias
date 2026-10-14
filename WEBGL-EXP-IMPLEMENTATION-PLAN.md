@@ -16,13 +16,17 @@
 | §1c | **清单里漏掉的第二个前提**：Emscripten 的 `MIN/MAX_WEBGL_VERSION` 缺省都是 **1**，而 `rhi/webgl` 用 WebGL2 的 UBO 一族；不抬到 2 就在**链接期**报 `glBindBufferBase` / `glGetUniformBlockIndex` / `glUniformBlockBinding` undefined。已在 `src/wasm/CMakeLists.txt` 按 `TARGET tamias::rhi_webgl` 条件加上 | ✅ |
 | §2.1 | `viewer_host.cpp` 后端选择改为 **WebGL 优先**，WebGPU 分支补实验告警 | ✅ |
 | §2.2 | `backend_name()` / `backend_experimental()` + embind 导出 | ✅ |
-| §2.3 | 前端顶栏后端读数 + 橙色「实验」角标（`--exp` 变量） | ✅ |
+| §2.3 | 前端顶栏后端读数 + 橙色「实验」角标 | ✅ **但机制变了**：顶栏后来按桌面端重做过，原来的 `--exp` CSS 变量没了；现在是顶栏角落的 backend chip（`.tb-chip.exp`），数据仍来自 `backendExperimental()` |
 | §3 | text / overlay 两条 GLSL 管线 + `render_runtime.cpp` 接线 | ❌ **未做**。注意：这不是本次切换引入的回退——`webgl_shaders.h` 与 `webgpu_shaders.h` **都**只有 mesh + sky，两个后端今天都缺这两条管线，属于既有缺口 |
-| §4.1 | `frameTimeMs()`（帧耗时 / FPS 读数） | ❌ 未做 |
-| §4.2 | 日志面板可折叠 / 复制 / 清空 | ❌ 未做 |
-| §5 | 交互（X 光开关、正交切换、框选、夹点编辑） | ❌ 未做 |
-| §6 | 文档同步：`docs/WEB.md`、`docs/WGPU.md`、`docs/ROADMAP.md` | ✅ |
+| §4.1 | `frameTimeMs()`（帧耗时 / FPS 读数） | ❌ 未做（embind 里确认没有这个导出） |
+| §4.2 | 日志面板可折叠 / 复制 / 清空 | 🟡 **折叠已做**：文件菜单 / 视图段有「引擎日志」开关（`log-panel`，面板有内容才画）。复制、清空仍未做 |
+| §5 | 交互（X 光开关、正交切换、框选、夹点编辑） | ❌ 未做（四项都还在）。**但正交那项比原来记的更小**：`camera.h:147` 已有 `set_orthographic()` / `orthographic()`，只差 embind 导出 + 按钮，见下面 §5 的表 |
+| §6 | 文档同步：`docs/WEB.md`、`docs/WGPU.md`、`docs/ROADMAP.md` | ✅（`docs/WEB.md` 后来又随造型内核 / 文档生命周期 / 文件管理页几轮重写过） |
 | §7 | 验证：产物含 GL 胶水；`tamias_server` 与几何服务的 F5 链路另见 `docs/DECISION-SERVER-LANGUAGE.md` | ✅ |
+
+> **后续轮次已经动过这份清单里的东西**：顶栏从"三个显示模式按钮"扩成 13 组 43 个工具
+> （图标改用桌面端同一份 SVG），并加了文档生命周期（新建 / 打开 / 关闭 / 文件管理页）。
+> 所以上表里凡是提到"顶栏"的落点，都要按 `docs/WEB.md` §4 的现状读，别照着本文件的旧描述找。
 
 ## 附带产出：F5 调试链路
 
@@ -309,10 +313,10 @@ WebGPU 侧的 WGSL 版本（`webgpu_shaders.h` 加同样四条）属同一 pull 
 
 | 项 | 落点 | 说明 |
 |---|---|---|
-| **X 光开关** | `ViewerHost` 已有 `xray_` 成员（`.trscn` 加载时会还原），`viewer_main.cpp` 加 `setXray(bool)` / `xray()` 导出，顶栏加按钮 | 最小，引擎侧逻辑已存在，只缺开关 |
-| **正交 / 透视切换** | 相机已有 `orthographic()`；加 `setOrthographic(bool)` 导出 + 按钮 | 小 |
+| **X 光开关** | `ViewerHost` 已有 `xray_` 成员与 `xray()` 读取（`viewer_host.h:56` / `:123`，`.trscn` 加载时会还原），`viewer_main.cpp` 加 `setXray(bool)` 导出，工具带加按钮 | 最小，引擎侧逻辑已存在，只缺 setter + 导出 |
+| **正交 / 透视切换** | 相机**已经有** `set_orthographic()` / `orthographic()`（`src/engine/math/camera.h:147-148`，投影分支在 `:118`）——本条原来把路径写成了 `src/engine/render/camera_controller.h`（不存在），实际在 `src/engine/math/camera.h`。加 embind 导出 + 按钮即可 | 小 |
 | **框选** | 需要在 `ViewerHost` 里做屏幕矩形 → 与 BVH 求交（复用 `pick_entity` 的 `camera_ray`，`viewer_host.cpp:302-319`），或者退化为「包围盒投影到屏幕后测试」 | 中 |
-| **夹点编辑** | `docs/WEB.md:30` 列为 ❌；需引擎侧新增夹点拾取 + 拖拽提交为可撤销命令 | 大，建议独立一轮 |
+| **夹点编辑** | 在 `docs/WEB.md` 的「对照桌面端」表里列为 ❌（别按行号找，那张表被重写过）；需引擎侧新增夹点拾取 + 拖拽提交为可撤销命令 | 大，建议独立一轮 |
 
 ---
 
