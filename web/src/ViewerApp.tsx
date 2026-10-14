@@ -151,6 +151,16 @@ export default function Viewer({ user, onLogout, engine, onRetryEngine }: Viewer
   const [samples] = useState<SampleDoc[]>(() => bundled_samples());
   // 初始化重试计数：变了就让下面那个 init effect 整个重跑（加载画面上的「重试」）。
   const [initAttempt, setInitAttempt] = useState(0);
+
+  // 挑一个本地文件夹列出文档：File System Access API，只有 Chromium 系有。
+  // 没有这个 API 就整个不出现（菜单项也不画）——不给一个点了必然报错的动作。
+  // **必须放在命令表之前**：menus 在构造时就要读 canPickFolder，声明在后面会踩 TDZ。
+  const directoryPicker = (
+    window as unknown as {
+      showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>;
+    }
+  ).showDirectoryPicker;
+  const canPickFolder = typeof directoryPicker === "function";
   // 键位处理依赖为空，文档状态同样要一个 ref 镜像（和 placingRef 一个道理）。
   const hasDocRef = useRef(false);
   hasDocRef.current = hasDoc;
@@ -477,11 +487,21 @@ export default function Viewer({ user, onLogout, engine, onRetryEngine }: Viewer
     id: "close-document",
     label: "关闭文档",
     icon: "close",
-    tip: "关掉当前文档回到欢迎页（web 端还不能保存，关掉即丢弃）",
+    tip: "关掉当前文档回到文件管理页（web 端还不能保存，关掉即丢弃）",
     location: "文件",
     shortcut: "Ctrl+W",
     disabled: !hasDoc,
     run: () => void closeDocument(),
+  };
+  // 「打开文件夹…」：Chromium 系的 File System Access API 才有的能力，所以只在菜单里
+  // 按需出现（没有这个 API 时整个菜单项都不画）。
+  const cOpenFolder: RibbonCommand = {
+    id: "open-folder",
+    label: "打开文件夹…",
+    icon: "open",
+    tip: "挑一个本地文件夹，列出里面的 .tdoc / .trscn / .obj",
+    location: "文件",
+    run: () => void openFolder(),
   };
   // 最近打开：每条就是一个命令，run 里拿当初那个 File 句柄重读磁盘。
   const recentCommands: RibbonCommand[] = recent.map((entry) => ({
@@ -524,6 +544,11 @@ export default function Viewer({ user, onLogout, engine, onRetryEngine }: Viewer
       entries: [
         { kind: "command", command: findCommand("new") },
         { kind: "command", command: findCommand("open") },
+        // 「打开文件夹…」原来在文件管理页的工具栏上；那一页照桌面端改成纯卡片墙之后，
+        // 这个动作挪到文件菜单里（桌面端的打开类动作也都在菜单 + ribbon 上）。
+        ...(canPickFolder
+          ? [{ kind: "command" as const, command: cOpenFolder }]
+          : []),
         // 最近打开只在本次会话内有内容（File 句柄不可序列化），空的时候不画这一项。
         ...(recentEntries.length > 0
           ? [{ kind: "submenu" as const, title: "最近打开", entries: recentEntries }]
@@ -846,6 +871,11 @@ export default function Viewer({ user, onLogout, engine, onRetryEngine }: Viewer
     void openFile(file);
   };
 
+  /** 从「最近打开」里移除一条（文件管理页的右键菜单）。key 形如 recent:名字:时间。 */
+  const removeRecent = (key: string) => {
+    setRecent((prev) => prev.filter((entry) => `recent:${entry.name}:${entry.at}` !== key));
+  };
+
   /** 打开仓库自带的示例。**双击时才拉字节**——不然一进文件管理页就会把那 3 个
    *  2 MB 的 .trscn 全下下来。 */
   const openSample = async (sample: SampleDoc) => {
@@ -876,15 +906,6 @@ export default function Viewer({ user, onLogout, engine, onRetryEngine }: Viewer
       setBusy(null);
     }
   };
-
-  // 挑一个本地文件夹列出里面的文档：File System Access API，只有 Chromium 系有。
-  // 没有这个 API 就不显示按钮——不给一个点了必然报错的按钮。
-  const directoryPicker = (
-    window as unknown as {
-      showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>;
-    }
-  ).showDirectoryPicker;
-  const canPickFolder = typeof directoryPicker === "function";
 
   const openFolder = async () => {
     if (directoryPicker === undefined) {
@@ -1214,9 +1235,7 @@ export default function Viewer({ user, onLogout, engine, onRetryEngine }: Viewer
             entries={fileEntries}
             busy={busy}
             error={fileError}
-            onOpenLocal={() => fileInputRef.current?.click()}
-            onOpenFolder={canPickFolder ? () => void openFolder() : undefined}
-            onNew={() => void newDocument()}
+            onRemoveRecent={removeRecent}
           />
         )}
         {/* 放置中：屏幕空间的橡皮筋。桌面端靠 DragContext 画实时实体预览，web 没有
