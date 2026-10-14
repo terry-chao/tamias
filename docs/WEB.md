@@ -1,7 +1,8 @@
 # 引擎 WASM + Web 查看器
 
 > **状态：⚠️ 施工中（WIP）。** 查看器、轻编辑、Truck 建模已经能跑，但**和桌面端远未对齐**：
-> 功能在陆续补，embind 接口与交互细节随时可能变，别当成品对外承诺。页面左上角有「施工中」角标。
+> 功能在陆续补，embind 接口与交互细节随时可能变，别当成品对外承诺。页面顶栏已按桌面端
+> 重做（一行菜单 + 两段分区工具带 + 底部状态栏），但菜单里只放真的能用的命令。
 > 桌面仍是 Qt 壳；浏览器走另一条产品线：无 Qt 的引擎交叉编译到 WebAssembly，新 Web UI 画在 HTML canvas 上。图形**默认 WebGL2**（`rhi/webgl`）；[WebGPU](WGPU.md)（`rhi/webgpu`）是**实验**预设 `wasm-webgpu`，功能与稳定性尚未与 WebGL 对齐。桌面不做 wgpu-native。
 
 实现入口：
@@ -16,7 +17,37 @@
 
 Qt 6 官方支持 WebAssembly，但 Tamias 桌面视口绑的是 HWND / X11、`AA_NativeWindows`、OpenGL 4.5 + SPIR-V、Vulkan Win32/Xlib。这些在浏览器里不存在。
 
-引擎库（document / io / command / entity / modeling）不 include Qt。Web 线复用它们，丢掉 `src/app`。
+**而且「用 Qt 就不用管图形 API」也不成立：Qt 在浏览器里只能跑 WebGL。** Qt for WebAssembly 的硬件加速就是 WebGL（GLES 2.0 → WebGL 1、GLES 3.0 → WebGL 2），Qt 自己的 QRhi 后端只有 `Null / Vulkan / OpenGLES2 / D3D11 / D3D12 / Metal`，**没有 WebGPU**。搬 Qt 进浏览器等于把整个产品锁在 WebGL2 上，wasm 侧的 WebGPU 路线一起没了；桌面那套 Vulkan / GL 4.5 假设也一条都不成立。
+
+Qt 官方文档同时写明这些限制（[Qt for WebAssembly](https://doc.qt.io/qt-6/wasm.html)、[QRhi](https://doc.qt.io/qt-6/qrhi.html)）：
+
+| 限制 | 影响 |
+|---|---|
+| 动态库 / 动态链接是 Technology Preview，原话 “not suitable for production use”；该模式下多线程与 Asyncify 不支持 | 打包与分发策略要按单体静态链接设计 |
+| 默认不支持嵌套事件循环：`QDialog::exec()`、带返回值的 `QMessageBox`、向外拖拽都要 Asyncify 或 JSPI；`QApplication::exec()` 永不返回、栈被泄漏 | 模态对话框这类 CAD 高频交互要重写；Asyncify 的代价见 [Emscripten 文档](https://emscripten.org/docs/porting/asyncify.html)：体积与速度「something like 50% or so」 |
+| `QOpenGLWidget` 不支持；OpenGL 上下文共享不支持（`shareContext()` 恒为 `nullptr`）；**一个 surface 只能一个 WebGL context** | 自研视口接进去只剩「Qt 建 context、RHI attach 上去」一条路，得把 `WebGLDevice` 的 initialize 拆成 attach 模式 |
+| 渲染到单个 `<canvas>`，没有 DOM | 无障碍靠 shadow DOM 补且默认关闭；系统字体拿不到，字体要随包发 |
+| 多线程要 SharedArrayBuffer + 跨源隔离（COOP `same-origin` / COEP `require-corp`） | 部署要改响应头；Qt 计划长期保留无线程模式（[开发邮件列表，2024-06](https://lists.qt-project.org/pipermail/development/2024-June/045385.html)） |
+
+**体积。** Qt 官方给的典型下载量：Core+Gui 2.1 MB brotli、加 Widgets 3.2 MB、再加 Quick+Charts 6.3 MB。真实 CAD 量级看唯一能找到的整包 Qt 编译案例 LibreCAD-Web：约 **18 MB brotli**（39 MB 原始 wasm + 30 MB 数据包；爱好项目、作者自述非厂商验证，[magik.net/librecad](https://magik.net/librecad/)）。对标 Tamias 现在的产物：`tamias_viewer.wasm` 约 2.3 MB + 前端约 150 KB。
+
+**产业界怎么做的**（每条都能追到一手出处）：
+
+| 产品 / 项目 | 形态 | 出处 |
+|---|---|---|
+| rhino3dm.js | wasm 内核（OpenNURBS）+ JS API | [developer.rhino3d.com](https://developer.rhino3d.com/guides/opennurbs/what-is-rhino3dmio/) |
+| web-ifc（IFC.js） | C++ 内核 → wasm（Emscripten）+ 薄 JS 层 | [github.com/ifcjs/web-ifc](https://github.com/ifcjs/web-ifc) |
+| Speckle viewer | 纯 JS/TS，建在 three.js 上 | [docs.speckle.systems](https://docs.speckle.systems/developers/viewer/overview) |
+| ODA inWEB | JS 查看器；wasm 只用在约束求解器 / BREP 建模器的原型 | [opendesign.com/products/inweb](https://www.opendesign.com/products/inweb) |
+| Autodesk APS | wasm 是**组件**不是几何内核（Rust→wasm 在 Service Worker 里解密模型流） | [aps.autodesk.com](https://aps.autodesk.com/blog/load-encrypted-model-data-webassembly-and-rust) |
+| Onshape | 几何在服务端，客户端只负责渲染与交互（fillet 只回传变化的三角面） | [cad.onshape.com/help](https://cad.onshape.com/help/Content/Home/hardware_and_graphics_performance_recommendations.htm) |
+| Rhino Compute / ShapeDiver | **不是**浏览器内 wasm：headless Rhino.Inside 服务 / AWS 上的 SaaS，客户端只是 JS + glTF 查看器 | [help.shapediver.com](https://help.shapediver.com/doc/shapediver-rhino-compute) |
+
+**没有找到任何一个已出货的商业 CAD / BIM 产品跑整包 Qt-for-wasm。** 注意这是「未证实的缺席」，不是「证明不存在」——但结论方向很清楚：出货产品要么把 C++ 内核放服务端，要么做成聚焦的 wasm 库 + web 原生 UI，「整包原生 UI 工具链进浏览器」在 CAD 领域只出现在爱好项目里。
+
+**一处边界**：上面是**现象**的证据；「他们是因为 Qt 这些限制才这么选」是**推断**，没有厂商公开这么说过。AutoCAD Web / SketchUp for Web 也没有找到 wasm vs JS 的一手说明，别当事实引用。
+
+引擎库（document / io / command / entity / modeling）不 include Qt。Web 线复用它们，丢掉 `src/app`。真要做到「一份 UI 两端跑」，走 [tac](TAC.md) 契约（`src/ui/tac` 无 Qt，wasm 分支已经在构建它），不要把 Qt 拖进浏览器。
 
 ---
 
@@ -97,14 +128,119 @@ WebGL2 RHI           rhi/webgl，绑 #viewport
 
 **线程。** `RenderDeviceConfig.synchronous = true` 时不建 `std::thread`。上传和 `pump()` 都在调用线程跑，避开 SharedArrayBuffer / COOP-COEP。
 
-**OCCT。** WASM 预设关掉 `TAMIAS_ENABLE_OCCT`，没有后端注册进内核注册表：特征树求值会直接报
-“kernel not registered”（`geometry_builder` 的过渡 shim 原样把错误传出去）。打开已 tessellate 的
-`.tdoc` 只吃 MESH/SCEN 缓存，不重求值。见 [建模内核](MODELING-KERNEL.md)。
+**造型内核。** 默认 **OCCT**，Truck 是可选回退——和桌面 / 服务端同一个关系
+（`linked_kernels.cpp` 的默认后端就是 `Occt`，没有就回退到第一个注册进来的）。
+
+浏览器里要有 OCCT，前提是一份**交叉编译到 wasm32-emscripten** 的 OCCT，
+只含 `FoundationClasses + ModelingData + ModelingAlgorithms`
+（没有 Visualization / DataExchange）。编法：
+
+```powershell
+powershell -File scripts/occt-wasm.ps1     # 产物默认在 C:\dev\occt-wasm\prefix
+```
+
+再由 `TAMIAS_OCCT_PREFIX` 指给构建（`wasm` 预设里已经指向那个默认位置）。两条容易踩的：
+
+- **`TAMIAS_OCCT_DATA_EXCHANGE=OFF`**（wasm 预设就是这么设的）：STEP / IGES / BREP 导入
+  （`occt_shape_ops.cpp`）整份不编。它要 XCAF，而 XCAF 在 OCCT 7.9 上会把 Visualization
+  一起拖进来；浏览器本来也没有这条入口（加载只认 `.tdoc` / `.trscn` / `.obj`）。
+- **`TAMIAS_ENABLE_OCCT` 不能在 `EMSCRIPTEN` 分支里 FORCE 关。** 以前就是那么写的，
+  结果无论预设怎么设，wasm 里永远只有 Truck。现在它和 RHI 后端一样是个普通开关。
+  另外 Emscripten 的工具链把 `CMAKE_FIND_ROOT_PATH_MODE_PACKAGE` 设成 `ONLY`，
+  `CMAKE_PREFIX_PATH` 会被整个无视——`TAMIAS_OCCT_PREFIX` 因此也要进
+  `CMAKE_FIND_ROOT_PATH`（`TamiasDependencies.cmake` 里做了），否则报的是
+  "Could NOT find OpenCASCADE"，连候选文件都不列。
+
+Truck 仍是**可选**那一个：`wasm-truck` 预设（`TAMIAS_ENABLE_OCCT=OFF`）出 2.8 MB 的轻量产物，
+默认的 `wasm` 带 OCCT、26 MB 量级。两个都编进来时 OCCT 胜出；若设了
+`set_default_kernel_backend(occt)` 而这次构建没编进 OCCT，引擎日志里会有一条
+`falling back to 'truck'` 的 warn，`kernelName()` 也如实报 `truck`。
+
+打开已 tessellate 的 `.tdoc` 只吃 MESH/SCEN 缓存，不重求值。见 [建模内核](MODELING-KERNEL.md)。
 
 **UI。** `web/` 是自建的 Vite + React 18 + TypeScript 工程，依赖全部本地化（不走 esm.sh CDN）。
 `src/viewer.ts` 里有 embind 导出的类型声明和加载器（运行时动态加载同目录的 `tamias_viewer.js`）；
-`src/App.tsx` 负责顶栏、文件打开、拖放、状态栏、键盘快捷键。构建时把 `dist/` 拷进 wasm 输出目录，
+`src/App.tsx` 是登录门禁（**纯前端 UI 门禁，不是安全边界**，理由见 `src/auth.ts` 顶部），
+`src/ViewerApp.tsx` 是查看器本体（视口、拖放、键盘快捷键、底部状态栏、放置流程），
+`src/files/` 是**文件管理页**（登录后的落地页：示例 / 最近打开 / 本地文件夹，双击打开），
+`src/modeling/catalog.ts` 是工具清单，
+`src/ribbon/` 是**照桌面端做的顶栏**：一行菜单 + 两段分区工具带 + 命令搜索，
+配色与尺寸对着 `src/app/shell/ribbon/ribbon_bar.cpp` 与 `src/app/base/theme.cpp` 抄，
+排法见 [APP.md](APP.md) 的「顶栏」一节。构建时把 `dist/` 拷进 wasm 输出目录，
 与 `tamias_viewer.js` / `.wasm` 同目录。换 UI 只换 `web/`，不换 `ViewerHost`。
+
+**图标只有一份来源。** 工具带图标直接用桌面端那套 `assets/icons/*.svg`
+（资源清单是 `src/app/resources.qrc`），经 `import.meta.glob(..., { query: "?url" })`
+在构建期内联成 data URL。它们是**全彩插画**（渐变 + 硬编码颜色），不是单色字形，
+所以用 `<img>` 而不是内联 SVG——顺便避开"多个 SVG 都有 `id="top"` 内联后串色"的坑。
+Vite 的 `server.fs.allow` 要放开 `web/` 之外，因为图标在仓库根目录。
+
+**工具目录。** `src/modeling/catalog.ts` 是工具的唯一来源：每个工具有 命令名 / 中文标签 /
+图标 basename / 分组 / 要几个点 / 需要哪些参数 / 是否要选择集。`ViewerApp` 把它映射成
+桌面端同款的两段分区（绘制 7 / 建筑 4 / 结构 6 / 修改 11 / 轴网 3 / 注释 1 / 楼层 1 +
+文件 / 编辑 / 导航 / 帮助，视图段 显示 / 面板），共 43 个工具。
+
+**放置流程（web 自己实现）。** 这些命令**全都支持"直给点"**（`p:points=` 或
+`v:origin` / `v:position`），所以 web 端按 `pickWorkPlane` 采点、把 args 拼全再
+`dispatch` 就够了——**引擎侧不需要 `feed_point` / `DragContext`**。代价是没有桌面端那种
+"跟着鼠标长的实体预览"，只有屏幕空间的橡皮筋（`src/ribbon/RubberBand.tsx`）：
+用户点过的点当初就是从那个屏幕位置反投影到工作平面的，所以连起来就是正确的投影。
+Enter / 双击结束开放式工具（折线 / 墙 / 板），Esc 取消。
+
+**文档模型：一个网页标签页 = 一份文档，而且进来先落在「文件管理」。**
+完整流程是**登录 → 文件管理 → 双击一份文档 → 查看器**。所以引擎启动时**不建默认文档**
+（`ViewerHost::start()` 只起渲染通道，`has_document()` 为 false，`render()` 提交空帧），
+由用户在文件管理页决定开哪一份。文件菜单里有「新建 / 打开 / 关闭文档（`Ctrl+W`）/
+最近打开」，顶栏右端是**当前文档 chip**（名字 + 关闭叉），底部状态栏只留消息。
+
+**登录页**默认把演示凭据填好（`auth.ts` 导出 `DEMO_USER` / `DEMO_PASSWORD`，登录页只管
+默认值，不另抄一份），进来直接回车即可。它仍然只是**纯前端 UI 门禁**，不是安全边界。
+
+**文件管理页**（`src/files/`）在"没有打开的文档"时盖住视口，三个来源合成一张表：
+
+| 来源 | 从哪来 | 说明 |
+|---|---|---|
+| 示例 | `assets/samples/**` 的 `.tdoc` / `.trscn` / `.obj`，经 Vite glob 拿 URL | **双击时才 `fetch`**，不然一进页面就把那 3 个 2 MB 的 `.trscn` 全拉下来；`render/**/debug/` 下的测试夹具排除在外 |
+| 最近打开 | 本次会话打开过的（存 `File` 句柄） | 见下 |
+| 本地文件夹 | `showDirectoryPicker()`（Chromium 系） | 列出目录里的 `.tdoc / .trscn / .obj`。**没有这个 API 就不显示按钮**，不给点了必然报错的按钮 |
+
+交互照桌面端：**单击选中、双击打开**，选中后按 Enter 也行。仓库里**没有 `.tdoc` 示例**，
+所以列表里的 `.tdoc` 只会来自"打开文件 / 打开文件夹"。注意示例文档会作为独立资源打进
+`dist/assets/`（约 7 MB），随 wasm 一起发布。
+
+- **关闭文档**：丢掉几何与 GPU 资产，回到文件管理页。关之前会确认；如果这份文档有未撤销
+  的改动，确认框会**明说改动会丢**——因为 web 端还不能保存（见下表）。
+  `ViewerHost::close_document()` 会把当前 Document 换成一份空的，所以 `render()` 提交的是
+  空场景，不需要"没有文档"的分支。
+- **换文档必须清掉"文档派生的渲染状态"**。`RenderThread::release_all_assets()` 一起清两样，
+  两样都是做这个功能时发现并修掉的既有 bug：
+  1. **网格 / 纹理映射**：语义 asset id 是每份 `Document` 各自从 1 编号的
+     （`Document::next_mesh_id_`），而映射按 asset id 缓存、**命中即早退**
+     （`upload_mesh_on_thread`）——不清就是"先开 A 再开 B，B 显示 A 的几何"。
+  2. **各通道留存的场景图**：场景图只在 `frame.scene_generation != channel.scene_generation`
+     时才重建（`draw_channel` 里那段），而代次是**每份 Scene 各自计数**的，换文档后
+     重新计数。撞上相同值那条判断就不成立，**旧几何继续留在屏幕上**（"文档关掉了但
+     东西还在"）。清掉 `scene_root` 后下一次提交走整树重建分支；注意 `scene_nodes`
+     里存的是树内节点裸指针，必须和 `scene_root` 一起清。
+- **最近打开**存的是 **`File` 句柄本身**（只是指向磁盘上那个文件，不把内容读进内存），
+  点它时再 `arrayBuffer()` 读一次，所以这条是真能用的。代价：只在本次会话内有效。
+- 顶栏文档名与状态栏的分工照桌面端：**名字在标签上**，状态栏只放消息。
+
+**web 端做不到的（有意不放死按钮）。** 想补之前先看这张表——它们不是"还没排上"，
+是这条路今天不通：
+
+| 桌面端能力 | 为什么 web 没有 |
+|---|---|
+| 保存 / 另存为 / 导出快照 | wasm 侧没有任何保存导出（`viewer_main.cpp` 只导出加载） |
+| 打开图纸 / 描图（DWF / DXF / PDF） | 没有对应的 embind 入口 |
+| 设置 / 插件管理 / 命令控制台 / AI 面板 | 桌面壳专属（Qt / .NET 宿主），web 没有宿主 |
+| 属性 / 材质 / 纹理 / 手柄 / 楼层面板 | 同上；`set_param` / `set_material` / `set_location` 在 web 上等于没有 UI 可挂 |
+| 图形诊断 / 调试这一帧 / 钉进测试 | 桌面排障工具 |
+| 最近打开 / 窗口标签页 | web **有意**是"一个网页标签页 = 一份文档"，不做页内多标签；跨刷新的最近打开要 File System Access API 的句柄 + IndexedDB（只在 Chromium 系可用），现在只保证本次会话内有效 |
+| X 光 / 正交 / 轴网显示开关 / 标注开关 | 引擎侧没有对应 embind 导出（要补得先加导出） |
+| `create_beam` 的 T/I 断面 | 命令注释明说"带点的 T/I 走 interactive"，web 喂不了点 |
+| `import_mesh`（按路径导入） | 命令只实现了"从真实文件系统读"，web 没有 FS 挂载（web 用自己的 .obj/.tdoc/.trscn 加载器） |
+| 轴网轴线 id（`a:axis_ids`） | web 拿不到轴线 id（没有导出），所以「柱网」只能按整张轴网布 |
 
 ---
 
@@ -126,6 +262,8 @@ WebGL2 RHI           rhi/webgl，绑 #viewport
 | 桌面调试 | Run and Debug → **CMake Launch Target**（照旧用 CMake Tools 的 preset） |
 | 只构建、不开浏览器 | `powershell -File scripts/wasm-preview.ps1 -NoBrowser` |
 | 只构建 wasm | `powershell -File scripts/wasm.ps1` |
+| 只构建 wasm（轻量，仅 Truck） | `cmake --preset wasm-truck` + `cmake --build build/wasm-truck --target tamias_viewer` |
+| 编 wasm 用的 OCCT（一次性） | `powershell -File scripts/occt-wasm.ps1` → 默认装到 `C:\dev\occt-wasm\prefix` |
 | 实验后端（WebGPU） | `cmake --preset wasm-webgpu` + `cmake --build build/wasm-webgpu --target tamias_viewer` |
 
 F5 那条链路做三件事：编 `build/wasm` 的 `tamias_viewer`（**WebGL2**）→ 起 .NET 几何服务
