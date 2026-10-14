@@ -29,3 +29,5 @@ server/**/bin/
 server/**/obj/
 # Truck 桥的 cargo 产物（Cargo.lock 要提交，target 不提交）
 src/engine/modeling/truck-bridge/target/
+# 本机文件权限修复的报告（ACL 备份 + 回滚脚本 + jsonl），机器相关，不进仓库
+acl-reports/
