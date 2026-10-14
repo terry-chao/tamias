@@ -1,5 +1,7 @@
 #include "engine/modeling/linked_kernels.h"
 
+#include "engine/base/log.h"
+
 #include <mutex>
 #include <string>
 
@@ -33,6 +35,11 @@ Result<std::unique_ptr<ModelKernel>> create_with_fallback(KernelBackend wanted,
       continue;
     }
     if (auto alt = ModelKernel::create(KernelCreateInfo{candidate})) {
+      // 说出来：不然「我设的内核怎么没生效」只能靠翻产物猜。
+      // 典型场景：wasm 上想要 occt，但那次构建没编进 OCCT（见 docs/WEB.md）。
+      log_warn(std::string("modeling kernel '") + to_string(wanted) +
+               "' is not available in this build; falling back to '" +
+               to_string(candidate) + "'");
       chosen = candidate;
       return alt;
     }
@@ -74,6 +81,14 @@ Result<ModelKernel*> default_kernel() {
     return Err(g_error.empty() ? std::string("no modeling kernel available") : g_error);
   }
   return g_default.get();
+}
+
+std::string active_kernel_name() {
+  auto kernel = default_kernel();
+  if (!kernel) {
+    return "none";
+  }
+  return to_string((*kernel)->backend());
 }
 
 }  // namespace tamias

@@ -74,7 +74,9 @@
         "TAMIAS_ENABLE_OPENGL_BACKEND": "OFF",
         "TAMIAS_ENABLE_WEBGL_BACKEND": "ON",
         "TAMIAS_ENABLE_WEBGPU_BACKEND": "OFF",
-        "TAMIAS_ENABLE_OCCT": "OFF",
+        "TAMIAS_ENABLE_OCCT": "ON",
+        "TAMIAS_OCCT_PREFIX": "C:/dev/occt-wasm/prefix",
+        "TAMIAS_OCCT_DATA_EXCHANGE": "OFF",
         "TAMIAS_ENABLE_TRUCK_KERNEL": "ON",
         "TAMIAS_BUILD_TESTS": "OFF",
         "TAMIAS_USE_FETCHCONTENT": "OFF"
@@ -83,6 +85,16 @@
         "microsoft.com/VisualStudioSettings/CMake/1.0": {
           "hostOS": [ "Windows" ]
         }
+      }
+    },
+    {
+      "name": "wasm-truck",
+      "displayName": "Emscripten WebGL viewer (仅 Truck，轻量)",
+      "inherits": "wasm",
+      "binaryDir": "${sourceDir}/build/wasm-truck",
+      "cacheVariables": {
+        "TAMIAS_ENABLE_OCCT": "OFF",
+        "TAMIAS_OCCT_PREFIX": ""
       }
     },
     {
@@ -154,8 +166,14 @@
     },
     {
       "name": "wasm-build",
-      "displayName": "构建 WASM 查看器（WebGL，默认）",
+      "displayName": "构建 WASM 查看器（WebGL + OCCT 造型，默认）",
       "configurePreset": "wasm",
+      "targets": ["tamias_viewer"]
+    },
+    {
+      "name": "wasm-truck-build",
+      "displayName": "构建 WASM 查看器（WebGL，仅 Truck）",
+      "configurePreset": "wasm-truck",
       "targets": ["tamias_viewer"]
     },
     {

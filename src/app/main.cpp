@@ -17,7 +17,11 @@
 #include "engine/graphics/graphics_backend.h"
 #include "app/base/i18n.h"
 #include "engine/modeling/linked_kernels.h"
+// STEP / IGES / BREP 导入路径是可裁剪的（TAMIAS_OCCT_DATA_EXCHANGE）。关掉时
+// occt_shape_ops.cpp 整个不编，所以这里连头文件都不该 include。
+#if defined(TAMIAS_HAS_OCCT_DATA_EXCHANGE) && TAMIAS_HAS_OCCT_DATA_EXCHANGE
 #include "engine/modeling/occt/occt_shape_ops.h"
+#endif
 #include "engine/profile/profiling.h"
 #include "ui/qt/backend.h"
 #include "ui/tac/backend.h"
@@ -59,7 +63,9 @@ int main(int argc, char* argv[]) {
   tamias::install_qt_event_source();
   tamias::register_linked_kernels();
   tamias::register_commands(tamias::command_registry());
+#if defined(TAMIAS_HAS_OCCT_DATA_EXCHANGE) && TAMIAS_HAS_OCCT_DATA_EXCHANGE
   tamias::register_occt_shape_ops();
+#endif
 
   tamias::AppSettings::instance().load();
   // 建模内核：用设置里选的那个（默认 occt）。必须在任何文档求值之前设置，

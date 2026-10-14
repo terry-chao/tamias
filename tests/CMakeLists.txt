@@ -43,10 +43,13 @@ target_link_libraries(tamias_tests
     tamias::plugin
     tamias::modeling
     tamias::render
-    tamias::ifc
     tamias::tac
     GTest::gtest_main
 )
+# 同 src/app：IFC 是可裁剪的（TAMIAS_ENABLE_IFC）。
+if(TAMIAS_ENABLE_IFC)
+  target_link_libraries(tamias_tests PRIVATE tamias::ifc)
+endif()
 target_compile_definitions(tamias_tests PRIVATE TAMIAS_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 include(GoogleTest)
 

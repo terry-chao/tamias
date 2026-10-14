@@ -159,7 +159,6 @@ target_link_libraries(tamias
     tamias::ai
     tamias::rag
     tamias::plugin
-    tamias::ifc
     # 界面抽象层与当前 Qt 后端（迁移中：见 docs/TAC.md）。
     tamias::tac
     tamias::qt
@@ -168,6 +167,12 @@ target_link_libraries(tamias
     Qt6::Svg
     Qt6::Network
 )
+
+# IfcOpenShell 语义树（src/bim）是可裁剪的：TAMIAS_ENABLE_IFC=OFF 时那个目录整个
+# 不编，这里也就没有 tamias::ifc 可链。桌面默认开。
+if(TAMIAS_ENABLE_IFC)
+  target_link_libraries(tamias PRIVATE tamias::ifc)
+endif()
 
 # PDF 图纸需要 Qt PDF 模块（Qt 6 下是 GPLv3 / 商业双许可，未随本仓库分发）。
 # 装上就自动启用；没装则 PDF 走"请导出 DXF/SVG/图片"的提示。

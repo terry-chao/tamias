@@ -21,4 +21,11 @@ void set_default_kernel_backend(KernelBackend backend);
 // 调用方应当显式持有内核，见 docs/MODELING-KERNEL.md。
 [[nodiscard]] Result<ModelKernel*> default_kernel();
 
+// **实际生效**的内核名字（"occt" / "truck"；一个都没有时 "none"）。
+// 注意它和 default_kernel_backend() 的区别：那个是「想要哪个」，这个是「真的用上了哪个」
+// ——编进来的后端里没有想要的那个时会对第一个可用的回退（见 create_with_fallback）。
+// 第一次调用会触发注册与创建，所以它反映的是最终结果。
+// 给 UI 显示用：桌面/服务端的默认是 occt，wasm 上取决于编进了什么。
+[[nodiscard]] std::string active_kernel_name();
+
 }  // namespace tamias

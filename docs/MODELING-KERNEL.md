@@ -172,8 +172,14 @@ Document::createGeom / rebuild
 ## 6. 第二个后端：Truck（Rust）
 
 **为什么是它**：Truck 是 Rust 写的开源 B-rep 内核（MIT/Apache）。它的价值不在“比 OCCT 强”，
-而在两点：① 能编到 WASM，将来浏览器里想要可编辑的模型，OCCT 进不去；② 用一个能力更弱的
-内核反过来验证接口是不是真的中立。
+而在两点：① 能力更弱，正好反过来验证接口是不是真的中立；② 是一个**轻量**的浏览器选项——
+OCCT 也能编到 WASM 了（见 [浏览器查看器](WEB.md)：`scripts/occt-wasm.ps1` 交叉编译
+FoundationClasses + ModelingData + ModelingAlgorithms），但那份产物是 26 MB 量级，
+而只带 Truck 的产物是 2.8 MB。所以现在的默认是 **OCCT**，Truck 是**可选回退**
+（`wasm-truck` 预设出轻量档）。
+
+> 更正：本节以前写的是「将来浏览器里想要可编辑的模型，OCCT 进不去」。**那句已经不成立**——
+> OCCT 7.9.3 可以交叉编译到 wasm32-emscripten，`wasm` 预设现在就是这么编的。
 
 **桥怎么分**（Rust 与 C++ 之间只有一层薄桥）：
 

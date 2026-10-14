@@ -73,14 +73,46 @@ endif()
 option(TAMIAS_ENABLE_WEBGL_BACKEND "Build the WebGL2 RHI backend (Emscripten; the WASM default)." ${_tamias_webgl_default})
 option(TAMIAS_ENABLE_WEBGPU_BACKEND "Build the browser WebGPU RHI backend (Emscripten; experimental)." OFF)
 unset(_tamias_webgl_default)
-option(TAMIAS_ENABLE_OCCT "Build OCCT modeling and IfcOpenShell." ON)
+# 建模内核：**OCCT 是默认**，Truck 是可选回退。
+# wasm 上「有没有 OCCT」取决于有没有一份交叉编译出来的 OCCT，所以这里的默认值做成
+# EMSCRIPTEN 感知——但**不能 FORCE**：选哪个内核是预设 / -D 的事。老版本正是在
+# EMSCRIPTEN 分支里把 OCCT FORCE 成 OFF，结果不管预设怎么设，wasm 里永远只有 Truck。
+if(EMSCRIPTEN)
+  set(_tamias_occt_default OFF)
+else()
+  set(_tamias_occt_default ON)
+endif()
+option(TAMIAS_ENABLE_OCCT "Build the OCCT modeling kernel backend." ${_tamias_occt_default})
+unset(_tamias_occt_default)
 option(TAMIAS_ENABLE_TRUCK_KERNEL "Build the Truck (Rust) modeling kernel backend." OFF)
+# OCCT 的导入路径（STEP / IGES / BREP + XCAF 颜色，见 occt_shape_ops.cpp）。
+# 它比内核本身重得多：要 XCAF，而 XCAF 在 OCCT 7.9 上还会把 Visualization
+# （TKService / TKV3d）一起拖进来。wasm 上根本没有这条路（服务端的 load_bytes 也只认
+# .tdoc / .trscn / .obj），关掉能省一大截体积和依赖。
+if(EMSCRIPTEN)
+  set(_tamias_occt_de_default OFF)
+else()
+  set(_tamias_occt_de_default ON)
+endif()
+option(TAMIAS_OCCT_DATA_EXCHANGE "Build the OCCT STEP/IGES/BREP import path (pulls in XCAF + Visualization)." ${_tamias_occt_de_default})
+unset(_tamias_occt_de_default)
 option(TAMIAS_BUILD_TESTS "Build unit tests." ON)
 # 服务端宿主：把 Session 暴露成扁平 C ABI 的共享库，给 .NET 服务壳 P/Invoke。
 # 见 docs/DECISION-SERVER-LANGUAGE.md。缺省关，不影响桌面 / wasm 两条产线。
 option(TAMIAS_BUILD_SERVER "Build the headless server host (tamias_server shared library)." OFF)
 option(TAMIAS_BUILD_SERVER_SHELL "Also publish the .NET server shell next to tamias_server." OFF)
 option(TAMIAS_USE_FETCHCONTENT "Fetch third-party libs with FetchContent when not found." ON)
+# IfcOpenShell 的 IfcParse（IFC 语义树 + tamias_ifc_dump，见 src/bim）。
+# 它和 OCCT 是**两件事**，以前挂在 TAMIAS_ENABLE_OCCT 上，于是「wasm 想要 OCCT」
+# 会顺带把 Boost 1.87 + IfcOpenShell 的 FetchContent 拉进来（wasm 上直接 FATAL）。
+# 配置期很贵，不需要就别开。wasm 一律关。
+if(EMSCRIPTEN)
+  set(_tamias_ifc_default OFF)
+else()
+  set(_tamias_ifc_default ON)
+endif()
+option(TAMIAS_ENABLE_IFC "Build IfcOpenShell IfcParse (IFC spatial tree + tamias_ifc_dump)." ${_tamias_ifc_default})
+unset(_tamias_ifc_default)
 option(TAMIAS_COMPILER_CACHE "Use sccache/ccache as compiler launcher when found." ON)
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/TamiasPch.cmake")
 
@@ -106,7 +138,11 @@ if(EMSCRIPTEN)
   # WebGL / WebGPU 这两个**不能 FORCE**：wasm 与 wasm-webgpu 两个预设就是靠这两个开关
   # 选后端的，FORCE 会把预设的选择直接盖掉。老版本正是这么写的，结果 wasm 被钉死在
   # WebGPU 上，rhi/webgl 从来没在这个预设下编过（产物里 GLctx 零命中）。
-  set(TAMIAS_ENABLE_OCCT OFF CACHE BOOL "OCCT is not linked in the phase-1 viewer." FORCE)
+  #
+  # OCCT 同一个道理，**也不能在这里 FORCE 关**：wasm 预设要靠 TAMIAS_ENABLE_OCCT 选内核
+  # ——有 wasm 的 OCCT 时它是默认、Truck 是可选回退，没有时只有 Truck。老版本在这里
+  # FORCE 成 OFF，于是无论预设怎么设，wasm 里永远只有 Truck。一份 wasm 的 OCCT 怎么编、
+  # 怎么指给构建（TAMIAS_OCCT_PREFIX），见 docs/WEB.md。
   set(TAMIAS_BUILD_TESTS OFF CACHE BOOL "Desktop tests are not built for WASM." FORCE)
   set(TAMIAS_USE_FETCHCONTENT OFF CACHE BOOL "No FetchContent on the WASM viewer path." FORCE)
   if(NOT TAMIAS_ENABLE_WEBGL_BACKEND AND NOT TAMIAS_ENABLE_WEBGPU_BACKEND)
@@ -152,7 +188,10 @@ add_subdirectory(src/rag)
 add_subdirectory(src/host)
 # tac：自研界面库（契约层），无 Qt 无 OCCT，wasm 分支也可以要它（见 docs/TAC.md）。
 add_subdirectory(src/ui/tac)
-if(TAMIAS_ENABLE_OCCT)
+# IfcOpenShell 的 IfcParse（IFC 语义树 + tamias_ifc_dump）。
+# 以前这里是 if(TAMIAS_ENABLE_OCCT)——把「几何内核」和「IFC 语义」绑成了一件事，
+# 于是 wasm 想开 OCCT 就会顺带要求 Boost + IfcOpenShell。现在各归各的开关。
+if(TAMIAS_ENABLE_IFC)
   add_subdirectory(src/bim)
 endif()
 if(NOT EMSCRIPTEN)
