@@ -35,6 +35,38 @@
       "detail": "结束正在运行的调试构建，避免 Restart 时无法覆盖 tamias.exe"
     },
     {
+      "label": "Tamias: 确保几何服务在跑",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/scripts/ensure-geometry-server.ps1\"",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "showReuseMessage": false,
+        "close": true,
+        "echo": false
+      },
+      "problemMatcher": [],
+      "detail": "只给 attach 当 preLaunchTask 用，不用手动跑：端口已经在听就直接返回（幂等，所以 F5 起过服务之后再 attach 是安全的），没在听就起一个独立窗口并等到端口通。它只起不编——产物缺失会明确报出来并指向下面的构建任务"
+    },
+    {
+      "label": "Tamias: 构建几何服务",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"& '${workspaceFolder}/scripts/ensure-geometry-server.ps1' -Stop; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & '${workspaceFolder}/scripts/build-server.ps1' -WithShell -Offline\"",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "showReuseMessage": false
+      },
+      "problemMatcher": [],
+      "detail": "先停服务再编：tamias_server.dll 被正在跑的 Tamias.Server 占着时重链必失败，所以命令里串了两步——ensure-geometry-server.ps1 -Stop（幂等，没在跑也算成功）→ build-server.ps1 -WithShell -Offline（编 tamias_server.dll 并把 .NET 壳 publish 到 build\\bin\\RelWithDebInfo）。不再单独占一条'停止几何服务'任务，因为它只服务这一条命令"
+    },
+    {
       "label": "Tamias: 检查桌面预设",
       "type": "shell",
       "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/scripts/check-desktop-preset.ps1\" \"${command:cmake.activeConfigurePresetName}\"",

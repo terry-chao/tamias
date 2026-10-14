@@ -13,6 +13,31 @@
       "detail": "构建 build/wasm 的 tamias_viewer（WebGL 后端，wasm 预设的默认）→ 起 .NET 几何服务（127.0.0.1:5199，窗口 TamiasGeometryServe）→ 在独立窗口起静态预览（:3000，窗口 TamiasWasmServe）→ 打开浏览器并附上 JS 调试器。调试 WebGL 一律连几何服务一起起；确实不想要它时用脚本（scripts\\wasm-preview.ps1 不带 -WithGeometryServer）。关掉对应窗口即停止对应服务。"
     },
     {
+      "name": "Geometry Server (attach)",
+      "type": "coreclr",
+      "request": "attach",
+      "processName": "Tamias.Server",
+      "preLaunchTask": "Tamias: 确保几何服务在跑",
+      "detail": "Attach the managed debugger to the geometry server. preLaunchTask makes the service ready first: if one is already listening on 5199 it is reused, otherwise one is started in its own TamiasGeometryServe window and the task waits for the port before attaching - so it works right after the F5 browser chain and the old 'No process with the specified name is currently running' popup is gone. It only starts, never builds. Breakpoints bind in Program.cs / NativeSession.cs, and P/Invoke (NativeServer.cs) lights up. Managed-only, so a breakpoint inside tamias_server.dll will NOT bind here - use 'Geometry Server (native attach)' for the native side."
+    },
+    {
+      "name": "Geometry Server (native attach)",
+      "type": "cppvsdbg",
+      "request": "attach",
+      "processId": "${command:pickProcess}",
+      "detail": "Attach the C++ debugger to a running Tamias.Server so the native side can take breakpoints: src/server/server_api.cpp, src/server/session_service.cpp, src/command/core/command_system.cpp, src/engine/modeling/evaluate/evaluator.cpp, src/engine/modeling/kernel/occt_kernel.cpp. Its PDB sits next to the DLL in build\\bin\\<Config>\\ - the same directory the shell runs from, so no symbol path is needed. This session does NOT drive the managed side: C# breakpoints stay unbound. Attaching changes thread timing, so default_kernel()'s call_once races can hide. If a breakpoint stays hollow, set logging.moduleLoad to true and check whether tamias_server.dll loaded with symbols."
+    },
+    {
+      "name": "WebGL 查看器 (wasm-debug, C++ 断点)",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://localhost:3000",
+      "webRoot": "${workspaceFolder}/build/wasm-debug/bin",
+      "sourceMaps": true,
+      "smartStep": true,
+      "detail": "浏览器里断进 C++ 用的配置。前提三件事，缺一条都只会停在 JS 上：(1) 先编 Debug 产物 cmake --preset wasm-debug + cmake --build build\\wasm-debug --target tamias_viewer（= wasm-truck + -g3 -gsource-map，只有 Truck 没有 OCCT）；(2) 预览必须指向调试产物：scripts\\serve-wasm.cmd <build\\wasm-debug\\bin> 3000，不要用 F5 那条链路（它伺服的 build\\wasm\\bin 是 Release、没有 DWARF）；(3) 装 ms-vscode.wasm-dwarf-debugging，vscode-js-debug 靠它读 DWARF。断点请下在 .cpp 上（Chrome 里则是 Sources 面板的 file:/// 一棵树）。引擎内部函数（如 glDrawElements 里面）断不住：DWARF 需要目标停下时读内存。它比 Release 慢很多，只用来抓逻辑 bug。"
+    },
+    {
       "name": "Tamias (CMake Launch Target)",
       "type": "cppvsdbg",
       "request": "launch",
