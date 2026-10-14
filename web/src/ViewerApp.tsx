@@ -21,6 +21,7 @@ import { buildArgs, firstStepHint, type ToolSpec, type Vec3 } from "./modeling/c
 import EngineLoading from "./engine/EngineLoading";
 import { loadViewer, settle, toBinaryString, type EngineProgress, type ViewerStats } from "./viewer";
 import ViewCube, { type ViewAngles } from "./ViewCube";
+import { readDeepLinkSampleKey, sampleHref, syncDeepLink } from "./viewer/deepLink";
 import AboutBox from "./viewer/AboutBox";
 import ViewportHud from "./viewer/ViewportHud";
 import { buildToolbar } from "./viewer/commands";
@@ -526,13 +527,16 @@ export default function Viewer({ user, onLogout, engine, onRetryEngine }: Viewer
       setHasDoc(await settle(module.hasDocument()));
       // 换文档了，正在放置的工具要取消（点对应不上新文档了）。
       setPlacing(null);
-      // 最近打开：同名去重后放最前，最多 5 条。存的是 File 句柄，几乎不占内存。
+      // 最近打开：同名去重后放最前，最多 8 条——与桌面端的 kMaxRecentFiles 对齐。
+      // 存的是 File 句柄，几乎不占内存。
       setRecent((prev) =>
         [
           { name: file.name, file, at: Date.now() },
           ...prev.filter((entry) => entry.name !== file.name),
-        ].slice(0, 5),
+        ].slice(0, 8),
       );
+      // 本地文件**没有 URL**（浏览器不给路径），所以地址栏不能留着上一份示例的深链。
+      syncDeepLink(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setStatus("加载失败");
@@ -555,9 +559,11 @@ export default function Viewer({ user, onLogout, engine, onRetryEngine }: Viewer
     setHasDoc(await settle(module.hasDocument()));
     // 换文档了，正在放置的工具要取消。
     setPlacing(null);
+    // 新建出来的文档没有磁盘文件，也就没有可写进 URL 的地址。
+    syncDeepLink(null);
   };
 
-  /** 关闭文档：回到欢迎卡片。web 端**没有保存**，所以关掉即丢弃——先跟用户确认。 */
+  /** 关闭文档：回到文件管理页。web 端**没有保存**，所以关掉即丢弃——先跟用户确认。 */
   const closeDocument = async () => {
     const module = moduleRef.current;
     if (!module || !hasDocRef.current) {
@@ -579,6 +585,8 @@ export default function Viewer({ user, onLogout, engine, onRetryEngine }: Viewer
     setSelectedCount(await settle(module.selectionCount()));
     setStatus(await settle(module.status()));
     setError(null);
+    // 回到文件管理页，地址栏也跟着回到干净地址（否则刷新会又打开刚才那份）。
+    syncDeepLink(null);
   };
 
   /** 最近打开里的一条：用当初拿到的 File 句柄再读一次磁盘。 */
@@ -615,6 +623,8 @@ export default function Viewer({ user, onLogout, engine, onRetryEngine }: Viewer
       setPlacing(null);
       setStatus(await settle(module.status()));
       setError(null);
+      // 地址栏跟着变成 `?doc=sample:<key>`：可以收藏、分享，也能直接开进新标签页。
+      syncDeepLink(sample.key);
     } catch (err) {
       setFileError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -686,9 +696,35 @@ export default function Viewer({ user, onLogout, engine, onRetryEngine }: Viewer
       kind: sample.kind,
       where: sample.where,
       source: "示例" as const,
+      // 有 URL 才给 href：示例在 assets/ 下有真地址，所以卡片是**真链接**，
+      // Ctrl/⌘+点击、中键、右键「在新标签页打开」都能用。
+      href: sampleHref(sample.key),
       open: () => void openSample(sample),
     })),
   ];
+
+  // URL 深链：`?doc=sample:<key>` 直接打开那份示例。新标签页 / 收藏 / 分享都靠它。
+  // **只认一次**：用户关掉之后不该又弹回来（关文档时地址栏已经被清干净了）。
+  //
+  // openSample 不在依赖里：它闭包里只用到 moduleRef（ref）和 setState（稳定），所以
+  // 首帧那份和后来的是等价的。deepLinkDone 这道闸也保证了重复运行是空操作。
+  const deepLinkDone = useRef(false);
+  useEffect(() => {
+    if (!ready || deepLinkDone.current) {
+      return;
+    }
+    deepLinkDone.current = true;
+    const key = readDeepLinkSampleKey();
+    if (key === null) {
+      return;
+    }
+    const hit = samples.find((sample) => sample.key === key);
+    if (hit === undefined) {
+      setFileError(`地址里的文档不在示例清单里：${key}`);
+      return;
+    }
+    void openSample(hit);
+  }, [ready, samples]);
 
   // 视图模式：线框 / 着色 / 真实感（桌面端是同一套 RenderMode）。
   const changeRenderMode = (mode: number) => {

@@ -30,6 +30,12 @@ export interface FileEntry {
   /** 打开时间（只有"最近打开"有）。 */
   at?: number;
   source: "示例" | "最近打开" | "本地文件夹";
+  /**
+   * 能写进 URL 的地址（只有仓库自带的示例有：它们在 assets/ 下有真 URL）。
+   * 有它就说明这份文档**可以在新标签页里打开**——浏览器不给本地文件路径，所以
+   * 最近打开 / 本地文件夹那两类没有 href，也就没法在新标签页里直接开。
+   */
+  href?: string;
   open: () => void;
 }
 
@@ -187,44 +193,80 @@ export default function FileManager({
               <span className="hm-section-hint">{group.hint}</span>
             </div>
             <div className="hm-gallery" role="listbox" aria-label={group.title}>
-              {group.items.map((entry) => (
-                <div
-                  key={entry.key}
-                  className={`hm-card${selected === entry.key ? " selected" : ""}`}
-                  role="option"
-                  aria-selected={selected === entry.key}
-                  tabIndex={0}
-                  title={tooltip(entry)}
-                  onClick={() => setSelected(entry.key)}
-                  onDoubleClick={() => {
+              {group.items.map((entry) => {
+                const cls = `hm-card${selected === entry.key ? " selected" : ""}`;
+                const sel = selected === entry.key;
+                const body = (
+                  <>
+                    {/* 缩略图位置：web 没有真缩略图，用桌面端同款兜底——#2d2f32 底 + 居中 logo。 */}
+                    <span className="hm-thumb">
+                      <img src={logo} alt="" draggable={false} />
+                    </span>
+                    <span className="hm-name">{entry.name}</span>
+                    <span className="hm-sub">{subtitle(entry)}</span>
+                  </>
+                );
+                const handlers = {
+                  onDoubleClick: () => {
                     if (busy === null) {
                       entry.open();
                     }
-                  }}
-                  onKeyDown={(event) => {
+                  },
+                  onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => {
                     if (event.key === "Enter") {
                       event.preventDefault();
                       openSelected();
                     }
-                  }}
-                  onContextMenu={(event) => {
-                    // 只有"最近打开"有可做的事（移除）。其余的别弹一个空的菜单。
-                    if (entry.source !== "最近打开") {
+                  },
+                  onContextMenu: (event: React.MouseEvent<HTMLElement>) => {
+                    // 示例有「在新标签页打开」，最近打开有「移除」。两样都没有就交回浏览器，
+                    // 别弹一个空菜单。
+                    if (entry.source !== "最近打开" && entry.href === undefined) {
                       return;
                     }
                     event.preventDefault();
                     setSelected(entry.key);
                     setMenu({ key: entry.key, x: event.clientX, y: event.clientY });
-                  }}
-                >
-                  {/* 缩略图位置：web 没有真缩略图，用桌面端同款兜底——#2d2f32 底 + 居中 logo。 */}
-                  <span className="hm-thumb">
-                    <img src={logo} alt="" draggable={false} />
-                  </span>
-                  <span className="hm-name">{entry.name}</span>
-                  <span className="hm-sub">{subtitle(entry)}</span>
-                </div>
-              ))}
+                  },
+                };
+                // 有 URL 的（示例）渲染成**真链接**：这样 Ctrl/⌘/Shift+点击、中键、
+                // 以及浏览器自带的右键「在新标签页打开」全都天然可用，不用我教。
+                // 本地文件没有 URL（浏览器不给路径），只能是 div。
+                return entry.href !== undefined ? (
+                  <a
+                    key={entry.key}
+                    className={cls}
+                    role="option"
+                    aria-selected={sel}
+                    tabIndex={0}
+                    href={entry.href}
+                    title={tooltip(entry)}
+                    onClick={(event) => {
+                      // 带修饰键 = 用户要开新标签页，别拦，让浏览器按 href 去开。
+                      if (!event.ctrlKey && !event.metaKey && !event.shiftKey) {
+                        event.preventDefault();
+                      }
+                      setSelected(entry.key);
+                    }}
+                    {...handlers}
+                  >
+                    {body}
+                  </a>
+                ) : (
+                  <div
+                    key={entry.key}
+                    className={cls}
+                    role="option"
+                    aria-selected={sel}
+                    tabIndex={0}
+                    title={tooltip(entry)}
+                    onClick={() => setSelected(entry.key)}
+                    {...handlers}
+                  >
+                    {body}
+                  </div>
+                );
+              })}
             </div>
           </section>
         ))
@@ -246,6 +288,19 @@ export default function FileManager({
           >
             打开
           </button>
+          {/* 只有有 URL 的那类（示例）能这么开。本地文件浏览器不给路径，没有地址可开。 */}
+          {menuEntry.href !== undefined && (
+            <button
+              type="button"
+              className="hm-menu-item"
+              onClick={() => {
+                setMenu(null);
+                window.open(menuEntry.href, "_blank", "noopener");
+              }}
+            >
+              在新标签页打开
+            </button>
+          )}
           <button
             type="button"
             className="hm-menu-item"
