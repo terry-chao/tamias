@@ -11,7 +11,10 @@ export interface ViewerStats {
 
 export interface TamiasViewerModule {
   startViewer(canvasSelector: string): boolean;
-  loadFile(name: string, bytes: string): boolean;
+  // 文件字节**必须**传 Uint8Array：embind 里 std::string 是按 UTF-8 注册的，
+  // 传 JS 字符串会把每个 ≥ 0x80 的字节重新编成 2 字节，chunk 头跟着错位——
+  // 现象就是 .tdoc / .trscn 打开时报 "chunk size exceeds remaining data"。
+  loadFile(name: string, bytes: Uint8Array): boolean;
   // 新建文档：空文档 + 内置示例场景（几何由 wasm 里的建模内核求值）。
   newDocument(): boolean;
   // 关闭文档：丢掉几何与 GPU 资产，回到「没有打开的文档」。web 端没有保存，关掉即丢弃。
@@ -202,15 +205,14 @@ export function loadViewer(): Promise<TamiasViewerModule> {
   return preloadViewer();
 }
 
-// embind 的 loadFile 参数是 std::string，JS 侧用 latin1 二进制字符串传递。
-export function toBinaryString(bytes: Uint8Array): string {
-  const CHUNK = 0x8000;
-  let out = "";
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    out += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-  }
-  return out;
-}
+// **别把二进制文件拼成 JS 字符串再交给 embind。** `loadFile` 的第二个参数是
+// `std::string`，而 Emscripten 给这个名字注册的类型是"UTF-8 字符串"
+// （产物里 `stdStringIsUTF8=true`）：JS 字符串会被 `stringToUTF8` 重新编码，
+// 每个 ≥ 0x80 的字节变成 2 字节，字节流整体错位——`.tdoc` / `.trscn` 的
+// chunk 头随之读错，报 "chunk size exceeds remaining data"（纯 ASCII 的 `.obj`
+// 碰巧看不出来）。直接传 `Uint8Array` 即可：embind 对它走 `HEAPU8.set()` 原样拷贝。
+// 同理，将来若有"从 wasm 取回二进制"的导出口，`fromWireType` 也是 `UTF8ToString`，
+// 同样不能当字符串取。
 
 // 这个 wasm 用 Asyncify 编译（WebGPU 的适配器/设备请求要走异步）。Asyncify 下
 // embind 导出**可能返回 Promise 而不是值**：调用一次挂起后，紧接着的调用也会返回
@@ -218,4 +220,22 @@ export function toBinaryString(bytes: Uint8Array): string {
 // 统一用 settle 取值：普通值原样返回，Promise 等它 resolve。
 export function settle<T>(value: T | Promise<T>): Promise<T> {
   return Promise.resolve(value);
+}
+
+// 打开失败的提示文案：引擎给的是英文诊断（`document_io: chunk size exceeds remaining
+// data`），直接摆在横幅里中文用户读不懂。**第一句固定是"打开文档失败"**，后面跟中文
+// 结论；认不出来的原因也照样带上"打开文档失败"这个前缀，原始诊断放在括号里，
+// 查日志、报 bug 都要它。整句单行：横幅 `<div>` 不换行。
+export function describeOpenFailure(status: string): string {
+  const raw = status.trim();
+  if (/chunk size exceeds remaining data|unexpected end of data/i.test(raw)) {
+    return `打开文档失败：文件不完整或已损坏（${raw}）`;
+  }
+  if (/bad magic|Not a Tamias/i.test(raw)) {
+    return `打开文档失败：这不是 Tamias 文件（${raw}）`;
+  }
+  if (/Unsupported (Tamias document|render scene) version/i.test(raw)) {
+    return `打开文档失败：这个文件是其它版本的 Tamias 写的，当前版本读不了（${raw}）`;
+  }
+  return raw === "" ? "打开文档失败：原因未知" : `打开文档失败：${raw}`;
 }

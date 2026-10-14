@@ -19,7 +19,13 @@ import RibbonBar from "./ribbon/RibbonBar";
 import type { RibbonDisplayMode } from "./ribbon/types";
 import { buildArgs, firstStepHint, type ToolSpec, type Vec3 } from "./modeling/catalog";
 import EngineLoading from "./engine/EngineLoading";
-import { loadViewer, settle, toBinaryString, type EngineProgress, type ViewerStats } from "./viewer";
+import {
+  describeOpenFailure,
+  loadViewer,
+  settle,
+  type EngineProgress,
+  type ViewerStats,
+} from "./viewer";
 import ViewCube, { type ViewAngles } from "./ViewCube";
 import { readDeepLinkSampleKey, sampleHref, syncDeepLink } from "./viewer/deepLink";
 import AboutBox from "./viewer/AboutBox";
@@ -516,9 +522,11 @@ export default function Viewer({ user, onLogout, engine, onRetryEngine }: Viewer
     try {
       setError(null);
       setStatus(`正在加载 ${file.name}…`);
+      // 字节直接以 Uint8Array 交给 embind（拼成 JS 字符串会被按 UTF-8 重编码，
+      // 见 viewer.ts 里 loadFile 的说明）。
       const bytes = new Uint8Array(await file.arrayBuffer());
-      if (!(await settle(module.loadFile(file.name, toBinaryString(bytes))))) {
-        throw new Error((await settle(module.status())) || "文件加载失败");
+      if (!(await settle(module.loadFile(file.name, bytes)))) {
+        throw new Error(describeOpenFailure(await settle(module.status())));
       }
       setDocName(file.name);
       setStatus(await settle(module.status()));
@@ -614,8 +622,8 @@ export default function Viewer({ user, onLogout, engine, onRetryEngine }: Viewer
         throw new Error(`拉取 ${sample.name} 失败：HTTP ${response.status}`);
       }
       const bytes = new Uint8Array(await response.arrayBuffer());
-      if (!(await settle(module.loadFile(sample.name, toBinaryString(bytes))))) {
-        throw new Error((await settle(module.status())) || "文件加载失败");
+      if (!(await settle(module.loadFile(sample.name, bytes)))) {
+        throw new Error(describeOpenFailure(await settle(module.status())));
       }
       setDocName(sample.name);
       setRenderMode(await settle(module.renderMode()));
