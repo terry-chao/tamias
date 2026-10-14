@@ -144,6 +144,15 @@ class RenderThread {
   // the assigned GPU mesh id. The semantic side refers to geometry by asset id.
   Result<std::uint64_t> upload_mesh(std::uint64_t asset_id, MeshCpu mesh);
   void request_upload_mesh(std::uint64_t asset_id, MeshCpu mesh);
+  // 释放**全部**文档派生的渲染状态：网格 + 纹理 + 常驻 LRU 记账 + **各通道留存的
+  // 场景图**。**换文档 / 关文档时必须调**：
+  //   - 语义 asset id 是每份 Document 各自从 1 编号的（Document::next_mesh_id_ 从 1 起），
+  //     而网格映射按 asset id 缓存、命中即早退（见 upload_mesh_on_thread），不清就会把
+  //     上一份文档的几何当成新文档的——"先开 A 再开 B，B 显示 A"就是这么来的；
+  //   - 场景图只在代次变化时重建，而代次是每份 Scene 各自计数的，换文档后重新计数，
+  //     撞上相同值就会让旧几何留在屏幕上（见 .cpp 里那段注释）。
+  // 渲染器自带的网格（lod box / axes / sky / text 四边形…）不在 meshes_ 里，不受影响。
+  void release_all_assets();
   std::vector<LodRequest> take_lod_requests();
   [[nodiscard]] RenderFrameStats last_stats() const;
   // 最近一次 draw_channel 中每个语义节点实际选中的 LOD（调试器用）。

@@ -99,10 +99,16 @@ void ViewerHost::load_demo() {
 
 bool ViewerHost::new_document() {
   // 新建 = 一个空文档 + 内置示例场景。示例走命令层（不是硬编码网格），所以几何由
-  // 已注册的内核求值——WASM 上是 Truck，顺便证明"新建出来就能接着造型"。
+  // 已注册的内核求值——WASM 上是 OCCT / Truck，顺便证明"新建出来就能接着造型"。
   clear_log();
+  // 换文档：先把上一份文档的 GPU 资产全丢掉。语义 asset id 是每份 Document 各自
+  // 从 1 编号的，不清就会命中旧映射、画出上一份文档的几何（见 release_all_assets）。
+  if (render_thread_) {
+    render_thread_->release_all_assets();
+  }
   session_->reset_document(std::make_shared<Document>(std::string("示例")));
   loaded_ = true;
+  document_open_ = true;
   last_submitted_scene_generation_ = 0;
 
   auto run = [this](const char* command, const char* args) {
@@ -185,10 +191,9 @@ Result<void> ViewerHost::start(const char* canvas_selector) {
     return r;
   }
   channel_ = std::make_unique<RenderChannel>(render_thread_, render_thread_->create_channel());
-  if (!loaded_) {
-    // 首次进入直接给一个示例文档（内核没注册时会退回内置网格演示体）。
-    new_document();
-  }
+  // **启动时不建默认文档**：页面进来先落在「文件管理」，由用户双击/新建/打开来决定
+  // 进哪份文档（见 docs/WEB.md 的文档模型）。所以这里 has_document() == false，
+  // render() 提交的是空帧。
   upload_document();
   status_ = "ready";
   return {};
@@ -279,11 +284,41 @@ Result<void> ViewerHost::load_bytes(std::string_view name, std::span<const std::
     status_ = "unsupported type (use .tdoc, .trscn or .obj)";
     return Err(status_);
   }
+  // 换文档：先把上一份文档的 GPU 资产全丢掉，再上传新的。两份文档的语义 asset id
+  // 都从 1 编号，不清就会命中旧映射（见 RenderThread::release_all_assets）。
+  if (render_thread_) {
+    render_thread_->release_all_assets();
+  }
   loaded_ = true;
+  document_open_ = true;
   last_submitted_scene_generation_ = 0;
   upload_document();
   status_ = std::string(name);
   return {};
+}
+
+bool ViewerHost::close_document() {
+  if (!document_open_) {
+    return false;
+  }
+  // 关文档 = 丢掉几何、回到"没有打开的文档"。GPU 资产必须一起丢：下一次打开新文档时
+  // 它的 asset id 又从 1 开始，留着这些残留就会命中旧映射。
+  if (render_thread_) {
+    render_thread_->release_all_assets();
+  }
+  // reset_document 会一并清空命令栈与工具状态（见 Session::reset_document）。
+  session_->reset_document(std::make_shared<Document>(std::string()));
+  session_->clear_selection();
+  document_open_ = false;
+  loaded_ = false;
+  mode_ = RenderMode::Shaded;
+  xray_ = false;
+  last_submitted_scene_generation_ = 0;
+  clear_log();
+  // 空文档：场景里什么都不剩，撤掉所有网格引用。
+  upload_document();
+  status_ = "没有打开的文档";
+  return true;
 }
 
 void ViewerHost::resize(std::uint32_t width, std::uint32_t height) {
@@ -460,6 +495,10 @@ void ViewerHost::render() {
 }
 
 std::string ViewerHost::document_name() const {
+  // 没有打开的文档时给空串，页面据此显示欢迎卡片而不是一个假名字。
+  if (!document_open_) {
+    return std::string();
+  }
   return session_->document().name();
 }
 

@@ -42,6 +42,11 @@ class ViewerHost {
   Result<void> load_bytes(std::string_view name, std::span<const std::uint8_t> bytes);
   // 新建文档：清空当前内容，填一个内置示例场景（走命令层，几何由已注册内核求值）。
   bool new_document();
+  // 关闭文档：丢掉几何与 GPU 资产，回到"没有打开的文档"状态。已经关着时返回 false。
+  // 之后 document_name() 返回空串，页面显示欢迎卡片。
+  // **web 端没有保存**，所以关掉就等于丢弃——页面上要先跟用户确认。
+  bool close_document();
+  [[nodiscard]] bool has_document() const { return document_open_; }
   void resize(std::uint32_t width, std::uint32_t height);
   // 视图模式：0 线框 / 1 着色 / 2 真实感（与 RenderMode 同序，桌面端是同一套）。
   void set_render_mode(int mode);
@@ -111,6 +116,9 @@ class ViewerHost {
   bool orbiting_ = false;
   bool panning_ = false;
   bool loaded_ = false;
+  // 有一份"打开的文档"吗？和 loaded_ 的区别：loaded_ 是内部记账（示例场景有没有填过），
+  // document_open_ 是**用户可见的文档状态**——关掉之后页面显示欢迎卡片。
+  bool document_open_ = false;
   RenderMode mode_ = RenderMode::Shaded;
   bool xray_ = false;
   std::uint64_t last_submitted_scene_generation_ = 0;  // 脏标记游标（见 Scene::dirty_since）

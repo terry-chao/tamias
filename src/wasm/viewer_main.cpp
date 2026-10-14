@@ -45,6 +45,12 @@ bool load_file(const std::string& name, const std::string& bytes) {
 // 新建文档：空文档 + 内置示例场景（走命令层，几何由 wasm 里的内核求值）。
 bool new_document_viewer() { return host().new_document(); }
 
+// 关闭文档：丢掉几何与 GPU 资产，页面回到欢迎卡片。web 端没有保存，关掉即丢弃。
+bool close_document_viewer() { return host().close_document(); }
+
+// 有没有打开的文档。页面据此决定显示视口还是欢迎卡片，并把依赖文档的工具灰掉。
+bool has_document_viewer() { return host().has_document(); }
+
 void resize_viewer(int width, int height) {
   host().resize(static_cast<std::uint32_t>(std::max(1, width)),
                 static_cast<std::uint32_t>(std::max(1, height)));
@@ -105,6 +111,12 @@ tamias::ViewerStats stats_viewer() { return host().stats(); }
 // 引擎最近的问题（warn / error）：页面上的错误面板用。
 std::string log_text_viewer() { return host().log_text(); }
 
+// 造型引擎：**实际生效**的那个（"occt" / "truck" / "none"）。
+// 和 backendName()（图形后端）并列——两个读数都别让用户靠猜。
+// 想要的和实际的不一定一样：编进来的后端里没有想要的那个时会回退，
+// 回退时引擎日志里有一条 warn（见 linked_kernels.cpp 的 create_with_fallback）。
+std::string kernel_name() { return tamias::active_kernel_name(); }
+
 }  // namespace
 
 #if defined(__EMSCRIPTEN__)
@@ -112,6 +124,8 @@ EMSCRIPTEN_BINDINGS(tamias_viewer) {
   emscripten::function("startViewer", &start_viewer);
   emscripten::function("loadFile", &load_file);
   emscripten::function("newDocument", &new_document_viewer);
+  emscripten::function("closeDocument", &close_document_viewer);
+  emscripten::function("hasDocument", &has_document_viewer);
   emscripten::function("resizeViewer", &resize_viewer);
   emscripten::function("pointerDown", &pointer_down);
   emscripten::function("pointerMove", &pointer_move);
@@ -140,6 +154,7 @@ EMSCRIPTEN_BINDINGS(tamias_viewer) {
   emscripten::function("pickEntity", &pick_entity_viewer);
   emscripten::function("stats", &stats_viewer);
   emscripten::function("logText", &log_text_viewer);
+  emscripten::function("kernelName", &kernel_name);
 
   // 桌面视口左下角读数的同款字段（draw / tri / gpu / tess）。
   emscripten::value_object<tamias::ViewerStats>("ViewerStats")

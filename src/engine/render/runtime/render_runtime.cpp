@@ -439,6 +439,42 @@ void RenderThread::request_upload_mesh(std::uint64_t asset_id, MeshCpu mesh) {
   });
 }
 
+void RenderThread::release_all_assets() {
+  // 和 upload_mesh 同一条路：投到渲染线程上执行，阻塞等它做完。
+  // 不同步等待的话，调用方紧接着上传新文档的网格，就可能跑在清理之前——那正是
+  // "新文档显示旧几何"的竞态。
+  auto promise = std::make_shared<std::promise<void>>();
+  auto future = promise->get_future();
+  post([this, promise]() {
+    meshes_.clear();
+    asset_to_gpu_.clear();
+    resident_.clear();
+    textures_.clear();
+    texture_asset_to_gpu_.clear();
+    texture_resident_.clear();
+    pending_evicted_texture_ids_.clear();
+    pending_lod_requests_.clear();
+    last_lod_by_node_.clear();
+    // **各通道留存的场景图也算文档派生状态，必须一起丢。** 场景图只在
+    // `frame.scene_generation != channel.scene_generation` 时才重建（见
+    // draw_channel 里那段），而代次是**每份 Scene 各自计数**的——换文档后重新计数，
+    // 一旦新文档的代次恰好等于上一份文档最后提交的代次，那条判断就不成立，
+    // 于是**旧文档的几何继续留在屏幕上**（"关掉文档但东西还在"）。
+    // 清掉 scene_root 后下一次 submit 会走 `!channel.scene_root` 分支整树重建。
+    // 注意 scene_nodes 里存的是树内节点的裸指针，必须和 scene_root 一起清。
+    for (auto& [channel_id, channel] : channels_) {
+      (void)channel_id;
+      channel.scene_root.reset();
+      channel.scene_nodes.clear();
+      channel.lod_by_node.clear();
+      channel.scene_generation = 0;
+    }
+    // next_mesh_id_ / next_texture_id_ 不重置：id 只增不复用，省得和还在飞的对象撞。
+    promise->set_value();
+  });
+  future.get();
+}
+
 std::vector<LodRequest> RenderThread::take_lod_requests() {
   std::scoped_lock lock(mutex_);
   std::vector<LodRequest> out;
