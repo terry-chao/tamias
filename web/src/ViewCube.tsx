@@ -268,6 +268,27 @@ function draw(canvas: HTMLCanvasElement, yaw: number, pitch: number, hoverId: st
     ctx.closePath();
     ctx.fillStyle = hovered ? "#e6e6eb" : "rgba(200, 200, 210, 0.82)";
     ctx.fill();
+
+    // **太扁的三角面不描边。** 贴着视线看的角（背面剔除阈值 0.08 附近那一段）投影出来是
+    // 一条几像素宽的细条：扫过所有视角，被画出来的角三角里有 3.6% 面积不到 12px²，最扁的
+    // 只有 8px²。这种形状上再描一圈 1px 深色边，**描边比填充本身还宽**，于是渲染成一条
+    // 突兀的深色线——这就是"三角有时候渲染不正确"。
+    //
+    // 判据用**最小高**而不是面积：面积随画布尺寸变，高不随。最小高 = 2·面积 / 最长边；
+    // 描边半宽 0.5px 两侧合计 1px，留点余量取 2px。
+    const area = Math.abs(
+      (pts[1].x - pts[0].x) * (pts[2].y - pts[0].y) -
+        (pts[2].x - pts[0].x) * (pts[1].y - pts[0].y),
+    ) / 2;
+    const longest = Math.max(
+      Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y),
+      Math.hypot(pts[2].x - pts[1].x, pts[2].y - pts[1].y),
+      Math.hypot(pts[0].x - pts[2].x, pts[0].y - pts[2].y),
+    );
+    const minAltitude = longest > 0 ? (2 * area) / longest : 0;
+    if (minAltitude < 2) {
+      continue;
+    }
     ctx.strokeStyle = hovered ? "rgba(40, 42, 48, 0.86)" : "rgba(40, 42, 48, 0.63)";
     ctx.lineWidth = hovered ? 1.4 : 1;
     ctx.stroke();
