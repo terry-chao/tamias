@@ -1686,6 +1686,26 @@ Meshes / textures: %2
         <source>Ctrl+Shift+T</source>
         <translation>Ctrl+Shift+T</translation>
     </message>
+    <message>
+        <source>Failed to open document.
+
+%1</source>
+        <translation>打开文档失败。
+
+%1</translation>
+    </message>
+    <message>
+        <source>The file is incomplete or damaged.</source>
+        <translation>文件不完整或已损坏，读不进来。</translation>
+    </message>
+    <message>
+        <source>This is not a Tamias file.</source>
+        <translation>这不是 Tamias 文件。</translation>
+    </message>
+    <message>
+        <source>The file was written by a Tamias version this build cannot read.</source>
+        <translation>这个文件是其它版本的 Tamias 写的，当前版本读不了。</translation>
+    </message>
 </context>
 <context>
     <name>tamias::DrawingSettingsDialog</name>

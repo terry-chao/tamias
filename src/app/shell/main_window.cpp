@@ -195,6 +195,38 @@ class OpenProgressDialog final {
   QProgressDialog dialog_;
 };
 
+// 引擎的报错是英文诊断文本（"document_io: chunk size exceeds remaining data"），
+// 直接糊在对话框里中文用户读不懂：先给一句中文结论，再把原始诊断原样附在后面
+// （查日志、报 bug 都要那一句）。认不出来的就原样透出，不吞信息。
+QString open_failure_detail(const std::string& engine_error) {
+  const QString raw = QString::fromStdString(engine_error);
+  const auto has = [&raw](const char* needle) { return raw.contains(QLatin1String(needle)); };
+  QString summary;
+  if (has("chunk size exceeds remaining data") || has("unexpected end of data")) {
+    // .tdoc / .trscn 的分块容器：长度对不上 = 文件被截断或改坏了。
+    summary = QCoreApplication::translate("tamias::MainWindow",
+                                          "The file is incomplete or damaged.");
+  } else if (has("bad magic")) {
+    summary = QCoreApplication::translate("tamias::MainWindow", "This is not a Tamias file.");
+  } else if (has("Unsupported Tamias document version") ||
+             has("Unsupported render scene version")) {
+    summary = QCoreApplication::translate(
+        "tamias::MainWindow",
+        "The file was written by a Tamias version this build cannot read.");
+  } else {
+    return raw;
+  }
+  return summary + QStringLiteral("\n\n") + raw;
+}
+
+// 所有「打开失败」都从这儿出去：标题统一，正文 = 中文结论 + 原始诊断。
+void show_open_failure(QWidget* parent, const QString& detail) {
+  QMessageBox::critical(parent, QCoreApplication::translate("tamias::MainWindow", "Open"),
+                        QCoreApplication::translate("tamias::MainWindow",
+                                                    "Failed to open document.\n\n%1")
+                            .arg(detail));
+}
+
 }  // namespace
 
 MainWindow::MainWindow(QWidget* parent)
@@ -2117,7 +2149,7 @@ bool MainWindow::open_path(const QString& path) {
     auto loaded = load_render_scene(file);
     if (!loaded) {
       progress.close();
-      QMessageBox::critical(this, tr("Open"), QString::fromStdString(loaded.error()));
+      show_open_failure(this, open_failure_detail(loaded.error()));
       return false;
     }
     progress.stage(82, tr("Generating preview…"));
@@ -2143,7 +2175,7 @@ bool MainWindow::open_path(const QString& path) {
     });
     if (!loaded) {
       progress.close();
-      QMessageBox::critical(this, tr("Open"), QString::fromStdString(loaded.error()));
+      show_open_failure(this, open_failure_detail(loaded.error()));
       return false;
     }
     ViewportState vp_storage = loaded->viewport;
@@ -2182,7 +2214,7 @@ bool MainWindow::open_path(const QString& path) {
     auto tree = format_ifc_spatial_tree(file);
     if (!tree) {
       progress.close();
-      QMessageBox::critical(this, tr("Open"), QString::fromStdString(tree.error()));
+      show_open_failure(this, open_failure_detail(tree.error()));
       return false;
     }
     progress.close();
@@ -2212,13 +2244,13 @@ bool MainWindow::open_path(const QString& path) {
     auto* ops = ShapeOpsRegistry::instance().find("occt");
     if (!ops) {
       progress.close();
-      QMessageBox::critical(this, tr("Open"), tr("OCCT ShapeOps is not registered."));
+      show_open_failure(this, tr("OCCT ShapeOps is not registered."));
       return false;
     }
     auto shape = ops->read_file(file);
     if (!shape) {
       progress.close();
-      QMessageBox::critical(this, tr("Open"), QString::fromStdString(shape.error()));
+      show_open_failure(this, open_failure_detail(shape.error()));
       return false;
     }
     cad_shape = std::move(*shape);
@@ -2228,7 +2260,7 @@ bool MainWindow::open_path(const QString& path) {
     auto model = load_mesh_model(file);
     if (!model) {
       progress.close();
-      QMessageBox::critical(this, tr("Open"), QString::fromStdString(model.error()));
+      show_open_failure(this, open_failure_detail(model.error()));
       return false;
     }
     imported = std::move(*model);
@@ -2282,7 +2314,7 @@ bool MainWindow::open_path(const QString& path) {
   }
   if (mesh_id == 0) {
     progress.close();
-    QMessageBox::critical(this, tr("Open"), tr("Failed to add imported geometry."));
+    show_open_failure(this, tr("Failed to add imported geometry."));
     return false;
   }
   add_document_tab(document, nullptr, [&progress](int percent, const QString& label) {
