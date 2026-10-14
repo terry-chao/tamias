@@ -314,8 +314,9 @@ web 没有真缩略图就用 `make_thumb_icon()` 的同款兜底（`#2d2f32` 底
 
 需要 [Emscripten SDK](https://emscripten.org/docs/getting_started/downloads.html)。Windows 上 SDK 在 `C:/dev/emsdk`。
 
-**浏览器查看器：按 F5。** Run and Debug 选 **「Tamias: WASM 预览 (F5)」**：按需配置并构建
-`tamias_viewer` → 在独立窗口起预览服务 → 打开 http://localhost:3000（并附上 JS 调试器）。
+**浏览器查看器：按 F5。** Run and Debug 选 **「WebGL + .NET Server」**：按需配置并构建
+`tamias_viewer` → 起 .NET 几何服务（`127.0.0.1:5199`）→ 在独立窗口起预览服务 →
+打开 http://localhost:3000（并附上 JS 调试器）。
 **关掉 `TamiasWasmServe` 窗口就是停止预览**，不需要再切「停止预览」预设。预览服务强制
 `Cache-Control: no-store`，不会再出现浏览器缓存住旧 `wasm` 的情况。
 
@@ -323,12 +324,16 @@ web 没有真缩略图就用 `make_thumb_icon()` 的同款兜底（`#2d2f32` 底
 
 | 想做的事 | 怎么做 |
 |---|---|
-| 浏览器预览 + 本地几何服务（推荐） | Run and Debug → **浏览器：WebGL 查看器 + 几何服务 (F5)** |
+| 浏览器预览 + 本地几何服务（推荐） | Run and Debug → **WebGL + .NET Server**（唯一的浏览器配置） |
+| 调 .NET 侧（路由 / 会话 / P/Invoke） | Run and Debug → **Geometry Server (attach)** 或 **(launch)** |
+| 调原生侧（`tamias_server.dll`、OCCT） | Run and Debug → **Geometry Server (native attach)** |
+| 在浏览器里断进 C++ | `cmake --preset wasm-debug`，见[分层调试](DEBUG-BROWSER-STACK.md) |
 | 停止 | 关掉 `TamiasWasmServe`（预览）和 `TamiasGeometryServe`（几何服务）两个窗口；或 `powershell -File scripts/wasm-stop.ps1` 一次收掉 |
 | 桌面调试 | Run and Debug → **CMake Launch Target**（照旧用 CMake Tools 的 preset） |
 | 只构建、不开浏览器 | `powershell -File scripts/wasm-preview.ps1 -NoBrowser` |
 | 只构建 wasm（默认，**含 OCCT**，26 MB） | `powershell -File scripts/wasm.ps1` |
 | 只构建 wasm（轻量，仅 Truck，2.8 MB 量级） | `cmake --preset wasm-truck` + `cmake --build build/wasm-truck --target tamias_viewer` |
+| 只构建 wasm（Debug + DWARF，供浏览器内 C++ 断点） | `cmake --preset wasm-debug` + `cmake --build build/wasm-debug --target tamias_viewer` |
 | 编 wasm 用的 OCCT（一次性） | `powershell -File scripts/occt-wasm.ps1` → 默认装到 `C:\dev\occt-wasm\prefix` |
 | 实验后端（WebGPU） | `cmake --preset wasm-webgpu` + `cmake --build build/wasm-webgpu --target tamias_viewer` |
 
@@ -338,6 +343,11 @@ F5 那条链路做三件事：编 `build/wasm` 的 `tamias_viewer`（**WebGL2**�
 这一个浏览器配置；确实不要它时走脚本（`scripts/wasm-preview.ps1` 不带
 `-WithGeometryServer`）。脚本最后会打印一行 `RHI backend: ...`——
 调试 WebGL 时最怕的就是"以为在调 WebGL，其实在跑 WebGPU"，两个产物长得几乎一样。
+
+**四层（TS / wasm / .NET 壳 / 原生 OCCT）各自怎么断、跨层怎么对齐、哪些是静默失败**：
+见 [浏览器 wasm + 几何服务的分层调试](DEBUG-BROWSER-STACK.md)。那里也说明了
+`wasm-debug` 预设为什么只编 Truck、以及几何回包的 digest 对比工具
+（`scripts/geometry-digest.ps1`）怎么用。
 
 命令行（等价于 F5，只是不开浏览器）：
 

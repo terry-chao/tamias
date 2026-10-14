@@ -139,4 +139,5 @@ nav:
   - 工程实践:
       - 答疑（Q&A）: FAQ.md
       - 测试: TESTING.md
+      - 分层调试（wasm + 几何服务）: DEBUG-BROWSER-STACK.md
       - 性能分析（Tracy）: PROFILING.md
