@@ -598,3 +598,127 @@ body {
   stroke: rgba(20, 22, 26, 0.85);
   stroke-width: 3;
 }
+
+/* ── 引擎加载画面（登录之后、引擎起来之前）──────────────────────────────────
+   以前这里是一块空白：26 MB 的 wasm 从登录之后才开始下。现在下载提前到登录页
+   （见 App.tsx 的预加载），剩下的这段等待给进度条和动画。 */
+.loading {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.loading-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: min(360px, 100%);
+  padding: 26px 22px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid var(--line);
+  border-top-color: var(--accent);
+  animation: tamias-spin 0.9s linear infinite;
+}
+
+@keyframes tamias-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-title {
+  font-size: 15px;
+}
+
+.loading-bar {
+  overflow: hidden;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+}
+
+.loading-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.15s linear;
+}
+
+.loading-meta {
+  font: 11px/1.4 ui-monospace, monospace;
+  color: var(--muted);
+}
+
+.loading-note {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* 拿不到总长度时不要假装知道百分比：画一条来回跑的。 */
+.loading-bar.indeterminate .loading-bar-fill,
+.warmup-bar.indeterminate .warmup-fill {
+  width: 35%;
+  animation: tamias-sweep 1.1s ease-in-out infinite;
+}
+
+@keyframes tamias-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+/* ── 登录页的引擎预热条 ───────────────────────────────────────────────────
+   登录这几秒正好用来下 26 MB 的产物；显示出来，用户才知道点完登录不用干等。 */
+.warmup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.warmup-text {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.warmup-bar {
+  overflow: hidden;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--panel-2);
+}
+
+.warmup-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.15s linear;
+}
+
+.warmup-done {
+  color: var(--ok);
+  font-size: 11px;
+}
+
+.warmup-error {
+  color: var(--error);
+  font-size: 11px;
+}

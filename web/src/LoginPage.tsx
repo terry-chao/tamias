@@ -2,13 +2,16 @@
 import { useState } from "react";
 
 import { DEMO_PASSWORD, DEMO_USER, storageAvailable, verify } from "./auth";
+import { formatMb, type EngineProgress } from "./viewer";
 
 interface LoginPageProps {
   /** 校验通过后回调，由 App 负责建立会话。 */
   onAuthenticated: (user: string) => void;
+  /** 引擎预加载进度。登录这几秒正好用来预热 26 MB 的产物，进度显示在这里。 */
+  engine: EngineProgress;
 }
 
-export default function LoginPage({ onAuthenticated }: LoginPageProps) {
+export default function LoginPage({ onAuthenticated, engine }: LoginPageProps) {
   // 演示凭据**默认填好**，进来直接回车就进（这也是为什么下面还有一行明写着凭据——
   // 反正它在 bundle 里，藏起来只是自欺欺人）。
   const [user, setUser] = useState(DEMO_USER);
@@ -102,7 +105,42 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
           <br />
           登录状态在同源标签页之间共享，12 小时内有效
         </div>
+
+        {/* 引擎预热进度。登录这几秒正好拿来下 26 MB 的 wasm——显示出来，用户才知道
+            点完登录之后不会对着一块空白干等。 */}
+        <EngineWarmup engine={engine} />
       </form>
+    </div>
+  );
+}
+
+function EngineWarmup({ engine }: { engine: EngineProgress }) {
+  if (engine.error !== null) {
+    return (
+      <div className="warmup" role="status">
+        <span className="warmup-error">引擎预加载失败：{engine.error}</span>
+      </div>
+    );
+  }
+  const total = engine.total;
+  if (total > 0 && engine.loaded >= total) {
+    return (
+      <div className="warmup" role="status">
+        <span className="warmup-done">引擎已就绪</span>
+      </div>
+    );
+  }
+  const determinate = total > 0;
+  const percent = determinate ? Math.min(100, Math.round((engine.loaded / total) * 100)) : 0;
+  return (
+    <div className="warmup" role="status">
+      <div className="warmup-text">
+        正在预热引擎
+        {determinate ? ` ${formatMb(engine.loaded)} / ${formatMb(total)} MB` : "…"}
+      </div>
+      <div className={`warmup-bar${determinate ? "" : " indeterminate"}`}>
+        <div className="warmup-fill" style={determinate ? { width: `${percent}%` } : undefined} />
+      </div>
     </div>
   );
 }

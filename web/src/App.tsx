@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 import { clearSession, loadSession, startSession, subscribeSession, type Session } from "./auth";
 import LoginPage from "./LoginPage";
 import ViewerApp from "./ViewerApp";
+import { preloadViewer, type EngineProgress } from "./viewer";
 
 export default function App() {
   // 惰性初始化：刷新页面（以及**新开标签页**）时从 localStorage 恢复——会话是同源所有
@@ -33,10 +34,45 @@ export default function App() {
   // 拿到会话。`storage` 事件只在**别的**标签页里触发，本页的变更靠上面的 setSession。
   useEffect(() => subscribeSession(setSession), []);
 
+  // **在登录页就开始拉引擎。** 产物 26 MB（含 OCCT），别等用户点完登录才开始下——
+  // 登录那几秒正好拿来下。ViewerApp 之后调 loadViewer() 会复用同一个 promise。
+  const [engine, setEngine] = useState<EngineProgress>({ loaded: 0, total: 0, error: null });
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    // 重试时先清掉错误，好让进度条重新出现。
+    setEngine((prev) => ({ ...prev, error: null }));
+    preloadViewer((progress) => {
+      if (!cancelled) {
+        setEngine({ loaded: progress.loaded, total: progress.total, error: null });
+      }
+    }).catch((err: unknown) => {
+      if (!cancelled) {
+        setEngine((prev) => ({
+          ...prev,
+          error: err instanceof Error ? err.message : String(err),
+        }));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [attempt]);
+
+  const retryPreload = useCallback(() => setAttempt((n) => n + 1), []);
+
   if (session === null) {
-    return <LoginPage onAuthenticated={onAuthenticated} />;
+    return <LoginPage onAuthenticated={onAuthenticated} engine={engine} />;
   }
   // 退出时会先切回 LoginPage，ViewerApp 随之卸载，它持有的 wasm 状态一并释放，
   // 所以这里不需要额外用 key 强制重建。
-  return <ViewerApp user={session.user} onLogout={onLogout} />;
+  return (
+    <ViewerApp
+      user={session.user}
+      onLogout={onLogout}
+      engine={engine}
+      onRetryEngine={retryPreload}
+    />
+  );
 }

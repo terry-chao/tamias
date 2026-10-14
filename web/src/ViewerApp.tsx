@@ -33,7 +33,8 @@ import {
   type ToolSpec,
   type Vec3,
 } from "./modeling/catalog";
-import { loadViewer, settle, toBinaryString, type ViewerStats } from "./viewer";
+import EngineLoading from "./engine/EngineLoading";
+import { loadViewer, settle, toBinaryString, type EngineProgress, type ViewerStats } from "./viewer";
 import ViewCube, { type ViewAngles } from "./ViewCube";
 
 import "./ribbon/ribbon.css";
@@ -73,6 +74,10 @@ interface ViewerProps {
   user: string;
   /** 退出登录：由 App 清掉会话，本组件随之卸载。 */
   onLogout: () => void;
+  /** 引擎预加载进度（App 在登录页就开始拉了），加载画面用它显示进度。 */
+  engine: EngineProgress;
+  /** 重新预加载引擎（加载画面上的「重试」）。 */
+  onRetryEngine: () => void;
 }
 
 /** 正在放置的工具：world 拼 args，screen 画橡皮筋。 */
@@ -84,7 +89,7 @@ interface PlacingState {
   ids: number[];
 }
 
-export default function Viewer({ user, onLogout }: ViewerProps) {
+export default function Viewer({ user, onLogout, engine, onRetryEngine }: ViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const moduleRef = useRef<Awaited<ReturnType<typeof loadViewer>> | null>(null);
@@ -144,6 +149,8 @@ export default function Viewer({ user, onLogout }: ViewerProps) {
   const [folderDocs, setFolderDocs] = useState<FileEntry[]>([]);
   // 仓库自带的示例文档清单：只算一次（glob 是构建期就定下来的）。
   const [samples] = useState<SampleDoc[]>(() => bundled_samples());
+  // 初始化重试计数：变了就让下面那个 init effect 整个重跑（加载画面上的「重试」）。
+  const [initAttempt, setInitAttempt] = useState(0);
   // 键位处理依赖为空，文档状态同样要一个 ref 镜像（和 placingRef 一个道理）。
   const hasDocRef = useRef(false);
   hasDocRef.current = hasDoc;
@@ -162,6 +169,12 @@ export default function Viewer({ user, onLogout }: ViewerProps) {
   const changeCollapsed = (next: boolean) => {
     setCollapsed(next);
     remember(COLLAPSED_KEY, next ? "1" : "0");
+  };
+
+  /** 加载画面上的「重试」：让 App 重新预加载，并让本组件的初始化整个重跑。 */
+  const retryEngine = () => {
+    onRetryEngine();
+    setInitAttempt((n) => n + 1);
   };
 
   // ── 建模工具：目录 → 命令 ────────────────────────────────────────────────
@@ -672,7 +685,8 @@ export default function Viewer({ user, onLogout }: ViewerProps) {
       moduleRef.current = null;
       setReady(false);
     };
-  }, []);
+    // initAttempt 变了就整个重来（加载画面上的「重试」）——上面那套清理会让它干净地重启。
+  }, [initAttempt]);
 
   // 桌面视口左下角的读数（draw / tri / gpu / tess）在 web 上同样常显。
   // 每 400ms 取一次即可，不必每帧穿过 embind。
@@ -1188,6 +1202,11 @@ export default function Viewer({ user, onLogout }: ViewerProps) {
           onDoubleClick={onDoubleClick}
         />
         {dragging && <div className="drop-overlay">松开以打开文件</div>}
+        {/* 引擎还没起来：给一块**有进度**的加载画面。以前这里是空白——登录之后 26 MB
+            的 wasm 才开始下，用户对着空视口干等几秒。 */}
+        {!ready && (
+          <EngineLoading progress={engine} message={error ?? status} onRetry={retryEngine} />
+        )}
         {/* 没有打开的文档 = 文件管理页（登录后的落地页）。引擎此刻已经在跑，
             render() 提交空帧；工具带里依赖文档的工具全灰着。 */}
         {ready && !hasDoc && (

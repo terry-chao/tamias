@@ -61,44 +61,124 @@ export interface TamiasViewerModule {
 
 declare global {
   interface Window {
-    createTamiasViewer?: () => Promise<TamiasViewerModule>;
+    // MODULARIZE 出来的工厂。可以传入 `wasmBinary` 把预取好的字节直接交给它——
+    // 胶水里的 getWasmBinary 见到它就**不再 fetch**（见下面 preloadViewer 的说明）。
+    createTamiasViewer?: (options?: { wasmBinary?: ArrayBuffer }) => Promise<TamiasViewerModule>;
   }
 }
 
 let modulePromise: Promise<TamiasViewerModule> | null = null;
 
-function loadScript(): Promise<void> {
+function loadScript(): Promise<string> {
   return new Promise((resolve, reject) => {
     if (typeof window.createTamiasViewer === "function") {
-      resolve();
+      resolve(new URL("tamias_viewer.js", document.baseURI).href);
       return;
     }
     const script = document.createElement("script");
     // 与 index.html 同目录（dev 时在 public/，构建后被 CMake 拷到 wasm 输出目录）。
     script.src = "tamias_viewer.js";
     script.async = true;
-    script.onload = () => resolve();
+    script.onload = () => resolve(script.src);
     script.onerror = () =>
       reject(new Error("加载 tamias_viewer.js 失败（请确认 WASM 产物与页面同目录）"));
     document.head.appendChild(script);
   });
 }
 
-export function loadViewer(): Promise<TamiasViewerModule> {
-  if (modulePromise === null) {
-    modulePromise = loadScript()
-      .then(() => {
-        if (typeof window.createTamiasViewer !== "function") {
-          throw new Error("tamias_viewer.js 未导出 createTamiasViewer");
-        }
-        return window.createTamiasViewer();
-      })
-      .catch((err: unknown) => {
-        modulePromise = null; // 允许重试
-        throw err;
-      });
+/** 预加载进度：已下字节 / 总字节（拿不到 Content-Length 时 total 为 0）。 */
+export interface PreloadProgress {
+  loaded: number;
+  total: number;
+}
+
+/** 预加载进度 + 失败原因。App 持有它，登录页和加载画面都读它。 */
+export interface EngineProgress extends PreloadProgress {
+  error: string | null;
+}
+
+export function formatMb(bytes: number): string {
+  return (bytes / 1024 / 1024).toFixed(1);
+}
+
+/**
+ * 自己把 .wasm 拉下来，并按块报进度。
+ *
+ * 为什么要自己 fetch：26 MB 的产物在冷启动时要下几秒，而胶水内部的 fetch 不给进度。
+ * 把拿到的字节通过 `wasmBinary` 交给工厂即可——**不会因此多下一遍**：胶水的
+ * `getWasmBinary` 第一句就是 `if (!wasmBinary)` 才去 fetch。这点很重要，因为预览服务
+ * 强制 `Cache-Control: no-store`，让它自己再取一次就是实打实的两遍 26 MB。
+ */
+async function fetchWasmWithProgress(
+  url: string,
+  onProgress: (progress: PreloadProgress) => void,
+): Promise<ArrayBuffer> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`加载 ${url} 失败：HTTP ${response.status}`);
   }
+  const contentLength = Number(response.headers.get("content-length") ?? "0");
+  if (response.body === null) {
+    // 极端情况下没有流（老浏览器）：退化成一次性读取，进度只有最后一下。
+    const buffer = await response.arrayBuffer();
+    onProgress({ loaded: buffer.byteLength, total: buffer.byteLength });
+    return buffer;
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let loaded = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    if (value !== undefined) {
+      chunks.push(value);
+      loaded += value.byteLength;
+      onProgress({ loaded, total: contentLength });
+    }
+  }
+  const merged = new Uint8Array(loaded);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return merged.buffer;
+}
+
+/**
+ * 加载（或复用）查看器模块。**在登录页就该调它**——26 MB 的产物别等用户点完登录才开始下，
+ * 登录那几秒正好用来拉。重复调用共用同一个 promise；失败时会复位以便重试。
+ *
+ * 传 `onProgress` 才会走"自己带进度地下"那条路；不传就交给胶水自己取（没有进度可言）。
+ */
+export function preloadViewer(
+  onProgress?: (progress: PreloadProgress) => void,
+): Promise<TamiasViewerModule> {
+  if (modulePromise !== null) {
+    return modulePromise;
+  }
+  modulePromise = (async () => {
+    const scriptUrl = await loadScript();
+    if (typeof window.createTamiasViewer !== "function") {
+      throw new Error("tamias_viewer.js 未导出 createTamiasViewer");
+    }
+    if (onProgress === undefined) {
+      return window.createTamiasViewer();
+    }
+    const wasmUrl = new URL("tamias_viewer.wasm", scriptUrl).href;
+    const wasmBinary = await fetchWasmWithProgress(wasmUrl, onProgress);
+    return window.createTamiasViewer({ wasmBinary });
+  })().catch((err: unknown) => {
+    modulePromise = null; // 允许重试
+    throw err;
+  });
   return modulePromise;
+}
+
+export function loadViewer(): Promise<TamiasViewerModule> {
+  return preloadViewer();
 }
 
 // embind 的 loadFile 参数是 std::string，JS 侧用 latin1 二进制字符串传递。
