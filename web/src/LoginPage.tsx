@@ -1,6 +1,10 @@
 // 登录页。校验逻辑与「这不是安全边界」的说明见 auth.ts 顶部。
+//
+// 排版是常规的双栏：左侧大面积品牌展示（光晕 + 等轴测网格，纯 CSS），右侧账号密码。
+// 窄窗口（≤900px）堆成一列，见 styles.css 末尾的媒体查询。
 import { useState } from "react";
 
+import logo from "../../assets/branding/logo.png";
 import { DEMO_PASSWORD, DEMO_USER, storageAvailable, verify } from "./auth";
 import { formatMb, type EngineProgress } from "./viewer";
 
@@ -46,70 +50,102 @@ export default function LoginPage({ onAuthenticated, engine }: LoginPageProps) {
 
   return (
     <div className="login">
-      <form className="login-card" onSubmit={submit}>
-        <div className="login-brand">
-          <strong>Tamias</strong>
-          <span>引擎 WASM · Web 查看器</span>
+      {/* 左：大面积留给品牌。光晕与等轴测网格都是 CSS 画的，不引额外素材。 */}
+      <aside className="login-brand-panel">
+        <div className="brand-lockup">
+          <img className="brand-logo" src={logo} alt="" draggable={false} />
+          <div className="brand-wordmark">
+            <h1 className="brand-name">Tamias</h1>
+            <span className="brand-sub">引擎 WASM · Web 查看器</span>
+          </div>
         </div>
 
-        <label className="login-field">
-          <span>账号</span>
-          <input
-            type="text"
-            value={user}
-            autoFocus
-            spellCheck={false}
-            autoComplete="username"
-            onChange={(event) => {
-              setUser(event.target.value);
-              setError(null);
-            }}
-          />
-        </label>
-
-        <label className="login-field">
-          <span>密码</span>
-          <input
-            type="password"
-            value={password}
-            autoComplete="current-password"
-            onChange={(event) => {
-              setPassword(event.target.value);
-              setError(null);
-            }}
-          />
-        </label>
-
-        {error !== null && (
-          <div className="login-error" role="alert">
-            {error}
-          </div>
-        )}
-
-        {/* 存储被禁时登录状态**留不住**，每个标签页都会要求重登。这种事得说出来，
-            否则看起来就像登录逻辑写错了。 */}
-        {!storageAvailable() && (
-          <div className="login-error muted" role="status">
-            浏览器禁用了本地存储（隐私模式？），登录状态无法在标签页之间保留——每开一个
-            标签页都需要重新登录。
-          </div>
-        )}
-
-        <button type="submit" className="btn login-submit" disabled={busy}>
-          {busy ? "登录中…" : "登录"}
-        </button>
-
-        {/* 凭据就在 bundle 里，藏起来是自欺欺人。接入服务端鉴权后删掉这行。 */}
-        <div className="login-note">
-          演示凭据：<code>admin</code> / <code>admin</code>
-          <br />
-          登录状态在同源标签页之间共享，12 小时内有效
+        <div className="brand-pitch">
+          {/* 定位句直接取 README 的第一句，别自己另编一套。 */}
+          <p className="brand-tagline">
+            跨 MCAD / BIM 的
+            <br />
+            几何查看 + 参数化编辑内核
+          </p>
+          <ul className="brand-points">
+            <li>OCCT 参数化造型内核，特征树可回改</li>
+            <li>WebGL2 渲染，WebGPU 是实验后端</li>
+            <li>一个网页标签页 = 一份文档</li>
+          </ul>
         </div>
 
-        {/* 引擎预热进度。登录这几秒正好拿来下 26 MB 的 wasm——显示出来，用户才知道
-            点完登录之后不会对着一块空白干等。 */}
-        <EngineWarmup engine={engine} />
-      </form>
+        <div className="brand-foot">
+          几何求值与渲染都在本地 WASM 里完成，模型不出浏览器。
+        </div>
+      </aside>
+
+      {/* 右：账号密码登录。 */}
+      <main className="login-form-panel">
+        <form className="login-card" onSubmit={submit}>
+          <div className="login-heading">
+            <h2>账号登录</h2>
+            <p>登录后进入文件管理，双击一份文档开始查看。</p>
+          </div>
+
+          <label className="login-field">
+            <span>账号</span>
+            <input
+              type="text"
+              value={user}
+              autoFocus
+              spellCheck={false}
+              autoComplete="username"
+              onChange={(event) => {
+                setUser(event.target.value);
+                setError(null);
+              }}
+            />
+          </label>
+
+          <label className="login-field">
+            <span>密码</span>
+            <input
+              type="password"
+              value={password}
+              autoComplete="current-password"
+              onChange={(event) => {
+                setPassword(event.target.value);
+                setError(null);
+              }}
+            />
+          </label>
+
+          {error !== null && (
+            <div className="login-error" role="alert">
+              {error}
+            </div>
+          )}
+
+          {/* 存储被禁时登录状态**留不住**，每个标签页都会要求重登。这种事得说出来，
+              否则看起来就像登录逻辑写错了。 */}
+          {!storageAvailable() && (
+            <div className="login-error muted" role="status">
+              浏览器禁用了本地存储（隐私模式？），登录状态无法在标签页之间保留——每开一个
+              标签页都需要重新登录。
+            </div>
+          )}
+
+          <button type="submit" className="btn login-submit" disabled={busy}>
+            {busy ? "登录中…" : "登录"}
+          </button>
+
+          {/* 凭据就在 bundle 里，藏起来是自欺欺人。接入服务端鉴权后删掉这段。 */}
+          <div className="login-note">
+            演示凭据：<code>admin</code> / <code>admin</code>
+            <br />
+            登录状态在同源标签页之间共享，12 小时内有效
+          </div>
+
+          {/* 引擎预热进度。登录这几秒正好拿来下 26 MB 的 wasm——显示出来，用户才知道
+              点完登录之后不会对着一块空白干等。 */}
+          <EngineWarmup engine={engine} />
+        </form>
+      </main>
     </div>
   );
 }

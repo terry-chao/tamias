@@ -62,44 +62,159 @@ body {
   cursor: default;
 }
 
-/* ── 登录页 ────────────────────────────────────────────────────────────────
-   门禁只是界面分栏，不是访问控制——理由见 web/src/auth.ts 顶部。 */
+/* ── 登录页：左品牌 / 右表单 ──────────────────────────────────────────────
+   常规的成熟双栏登录：左侧大面积留给品牌，右侧是账号密码。
+   整页不引任何额外素材：品牌光晕 + 等轴测网格都是 CSS 画的（CAD 的味道，也和
+   桌面端启动画面那种"网格 + logo"的观感一致）。 */
 .login {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  height: 100%;
+  background: var(--bg);
+}
+
+.login-brand-panel {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 46px 54px;
+  background:
+    radial-gradient(120% 80% at 16% 10%, #23304a 0%, rgba(20, 22, 26, 0) 62%),
+    linear-gradient(158deg, #1a1e26 0%, #14161a 72%);
+  border-right: 1px solid var(--line);
+}
+
+/* 等轴测网格：三组斜/直线叠出立体网格，再往右下淡出，不要糊满整块。 */
+.login-brand-panel::before {
+  content: "";
+  position: absolute;
+  inset: -25%;
+  background-image:
+    repeating-linear-gradient(60deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 48px),
+    repeating-linear-gradient(-60deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 48px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 48px);
+  -webkit-mask-image: radial-gradient(85% 65% at 22% 22%, #000 0%, transparent 78%);
+  mask-image: radial-gradient(85% 65% at 22% 22%, #000 0%, transparent 78%);
+  pointer-events: none;
+}
+
+/* 面板里的内容要压在网格之上。 */
+.login-brand-panel > * {
+  position: relative;
+}
+
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.brand-logo {
+  width: 68px;
+  height: 68px;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 26px rgba(0, 0, 0, 0.5));
+}
+
+.brand-wordmark {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.brand-name {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: var(--text);
+}
+
+.brand-sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.brand-pitch {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 30ch;
+}
+
+.brand-tagline {
+  margin: 0;
+  font-size: 21px;
+  line-height: 1.5;
+  color: #e7e3dd;
+}
+
+.brand-points {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.brand-points li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+/* 小圆点用伪元素画，别去引一套图标。 */
+.brand-points li::before {
+  content: "";
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translateY(-2px);
+}
+
+.brand-foot {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.login-form-panel {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  padding: 24px;
-  background: radial-gradient(circle at 50% 0%, #1b2028 0%, var(--bg) 60%);
+  padding: 32px 24px;
 }
 
 .login-card {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  width: min(360px, 100%);
-  padding: 22px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  width: min(352px, 100%);
 }
 
-.login-brand {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
+.login-heading {
   margin-bottom: 6px;
 }
 
-.login-brand strong {
-  font-size: 20px;
-  letter-spacing: 0.5px;
+.login-heading h2 {
+  margin: 0 0 4px;
+  font-size: 19px;
+  font-weight: 600;
 }
 
-.login-brand span {
+.login-heading p {
+  margin: 0;
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.5;
 }
 
 .login-field {
@@ -118,7 +233,7 @@ body {
   background: var(--panel-2);
   color: var(--text);
   border-radius: 6px;
-  padding: 8px 10px;
+  padding: 9px 10px;
   font: inherit;
 }
 
@@ -143,18 +258,53 @@ body {
 
 .login-submit {
   justify-content: center;
-  padding: 9px 10px;
+  padding: 10px;
+  margin-top: 2px;
 }
 
 .login-note {
   color: var(--muted);
   font-size: 11px;
+  line-height: 1.6;
   text-align: center;
 }
 
 .login-note code {
   font: 11px/1 ui-monospace, monospace;
   color: var(--text);
+}
+
+/* 窄窗口（笔记本竖屏 / 小窗）堆成一列：品牌在上、表单在下，卖点先收起来。 */
+@media (max-width: 900px) {
+  .login {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .login-brand-panel {
+    padding: 24px 26px;
+    gap: 16px;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .brand-logo {
+    width: 44px;
+    height: 44px;
+  }
+
+  .brand-name {
+    font-size: 22px;
+  }
+
+  .brand-tagline {
+    font-size: 15px;
+  }
+
+  .brand-points,
+  .brand-foot {
+    display: none;
+  }
 }
 
 /* ── 视口 ──────────────────────────────────────────────────────────────── */
