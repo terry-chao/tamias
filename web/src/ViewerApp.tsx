@@ -16,58 +16,20 @@ import FileManager, { type FileEntry } from "./files/FileManager";
 import { bundled_samples, type SampleDoc } from "./files/samples";
 import MenuBar from "./ribbon/MenuBar";
 import RibbonBar from "./ribbon/RibbonBar";
-import type {
-  MenuEntry,
-  MenuSpec,
-  RibbonCommand,
-  RibbonDisplayMode,
-  RibbonSectionSpec,
-} from "./ribbon/types";
-import {
-  buildArgs,
-  firstStepHint,
-  HOME_GROUP_TITLES,
-  HOME_TOOLS,
-  VIEW_GROUP_TITLES,
-  VIEW_TOOLS,
-  type ToolSpec,
-  type Vec3,
-} from "./modeling/catalog";
+import type { RibbonDisplayMode } from "./ribbon/types";
+import { buildArgs, firstStepHint, type ToolSpec, type Vec3 } from "./modeling/catalog";
 import EngineLoading from "./engine/EngineLoading";
 import { loadViewer, settle, toBinaryString, type EngineProgress, type ViewerStats } from "./viewer";
 import ViewCube, { type ViewAngles } from "./ViewCube";
+import AboutBox from "./viewer/AboutBox";
+import ViewportHud from "./viewer/ViewportHud";
+import { buildToolbar } from "./viewer/commands";
+import { COLLAPSED_KEY, loadCollapsed, loadDisplayMode, remember, STYLE_KEY } from "./viewer/prefs";
+import type { PlacingState } from "./viewer/types";
 
 import "./ribbon/ribbon.css";
 
-// 顶栏形态记忆。键名**故意用桌面端的那两个**（ui/ribbon_style、ui/ribbon_collapsed，
-// 见 main_window 里的 settings 读写），这样两边对照时名字是一致的。
-// 存 localStorage 而不是 sessionStorage：这是界面偏好，不该关掉标签页就忘。
-const STYLE_KEY = "ui/ribbon_style";
-const COLLAPSED_KEY = "ui/ribbon_collapsed";
-
-function loadDisplayMode(): RibbonDisplayMode {
-  try {
-    return window.localStorage.getItem(STYLE_KEY) === "icons" ? "icons" : "text";
-  } catch {
-    return "text";
-  }
-}
-
-function loadCollapsed(): boolean {
-  try {
-    return window.localStorage.getItem(COLLAPSED_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function remember(key: string, value: string): void {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // 隐私模式存不下：不影响本次会话，只是下次开不记得。
-  }
-}
+// 顶栏形态的本地记忆挪到了 viewer/prefs.ts（键名与桌面端一致，理由写在那边）。
 
 interface ViewerProps {
   /** 当前登录名，显示在顶栏。 */
@@ -80,14 +42,8 @@ interface ViewerProps {
   onRetryEngine: () => void;
 }
 
-/** 正在放置的工具：world 拼 args，screen 画橡皮筋。 */
-interface PlacingState {
-  spec: ToolSpec;
-  params: Record<string, string>;
-  world: Vec3[];
-  screen: ScreenPoint[];
-  ids: number[];
-}
+// PlacingState 的字段说明见 viewer/types.ts（放那边是为了让 commands.ts 也能用，
+// 又不和本文件形成 import 环）。
 
 export default function Viewer({ user, onLogout, engine, onRetryEngine }: ViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -382,253 +338,11 @@ export default function Viewer({ user, onLogout, engine, onRetryEngine }: Viewer
     await runImmediate(spec, values, ids);
   };
 
-  // ── 工具带 / 菜单的命令表 ────────────────────────────────────────────────
-  // 菜单项与工具带按钮指向**同一批对象**（桌面端是同一批 QAction），所以名字 / 图标 /
-  // 勾选态只有一份。每次渲染重建是刻意的：闭包必须看到当前的 ready / renderMode /
-  // selectedCount / placing，缓存起来只会拿到过期状态。
-  const toCommand = (spec: ToolSpec): RibbonCommand => {
-    const action = uiActions[spec.command];
-    const shortcut =
-      spec.command === "undo"
-        ? "Ctrl+Z"
-        : spec.command === "redo"
-          ? "Ctrl+Y"
-          : spec.command === "frame_all"
-            ? "F"
-            : undefined;
-    // 不依赖引擎就绪的只有"关于 / 退出登录"；不依赖**文档**的是"新建 / 打开 / 关于 /
-    // 退出登录"——没有打开的文档时，其余工具全灰掉，而不是点了报错。
-    const needsEngine = spec.command !== "about" && spec.command !== "logout";
-    const needsDocument =
-      spec.command !== "new" &&
-      spec.command !== "open" &&
-      spec.command !== "about" &&
-      spec.command !== "logout";
-    return {
-      id: specId(spec),
-      label:
-        spec.command === "delete_entity" && selectedCount > 0
-          ? `${spec.label} (${selectedCount})`
-          : spec.label,
-      icon: spec.icon,
-      tip: spec.tip,
-      location: spec.location,
-      shortcut,
-      disabled: (needsEngine && notReady) || (needsDocument && !hasDoc),
-      checked: isToolActive(spec),
-      run: action ?? (() => void armTool(spec)),
-    };
-  };
-
-  const isToolActive = (spec: ToolSpec): boolean => {
-    const id = specId(spec);
-    if (placing !== null && specId(placing.spec) === id) {
-      return true;
-    }
-    switch (spec.command) {
-      case "wireframe":
-        return renderMode === 0;
-      case "shaded":
-        return renderMode === 1;
-      case "realistic":
-        return renderMode === 2;
-      case "log-panel":
-        return showLog;
-      default:
-        return false;
-    }
-  };
-
-  // 工具带：两段分区（桌面端 home / view 同时铺开，没有页签）。
-  const buildSection = (
-    id: string,
-    title: string,
-    accent: RibbonSectionSpec["accent"],
-    titles: Record<string, string>,
-    tools: Record<string, ToolSpec[]>,
-    order: string[],
-  ): RibbonSectionSpec => ({
-    id,
-    title,
-    accent,
-    groups: order.map((group) => ({
-      id: group,
-      title: titles[group],
-      commands: (tools[group] ?? []).map(toCommand),
-    })),
-  });
-
-  const sections: RibbonSectionSpec[] = [
-    buildSection(
-      "home",
-      "开始",
-      "blue",
-      HOME_GROUP_TITLES,
-      HOME_TOOLS,
-      ["file", "edit", "draw", "architectural", "structural", "modify", "annotate", "navigation", "grid", "storey", "help"],
-    ),
-    buildSection("view", "视图", "teal", VIEW_GROUP_TITLES, VIEW_TOOLS, ["display", "panels"]),
-  ];
-
-  const allCommands: RibbonCommand[] = sections.flatMap((section) =>
-    section.groups.flatMap((group) => group.commands),
-  );
-  // 只挂菜单、不在带上的命令（退出登录）。
-  const cLogout: RibbonCommand = {
-    id: "logout",
-    label: "退出登录",
-    icon: "logout",
-    tip: `退出 ${user}`,
-    location: "文件",
-    run: onLogout,
-  };
-  // 关闭文档：纯 UI 动作（引擎侧有个 closeDocument 导出，但不算"建模命令"）。
-  const cClose: RibbonCommand = {
-    id: "close-document",
-    label: "关闭文档",
-    icon: "close",
-    tip: "关掉当前文档回到文件管理页（web 端还不能保存，关掉即丢弃）",
-    location: "文件",
-    shortcut: "Ctrl+W",
-    disabled: !hasDoc,
-    run: () => void closeDocument(),
-  };
-  // 「打开文件夹…」：Chromium 系的 File System Access API 才有的能力，所以只在菜单里
-  // 按需出现（没有这个 API 时整个菜单项都不画）。
-  const cOpenFolder: RibbonCommand = {
-    id: "open-folder",
-    label: "打开文件夹…",
-    icon: "open",
-    tip: "挑一个本地文件夹，列出里面的 .tdoc / .trscn / .obj",
-    location: "文件",
-    run: () => void openFolder(),
-  };
-  // 最近打开：每条就是一个命令，run 里拿当初那个 File 句柄重读磁盘。
-  const recentCommands: RibbonCommand[] = recent.map((entry) => ({
-    id: `recent:${entry.name}`,
-    label: entry.name,
-    icon: "open",
-    tip: `重新打开 ${entry.name}`,
-    location: "文件 · 最近打开",
-    run: () => reopenRecent(entry.file),
-  }));
-  const recentEntries: MenuEntry[] = recentCommands.map((command) => ({
-    kind: "command",
-    command,
-  }));
-  const topCommands: RibbonCommand[] = [...allCommands, cClose, cLogout, ...recentCommands];
-
-  const findCommand = (id: string): RibbonCommand => {
-    const hit = allCommands.find((command) => command.id === id);
-    if (hit !== undefined) {
-      return hit;
-    }
-    throw new Error(`顶栏命令表里没有 "${id}"`);
-  };
-  const home = (group: string, index = 0) => {
-    const section = sections[0].groups.find((g) => g.id === group);
-    const command = section?.commands[index];
-    if (command === undefined) {
-      throw new Error(`开始段的 ${group} 组第 ${index} 个命令不存在`);
-    }
-    return command;
-  };
-
-  // 菜单。桌面端是 文件 / 编辑 / 视图 / 工具 / 窗口 / 帮助；这里**没有「窗口」**——
-  // 那一项在桌面端是标签页清单（下一个 / 上一个 / 打开的文档），而 web 端一次只有
-  // 一份文档，放一个只有一项的菜单不如不放。等 web 支持多文档时再补。
-  const menus: MenuSpec[] = [
-    {
-      id: "file",
-      title: "文件",
-      entries: [
-        { kind: "command", command: findCommand("new") },
-        { kind: "command", command: findCommand("open") },
-        // 「打开文件夹…」原来在文件管理页的工具栏上；那一页照桌面端改成纯卡片墙之后，
-        // 这个动作挪到文件菜单里（桌面端的打开类动作也都在菜单 + ribbon 上）。
-        ...(canPickFolder
-          ? [{ kind: "command" as const, command: cOpenFolder }]
-          : []),
-        // 最近打开只在本次会话内有内容（File 句柄不可序列化），空的时候不画这一项。
-        ...(recentEntries.length > 0
-          ? [{ kind: "submenu" as const, title: "最近打开", entries: recentEntries }]
-          : []),
-        { kind: "separator" },
-        { kind: "command", command: cClose },
-        { kind: "separator" },
-        { kind: "command", command: cLogout },
-      ],
-    },
-    {
-      id: "edit",
-      title: "编辑",
-      entries: [
-        { kind: "command", command: findCommand("undo") },
-        { kind: "command", command: findCommand("redo") },
-        { kind: "separator" },
-        { kind: "command", command: findCommand("move_entities") },
-        { kind: "command", command: findCommand("copy_entities") },
-        { kind: "command", command: findCommand("delete_entity") },
-      ],
-    },
-    {
-      id: "view",
-      title: "视图",
-      entries: [
-        {
-          kind: "submenu",
-          title: "显示模式",
-          entries: [
-            { kind: "command", command: findCommand("wireframe") },
-            { kind: "command", command: findCommand("shaded") },
-            { kind: "command", command: findCommand("realistic") },
-          ],
-        },
-        { kind: "separator" },
-        { kind: "command", command: findCommand("frame_all") },
-        { kind: "command", command: findCommand("log-panel") },
-      ],
-    },
-    {
-      id: "draw",
-      title: "绘制",
-      entries: [
-        { kind: "command", command: findCommand("create_line") },
-        { kind: "command", command: findCommand("create_polyline") },
-        { kind: "command", command: findCommand("create_rectangle") },
-        { kind: "command", command: findCommand("create_circle") },
-        { kind: "command", command: findCommand("create_arc") },
-        { kind: "separator" },
-        { kind: "command", command: findCommand("create_wall") },
-        { kind: "command", command: findCommand("create_door") },
-        { kind: "command", command: findCommand("create_window") },
-        { kind: "separator" },
-        { kind: "command", command: findCommand("create_beam") },
-        { kind: "command", command: findCommand("create_column") },
-        { kind: "command", command: findCommand("create_column_circle") },
-        { kind: "command", command: findCommand("create_slab") },
-        { kind: "command", command: findCommand("create_foundation") },
-      ],
-    },
-    {
-      id: "tools",
-      title: "工具",
-      entries: [
-        { kind: "command", command: findCommand("create_text") },
-        { kind: "separator" },
-        { kind: "command", command: home("grid", 0) },
-        { kind: "command", command: home("grid", 1) },
-        { kind: "command", command: home("grid", 2) },
-        { kind: "separator" },
-        { kind: "command", command: home("storey", 0) },
-      ],
-    },
-    {
-      id: "help",
-      title: "帮助",
-      entries: [{ kind: "command", command: findCommand("about") }],
-    },
-  ];
+  // ── 工具带 / 菜单 ────────────────────────────────────────────────────────
+  // 命令表在 viewer/commands.ts（工具规格 → 菜单项 + 工具带按钮）。它是个纯函数，
+  // 每次渲染重建、不缓存——闭包必须看到当前的 ready / renderMode / selectedCount /
+  // placing。**调用点在下面**（必须在 closeDocument / openFolder / reopenRecent 这些
+  // handler 定义之后：它们以**值**的形式传进 ctx，提前引用会踩 TDZ）。
 
   // 初始化：加载 WASM 模块、绑定 canvas、跑渲染循环、监听尺寸变化。
   useEffect(() => {
@@ -650,7 +364,8 @@ export default function Viewer({ user, onLogout, engine, onRetryEngine }: Viewer
         setError(null);
         setStatus(await settle(module.status()));
         setDocName(await settle(module.documentName()));
-        // 启动时引擎会自己建一份默认文档（见 ViewerHost::start），所以这里通常是 true。
+        // **启动时没有默认文档**：ViewerHost::start() 只起渲染通道，所以这里通常是
+        // false——页面落在文件管理页，由用户双击 / 新建决定开哪一份（见 docs/WEB.md）。
         setHasDoc(await settle(module.hasDocument()));
         // 跑在哪个后端上：顶栏读数 + 实验角标。别让用户靠猜（WebGL / WebGPU 的
         // 画质与限制并不一样，见 docs/WEB.md）。
@@ -1130,6 +845,27 @@ export default function Viewer({ user, onLogout, engine, onRetryEngine }: Viewer
     if (file) void openFile(file);
   };
 
+  // 工具带 / 菜单：命令表是纯函数，每次渲染重建（实现见 viewer/commands.ts）。
+  // 调用点放这么后，是因为 ctx 里以**值**传了 closeDocument / openFolder / recent——
+  // 它们定义在上面，提前引用会在求值对象字面量时踩 TDZ。
+  const { sections, topCommands, menus } = buildToolbar({
+    notReady,
+    hasDoc,
+    renderMode,
+    selectedCount,
+    showLog,
+    placing,
+    user,
+    canPickFolder,
+    recent,
+    uiActions,
+    armTool,
+    closeDocument,
+    openFolder,
+    reopenRecent,
+    onLogout,
+  });
+
   const statusClass = error ? "error" : ready ? "ready" : "";
 
   return (
@@ -1272,24 +1008,14 @@ export default function Viewer({ user, onLogout, engine, onRetryEngine }: Viewer
             </>
           )}
         </div>
-        {/* 与桌面视口左下角同一组读数 */}
-        <div className="stats" title="与桌面视口左下角同一组读数">
-          <span>draw {stats.draws}</span>
-          <span>tri {stats.triangles}</span>
-          <span>gpu {stats.gpuMeshMb.toFixed(1)}MB</span>
-          <span>backend {backend.name === "" ? "—" : backend.name}</span>
-          <span>kernel {kernel === "" ? "—" : kernel}</span>
-          <span>tess {stats.pendingTessellate}</span>
-          <span>选中 {selectedCount}</span>
-        </div>
-        {/* 引擎报错：原来只能翻 DevTools，现在直接显示在页面上。
-            「视图 → 面板 → 引擎日志」可以关掉它（默认开）。 */}
-        {showLog && logText.trim() !== "" && (
-          <div className="log-panel" title="引擎的 warn / error 日志">
-            <div className="log-title">引擎日志</div>
-            <pre>{logText.trim()}</pre>
-          </div>
-        )}
+        <ViewportHud
+          stats={stats}
+          backendName={backend.name}
+          kernel={kernel}
+          selectedCount={selectedCount}
+          logText={logText}
+          showLog={showLog}
+        />
       </div>
       {/* 底部状态栏：桌面端的状态消息走 QStatusBar（main_window 里满地的
           statusBar()->showMessage），文档名在右端。 */}
@@ -1300,38 +1026,13 @@ export default function Viewer({ user, onLogout, engine, onRetryEngine }: Viewer
       </div>
       {/* 关于（桌面端有关于框，这里是最小版）。 */}
       {aboutOpen && (
-        <div className="about-backdrop" onClick={() => setAboutOpen(false)}>
-          <div
-            className="about-card"
-            role="dialog"
-            aria-label="关于 Tamias Viewer"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="about-title">关于 Tamias Viewer</div>
-            <dl className="about-rows">
-              <dt>图形后端</dt>
-              <dd>
-                {backend.name === "" ? "—" : backend.name}
-                {backend.experimental ? "（实验）" : ""}
-              </dd>
-              <dt>造型内核</dt>
-              <dd>
-                {kernel === "" ? "—" : kernel}
-                {kernel === "truck" ? "（回退：这次构建没编进 OCCT）" : ""}
-              </dd>
-              <dt>渲染读数</dt>
-              <dd>
-                draw {stats.draws} · tri {stats.triangles} · gpu{" "}
-                {stats.gpuMeshMb.toFixed(1)}MB
-              </dd>
-              <dt>当前登录</dt>
-              <dd>{user}</dd>
-            </dl>
-            <button type="button" className="btn" onClick={() => setAboutOpen(false)}>
-              关闭
-            </button>
-          </div>
-        </div>
+        <AboutBox
+          backend={backend}
+          kernel={kernel}
+          stats={stats}
+          user={user}
+          onClose={() => setAboutOpen(false)}
+        />
       )}
       {/* 需要参数的命令：桌面端各有专门对话框/面板，web 用一个通用小表单收值。 */}
       {prompt !== null && (
