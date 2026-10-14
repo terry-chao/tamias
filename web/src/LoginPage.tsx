@@ -138,7 +138,7 @@ export default function LoginPage({ onAuthenticated, engine }: LoginPageProps) {
           <div className="login-note">
             演示凭据：<code>admin</code> / <code>admin</code>
             <br />
-            登录状态在同源标签页之间共享，12 小时内有效
+            登录状态在同源标签页之间共享，一周内有效
           </div>
 
           {/* 引擎预热进度。登录这几秒正好拿来下 26 MB 的 wasm——显示出来，用户才知道

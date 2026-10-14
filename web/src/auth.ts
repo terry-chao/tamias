@@ -32,8 +32,12 @@ export const DEMO_PASSWORD = "admin";
 const STORAGE_KEY = "tamias.session";
 
 // 登录有效期。**每次打开页面顺延一次**（滑动过期），所以常用的人不会掉线；放着不管
-// 半天才会失效。这里没有服务端参与，纯粹是"别让它永远有效"。
-const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 小时
+// 一周才会失效。这里没有服务端参与，纯粹是"别让它永远有效"。
+//
+// 为什么是一周：它是本地查看器工具、不是对外服务，登录态本来就在同源标签页之间共享
+// （见上面 STORAGE_KEY 的说明），动不动就要求重登只会让人烦。代价说清楚——**共用电脑
+// 上"退出登录"必须真的点**，否则一周内谁打开都能进。
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 一周
 
 /** 校验凭据。注意它是同步的——真正的鉴权会是一次网络往返。 */
 export function verify(user: string, password: string): boolean {
