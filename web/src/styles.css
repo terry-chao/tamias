@@ -135,6 +135,12 @@ body {
   padding: 6px 8px;
 }
 
+/* 提示而非报错（例如"存储被禁用，登录留不住"）——别用红框吓人。 */
+.login-error.muted {
+  color: var(--muted);
+  border-color: var(--line);
+}
+
 .login-submit {
   justify-content: center;
   padding: 9px 10px;

@@ -169,6 +169,21 @@ Truck 仍是**可选**那一个：`wasm-truck` 预设（`TAMIAS_ENABLE_OCCT=OFF`
 排法见 [APP.md](APP.md) 的「顶栏」一节。构建时把 `dist/` 拷进 wasm 输出目录，
 与 `tamias_viewer.js` / `.wasm` 同目录。换 UI 只换 `web/`，不换 `ViewerHost`。
 
+**登录与登录态。** `src/auth.ts` 是登录态的唯一来源，`src/App.tsx` 只做门禁。
+会话存在 **`localStorage`**（同源所有标签页共享），所以**登录之后新开标签页不用再登一次**。
+踩过的坑：原来用 `sessionStorage`，而它是**按标签页隔离**的——每开一个标签页必然要求重新
+登录。配套三件事：
+
+1. **12 小时有效期**，每次打开页面顺延一次（滑动过期），常用的人不会掉线；
+2. **跨标签页同步**：在别的标签页登出，这一页也跟着登出。用 `storage` 事件——注意它
+   **只在"别的"标签页里触发**，发起变更的那一页收不到，得自己 `setState`；
+3. **`storageAvailable()` 探测存储可用性**：隐私模式 / 站点数据被禁时登录态根本留不住，
+   登录页会**明说**这一点，否则看起来像登录逻辑写错了。
+
+**但它仍然不是安全边界**：凭据、判定、存储全在浏览器里，DevTools 里写一句
+`localStorage.setItem("tamias.session", ...)` 就能绕过。真鉴权必须在服务端
+（见 [服务端语言决策](DECISION-SERVER-LANGUAGE.md) §8.2：服务端目前无认证）。
+
 **图标只有一份来源。** 工具带图标直接用桌面端那套 `assets/icons/*.svg`
 （资源清单是 `src/app/resources.qrc`），经 `import.meta.glob(..., { query: "?url" })`
 在构建期内联成 data URL。它们是**全彩插画**（渐变 + 硬编码颜色），不是单色字形，

@@ -9,26 +9,29 @@
 // 在 Windows / macOS 上会被 TS 判成同一个文件，tsc 直接报 TS1261。）
 //
 // 「这不是安全边界」，理由见 auth.ts 顶部。
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import { clearSession, loadSession, saveSession, type Session } from "./auth";
+import { clearSession, loadSession, startSession, subscribeSession, type Session } from "./auth";
 import LoginPage from "./LoginPage";
 import ViewerApp from "./ViewerApp";
 
 export default function App() {
-  // 惰性初始化：刷新页面时从 sessionStorage 恢复，不会再闪一下登录页。
+  // 惰性初始化：刷新页面（以及**新开标签页**）时从 localStorage 恢复——会话是同源所有
+  // 标签页共享的，所以登录过之后开新标签页不会再被要求登录一次。
   const [session, setSession] = useState<Session | null>(() => loadSession());
 
   const onAuthenticated = useCallback((user: string) => {
-    const next: Session = { user, since: Date.now() };
-    saveSession(next);
-    setSession(next);
+    setSession(startSession(user));
   }, []);
 
   const onLogout = useCallback(() => {
     clearSession();
     setSession(null);
   }, []);
+
+  // 跨标签页同步：在别的标签页登出，这一页也跟着登出；在别的标签页登录，这一页立刻
+  // 拿到会话。`storage` 事件只在**别的**标签页里触发，本页的变更靠上面的 setSession。
+  useEffect(() => subscribeSession(setSession), []);
 
   if (session === null) {
     return <LoginPage onAuthenticated={onAuthenticated} />;
