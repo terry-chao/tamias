@@ -50,6 +50,22 @@ if(TARGET tamias::rhi_webgl)
   target_compile_definitions(tamias_viewer PRIVATE TAMIAS_WASM_WEBGL2=1)
 endif()
 
+# 调试构建（wasm-debug 预设，见 docs/DEBUG-BROWSER-STACK.md）：Release 默认**不出** DWARF，
+# Chrome 的 Sources 里只能看到 wasm-function[1234] 这种地址，C++ 断点无从谈起。
+#   -g3           DWARF 调试信息（含宏）
+#   -gsource-map  生成 .wasm.map：Chrome / VS Code 靠它把 wasm 帧映射回 .cpp 文件
+#   -sASSERTIONS=2 打开 Emscripten 的运行时断言（浏览器里的 abort 信息直接可读）
+# 只挂在调试配置上：这三样都会显著增大产物，Release 产物（26 MB 那份）不加。
+# 注意 -gsource-map 只放 link：它是链接器选项，塞进 clang 编译命令只会得到一条
+# "argument unused" 警告。
+target_compile_options(tamias_viewer PRIVATE
+  "$<$<CONFIG:Debug,RelWithDebInfo>:-g3>"
+)
+target_link_options(tamias_viewer PRIVATE
+  "$<$<CONFIG:Debug,RelWithDebInfo>:-gsource-map>"
+  "$<$<CONFIG:Debug,RelWithDebInfo>:-sASSERTIONS=2>"
+)
+
 # Web UI（Vite + React + TypeScript，工程根在 web/）：构建 dist 并拷到 wasm 输出目录，
 # 与 tamias_viewer.js/.wasm 同目录。找不到 node/npm 时跳过 UI（只产出 wasm 文件）。
 #

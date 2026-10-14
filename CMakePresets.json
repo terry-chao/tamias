@@ -108,6 +108,15 @@
       }
     },
     {
+      "name": "wasm-debug",
+      "displayName": "Emscripten WebGL viewer (Debug + DWARF)",
+      "inherits": "wasm-truck",
+      "binaryDir": "${sourceDir}/build/wasm-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
       "name": "linux",
       "displayName": "Linux x64 (Vulkan, X11/XCB)",
       "condition": {
@@ -174,6 +183,12 @@
       "name": "wasm-truck-build",
       "displayName": "构建 WASM 查看器（WebGL，仅 Truck）",
       "configurePreset": "wasm-truck",
+      "targets": ["tamias_viewer"]
+    },
+    {
+      "name": "wasm-debug-build",
+      "displayName": "构建 WASM 查看器（Debug + DWARF，供浏览器内 C++ 断点）",
+      "configurePreset": "wasm-debug",
       "targets": ["tamias_viewer"]
     },
     {

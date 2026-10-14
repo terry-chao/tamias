@@ -354,6 +354,9 @@ Select-String build\wasm\CMakeCache.txt -Pattern 'TAMIAS_ENABLE_(WEBGL|WEBGPU|OC
 powershell -File scripts/wasm-preview.ps1
 ```
 
+复验时要在浏览器里断进 C++、或者要把这几个读数与服务端 / 桌面端对齐，见
+[浏览器 wasm + 几何服务的分层调试](DEBUG-BROWSER-STACK.md)。
+
 功能面复验：打开示例文档 → 建一段文字标注（注释组）→ **确认视口里没有文字**（这是 ① 的现场）。
 注意 `logText()` 面板里**不会有**任何提示：WebGL 走不到那几行 `log_error`（它们在被跳过的守卫块**内部**），
 两条管线是**静默不建**的。（`WEBGL-EXP-IMPLEMENTATION-PLAN.md:352` 让你去日志里找这两条，是错的。）

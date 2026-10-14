@@ -84,6 +84,19 @@ else()
 endif()
 option(TAMIAS_ENABLE_OCCT "Build the OCCT modeling kernel backend." ${_tamias_occt_default})
 unset(_tamias_occt_default)
+# wasm 的 OCCT 前缀（C:\dev\occt-wasm\prefix）**只装了 Release 一份**：它的
+# OpenCASCADE*Targets-release.cmake 是 find_package 唯一认识的配置，Debug 构建会安静地
+# 链上 -O3 -DNDEBUG 的 Release 库。既不是真 Debug，又让人以为"我编了 Debug"。
+# 调试用的 wasm-debug 预设因此继承 wasm-truck；这条守卫把"想调 OCCT 就换 Debug"讲明白。
+if(EMSCRIPTEN AND TAMIAS_ENABLE_OCCT AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+  message(FATAL_ERROR
+    "Emscripten + Debug + TAMIAS_ENABLE_OCCT 组合不成立：\n"
+    "  wasm 的 OCCT 前缀只有 Release 库（${TAMIAS_OCCT_PREFIX}），Debug 构建会链到 -O3\n"
+    "  的 Release OCCT —— 那不是能断点调试的 Debug 构建。\n"
+    "调试用 wasm-debug 预设（= wasm-truck，仅 Truck，见 docs/DEBUG-BROWSER-STACK.md）：\n"
+    "  cmake --preset wasm-debug           (或 -DTAMIAS_ENABLE_OCCT=OFF)\n"
+    "真要连 OCCT 一起调，得先把 OCCT 交叉编译成 Debug 一份，再用 -DTAMIAS_OCCT_PREFIX 指过去。")
+endif()
 option(TAMIAS_ENABLE_TRUCK_KERNEL "Build the Truck (Rust) modeling kernel backend." OFF)
 # OCCT 的导入路径（STEP / IGES / BREP + XCAF 颜色，见 occt_shape_ops.cpp）。
 # 它比内核本身重得多：要 XCAF，而 XCAF 在 OCCT 7.9 上还会把 Visualization
