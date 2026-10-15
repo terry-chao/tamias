@@ -63,29 +63,6 @@ std::filesystem::path resolve_shader_path(const std::filesystem::path& name) {
   return std::filesystem::path(TAMIAS_SHADER_SOURCE_DIR) / name;
 }
 
-// 世界坐标轴线段（X 红 / Y 绿 / Z 蓝，LineList 拓扑）。
-MeshCpu make_axes_mesh(float length = 1.0f) {
-  MeshCpu mesh;
-  const auto add_line = [&](Vec3 a, Vec3 b, Vec3 color) {
-    const auto base = static_cast<std::uint32_t>(mesh.vertices.size());
-    Vertex va{};
-    va.position = a;
-    va.normal = {0.f, 0.f, 1.f};
-    va.color = color;
-    Vertex vb = va;
-    vb.position = b;
-    mesh.vertices.push_back(va);
-    mesh.vertices.push_back(vb);
-    mesh.indices.push_back(base);
-    mesh.indices.push_back(base + 1);
-  };
-  add_line({0, 0, 0}, {length, 0, 0}, {1, 0, 0});  // X 红
-  add_line({0, 0, 0}, {0, length, 0}, {0, 1, 0});  // Y 绿
-  add_line({0, 0, 0}, {0, 0, length}, {0, 0, 1});  // Z 蓝
-  recompute_bounds(mesh);
-  return mesh;
-}
-
 // 全屏三角形（顶点已是 NDC 坐标，覆盖整个屏幕）。
 MeshCpu make_fullscreen_triangle() {
   MeshCpu mesh;
@@ -133,6 +110,23 @@ MeshCpu make_overlay_quad() {
   }
   mesh.indices = {0, 1, 2, 0, 2, 3};
   mesh.has_texcoord = true;
+  recompute_bounds(mesh);
+  return mesh;
+}
+
+// 屏幕空间像素线的单位四边形（见 line.vert.hlsl）：x = 沿线参数 t ∈ {0,1}，
+// y = 横向 side ∈ {0,1}（shader 里映射成 -1 / +1）。顶点只有这四个角有意义，
+// 实参（起点 / 终点 / 线宽 / 颜色）走每段一个的实例记录。
+MeshCpu make_line_quad() {
+  MeshCpu mesh;
+  const Vec3 corners[4] = {{0.f, 0.f, 0.f}, {1.f, 0.f, 0.f}, {1.f, 1.f, 0.f}, {0.f, 1.f, 0.f}};
+  for (const Vec3& corner : corners) {
+    Vertex v{};
+    v.position = corner;
+    v.normal = {0.f, 0.f, 1.f};
+    mesh.vertices.push_back(v);
+  }
+  mesh.indices = {0, 1, 2, 0, 2, 3};
   recompute_bounds(mesh);
   return mesh;
 }
@@ -310,10 +304,11 @@ void RenderThread::stop() {
   sky_pipeline_.reset();
   overlay_pipeline_.reset();
   text_pipeline_.reset();
-  axes_mesh_ = GpuMesh{};
+  line_ss_pipeline_.reset();
   sky_mesh_ = GpuMesh{};
   overlay_quad_mesh_ = GpuMesh{};
   text_unit_quad_mesh_ = GpuMesh{};
+  line_quad_mesh_ = GpuMesh{};
   preview_line_mesh_ = GpuMesh{};
   vs_.reset();
   fs_.reset();
@@ -323,6 +318,8 @@ void RenderThread::stop() {
   overlay_fs_.reset();
   text_vs_.reset();
   text_fs_.reset();
+  line_vs_.reset();
+  line_fs_.reset();
   if (device_) {
     device_.reset();
   }
@@ -659,8 +656,8 @@ void RenderThread::resize_surface(std::uint64_t channel_id, NativeWindowHandle w
 Result<void> RenderThread::ensure_pipelines() {
   if (shaded_pipeline_ && wire_pipeline_ && line_pipeline_ && entity_line_pipeline_ &&
       blend_pipeline_ && sky_pipeline_ &&
-      axes_mesh_.index_buffer && sky_mesh_.index_buffer &&
-      preview_line_mesh_.index_buffer && lod_box_mesh_.index_buffer && default_texture_ && default_normal_ &&
+      sky_mesh_.index_buffer && preview_line_mesh_.index_buffer && lod_box_mesh_.index_buffer &&
+      default_texture_ && default_normal_ &&
       default_orm_ &&
       ibl_irradiance_ && ibl_prefilter_ && ibl_brdf_lut_) {
     return {};
@@ -944,6 +941,65 @@ Result<void> RenderThread::ensure_pipelines() {
     }
   }
 
+  // 屏幕空间像素线管线（overlay 的预览线 / 轴网 / 夹点 / 捕捉 / 调试段）。
+  // 顶点把世界线段投影后在**屏幕空间**撑成四边形，片元按像素距离算覆盖率，所以线宽
+  // 是以设备像素为单位的（见 shaders/line.vert.hlsl）。不测深度：和坐标轴 / 预览线
+  // 一档，永远看得见；混合走预乘 alpha（抗锯齿那 1 px 靠它）。
+  // 桌面后端才有这对 shader（WebGL / WebGPU 的 GLSL / WGSL 版本还没写），
+  // 那两个后端照旧走逐段 LineList 的兜底分支。
+  if (!webgl && !webgpu) {
+    const char* line_vs_name = opengl ? "line.vert.gl.spv" : "line.vert.spv";
+    const char* line_fs_name = opengl ? "line.frag.gl.spv" : "line.frag.spv";
+    auto line_vs_words = load_spirv_file(resolve_shader_path(line_vs_name).string());
+    auto line_fs_words = load_spirv_file(resolve_shader_path(line_fs_name).string());
+    // 缺 shader 不该把视口拖垮：报一声，overlay 线条退回 1 px 的 LineList。
+    if (!line_vs_words || !line_fs_words) {
+      log_error("screen-space line shaders unavailable: " +
+                (line_vs_words ? line_fs_words.error() : line_vs_words.error()));
+    } else {
+      std::vector<std::uint32_t> line_vs_spirv = std::move(*line_vs_words);
+      std::vector<std::uint32_t> line_fs_spirv = std::move(*line_fs_words);
+      ShaderModuleDesc line_vs_desc{};
+      line_vs_desc.stage = ShaderStage::Vertex;
+      line_vs_desc.entry = "main";
+      line_vs_desc.language = ShaderLanguage::Spirv;
+      line_vs_desc.spirv = line_vs_spirv;
+      ShaderModuleDesc line_fs_desc{};
+      line_fs_desc.stage = ShaderStage::Fragment;
+      line_fs_desc.entry = "main";
+      line_fs_desc.language = ShaderLanguage::Spirv;
+      line_fs_desc.spirv = line_fs_spirv;
+      auto line_vs = device_->create_shader_module(line_vs_desc);
+      auto line_fs = device_->create_shader_module(line_fs_desc);
+      if (!line_vs || !line_fs) {
+        log_error("screen-space line shader modules rejected: " +
+                  (line_vs ? line_fs.error() : line_vs.error()));
+      } else {
+        auto line_quad = create_gpu_mesh(*device_, make_line_quad());
+        if (!line_quad) {
+          log_error("screen-space line quad failed: " + line_quad.error());
+        } else {
+          line_vs_ = std::move(*line_vs);
+          line_fs_ = std::move(*line_fs);
+          line_quad_mesh_ = std::move(*line_quad);
+          PipelineDesc line_ss{};
+          line_ss.vertex_shader = line_vs_.get();
+          line_ss.fragment_shader = line_fs_.get();
+          line_ss.instanced = true;    // 每段一条实例，复用 GpuInstance 布局
+          line_ss.depth_test = false;  // 和坐标轴 / 预览线一档，永远看得见
+          line_ss.depth_write = false;
+          line_ss.blend = true;        // 预乘 alpha：边缘覆盖率靠它
+          auto pline = device_->create_pipeline(line_ss);
+          if (!pline) {
+            log_error("screen-space line pipeline failed: " + pline.error());
+          } else {
+            line_ss_pipeline_ = std::move(*pline);
+          }
+        }
+      }
+    }
+  }
+
   // 坐标轴线管线：LineList + 关深度测试，让轴始终可见。
   PipelineDesc line = shaded;
   line.topology = PrimitiveTopology::LineList;
@@ -983,12 +1039,6 @@ Result<void> RenderThread::ensure_pipelines() {
     return Err(text_unit_quad.error());
   }
   text_unit_quad_mesh_ = std::move(*text_unit_quad);
-
-  auto axes_mesh = create_gpu_mesh(*device_, make_axes_mesh());
-  if (!axes_mesh) {
-    return Err(axes_mesh.error());
-  }
-  axes_mesh_ = std::move(*axes_mesh);
 
   auto preview_line_mesh = create_gpu_mesh(*device_, make_preview_line_mesh());
   if (!preview_line_mesh) {
@@ -1240,11 +1290,6 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     channel.instance_write_offset += bytes;
     return true;
   };
-  auto bind_identity_instance = [&]() {
-    const GpuInstance inst =
-        make_gpu_instance(Mat4::identity(), Vec3{1.f, 1.f, 1.f}, 1.f, 0.6f, 0.f, false);
-    upload_instances(std::span<const GpuInstance>{&inst, 1});
-  };
   // 背景：天空 + 地面 + 工作平面网格，一块全屏三角画完（见 shaders/sky.frag.hlsl）。
   // 它不采样 IBL——背景是设计过的配色，不再由环境立方体决定；模型自己的 IBL
   // 反射照旧。push constant 的复用约定：
@@ -1275,25 +1320,6 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     sd.index_count = sky_mesh_.index_count;
     channel.command_list->draw_indexed(sd);
   }
-
-  // 无光照线条（mode 3）：地面网格 + 坐标轴。
-  auto draw_lines = [&](PipelineState& pipeline, const GpuMesh& mesh) {
-    PushConstants pc{};
-    pc.mvp = view_proj;
-    pc.model = Mat4::identity();
-    pc.color[0] = pc.color[1] = pc.color[2] = pc.color[3] = 1.f;
-    pc.eye_pos_mode[3] = 3.f;
-    channel.command_list->set_pipeline(pipeline);
-    // 网格 shader 静态引用贴图描述符，即使 mode==3 不采样也须绑定合法资源。
-    bind_mesh_sets();
-    channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
-    channel.command_list->set_vertex_buffer(*mesh.vertex_buffer);
-    channel.command_list->set_index_buffer(*mesh.index_buffer);
-    bind_identity_instance();
-    DrawIndexedDesc d{};
-    d.index_count = mesh.index_count;
-    channel.command_list->draw_indexed(d);
-  };
 
   // 模型：留存渲染场景图 + 脏标记增量同步。代次未变时不重建树，
   // 只让 RecordCommands 访问者从留存树录制 draw 命令（视锥剔除 / 隐藏集
@@ -1469,14 +1495,17 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     }
   }
 
-  // 坐标轴（深度测试关，始终可见）。
-  if (frame.show_axes && line_pipeline_ && axes_mesh_.index_buffer) {
-    draw_lines(*line_pipeline_, axes_mesh_);
-  }
-
-  // 预览线（建墙 / 草图曲线 / 贝塞尔控制多边形与控制点 / 网格捕捉，深度测试关）。
-  if (line_pipeline_ && preview_line_mesh_.index_buffer) {
-    TAMIAS_GPU_ZONE(*channel.command_list, "gpu.overlay");
+  // overlay 线条（深度测试关，永远看得见）：世界坐标轴 + 建墙 / 草图曲线 / 贝塞尔
+  // 控制多边形与控制点 / 夹点 / 捕捉点 / 轴网 / 调试段。**先收集成线段**，再走屏幕
+  // 空间像素线管线（shaders/line.vert.hlsl）：线宽是设备像素、带抗锯齿，整批一次
+  // 实例化 draw——以前是每段一次 push constant + draw，轴网密一点就上千次提交。
+  // 收集顺序 = 绘制顺序（都不测深度、都混合）：轴网垫底，调试顶点压在最上面。
+  std::uint32_t overlay_line_instances = 0;
+  std::uint32_t overlay_line_draws = 0;
+  {
+    const float overlay_w = (std::max)(frame.line_width_px, 0.5f);
+    const float grid_w = (std::max)(frame.grid_line_width_px, 0.5f);
+    std::vector<OverlayLine> lines;
     const bool has_curve = frame.preview_polyline.size() >= 2;
     const bool has_controls = frame.preview_control_polyline.size() >= 2;
     const bool has_points = !frame.preview_points.empty();
@@ -1487,36 +1516,27 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
     const bool has_grid_preview = frame.grid_preview_segments.size() >= 2;
     const bool has_grid_selected = frame.grid_selected_segments.size() >= 2;
     const bool has_vertex = frame.debug_vertex.has_value();
+    const bool has_axes = frame.show_axes;
     if (has_curve || has_controls || has_points || has_grips || has_snap || has_debug ||
-        has_grid || has_grid_preview || has_grid_selected || has_vertex) {
-      channel.command_list->set_pipeline(*line_pipeline_);
-      bind_mesh_sets();
-      channel.command_list->set_vertex_buffer(*preview_line_mesh_.vertex_buffer);
-      channel.command_list->set_index_buffer(*preview_line_mesh_.index_buffer);
-
-      auto draw_segment = [&](Vec3 start, Vec3 end, float r, float g, float b) {
-        const Vec3 d = end - start;
-        const float seg_len = length(d);
-        if (seg_len < 1e-6f) {
+        has_grid || has_grid_preview || has_grid_selected || has_vertex || has_axes) {
+      // 收集一条线段。width ≤ 0 表示「用 overlay 的默认线宽」——轴网那几处显式传
+      // 自己的（和天空背景网格一样细）。
+      auto draw_segment = [&](Vec3 start, Vec3 end, float r, float g, float b,
+                              float width = 0.f) {
+        if (length(end - start) < 1e-6f) {
           return;
         }
-        const Mat4 model = segment_model(start, end);
-        PushConstants pc{};
-        pc.mvp = view_proj;
-        pc.model = Mat4::identity();
-        pc.color[0] = r;
-        pc.color[1] = g;
-        pc.color[2] = b;
-        pc.color[3] = 1.f;
-        pc.eye_pos_mode[3] = 3.f;  // mode 3 = 无光照线条
-        channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
-        const GpuInstance inst =
-            make_gpu_instance(model, Vec3{1.f, 1.f, 1.f}, 1.f, 0.6f, 0.f, false);
-        upload_instances(std::span<const GpuInstance>{&inst, 1});
-        DrawIndexedDesc pd{};
-        pd.index_count = preview_line_mesh_.index_count;
-        channel.command_list->draw_indexed(pd);
+        lines.push_back(
+            OverlayLine{start, end, Vec3{r, g, b}, width > 0.f ? width : overlay_w});
       };
+
+      // 世界坐标轴（X 红 / Y 绿 / Z 蓝）。以前是一条独立的 LineList 网格再单独 draw，
+      // 现在混进同一批线段：颜色和线宽就只剩这一份定义。
+      if (has_axes) {
+        draw_segment({0.f, 0.f, 0.f}, {1.f, 0.f, 0.f}, 1.f, 0.f, 0.f);
+        draw_segment({0.f, 0.f, 0.f}, {0.f, 1.f, 0.f}, 0.f, 1.f, 0.f);
+        draw_segment({0.f, 0.f, 0.f}, {0.f, 0.f, 1.f}, 0.f, 0.f, 1.f);
+      }
 
       auto draw_polyline = [&](const std::vector<Vec3>& pts, float r, float g, float b) {
         for (std::size_t i = 0; i + 1 < pts.size(); ++i) {
@@ -1581,26 +1601,25 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
 
       // 轴网先画：它是底图，预览线/夹点要在它上面。
       if (has_grid) {
-        // 实线而不是虚线：这条通路是逐段提交（每段一次 push constant + 实例上传），
-        // 一根 20 m 的轴按 0.1 m 虚线画就是上百次提交，几十根轴直接上千。轴网用
-        // 更淡的颜色和构件区分，不靠虚线。
+        // 实线而不是虚线（虚线得在 shader 里做，见下），线宽取 grid_line_width_px：
+        // 和天空背景的工作平面网格一样细，轴网才像底图而不像构件。
         const std::vector<Vec3>& pts = frame.grid_line_segments;
         for (std::size_t i = 0; i + 1 < pts.size(); i += 2) {
-          draw_segment(pts[i], pts[i + 1], 0.52f, 0.58f, 0.66f);
+          draw_segment(pts[i], pts[i + 1], 0.52f, 0.58f, 0.66f, grid_w);
         }
       }
       if (has_grid_preview) {
         // 放置预览：同样的线，但用高亮色，和已经落位的轴网分得开。
         const std::vector<Vec3>& pts = frame.grid_preview_segments;
         for (std::size_t i = 0; i + 1 < pts.size(); i += 2) {
-          draw_segment(pts[i], pts[i + 1], 0.30f, 0.92f, 1.00f);
+          draw_segment(pts[i], pts[i + 1], 0.30f, 0.92f, 1.00f, grid_w);
         }
       }
       if (has_grid_selected) {
-        // 选中的轴线：琥珀色压在轴网上，一眼看出选的是哪几根。
+        // 选中的轴线：琥珀色 + 两倍线宽压在轴网上，一眼看出选的是哪几根。
         const std::vector<Vec3>& pts = frame.grid_selected_segments;
         for (std::size_t i = 0; i + 1 < pts.size(); i += 2) {
-          draw_segment(pts[i], pts[i + 1], 1.00f, 0.62f, 0.22f);
+          draw_segment(pts[i], pts[i + 1], 1.00f, 0.62f, 0.22f, grid_w * 2.f);
         }
       }
       if (has_controls) {
@@ -1674,7 +1693,95 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
         const Vec3 uv_color_pos = p + tangent * (half * 0.35f) + bitangent * (half * 0.35f);
         draw_square(uv_color_pos, half * 0.22f, u * 0.5f, vv * 0.5f, 0.15f);
       }
+
+      // 提交。有屏幕空间像素线管线就整批实例化（一批画不完就按实例缓冲容量分几批，
+      // 顺序不变，混合结果和一次画完一样）；没有（缺 shader 的构建 / 浏览器后端）
+      // 退回逐段 LineList——线宽回到硬件的 1 px，但线条还在。
+      const bool pixel_lines = line_ss_pipeline_ && line_quad_mesh_.index_buffer;
+      if (pixel_lines) {
+        TAMIAS_GPU_ZONE(*channel.command_list, "gpu.overlay_lines");
+        std::vector<GpuInstance> instances;
+        instances.reserve(lines.size());
+        for (const OverlayLine& line : lines) {
+          instances.push_back(make_line_instance(line));
+        }
+        channel.command_list->set_pipeline(*line_ss_pipeline_);
+        // 线条 shader 不采样任何贴图，但这条通路一直这么绑（默认 1×1 资源），
+        // 省得将来往 shader 里加贴图时踩到未绑定的描述符。
+        bind_mesh_sets();
+        channel.command_list->set_vertex_buffer(*line_quad_mesh_.vertex_buffer);
+        channel.command_list->set_index_buffer(*line_quad_mesh_.index_buffer);
+        PushConstants pc{};
+        pc.mvp = view_proj;
+        pc.model = Mat4::identity();
+        pc.color[0] = pc.color[1] = pc.color[2] = pc.color[3] = 1.f;
+        // 线条 shader 在屏幕空间撑四边形，需要视口尺寸（和文字共用 eye_pos_mode.xy）。
+        pc.eye_pos_mode[0] = static_cast<float>(channel.swap_chain->width());
+        pc.eye_pos_mode[1] = static_cast<float>(channel.swap_chain->height());
+        channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
+        // 实例缓冲按 ping-pong 分槽（见上面的 kInstanceSlots）：一批装不下就分批画，
+        // 顺序不变（同一深度上的混合结果和一次画完一样）。容量按**当前**缓冲算，
+        // 因为模型那一遍可能刚把这个缓冲换大过。
+        const std::uint64_t buffer_bytes =
+            channel.instance_buffer ? channel.instance_buffer->desc().size : 0;
+        std::size_t first = 0;
+        while (first < instances.size() && buffer_bytes >= kInstanceSlots) {
+          const std::uint64_t slot_bytes = buffer_bytes / kInstanceSlots;
+          const std::uint64_t used = channel.instance_write_offset;
+          const std::uint64_t slot_end = slot_bytes * (used / slot_bytes + 1);
+          if (used + sizeof(GpuInstance) > slot_end || used >= buffer_bytes) {
+            break;  // 这一槽塞满了，剩下的这一帧不画（下帧从新槽开始）
+          }
+          const std::size_t capacity =
+              static_cast<std::size_t>((slot_end - used) / sizeof(GpuInstance));
+          const std::size_t count = (std::min)(capacity, instances.size() - first);
+          if (!upload_instances(
+                  std::span<const GpuInstance>(instances.data() + first, count))) {
+            break;
+          }
+          DrawIndexedDesc d{};
+          d.index_count = line_quad_mesh_.index_count;
+          d.instance_count = static_cast<std::uint32_t>(count);
+          channel.command_list->draw_indexed(d);
+          ++overlay_line_draws;
+          first += count;
+        }
+        overlay_line_instances = static_cast<std::uint32_t>(first);
+      } else if (line_pipeline_ && preview_line_mesh_.index_buffer) {
+        TAMIAS_GPU_ZONE(*channel.command_list, "gpu.overlay");
+        channel.command_list->set_pipeline(*line_pipeline_);
+        // 网格 shader 静态引用贴图描述符，即使 mode==3 不采样也须绑定合法资源。
+        bind_mesh_sets();
+        channel.command_list->set_vertex_buffer(*preview_line_mesh_.vertex_buffer);
+        channel.command_list->set_index_buffer(*preview_line_mesh_.index_buffer);
+        for (const OverlayLine& line : lines) {
+          PushConstants pc{};
+          pc.mvp = view_proj;
+          pc.model = Mat4::identity();
+          pc.color[0] = line.color.x;
+          pc.color[1] = line.color.y;
+          pc.color[2] = line.color.z;
+          pc.color[3] = 1.f;
+          pc.eye_pos_mode[3] = 3.f;  // mode 3 = 无光照线条
+          channel.command_list->set_push_constants(std::as_bytes(std::span{&pc, 1}));
+          const GpuInstance inst = make_gpu_instance(segment_model(line.start, line.end),
+                                                     Vec3{1.f, 1.f, 1.f}, 1.f, 0.6f, 0.f, false);
+          upload_instances(std::span<const GpuInstance>{&inst, 1});
+          DrawIndexedDesc pd{};
+          pd.index_count = preview_line_mesh_.index_count;
+          channel.command_list->draw_indexed(pd);
+          ++overlay_line_draws;
+        }
+        overlay_line_instances = static_cast<std::uint32_t>(lines.size());
+      }
     }
+  }
+
+  // overlay 线条的统计要画完才知道，单独补一次（上面那次发布带的是录制阶段的数）。
+  {
+    std::scoped_lock lock(mutex_);
+    last_stats_.overlay_line_instances = overlay_line_instances;
+    last_stats_.overlay_line_draws = overlay_line_draws;
   }
 
   channel.command_list->end_render_pass();

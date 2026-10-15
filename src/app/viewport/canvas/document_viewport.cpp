@@ -1045,6 +1045,10 @@ void DocumentViewport::submit_current_frame() {
   frame.fovy = camera_.fovy();
   frame.orthographic = camera_.orthographic();
   frame.mode = mode_;
+  // overlay 线条的线宽是**设备像素**：这里乘 DPR，HiDPI 屏上粗细才和逻辑像素一致
+  // （和文字标注 size * dpr 同一个道理，见 FrameSubmission::line_width_px）。
+  frame.line_width_px = kOverlayLineWidthPx * static_cast<float>(dpr);
+  frame.grid_line_width_px = kGridLineWidthPx * static_cast<float>(dpr);
   frame.xray = xray_ ? kXrayOpacity : 0.f;
   refresh_floors();
   // 留存场景图的同步源必须是全量清单（无视锥剔除）；剔除/可见性过滤移到渲染

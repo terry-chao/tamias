@@ -12,6 +12,7 @@
 #include "engine/render/runtime/render_frame_stats.h"
 #include "engine/render/runtime/render_types.h"
 #include "engine/render/runtime/resident_cache.h"
+#include "engine/render/runtime/line_instance.h"
 #include "engine/render/runtime/text_quad.h"
 
 #include <atomic>
@@ -38,6 +39,12 @@ struct DrawingOverlay {
   std::uint64_t texture_id = 0;
   float opacity = 1.f;
 };
+
+// overlay 线条的默认线宽（**逻辑**像素）：视口按 devicePixelRatio 乘成设备像素再填进
+// FrameSubmission（和文字标注 size * dpr 一个道理）。1.5 px 的一般线条比硬件的 1 px
+// 发丝线稳，轴网取 1 px 和天空背景的工作平面网格对齐。
+inline constexpr float kOverlayLineWidthPx = 1.5f;
+inline constexpr float kGridLineWidthPx = 1.0f;
 
 struct FrameSubmission {
   NativeWindowHandle window{};
@@ -66,6 +73,12 @@ struct FrameSubmission {
   // 按语义节点 id 隐藏（视口 floor/类别/isolate 过滤；录制时生效）。
   std::vector<std::uint64_t> hidden_node_ids;
   bool show_axes = true;  // 世界坐标轴（X红/Y绿/Z蓝）
+  // overlay 通道的**屏幕空间像素线宽**（设备像素，见 shaders/line.vert.hlsl）：
+  // 预览线 / 草图曲线 / 夹点 / 捕捉 / 调试段吃 line_width_px，轴网与轴线吃
+  // grid_line_width_px（和天空背景网格那 1 px 对齐）。视口按 devicePixelRatio 乘进来，
+  // HiDPI 上才不会越看越细。
+  float line_width_px = kOverlayLineWidthPx;
+  float grid_line_width_px = kGridLineWidthPx;
   std::vector<Vec3> preview_polyline;
   std::vector<Vec3> preview_control_polyline;  // 贝塞尔控制多边形
   std::vector<Vec3> preview_points;            // 控制点标记
@@ -229,6 +242,13 @@ class RenderThread {
   std::unique_ptr<ShaderModule> text_fs_;
   std::unique_ptr<PipelineState> text_pipeline_;
   GpuMesh text_unit_quad_mesh_;
+  // 屏幕空间像素线（overlay 线条）：单位四边形 + 每段一个实例，实例同样复用
+  // GpuInstance 布局（见 line_instance.h）。桌面后端才有这对 shader：WebGL / WebGPU
+  // 不建这条管线，overlay 线条退回逐段 LineList（见 draw_channel 里的兜底分支）。
+  std::unique_ptr<ShaderModule> line_vs_;
+  std::unique_ptr<ShaderModule> line_fs_;
+  std::unique_ptr<PipelineState> line_ss_pipeline_;
+  GpuMesh line_quad_mesh_;
   GpuMesh sky_mesh_;
   GpuMesh preview_line_mesh_;
   std::unordered_map<std::uint64_t, GpuMesh> meshes_;
