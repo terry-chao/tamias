@@ -172,6 +172,9 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 |---|---|
 | `mesh.vert.hlsl` / `mesh.frag.hlsl` | 模型：变换 + 光照 + 贴图 + 选中 |
 | `sky.vert.hlsl` / `sky.frag.hlsl` | 视口背景：天空渐变 + 地面 + 工作平面网格 |
+| `overlay.vert.hlsl` / `overlay.frag.hlsl` | 参考图纸底图：贴图四边形，不打光 |
+| `text.vert.hlsl` / `text.frag.hlsl` | 屏幕空间文字：字形四边形（像素矩形 → NDC） |
+| `line.vert.hlsl` / `line.frag.hlsl` | 屏幕空间像素线：overlay 的轴 / 预览线 / 轴网（世界线段 + 像素线宽 + 抗锯齿） |
 
 每套编出两份：`mesh.vert.spv` 和 `mesh.vert.gl.spv`（见 [TamiasShaders.cmake](https://github.com/terry-chao/tamias/blob/main/cmake/TamiasShaders.cmake)）。运行时按后端加载。
 
@@ -182,8 +185,11 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 | `sky_pipeline_` | 全屏三角，不测深度（当背景） |
 | `shaded_pipeline_` | 实心三角 |
 | `wire_pipeline_` | 同一套 mesh shader，只把光栅变成线框 |
-| `line_pipeline_` | 线段，不测深度（轴和预览线永远在最前） |
+| `entity_line_pipeline_` | 草图实体线：`LineList` + 测深度（看起来是线，而不是挤出的小圆柱） |
+| `line_ss_pipeline_` | 屏幕空间像素线：三角拓扑 + 每段一个实例，线宽是**设备像素**、带抗锯齿（overlay 的轴 / 预览线 / 轴网 / 夹点 / 捕捉 / 调试段，见 §7.1） |
+| `line_pipeline_` | 线段（`LineList`），不测深度：缺像素线 shader 时的兜底通路 |
 | `overlay_pipeline_` | 参考图纸底图：无光照 + 贴图 + 预乘 alpha，测深度、不写深度（挡在前面的构件遮住它） |
+| `text_pipeline_` | 屏幕空间文字：字形实例化四边形 + 图集，预乘混合 |
 
 **Push constants**：每画一次物体塞给 shader 的一小包数——MVP 矩阵、模型矩阵、颜色、粗糙度/金属度、有没有 albedo/法线贴图、光线方向、是否选中、眼睛位置、显示模式、IBL mip。没有大块材质 UBO。
 
@@ -198,8 +204,8 @@ Tamias 的 shader 用 **HLSL** 写在 `shaders/`，构建时用 Vulkan SDK 的 *
 2. 背景      全屏大三角：天空渐变 + 地面 + 工作平面网格，不写深度
 3. 模型      清单里每一项一次 draw_indexed（没有合批；屏外叶子已在展平时丢掉，见 [视锥剔除](FRUSTUM-CULLING.md)）
 4. 图纸底图  每张参考图纸一次 draw_indexed（无光照 + 贴图平面，挡在它前面的构件遮住它，见 [参考图纸](DRAWING.md)）
-5. 世界坐标轴  X 红 Y 绿 Z 蓝，不测深度
-6. 预览线    拖墙时起点→光标
+5. 屏幕空间文字  标注（轴号 / 标高 / 尺寸），一批实例化 draw
+6. overlay 线条  世界坐标轴 + 预览线 + 轴网 + 夹点 / 捕捉 / 调试段，屏幕空间像素线，一批实例化 draw（见 §7.1）
 7. 把这张图画到窗口（swap / present）
 ```
 
@@ -236,6 +242,27 @@ tan(半视角)，正交下是半宽 / 半高——所以平面视图（正交顶
 
 **现在：** 同几何会 intern 成一份 `MeshAsset`（G1a）。**还没有：** GPU instancing、透明排序。屏外叶子一期已经不进清单；一万个仍在画面里的同型号柱仍是一万次 draw（网格已共享）。方案见 [合批 / Instancing](INSTANCING.md)。
 
+### 7.1 overlay 线条：屏幕空间像素线
+
+轴、预览线、草图曲线、贝塞尔控制多边形与控制点、夹点、捕捉点、轴网、调试段**共用一条通路**：
+CPU 侧先把它们收进一张 `OverlayLine` 表（世界两端点 + 颜色 + 像素线宽，[line_instance.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/line_instance.h)），
+再打包成 `GpuInstance` 实例记录，一次实例化 draw 画完。
+
+顶点把两个端点投影到屏幕，在**屏幕空间**按法线把线段撑成四边形；片元按「到中线的像素距离」
+算覆盖率（`|d|` 落在 `半宽 ± 0.5 px` 之间时淡出，[line.frag.hlsl](https://github.com/terry-chao/tamias/blob/main/shaders/line.frag.hlsl)）。
+于是：
+
+- **线宽和相机无关**：拉远拉近都是那几个像素粗。硬件 `LineList` 做不到——Vulkan 的
+  `lineWidth` 被钉在 1（`rs.lineWidth = 1.f`），而且没有抗锯齿；
+- **合批**：一千根轴线是 1 次 draw，而不是 1000 次 `set_push_constants + draw_indexed`
+  （本帧的数在 `RenderFrameStats::overlay_line_instances` / `overlay_line_draws` 里）；
+- 线宽由 `FrameSubmission::line_width_px` / `grid_line_width_px` 给，单位是**设备像素**：
+  视口按 `devicePixelRatio` 乘进来，HiDPI 屏上才不会越看越细（和文字标注 `size * dpr` 同理）。
+
+实例仍然复用 `GpuInstance` 的 96 字节布局（字段含义由 `line.vert.hlsl` 解释，和文字实例一个
+套路），所以四条 RHI 后端都不用按新属性改。WebGL / WebGPU 还没有这对 shader，那两个后端走
+兜底：逐段 `LineList`（`line_pipeline_`），线宽回到 1 px。
+
 ---
 
 ## 8. 三种显示模式
@@ -248,7 +275,8 @@ tan(半视角)，正交下是半宽 / 半高——所以平面视图（正交顶
 | 着色 Shaded | 1 | Lambert：构件识别色 × 光线点积，不读材质贴图 |
 | 真实 Realistic | 2 | PBR metallic-roughness：GGX 高光 + 方向光 + split-sum IBL（工作室环境立方体） |
 
-另外 `mode == 3` 给坐标轴/预览线：顶点自带颜色，不打光。
+另外 `mode == 3` 是**兜底线条**用的（overlay 线条在拿不到屏幕空间像素线管线时才走它）：
+顶点自带颜色，不打光。
 
 着色和真实都会做一件 CAD 视口常做的事：若三角的几何法线背对相机就 `discard`。这样不用依赖 GPU 的正面判定（Vulkan 翻了 Y 之后绕序很脆），模型内部不容易透出来。
 

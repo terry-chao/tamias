@@ -434,17 +434,22 @@ grid_line_segments / grid_preview_segments / grid_selected_segments
 debug_line_segments
 ```
 
-渲染侧统一用 `preview_line_mesh_`（一段单位线段）+ 每段一个 `GpuInstance`，逐段 `set_push_constants` + `draw_indexed`（`draw_segment` / `draw_polyline` / `draw_dashed_polyline`）。**它们不进 `BatchKey` 的模型桶**：状态（无光照模式、无深度测试）跟实体完全不同，混进去只会把模型批次拆碎。
+渲染侧先把它们收进一张 `OverlayLine` 表（世界两端点 + 颜色 + 像素线宽，`line_instance.h`），
+再走**屏幕空间像素线**管线：顶点在屏幕空间把线段撑成四边形，片元按到中线的像素距离算覆盖率，
+整批一次实例化 draw（见 [管线与 RHI](RENDERING.md#71-overlay-线条屏幕空间像素线)）。
+线宽因此跟相机距离无关、边缘带抗锯齿；以前是逐段 `set_push_constants + draw_indexed`，
+轴网一密就上千次提交。**它们不进 `BatchKey` 的模型桶**：状态（无光照模式、无深度测试）跟实体
+完全不同，混进去只会把模型批次拆碎。
 
 ### 为什么临时图元要单开通道
 
 1. **生命周期不同**：模型网格「几何变了才上传」，预览线「每帧都变」；
-2. **深度语义不同**：预览线要「永远看得见」（`line_pipeline` 不测深度），模型要遮挡；
+2. **深度语义不同**：预览线要「永远看得见」（`line_ss_pipeline_` / 兜底的 `line_pipeline_` 都不测深度），模型要遮挡；
 3. **不污染统计**：`RenderFrameStats::triangles` 只算三角面，`as_lines` 的不计。
 
 ### 实例化怎么处理
 
-实例数据是 `GpuInstance`（80 字节：world 3×4 仿射矩阵 + 颜色 + 材质，[gpu_instance.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/gpu_instance.h)），走**顶点 instance rate** 的第二个顶点缓冲，而不是一个一个 push constant：
+实例数据是 `GpuInstance`（96 字节：world 3×4 仿射矩阵 + 颜色 + 材质，[gpu_instance.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/gpu_instance.h)），走**顶点 instance rate** 的第二个顶点缓冲，而不是一个一个 push constant：
 
 ```
 RecordCommands::enqueue(batch, instance)   → 按 BatchKey 找桶

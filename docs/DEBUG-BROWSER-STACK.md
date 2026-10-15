@@ -239,7 +239,7 @@ OCCT 本身基本是黑盒，别指望单步进内核。有效的办法是在边
    （[GEOMETRY-SERVICE-PLAN.md §6.3](https://github.com/terry-chao/tamias/blob/main/GEOMETRY-SERVICE-PLAN.md)）。同源方案能顺带消掉这个噪声。
 5. **Asyncify 在帧内挂起**：页面卡死、栈停在 `requestAnimationFrame` 里。纪律是死的：
    **网络只从命令路径发起，帧内只 poll**（[GEOMETRY-SERVICE-PLAN.md §7.4](https://github.com/terry-chao/tamias/blob/main/GEOMETRY-SERVICE-PLAN.md)）。
-6. **静默不建管线**：WebGL 下 text / overlay 两条管线是**静默不建**的，日志里
+6. **静默不建管线**：WebGL 下 text / overlay / line 三条管线是**静默不建**的，日志里
    **不会有任何提示**（[WEBGL-PIPELINE-AUDIT.md](WEBGL-PIPELINE-AUDIT.md) 专门纠正了
    旧文档让你去日志里找的做法）。只能靠 Spector.js 数 draw call。
 7. **`mesh_binary` 格式缺口**：`line_list` / `has_texcoord` / `faces` 缺失。跨边界传网格会

@@ -79,7 +79,7 @@
 ### ① 文字标注 + 图纸底图：**两层都断了** —— 唯一「功能存在但看不见」的硬伤
 
 **第一层（计划文档记了）**：`webgl_shaders.h` 只有 `mesh_vert/frag` + `sky_vert/frag`，
-**没有 text / overlay**；`render_runtime.cpp` 里这两条管线被 `if (!webgl && !webgpu)` 整段跳过
+**没有 text / overlay / line**；`render_runtime.cpp` 里这三条管线被 `if (!webgl && !webgpu)` 整段跳过
 （[`:848`](../src/engine/render/runtime/render_runtime.cpp#L848)、[`:898`](../src/engine/render/runtime/render_runtime.cpp#L898)）。
 全文 grep 确认：**这是仅有的两处** web 后端被跳过的地方，mesh/sky 都有 WebGL 分支。
 
@@ -272,8 +272,8 @@ GLES 3.0 没有 polygon mode，`WebGLPipeline` **连 `desc.wireframe` 都不存*
 ⇒ **浏览器画面很可能比 Vulkan 参考偏暗** —— 这与桌面 GL 已记录的同类问题
 （`opengl/README.md:600-602`「画面偏暗」）是同一类。**未运行浏览器验证，按推断对待。**
 
-**f. 细节：`ensure_pipelines()` 的早退条件不含 text/overlay**（`:660-667`）——
-所以这两条管线一旦创建失败，就**不会再重试**（其余资源齐了就早退）。
+**f. 细节：`ensure_pipelines()` 的早退条件不含 text/overlay/line**（`:660-667`）——
+所以这三条管线一旦创建失败，就**不会再重试**（其余资源齐了就早退）。
 
 **g. 细节：文字图集采样器靠默认落在 0 号槽。** `WebGLDevice::create_pipeline` 只显式绑了
 mesh 那六个采样器（`webgl_device.cpp:571-606`），`atlas_tex` / `albedo_tex` 没绑；
@@ -359,4 +359,5 @@ powershell -File scripts/wasm-preview.ps1
 
 功能面复验：打开示例文档 → 建一段文字标注（注释组）→ **确认视口里没有文字**（这是 ① 的现场）。
 注意 `logText()` 面板里**不会有**任何提示：WebGL 走不到那几行 `log_error`（它们在被跳过的守卫块**内部**），
-两条管线是**静默不建**的。（`WEBGL-EXP-IMPLEMENTATION-PLAN.md:352` 让你去日志里找这两条，是错的。）
+三条管线（text / overlay / line）是**静默不建**的。（`WEBGL-EXP-IMPLEMENTATION-PLAN.md:352`
+让你去日志里找这两条，是错的。）overlay 线条照旧画：它走 `line_pipeline_` 的逐段 LineList 兜底。

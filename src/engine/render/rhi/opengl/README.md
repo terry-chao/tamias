@@ -472,7 +472,7 @@ else
   gl::DrawElements(mode, desc.index_count, GL_UNSIGNED_INT, index_ptr);
 ```
 
-注意 `LineList` 走**独立的 pipeline**（`line_pipeline_`），而不是靠线框——线框（`wireframe_`）是 `glPolygonMode(GL_LINE)`，拓扑仍是三角形、画的是三角边；`LineList` 是索引成对解释、画的是真正的线段（轴线、预览线、栅格用这个）。
+注意 `LineList` 走**独立的 pipeline**（`entity_line_pipeline_`），而不是靠线框——线框（`wireframe_`）是 `glPolygonMode(GL_LINE)`，拓扑仍是三角形、画的是三角边；`LineList` 是索引成对解释、画的是真正的线段（草图实体线用这个）。overlay 的轴 / 预览线 / 轴网走的是**屏幕空间像素线**（`line_ss_pipeline_`，拓扑仍是三角形：顶点在屏幕空间把线段撑成四边形，线宽按设备像素算，见 [管线与 RHI](../../../../../docs/RENDERING.md) §7.1）；Windows 上只有 `entity_line_pipeline_` 那条 `LineList` 通路依赖驱动把线宽钉在 1 px。
 
 ## 3.11 Windows 专属的表面辅助函数（1053–1150）
 
