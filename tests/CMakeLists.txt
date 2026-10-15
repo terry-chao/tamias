@@ -13,6 +13,7 @@ add_executable(tamias_tests smoke_tests.cpp location_tests.cpp ifc_spatial_tree_
   length_text_tests.cpp grid_dimensions_tests.cpp annotation_layout_tests.cpp
   text_annotation_tests.cpp vulkan_loader_tests.cpp rhi_selection_tests.cpp
   offscreen_render_tests.cpp scene_capture_tests.cpp edit_operations_tests.cpp
+  overlay_line_tests.cpp overlay_line_render_tests.cpp
   interaction_tests.cpp mcp_server_tests.cpp mcp_session_backend_tests.cpp
   meshy_protocol_tests.cpp
   rag_tokenizer_tests.cpp rag_bm25_tests.cpp rag_lexical_provider_tests.cpp
