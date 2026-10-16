@@ -14,7 +14,10 @@ function(tamias_deploy_qt_runtime target)
     return()
   endif()
   get_filename_component(_qt_bin_dir "${_qmake_location}" DIRECTORY)
-  find_program(TAMIAS_WINDEPLOYQT windeployqt HINTS "${_qt_bin_dir}")
+  # 不缓存：find_program 默认把结果写进 CMakeCache，换 Qt 版本/prefix 之后缓存里
+  # 那条已经删掉的 windeployqt 路径仍然会被用，POST_BUILD 直接失败。
+  unset(TAMIAS_WINDEPLOYQT CACHE)
+  find_program(TAMIAS_WINDEPLOYQT NAMES windeployqt HINTS "${_qt_bin_dir}" NO_CACHE)
   if(NOT TAMIAS_WINDEPLOYQT)
     message(WARNING "windeployqt not found; Qt DLLs will not be copied next to ${target}")
     return()
