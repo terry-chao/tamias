@@ -28,7 +28,7 @@
         "VCPKG_INSTALLATION_ROOT": "C:/dev/vcpkg"
       },
       "cacheVariables": {
-        "TAMIAS_QT_PREFIX": "C:/Qt/6.11.1/msvc2022_64",
+        "TAMIAS_QT_PREFIX": "C:/Qt/6.12.0/msvc2022_64",
         "TAMIAS_TACUI_SOURCE_DIR": "C:/dev/TacUI",
         "CMAKE_C_COMPILER": "cl.exe",
         "CMAKE_CXX_COMPILER": "cl.exe",

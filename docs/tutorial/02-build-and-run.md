@@ -11,7 +11,7 @@ C++ 3D 项目几乎都依赖一堆第三方库（图形 API、几何内核、UI 
 | 依赖 | 说明 |
 |---|---|
 | **Visual Studio 2022/2026**（C++ 桌面开发） | 编译器 + 调试器 |
-| **Qt 6**（测试过 6.11.1 `msvc2022_64`） | 桌面 UI 框架 |
+| **Qt 6**（测试过 6.12.0 `msvc2022_64`） | 桌面 UI 框架 |
 | **Vulkan SDK** | 主渲染后端 + shader 编译 |
 | **vcpkg**（放在 `C:\dev\vcpkg`） | 包管理器，装 OCCT |
 | **CMake 3.24+** | 构建系统 |
@@ -25,7 +25,7 @@ Linux 用 `linux` preset，装 Qt6/Vulkan 即可，OCCT 仍走 vcpkg。详细步
 ```powershell
 $env:VULKAN_SDK = 'C:\VulkanSDK\<你的版本>'
 $env:VCPKG_ROOT = 'C:\dev\vcpkg'
-$env:Path = "$env:VULKAN_SDK\Bin;C:\Qt\6.11.1\msvc2022_64\bin;$env:Path"
+$env:Path = "$env:VULKAN_SDK\Bin;C:\Qt\6.12.0\msvc2022_64\bin;$env:Path"
 
 cmake --preset msvc                        # 1. 配置：找依赖、生成工程
 cmake --build --preset relwithdebinfo --parallel   # 2. 编译

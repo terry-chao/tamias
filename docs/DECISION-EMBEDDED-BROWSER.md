@@ -114,7 +114,7 @@ Chromium 是多进程的：要打包 `QtWebEngineProcess`、resources、locales�
 
 Release 安装包增量在**百 MB 量级**（`QtWebEngineCore` 单个 DLL 就接近百 MB，另加 resources/locales），
 Debug 构建树可上 GB；运行时内存基线每个进程百 MB 级。构建侧：Windows 现用官方 Qt
-（`CMakePresets.json` 的 `TAMIAS_QT_PREFIX=C:/Qt/6.11.1/msvc2022_64`，
+（`CMakePresets.json` 的 `TAMIAS_QT_PREFIX=C:/Qt/6.12.0/msvc2022_64`，
 **当前这台机器没装 WebEngine 组件**，要先用 Maintenance Tool 装），Linux 线走 vcpkg，
 `qtwebengine` 是出了名的重 port（小时级构建，CI 时间直接上涨）。
 

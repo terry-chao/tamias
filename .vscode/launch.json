@@ -49,7 +49,7 @@
       "environment": [
         {
           "name": "PATH",
-          "value": "C:/Qt/6.11.1/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
+          "value": "C:/Qt/6.12.0/msvc2022_64/bin;${env:VULKAN_SDK}/Bin;${env:PATH}"
         }
       ],
       "logging": {

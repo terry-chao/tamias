@@ -7,7 +7,7 @@ Supports **Windows x64** and **Linux x64** (X11/XCB). C++23, CMake Presets.
 Prerequisites:
 
 - Visual Studio 2022/2026 with C++ desktop workload
-- [Qt 6](https://www.qt.io/) (tested: 6.11.1 `msvc2022_64`)
+- [Qt 6](https://www.qt.io/) (tested: 6.12.0 `msvc2022_64`)
 - [Vulkan SDK](https://vulkan.lunarg.com/)
 - [vcpkg](https://vcpkg.io/) at `C:\dev\vcpkg` (`VCPKG_ROOT`; Open CASCADE comes from `vcpkg.json`, pinned to 7.9.3). Do **not** use the copy bundled with Visual Studio.
 - CMake 3.24+
@@ -15,7 +15,7 @@ Prerequisites:
 ```powershell
 $env:VULKAN_SDK = 'C:\VulkanSDK\<version>'
 $env:VCPKG_ROOT = 'C:\dev\vcpkg'
-$env:Path = "$env:VULKAN_SDK\Bin;C:\Qt\6.11.1\msvc2022_64\bin;$env:Path"
+$env:Path = "$env:VULKAN_SDK\Bin;C:\Qt\6.12.0\msvc2022_64\bin;$env:Path"
 
 # Edit CMakePresets.json TAMIAS_QT_PREFIX if your Qt path differs.
 # If this tree was previously configured with OCCT_ROOT, delete build/ first.
@@ -112,7 +112,7 @@ Requires the [.NET SDK](https://dotnet.microsoft.com/download) (for the WiX tool
 ```powershell
 $env:VULKAN_SDK = 'C:\VulkanSDK\<version>'
 $env:VCPKG_ROOT = 'C:\dev\vcpkg'
-$env:Path = "$env:VULKAN_SDK\Bin;C:\Qt\6.11.1\msvc2022_64\bin;$env:Path"
+$env:Path = "$env:VULKAN_SDK\Bin;C:\Qt\6.12.0\msvc2022_64\bin;$env:Path"
 
 cmd /c "call `"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat`" && cmake --preset msvc && cmake --build --preset msi --parallel"
 ```
