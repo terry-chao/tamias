@@ -17,14 +17,16 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if(MSVC)
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
   add_compile_options(/utf-8 /MP /FS /W4 /permissive- /EHsc)
-  # CMake 把 CMAKE_CL_SHOWINCLUDES_PREFIX 按控制台 ACP 写入 ninja。
-  # cl /utf-8 只改源文件编码，/showIncludes 仍跟控制台代码页走：CP936 输出 GBK，
-  # UTF-8 控制台输出 UTF-8。Ninja 前缀写成 UTF-8，编译用 cl_utf8_launcher 切到 65001。
+  # cl /showIncludes 的前缀跟**控制台代码页**走（本机 clui 只有中文：CP936 出 GBK、
+  # UTF-8 出 UTF-8），而 ninja 拿 msvc_deps_prefix 逐字节比对 cl 的 stdout。
+  # cl_utf8_launcher 把子进程切到 65001，所以这里必须写**真正的 UTF-8 中文**：
+  # 写 ACP 乱码那版永远匹配不上，后果是所有 .obj 记录到的依赖数是 0——改头文件不重编，
+  # 而"每次全量重编"会把这个假象盖住（见 docs/BUILD.md 的增量构建说明）。
   if(CMAKE_GENERATOR MATCHES "Ninja")
-    set(_tamias_showinc "娉ㄦ剰: 鍖呭惈鏂囦欢:  ")
+    set(_tamias_showinc "注意: 包含文件:  ")
     unset(CMAKE_CL_SHOWINCLUDES_PREFIX)
     set(CMAKE_CL_SHOWINCLUDES_PREFIX "${_tamias_showinc}" CACHE STRING
-      "ACP-mojibake of UTF-8 注意: 包含文件:  (two spaces after colon)" FORCE)
+      "cl /showIncludes prefix as UTF-8 注意: 包含文件:  (two spaces after colon)" FORCE)
     set(CMAKE_CL_SHOWINCLUDES_PREFIX "${_tamias_showinc}")
     set(CMAKE_C_CL_SHOWINCLUDES_PREFIX "${_tamias_showinc}")
     set(CMAKE_CXX_CL_SHOWINCLUDES_PREFIX "${_tamias_showinc}")
