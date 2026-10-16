@@ -138,7 +138,7 @@ class OpenGLShaderModule final : public ShaderModule {
   explicit OpenGLShaderModule(GLuint shader) : shader_(shader) {}
   ~OpenGLShaderModule() override {
     if (shader_) {
-      gl::DeleteShader(shader_);
+      glDeleteShader(shader_);
     }
   }
   [[nodiscard]] GLuint handle() const { return shader_; }
@@ -160,7 +160,7 @@ class OpenGLPipeline final : public PipelineState {
         instanced_(instanced) {}
   ~OpenGLPipeline() override {
     if (program_) {
-      gl::DeleteProgram(program_);
+      glDeleteProgram(program_);
     }
   }
   [[nodiscard]] GLuint program() const { return program_; }
@@ -183,7 +183,7 @@ class OpenGLPipeline final : public PipelineState {
 
 class OpenGLFence final : public Fence {
  public:
-  void wait() override { gl::Finish(); }
+  void wait() override { glFinish(); }
   void reset() override {}
 };
 
@@ -317,7 +317,7 @@ class OpenGLDevice final : public RHIDevice {
       return identity;
     }
     const auto read_string = [](GLenum name) -> std::string {
-      const GLubyte* text = gl::GetString(name);
+      const GLubyte* text = glGetString(name);
       return text == nullptr ? std::string() : std::string(reinterpret_cast<const char*>(text));
     };
     identity.os = rhi_current_os();
@@ -351,8 +351,8 @@ class OpenGLDevice final : public RHIDevice {
     if (auto r = ensure_current(); !r) {
       return Err(r.error());
     }
-    gl::Finish();
-    const GLenum error = gl::GetError();
+    glFinish();
+    const GLenum error = glGetError();
     release_current();
     if (error != GL_NO_ERROR) {
       return Err("submit_noop: glFinish reported GL error " + std::to_string(error));
@@ -366,7 +366,7 @@ class OpenGLDevice final : public RHIDevice {
       return Err(r.error());
     }
     GLuint texture = 0;
-    gl::GenTextures(1, &texture);
+    glGenTextures(1, &texture);
     if (texture == 0) {
       return Err("glGenTextures failed");
     }
@@ -388,7 +388,7 @@ class OpenGLDevice final : public RHIDevice {
   Result<void> end_frame(SwapChain& swap_chain) override;
   void wait_idle() override {
     if (ensure_current()) {
-      gl::Finish();
+      glFinish();
       release_current();
     }
   }
@@ -457,7 +457,7 @@ OpenGLBuffer::~OpenGLBuffer() {
     return;
   }
   if (device_->ensure_current()) {
-    gl::DeleteBuffers(1, &buffer_);
+    glDeleteBuffers(1, &buffer_);
   }
   buffer_ = 0;
 }
@@ -472,8 +472,8 @@ Result<void> OpenGLBuffer::write(std::uint64_t offset, std::span<const std::byte
   if (auto r = device_->ensure_current(); !r) {
     return Err(r.error());
   }
-  gl::BindBuffer(target_, buffer_);
-  gl::BufferSubData(target_, static_cast<GLintptr>(offset), static_cast<GLsizeiptr>(data.size()),
+  glBindBuffer(target_, buffer_);
+  glBufferSubData(target_, static_cast<GLintptr>(offset), static_cast<GLsizeiptr>(data.size()),
                     data.data());
   return {};
 }
@@ -483,7 +483,7 @@ OpenGLTexture::~OpenGLTexture() {
     return;
   }
   if (device_->ensure_current()) {
-    gl::DeleteTextures(1, &texture_);
+    glDeleteTextures(1, &texture_);
   }
   texture_ = 0;
 }
@@ -545,7 +545,7 @@ Result<void> OpenGLTexture::write_subresource(std::uint32_t mip, std::uint32_t l
     return Err(r.error());
   }
   const GLenum target = gl_texture_target(desc_);
-  gl::BindTexture(target, texture_);
+  glBindTexture(target, texture_);
   GLint internal = 0;
   GLenum format = GL_RGBA;
   GLenum type = GL_UNSIGNED_BYTE;
@@ -553,25 +553,25 @@ Result<void> OpenGLTexture::write_subresource(std::uint32_t mip, std::uint32_t l
   const GLenum image_target = desc_.dimension == TextureDesc::Dimension::Cube
                                   ? static_cast<GLenum>(GL_TEXTURE_CUBE_MAP_POSITIVE_X + layer)
                                   : GL_TEXTURE_2D;
-  gl::TexImage2D(image_target, static_cast<GLint>(mip), internal, static_cast<GLsizei>(w),
+  glTexImage2D(image_target, static_cast<GLint>(mip), internal, static_cast<GLsizei>(w),
                  static_cast<GLsizei>(h), 0, format, type, data.data());
   const GLint wrap = desc_.address_mode == TextureDesc::AddressMode::Clamp
                          ? static_cast<GLint>(GL_CLAMP_TO_EDGE)
                          : static_cast<GLint>(GL_REPEAT);
-  gl::TexParameteri(target, GL_TEXTURE_WRAP_S, wrap);
-  gl::TexParameteri(target, GL_TEXTURE_WRAP_T, wrap);
+  glTexParameteri(target, GL_TEXTURE_WRAP_S, wrap);
+  glTexParameteri(target, GL_TEXTURE_WRAP_T, wrap);
   if (desc_.dimension == TextureDesc::Dimension::Cube) {
-    gl::TexParameteri(target, GL_TEXTURE_WRAP_R, wrap);
+    glTexParameteri(target, GL_TEXTURE_WRAP_R, wrap);
   }
-  gl::TexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  gl::TexParameteri(target, GL_TEXTURE_MIN_FILTER,
+  glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(target, GL_TEXTURE_MIN_FILTER,
                     mips > 1 ? static_cast<GLint>(GL_LINEAR_MIPMAP_LINEAR)
                              : static_cast<GLint>(GL_LINEAR));
-  gl::TexParameteri(target, GL_TEXTURE_MAX_LEVEL, static_cast<GLint>(mips - 1));
+  glTexParameteri(target, GL_TEXTURE_MAX_LEVEL, static_cast<GLint>(mips - 1));
   if (desc_.dimension != TextureDesc::Dimension::Cube &&
       desc_.format != TextureDesc::Format::R16G16B16A16_SFLOAT &&
       desc_.format != TextureDesc::Format::R16G16_SFLOAT) {
-    gl::TexParameteri(target, GL_TEXTURE_MAX_ANISOTROPY_EXT, 8);
+    glTexParameteri(target, GL_TEXTURE_MAX_ANISOTROPY_EXT, 8);
   }
   return {};
 }
@@ -702,10 +702,10 @@ Result<void> OpenGLDevice::create_dummy_context() {
     return Err(current.error());
   }
 
-  gl::GenBuffers(1, &push_ubo_);
-  gl::BindBuffer(GL_UNIFORM_BUFFER, push_ubo_);
-  gl::BufferData(GL_UNIFORM_BUFFER, 256, nullptr, GL_DYNAMIC_DRAW);
-  gl::GenVertexArrays(1, &vao_);
+  glGenBuffers(1, &push_ubo_);
+  glBindBuffer(GL_UNIFORM_BUFFER, push_ubo_);
+  glBufferData(GL_UNIFORM_BUFFER, 256, nullptr, GL_DYNAMIC_DRAW);
+  glGenVertexArrays(1, &vao_);
 
   release_current();
   return {};
@@ -779,11 +779,11 @@ void OpenGLDevice::destroy() {
   if (context_) {
     (void)make_current_dummy();  // 删 GL 对象得有 current context
     if (vao_) {
-      gl::DeleteVertexArrays(1, &vao_);
+      glDeleteVertexArrays(1, &vao_);
       vao_ = 0;
     }
     if (push_ubo_) {
-      gl::DeleteBuffers(1, &push_ubo_);
+      glDeleteBuffers(1, &push_ubo_);
       push_ubo_ = 0;
     }
     release_current();
@@ -889,10 +889,10 @@ Result<void> OpenGLDevice::create_dummy_context() {
   }
   procs_loaded_ = true;
 
-  gl::GenBuffers(1, &push_ubo_);
-  gl::BindBuffer(GL_UNIFORM_BUFFER, push_ubo_);
-  gl::BufferData(GL_UNIFORM_BUFFER, 256, nullptr, GL_DYNAMIC_DRAW);
-  gl::GenVertexArrays(1, &vao_);
+  glGenBuffers(1, &push_ubo_);
+  glBindBuffer(GL_UNIFORM_BUFFER, push_ubo_);
+  glBufferData(GL_UNIFORM_BUFFER, 256, nullptr, GL_DYNAMIC_DRAW);
+  glGenVertexArrays(1, &vao_);
 
   release_current();
   return {};
@@ -953,11 +953,11 @@ void OpenGLDevice::destroy() {
   if (context_ && display_) {
     (void)make_current_dummy();  // 删 GL 对象得有 current context
     if (vao_) {
-      gl::DeleteVertexArrays(1, &vao_);
+      glDeleteVertexArrays(1, &vao_);
       vao_ = 0;
     }
     if (push_ubo_) {
-      gl::DeleteBuffers(1, &push_ubo_);
+      glDeleteBuffers(1, &push_ubo_);
       push_ubo_ = 0;
     }
     release_current();
@@ -1003,9 +1003,9 @@ Result<std::unique_ptr<Buffer>> OpenGLDevice::create_buffer(const BufferDesc& de
     target = GL_UNIFORM_BUFFER;
   }
   GLuint buffer = 0;
-  gl::GenBuffers(1, &buffer);
-  gl::BindBuffer(target, buffer);
-  gl::BufferData(target, static_cast<GLsizeiptr>(desc.size), nullptr,
+  glGenBuffers(1, &buffer);
+  glBindBuffer(target, buffer);
+  glBufferData(target, static_cast<GLsizeiptr>(desc.size), nullptr,
                  desc.host_visible ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW);
   return std::make_unique<OpenGLBuffer>(this, buffer, desc, target);
 }
@@ -1015,7 +1015,7 @@ Result<std::unique_ptr<ShaderModule>> OpenGLDevice::create_shader_module(
   if (desc.language != ShaderLanguage::Spirv || desc.spirv.empty()) {
     return Err("OpenGL shaders require SPIR-V");
   }
-  if (!gl::ShaderBinary || !gl::SpecializeShader) {
+  if (!glShaderBinary || !glSpecializeShaderARB) {
     return Err("OpenGL SPIR-V unsupported (need GL_ARB_gl_spirv / glSpecializeShader)");
   }
   if (auto r = ensure_current(); !r) {
@@ -1023,23 +1023,23 @@ Result<std::unique_ptr<ShaderModule>> OpenGLDevice::create_shader_module(
   }
   const GLenum type =
       desc.stage == ShaderStage::Fragment ? GL_FRAGMENT_SHADER : GL_VERTEX_SHADER;
-  const GLuint shader = gl::CreateShader(type);
+  const GLuint shader = glCreateShader(type);
   const auto byte_size = static_cast<GLsizei>(desc.spirv.size_bytes());
-  gl::ShaderBinary(1, &shader, GL_SHADER_BINARY_FORMAT_SPIR_V, desc.spirv.data(), byte_size);
-  if (GLenum err = gl::GetError(); err != 0) {
-    gl::DeleteShader(shader);
+  glShaderBinary(1, &shader, GL_SHADER_BINARY_FORMAT_SPIR_V, desc.spirv.data(), byte_size);
+  if (GLenum err = glGetError(); err != 0) {
+    glDeleteShader(shader);
     return Err("glShaderBinary failed (GL error " + std::to_string(err) + ")");
   }
   const GLchar* entry = desc.entry.empty() ? "main" : desc.entry.c_str();
-  gl::SpecializeShader(shader, entry, 0, nullptr, nullptr);
+  glSpecializeShaderARB(shader, entry, 0, nullptr, nullptr);
   GLint status = 0;
-  gl::GetShaderiv(shader, GL_COMPILE_STATUS, &status);
+  glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
   if (!status) {
     GLint log_len = 0;
-    gl::GetShaderiv(shader, GL_INFO_LOG_LENGTH, &log_len);
+    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &log_len);
     std::string log(static_cast<std::size_t>(std::max(log_len, 1)), '\0');
-    gl::GetShaderInfoLog(shader, log_len, nullptr, log.data());
-    gl::DeleteShader(shader);
+    glGetShaderInfoLog(shader, log_len, nullptr, log.data());
+    glDeleteShader(shader);
     return Err(std::string("SPIR-V specialize failed: ") + log.c_str());
   }
   return std::make_unique<OpenGLShaderModule>(shader);
@@ -1054,18 +1054,18 @@ Result<std::unique_ptr<PipelineState>> OpenGLDevice::create_pipeline(const Pipel
   if (auto r = ensure_current(); !r) {
     return Err(r.error());
   }
-  const GLuint program = gl::CreateProgram();
-  gl::AttachShader(program, vs->handle());
-  gl::AttachShader(program, fs->handle());
-  gl::LinkProgram(program);
+  const GLuint program = glCreateProgram();
+  glAttachShader(program, vs->handle());
+  glAttachShader(program, fs->handle());
+  glLinkProgram(program);
   GLint status = 0;
-  gl::GetProgramiv(program, GL_LINK_STATUS, &status);
+  glGetProgramiv(program, GL_LINK_STATUS, &status);
   if (!status) {
     GLint log_len = 0;
-    gl::GetProgramiv(program, GL_INFO_LOG_LENGTH, &log_len);
+    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &log_len);
     std::string log(static_cast<std::size_t>(std::max(log_len, 1)), '\0');
-    gl::GetProgramInfoLog(program, log_len, nullptr, log.data());
-    gl::DeleteProgram(program);
+    glGetProgramInfoLog(program, log_len, nullptr, log.data());
+    glDeleteProgram(program);
     return Err(std::string("program link failed: ") + log.c_str());
   }
   return std::make_unique<OpenGLPipeline>(program, desc.wireframe, desc.depth_test,
@@ -1090,50 +1090,50 @@ Result<void> OpenGLOffscreenTarget::make_current_and_bind() {
   if (auto r = device_->ensure_current(); !r) {
     return Err(r.error());
   }
-  gl::BindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
+  glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
   // 颜色附件是 sRGB：shader 写线性值，这里让驱动做线性→sRGB 编码（默认是关的）。
   // 不打开的话 --render-view / 缩略图会比 Vulkan 那边暗一大截。
-  gl::Enable(GL_FRAMEBUFFER_SRGB);
+  glEnable(GL_FRAMEBUFFER_SRGB);
   return {};
 }
 
 Result<void> OpenGLOffscreenTarget::create() {
   // FBO 那一组入口要是没解析出来（老上下文 / 驱动不给），宁可如实报「不支持」，
   // 也不能去调空函数指针。
-  const bool entries_ready = gl::GenFramebuffers != nullptr && gl::DeleteFramebuffers != nullptr &&
-                             gl::BindFramebuffer != nullptr &&
-                             gl::FramebufferTexture2D != nullptr &&
-                             gl::FramebufferRenderbuffer != nullptr &&
-                             gl::CheckFramebufferStatus != nullptr &&
-                             gl::GenRenderbuffers != nullptr &&
-                             gl::DeleteRenderbuffers != nullptr &&
-                             gl::BindRenderbuffer != nullptr &&
-                             gl::RenderbufferStorage != nullptr && gl::ReadPixels != nullptr;
+  const bool entries_ready = glGenFramebuffers != nullptr && glDeleteFramebuffers != nullptr &&
+                             glBindFramebuffer != nullptr &&
+                             glFramebufferTexture2D != nullptr &&
+                             glFramebufferRenderbuffer != nullptr &&
+                             glCheckFramebufferStatus != nullptr &&
+                             glGenRenderbuffers != nullptr &&
+                             glDeleteRenderbuffers != nullptr &&
+                             glBindRenderbuffer != nullptr &&
+                             glRenderbufferStorage != nullptr && glReadPixels != nullptr;
   if (device_ == nullptr || !entries_ready) {
     return Err("offscreen target: OpenGL framebuffer entry points unavailable");
   }
   if (auto r = device_->ensure_current(); !r) {
     return Err(r.error());
   }
-  gl::GenFramebuffers(1, &framebuffer_);
-  gl::BindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
+  glGenFramebuffers(1, &framebuffer_);
+  glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
 
-  gl::GenTextures(1, &color_);
-  gl::BindTexture(GL_TEXTURE_2D, color_);
-  gl::TexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, static_cast<GLsizei>(width_),
+  glGenTextures(1, &color_);
+  glBindTexture(GL_TEXTURE_2D, color_);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, static_cast<GLsizei>(width_),
                  static_cast<GLsizei>(height_), 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-  gl::TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  gl::TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  gl::FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color_, 0);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color_, 0);
 
-  gl::GenRenderbuffers(1, &depth_);
-  gl::BindRenderbuffer(GL_RENDERBUFFER, depth_);
-  gl::RenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, static_cast<GLsizei>(width_),
+  glGenRenderbuffers(1, &depth_);
+  glBindRenderbuffer(GL_RENDERBUFFER, depth_);
+  glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, static_cast<GLsizei>(width_),
                           static_cast<GLsizei>(height_));
-  gl::FramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth_);
+  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth_);
 
-  const GLenum status = gl::CheckFramebufferStatus(GL_FRAMEBUFFER);
-  gl::BindFramebuffer(GL_FRAMEBUFFER, 0);
+  const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
   if (status != GL_FRAMEBUFFER_COMPLETE) {
     destroy();
     return Err("offscreen framebuffer incomplete");
@@ -1152,15 +1152,15 @@ void OpenGLOffscreenTarget::destroy() {
     return;  // 没有上下文就删不掉 GL 对象，只能留给驱动回收
   }
   if (depth_ != 0) {
-    gl::DeleteRenderbuffers(1, &depth_);
+    glDeleteRenderbuffers(1, &depth_);
     depth_ = 0;
   }
   if (color_ != 0) {
-    gl::DeleteTextures(1, &color_);
+    glDeleteTextures(1, &color_);
     color_ = 0;
   }
   if (framebuffer_ != 0) {
-    gl::DeleteFramebuffers(1, &framebuffer_);
+    glDeleteFramebuffers(1, &framebuffer_);
     framebuffer_ = 0;
   }
 }
@@ -1173,7 +1173,7 @@ Result<void> OpenGLOffscreenTarget::read_back_rgba(std::vector<std::uint8_t>& ou
     return Err(r.error());
   }
   out.resize(static_cast<std::size_t>(width_) * height_ * 4);
-  gl::ReadPixels(0, 0, static_cast<GLsizei>(width_), static_cast<GLsizei>(height_), GL_RGBA,
+  glReadPixels(0, 0, static_cast<GLsizei>(width_), static_cast<GLsizei>(height_), GL_RGBA,
                  GL_UNSIGNED_BYTE, out.data());
   // GL 的原点在左下：翻成左上原点，和 Vulkan 那边保持同一套约定。
   const std::size_t row = static_cast<std::size_t>(width_) * 4;
@@ -1254,7 +1254,7 @@ Result<void> OpenGLDevice::begin_frame(SwapChain& swap_chain) {
 Result<void> OpenGLDevice::end_frame(SwapChain& swap_chain) {
   if (swap_chain.offscreen()) {
     // 离屏没有 SwapBuffers：等驱动把命令跑完，读回时才有内容可读。
-    gl::Finish();
+    glFinish();
     release_current();
     return {};
   }
@@ -1269,38 +1269,38 @@ void OpenGLCommandList::begin_render_pass(SwapChain& swap_chain, const float cle
   if (swap_chain.offscreen()) {
     // 离屏：先把 FBO 绑上（begin_frame 已经绑过一次，这里再绑一次保证录制期也是它）。
     auto& target = static_cast<OpenGLOffscreenTarget&>(swap_chain);
-    gl::BindFramebuffer(GL_FRAMEBUFFER, target.framebuffer());
+    glBindFramebuffer(GL_FRAMEBUFFER, target.framebuffer());
     // 视口 / 裁剪也跟着目标尺寸走：GL 的状态是上下文级的，不设就会沿用窗口那一套
     //（dummy 窗口往往只有 1×1，clear 会被裁掉，读回来全是黑的）。
-    gl::Viewport(0, 0, static_cast<GLsizei>(target.width()),
+    glViewport(0, 0, static_cast<GLsizei>(target.width()),
                  static_cast<GLsizei>(target.height()));
-    gl::Scissor(0, 0, static_cast<GLsizei>(target.width()),
+    glScissor(0, 0, static_cast<GLsizei>(target.width()),
                 static_cast<GLsizei>(target.height()));
   }
-  gl::Enable(GL_DEPTH_TEST);
-  gl::Enable(GL_SCISSOR_TEST);
-  gl::DepthFunc(GL_LESS);
-  gl::DepthMask(GL_TRUE);
-  gl::ClearColor(clear_color[0], clear_color[1], clear_color[2], clear_color[3]);
-  gl::ClearDepth(clear_depth);
-  gl::Clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  glEnable(GL_DEPTH_TEST);
+  glEnable(GL_SCISSOR_TEST);
+  glDepthFunc(GL_LESS);
+  glDepthMask(GL_TRUE);
+  glClearColor(clear_color[0], clear_color[1], clear_color[2], clear_color[3]);
+  glClearDepth(clear_depth);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
 void OpenGLCommandList::set_pipeline(PipelineState& pipeline) {
   pipeline_ = static_cast<OpenGLPipeline*>(&pipeline);
-  gl::UseProgram(pipeline_->program());
-  gl::PolygonMode(GL_FRONT_AND_BACK, pipeline_->wireframe() ? GL_LINE : GL_FILL);
+  glUseProgram(pipeline_->program());
+  glPolygonMode(GL_FRONT_AND_BACK, pipeline_->wireframe() ? GL_LINE : GL_FILL);
   if (pipeline_->depth_test()) {
-    gl::Enable(GL_DEPTH_TEST);
+    glEnable(GL_DEPTH_TEST);
   } else {
-    gl::Disable(GL_DEPTH_TEST);
+    glDisable(GL_DEPTH_TEST);
   }
-  gl::DepthMask(pipeline_->depth_write() ? GL_TRUE : GL_FALSE);
+  glDepthMask(pipeline_->depth_write() ? GL_TRUE : GL_FALSE);
   if (pipeline_->blend()) {
-    gl::Enable(GL_BLEND);
-    gl::BlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
   } else {
-    gl::Disable(GL_BLEND);
+    glDisable(GL_BLEND);
   }
 }
 
@@ -1320,63 +1320,63 @@ void OpenGLCommandList::set_index_buffer(Buffer& buffer, std::uint64_t offset) {
 }
 
 void OpenGLCommandList::set_push_constants(std::span<const std::byte> data) {
-  gl::BindBuffer(GL_UNIFORM_BUFFER, device_->push_ubo());
-  gl::BufferSubData(GL_UNIFORM_BUFFER, 0, static_cast<GLsizeiptr>(data.size()), data.data());
-  gl::BindBufferBase(GL_UNIFORM_BUFFER, kPushConstantBinding, device_->push_ubo());
+  glBindBuffer(GL_UNIFORM_BUFFER, device_->push_ubo());
+  glBufferSubData(GL_UNIFORM_BUFFER, 0, static_cast<GLsizeiptr>(data.size()), data.data());
+  glBindBufferBase(GL_UNIFORM_BUFFER, kPushConstantBinding, device_->push_ubo());
 }
 
 void OpenGLCommandList::set_texture(Texture& texture, std::uint32_t slot) {
   auto& tex = static_cast<OpenGLTexture&>(texture);
-  gl::ActiveTexture(GL_TEXTURE0 + slot);
+  glActiveTexture(GL_TEXTURE0 + slot);
   const GLenum target = tex.desc().dimension == TextureDesc::Dimension::Cube ? GL_TEXTURE_CUBE_MAP
                                                                              : GL_TEXTURE_2D;
   const GLenum other = target == GL_TEXTURE_CUBE_MAP ? GL_TEXTURE_2D : GL_TEXTURE_CUBE_MAP;
-  gl::BindTexture(other, 0);
-  gl::BindTexture(target, tex.handle());
+  glBindTexture(other, 0);
+  glBindTexture(target, tex.handle());
 }
 
 void OpenGLCommandList::set_viewport(float x, float y, float w, float h, float, float) {
-  gl::Viewport(static_cast<GLint>(x), static_cast<GLint>(y), static_cast<GLsizei>(w),
+  glViewport(static_cast<GLint>(x), static_cast<GLint>(y), static_cast<GLsizei>(w),
                static_cast<GLsizei>(h));
 }
 
 void OpenGLCommandList::set_scissor(std::int32_t x, std::int32_t y, std::uint32_t w,
                                     std::uint32_t h) {
-  gl::Scissor(x, y, static_cast<GLsizei>(w), static_cast<GLsizei>(h));
+  glScissor(x, y, static_cast<GLsizei>(w), static_cast<GLsizei>(h));
 }
 
 void OpenGLCommandList::draw_indexed(const DrawIndexedDesc& desc) {
   if (!pipeline_ || !vertex_ || !index_) {
     return;
   }
-  gl::BindVertexArray(device_->vao());
-  gl::BindBuffer(GL_ARRAY_BUFFER, vertex_->handle());
-  gl::BindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_->handle());
+  glBindVertexArray(device_->vao());
+  glBindBuffer(GL_ARRAY_BUFFER, vertex_->handle());
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_->handle());
 
   constexpr GLsizei stride = static_cast<GLsizei>(sizeof(Vertex));
   const auto base = reinterpret_cast<const void*>(static_cast<std::uintptr_t>(vertex_offset_));
-  gl::EnableVertexAttribArray(0);
-  gl::VertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, base);
-  gl::VertexAttribDivisor(0, 0);
-  gl::EnableVertexAttribArray(1);
-  gl::VertexAttribPointer(
+  glEnableVertexAttribArray(0);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, base);
+  glVertexAttribDivisor(0, 0);
+  glEnableVertexAttribArray(1);
+  glVertexAttribPointer(
       1, 3, GL_FLOAT, GL_FALSE, stride,
       reinterpret_cast<const void*>(static_cast<std::uintptr_t>(vertex_offset_ + offsetof(Vertex, normal))));
-  gl::VertexAttribDivisor(1, 0);
-  gl::EnableVertexAttribArray(2);
-  gl::VertexAttribPointer(
+  glVertexAttribDivisor(1, 0);
+  glEnableVertexAttribArray(2);
+  glVertexAttribPointer(
       2, 2, GL_FLOAT, GL_FALSE, stride,
       reinterpret_cast<const void*>(static_cast<std::uintptr_t>(vertex_offset_ + offsetof(Vertex, uv))));
-  gl::VertexAttribDivisor(2, 0);
-  gl::EnableVertexAttribArray(3);
-  gl::VertexAttribPointer(
+  glVertexAttribDivisor(2, 0);
+  glEnableVertexAttribArray(3);
+  glVertexAttribPointer(
       3, 3, GL_FLOAT, GL_FALSE, stride,
       reinterpret_cast<const void*>(static_cast<std::uintptr_t>(vertex_offset_ + offsetof(Vertex, color))));
-  gl::VertexAttribDivisor(3, 0);
+  glVertexAttribDivisor(3, 0);
 
   if (pipeline_->instanced() && instance_) {
     constexpr GLsizei inst_stride = static_cast<GLsizei>(sizeof(GpuInstance));
-    gl::BindBuffer(GL_ARRAY_BUFFER, instance_->handle());
+    glBindBuffer(GL_ARRAY_BUFFER, instance_->handle());
     const auto inst_base = static_cast<std::uintptr_t>(instance_offset_);
     const struct {
       GLuint index;
@@ -1391,15 +1391,15 @@ void OpenGLCommandList::draw_indexed(const DrawIndexedDesc& desc) {
         {9, 4, offsetof(GpuInstance, tex_st)},
     };
     for (const auto& attr : inst_attrs) {
-      gl::EnableVertexAttribArray(attr.index);
-      gl::VertexAttribPointer(attr.index, attr.size, GL_FLOAT, GL_FALSE, inst_stride,
+      glEnableVertexAttribArray(attr.index);
+      glVertexAttribPointer(attr.index, attr.size, GL_FLOAT, GL_FALSE, inst_stride,
                               reinterpret_cast<const void*>(inst_base + attr.offset));
-      gl::VertexAttribDivisor(attr.index, 1);
+      glVertexAttribDivisor(attr.index, 1);
     }
   } else {
     for (GLuint i = 4; i <= 9; ++i) {
-      gl::DisableVertexAttribArray(i);
-      gl::VertexAttribDivisor(i, 0);
+      glDisableVertexAttribArray(i);
+      glVertexAttribDivisor(i, 0);
     }
   }
 
@@ -1410,10 +1410,10 @@ void OpenGLCommandList::draw_indexed(const DrawIndexedDesc& desc) {
       pipeline_->topology() == PrimitiveTopology::LineList ? GL_LINES : GL_TRIANGLES;
   const GLsizei instances = static_cast<GLsizei>(std::max(1u, desc.instance_count));
   if (pipeline_->instanced()) {
-    gl::DrawElementsInstanced(mode, static_cast<GLsizei>(desc.index_count), GL_UNSIGNED_INT,
+    glDrawElementsInstanced(mode, static_cast<GLsizei>(desc.index_count), GL_UNSIGNED_INT,
                               index_ptr, instances);
   } else {
-    gl::DrawElements(mode, static_cast<GLsizei>(desc.index_count), GL_UNSIGNED_INT, index_ptr);
+    glDrawElements(mode, static_cast<GLsizei>(desc.index_count), GL_UNSIGNED_INT, index_ptr);
   }
 }
 

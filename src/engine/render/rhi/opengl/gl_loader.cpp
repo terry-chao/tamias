@@ -1,12 +1,15 @@
 #include "gl_loader.h"
 
-#if !defined(_WIN32)
-#include <GL/glx.h>
+namespace tamias::gl {
+
+#if defined(_WIN32)
+PFN_wglCreateContextAttribsARB CreateContextAttribsARB = nullptr;
+PFN_wglChoosePixelFormatARB ChoosePixelFormatARB = nullptr;
 #endif
 
-namespace tamias::gl {
 namespace {
 
+// GL 入口点整表交给 gladLoadGL；这个模板只服务 WGL 那两个扩展入口。
 template <typename T>
 bool load(T& fn, const char* name) {
   fn = reinterpret_cast<T>(get_proc(name));
@@ -15,170 +18,40 @@ bool load(T& fn, const char* name) {
 
 }  // namespace
 
-void (*GenBuffers)(GLsizei, GLuint*) = nullptr;
-void (*DeleteBuffers)(GLsizei, const GLuint*) = nullptr;
-void (*BindBuffer)(GLenum, GLuint) = nullptr;
-void (*BufferData)(GLenum, GLsizeiptr, const void*, GLenum) = nullptr;
-void (*BufferSubData)(GLenum, GLintptr, GLsizeiptr, const void*) = nullptr;
-void (*BindBufferBase)(GLenum, GLuint, GLuint) = nullptr;
-
-void (*GenTextures)(GLsizei, GLuint*) = nullptr;
-void (*DeleteTextures)(GLsizei, const GLuint*) = nullptr;
-void (*BindTexture)(GLenum, GLuint) = nullptr;
-void (*ActiveTexture)(GLenum) = nullptr;
-void (*TexImage2D)(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum,
-                   const void*) = nullptr;
-void (*TexParameteri)(GLenum, GLenum, GLint) = nullptr;
-
-void (*GenVertexArrays)(GLsizei, GLuint*) = nullptr;
-void (*DeleteVertexArrays)(GLsizei, const GLuint*) = nullptr;
-void (*BindVertexArray)(GLuint) = nullptr;
-void (*EnableVertexAttribArray)(GLuint) = nullptr;
-void (*DisableVertexAttribArray)(GLuint) = nullptr;
-void (*VertexAttribPointer)(GLuint, GLint, GLenum, GLboolean, GLsizei, const void*) = nullptr;
-void (*VertexAttribDivisor)(GLuint, GLuint) = nullptr;
-
-GLuint (*CreateShader)(GLenum) = nullptr;
-void (*DeleteShader)(GLuint) = nullptr;
-void (*ShaderSource)(GLuint, GLsizei, const GLchar* const*, const GLint*) = nullptr;
-void (*CompileShader)(GLuint) = nullptr;
-void (*ShaderBinary)(GLsizei, const GLuint*, GLenum, const void*, GLsizei) = nullptr;
-void (*SpecializeShader)(GLuint, const GLchar*, GLuint, const GLuint*, const GLuint*) = nullptr;
-void (*GetShaderiv)(GLuint, GLenum, GLint*) = nullptr;
-void (*GetShaderInfoLog)(GLuint, GLsizei, GLsizei*, GLchar*) = nullptr;
-
-GLuint (*CreateProgram)() = nullptr;
-void (*DeleteProgram)(GLuint) = nullptr;
-void (*AttachShader)(GLuint, GLuint) = nullptr;
-void (*LinkProgram)(GLuint) = nullptr;
-void (*UseProgram)(GLuint) = nullptr;
-void (*GetProgramiv)(GLuint, GLenum, GLint*) = nullptr;
-void (*GetProgramInfoLog)(GLuint, GLsizei, GLsizei*, GLchar*) = nullptr;
-
-void (*Enable)(GLenum) = nullptr;
-void (*Disable)(GLenum) = nullptr;
-void (*BlendFunc)(GLenum, GLenum) = nullptr;
-void (*DepthFunc)(GLenum) = nullptr;
-void (*DepthMask)(GLboolean) = nullptr;
-void (*Clear)(GLbitfield) = nullptr;
-void (*ClearColor)(GLfloat, GLfloat, GLfloat, GLfloat) = nullptr;
-void (*ClearDepth)(GLdouble) = nullptr;
-void (*Viewport)(GLint, GLint, GLsizei, GLsizei) = nullptr;
-void (*Scissor)(GLint, GLint, GLsizei, GLsizei) = nullptr;
-void (*PolygonMode)(GLenum, GLenum) = nullptr;
-void (*DrawElements)(GLenum, GLsizei, GLenum, const void*) = nullptr;
-void (*DrawElementsInstanced)(GLenum, GLsizei, GLenum, const void*, GLsizei) = nullptr;
-void (*Finish)() = nullptr;
-GLenum (*GetError)() = nullptr;
-const GLubyte* (*GetString)(GLenum) = nullptr;
-
-void (*GenFramebuffers)(GLsizei, GLuint*) = nullptr;
-void (*DeleteFramebuffers)(GLsizei, const GLuint*) = nullptr;
-void (*BindFramebuffer)(GLenum, GLuint) = nullptr;
-void (*FramebufferTexture2D)(GLenum, GLenum, GLenum, GLuint, GLint) = nullptr;
-void (*FramebufferRenderbuffer)(GLenum, GLenum, GLenum, GLuint) = nullptr;
-GLenum (*CheckFramebufferStatus)(GLenum) = nullptr;
-void (*GenRenderbuffers)(GLsizei, GLuint*) = nullptr;
-void (*DeleteRenderbuffers)(GLsizei, const GLuint*) = nullptr;
-void (*BindRenderbuffer)(GLenum, GLuint) = nullptr;
-void (*RenderbufferStorage)(GLenum, GLenum, GLsizei, GLsizei) = nullptr;
-void (*ReadPixels)(GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, void*) = nullptr;
-
+GLADapiproc get_proc(const char* name) {
 #if defined(_WIN32)
-PFN_wglCreateContextAttribsARB CreateContextAttribsARB = nullptr;
-PFN_wglChoosePixelFormatARB ChoosePixelFormatARB = nullptr;
-#endif
-
-void* get_proc(const char* name) {
-#if defined(_WIN32)
-  void* p = reinterpret_cast<void*>(wglGetProcAddress(name));
-  if (p == nullptr || p == reinterpret_cast<void*>(1) || p == reinterpret_cast<void*>(2) ||
-      p == reinterpret_cast<void*>(3) || p == reinterpret_cast<void*>(-1)) {
+  // wglGetProcAddress 不只返回 NULL 表示失败：驱动还会用 1 / 2 / 3 / -1 这几个哨兵值
+  // （WGL 规范），照原样强转就会调用到地址 1。遇到哨兵要退回 opengl32.dll 里找 ——
+  // GL 1.1 的入口本来就只在那里面。
+  GLADapiproc p = reinterpret_cast<GLADapiproc>(wglGetProcAddress(name));
+  if (p == nullptr || p == reinterpret_cast<GLADapiproc>(1) ||
+      p == reinterpret_cast<GLADapiproc>(2) || p == reinterpret_cast<GLADapiproc>(3) ||
+      p == reinterpret_cast<GLADapiproc>(-1)) {
     static HMODULE module = GetModuleHandleA("opengl32.dll");
     if (module) {
-      p = reinterpret_cast<void*>(GetProcAddress(module, name));
+      p = reinterpret_cast<GLADapiproc>(GetProcAddress(module, name));
     }
   }
   return p;
 #else
-  return reinterpret_cast<void*>(glXGetProcAddressARB(reinterpret_cast<const GLubyte*>(name)));
+  return reinterpret_cast<GLADapiproc>(glXGetProcAddressARB(reinterpret_cast<const GLubyte*>(name)));
 #endif
 }
 
 bool load_procs() {
-  bool ok = true;
-  ok = load(GenBuffers, "glGenBuffers") && ok;
-  ok = load(DeleteBuffers, "glDeleteBuffers") && ok;
-  ok = load(BindBuffer, "glBindBuffer") && ok;
-  ok = load(BufferData, "glBufferData") && ok;
-  ok = load(BufferSubData, "glBufferSubData") && ok;
-  ok = load(BindBufferBase, "glBindBufferBase") && ok;
-  ok = load(GenTextures, "glGenTextures") && ok;
-  ok = load(DeleteTextures, "glDeleteTextures") && ok;
-  ok = load(BindTexture, "glBindTexture") && ok;
-  ok = load(ActiveTexture, "glActiveTexture") && ok;
-  ok = load(TexImage2D, "glTexImage2D") && ok;
-  ok = load(TexParameteri, "glTexParameteri") && ok;
-  ok = load(GenVertexArrays, "glGenVertexArrays") && ok;
-  ok = load(DeleteVertexArrays, "glDeleteVertexArrays") && ok;
-  ok = load(BindVertexArray, "glBindVertexArray") && ok;
-  ok = load(EnableVertexAttribArray, "glEnableVertexAttribArray") && ok;
-  ok = load(DisableVertexAttribArray, "glDisableVertexAttribArray") && ok;
-  ok = load(VertexAttribPointer, "glVertexAttribPointer") && ok;
-  ok = load(VertexAttribDivisor, "glVertexAttribDivisor") && ok;
-  ok = load(CreateShader, "glCreateShader") && ok;
-  ok = load(DeleteShader, "glDeleteShader") && ok;
-  ok = load(ShaderSource, "glShaderSource") && ok;
-  ok = load(CompileShader, "glCompileShader") && ok;
-  ok = load(ShaderBinary, "glShaderBinary") && ok;
-  // Core in 4.6; on 4.5 + GL_ARB_gl_spirv the entry is glSpecializeShaderARB.
-  if (!load(SpecializeShader, "glSpecializeShader")) {
-    ok = load(SpecializeShader, "glSpecializeShaderARB") && ok;
-  }
-  ok = load(GetShaderiv, "glGetShaderiv") && ok;
-  ok = load(GetShaderInfoLog, "glGetShaderInfoLog") && ok;
-  ok = load(CreateProgram, "glCreateProgram") && ok;
-  ok = load(DeleteProgram, "glDeleteProgram") && ok;
-  ok = load(AttachShader, "glAttachShader") && ok;
-  ok = load(LinkProgram, "glLinkProgram") && ok;
-  ok = load(UseProgram, "glUseProgram") && ok;
-  ok = load(GetProgramiv, "glGetProgramiv") && ok;
-  ok = load(GetProgramInfoLog, "glGetProgramInfoLog") && ok;
-  ok = load(Enable, "glEnable") && ok;
-  ok = load(Disable, "glDisable") && ok;
-  ok = load(BlendFunc, "glBlendFunc") && ok;
-  ok = load(DepthFunc, "glDepthFunc") && ok;
-  ok = load(DepthMask, "glDepthMask") && ok;
-  ok = load(Clear, "glClear") && ok;
-  ok = load(ClearColor, "glClearColor") && ok;
-  ok = load(ClearDepth, "glClearDepth") && ok;
-  ok = load(Viewport, "glViewport") && ok;
-  ok = load(Scissor, "glScissor") && ok;
-  ok = load(PolygonMode, "glPolygonMode") && ok;
-  ok = load(DrawElements, "glDrawElements") && ok;
-  ok = load(DrawElementsInstanced, "glDrawElementsInstanced") && ok;
-  ok = load(Finish, "glFinish") && ok;
-  ok = load(GetError, "glGetError") && ok;
-  ok = load(GetString, "glGetString") && ok;
-  ok = load(GenFramebuffers, "glGenFramebuffers") && ok;
-  ok = load(DeleteFramebuffers, "glDeleteFramebuffers") && ok;
-  ok = load(BindFramebuffer, "glBindFramebuffer") && ok;
-  ok = load(FramebufferTexture2D, "glFramebufferTexture2D") && ok;
-  ok = load(FramebufferRenderbuffer, "glFramebufferRenderbuffer") && ok;
-  ok = load(CheckFramebufferStatus, "glCheckFramebufferStatus") && ok;
-  ok = load(GenRenderbuffers, "glGenRenderbuffers") && ok;
-  ok = load(DeleteRenderbuffers, "glDeleteRenderbuffers") && ok;
-  ok = load(BindRenderbuffer, "glBindRenderbuffer") && ok;
-  ok = load(RenderbufferStorage, "glRenderbufferStorage") && ok;
-  ok = load(ReadPixels, "glReadPixels") && ok;
+  // gladLoadGL 会对每个名字调 get_proc，把指针和 GLAD_GL_* 标志都填上（取不到的留 NULL）。
+  // 它自己只回报「解析出来的 GL 版本」，所以这里再要求上下文报的是 4.5 以上：
+  // 后端建的就是 4.5 Core，低于这个版本就意味着入口表不完整，早点失败比后面空指针好。
+  const bool gl_ok = gladLoadGL(get_proc) != 0 && GLAD_GL_VERSION_4_5 != 0;
 #if defined(_WIN32)
-  CreateContextAttribsARB =
-      reinterpret_cast<PFN_wglCreateContextAttribsARB>(get_proc("wglCreateContextAttribsARB"));
-  ChoosePixelFormatARB =
-      reinterpret_cast<PFN_wglChoosePixelFormatARB>(get_proc("wglChoosePixelFormatARB"));
-  ok = CreateContextAttribsARB != nullptr && ok;
+  // 建 4.5 Core 上下文要用这两个 WGL 扩展入口；ChoosePixelFormatARB 允许缺席
+  // （调用点会先判空再退回 legacy 的 ChoosePixelFormat）。
+  const bool wgl_ok = load(CreateContextAttribsARB, "wglCreateContextAttribsARB");
+  load(ChoosePixelFormatARB, "wglChoosePixelFormatARB");
+  return gl_ok && wgl_ok;
+#else
+  return gl_ok;
 #endif
-  return ok;
 }
 
 }  // namespace tamias::gl

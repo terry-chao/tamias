@@ -1,7 +1,22 @@
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
+// OpenGL 4.5 入口点：函数指针（以及 4.5 core 需要的类型与枚举）全部由 vendored 的 glad
+// 提供，见 3rdparty/glad —— 生成参数、复现命令与许可写在那个目录的 README.md 里。
+//
+// 调用点直接用 glad 展开的 GL 名字：glad 的 gl.h 里有
+// `#define glBufferData glad_glBufferData`，所以 opengl_device.cpp 里就是 `glBufferData(...)`，
+// 没有一层中转表。这个文件只留三样东西：
+//
+//   1. 加载入口 load_procs() / get_proc()：gladLoadGL 要一个「名字 → 地址」的回调，
+//      这里把平台的 wglGetProcAddress / glXGetProcAddressARB 接上去（含 Windows 那几个
+//      哨兵值与 opengl32.dll 兜底）；
+//   2. WGL 的两个扩展入口：建 4.5 Core 上下文要用，且只能在有 current 上下文时取；
+//   3. GLX 侧只多一个 glXCreateContextAttribsARB，在 opengl_device.cpp 里就地取。
+//
+// 能力看 glad 的 GLAD_GL_* 标志（例：SPIR-V 通路要 GLAD_GL_ARB_gl_spirv）。4.5 上还没有
+// 核心版 glSpecializeShader（4.6 才转正），所以调用点写的是 glSpecializeShaderARB。
+
+#include <glad/gl.h>
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -10,288 +25,18 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
-#include <windows.h>
-#include <GL/gl.h>
+#include <windows.h>  // WGL 入口点要用 HDC / HGLRC / WINAPI
 #else
-#include <GL/gl.h>
-#include <GL/glx.h>
+#include <GL/glx.h>  // glXGetProcAddressARB
 #endif
-
-// Minimal OpenGL 4.5 core loader used by the Tamias OpenGL RHI.
-// Tokens / prototypes that may be missing from system GL headers.
-
-#ifndef GL_ARRAY_BUFFER
-#define GL_ARRAY_BUFFER 0x8892
-#endif
-#ifndef GL_ELEMENT_ARRAY_BUFFER
-#define GL_ELEMENT_ARRAY_BUFFER 0x8893
-#endif
-// 离屏渲染（FBO）用到的 token：GL 1.1 头里没有，按需补。
-#ifndef GL_FRAMEBUFFER
-#define GL_FRAMEBUFFER 0x8D40
-#endif
-#ifndef GL_RENDERBUFFER
-#define GL_RENDERBUFFER 0x8D41
-#endif
-#ifndef GL_COLOR_ATTACHMENT0
-#define GL_COLOR_ATTACHMENT0 0x8CE0
-#endif
-#ifndef GL_DEPTH_ATTACHMENT
-#define GL_DEPTH_ATTACHMENT 0x8D00
-#endif
-#ifndef GL_FRAMEBUFFER_COMPLETE
-#define GL_FRAMEBUFFER_COMPLETE 0x8CD5
-#endif
-#ifndef GL_RGBA8
-#define GL_RGBA8 0x8058
-#endif
-#ifndef GL_DEPTH_COMPONENT24
-#define GL_DEPTH_COMPONENT24 0x81A6
-#endif
-#ifndef GL_UNIFORM_BUFFER
-#define GL_UNIFORM_BUFFER 0x8A11
-#endif
-#ifndef GL_DYNAMIC_DRAW
-#define GL_DYNAMIC_DRAW 0x88E8
-#endif
-#ifndef GL_STATIC_DRAW
-#define GL_STATIC_DRAW 0x88E4
-#endif
-#ifndef GL_COMPILE_STATUS
-#define GL_COMPILE_STATUS 0x8B81
-#endif
-#ifndef GL_LINK_STATUS
-#define GL_LINK_STATUS 0x8B82
-#endif
-#ifndef GL_FRAGMENT_SHADER
-#define GL_FRAGMENT_SHADER 0x8B30
-#endif
-#ifndef GL_VERTEX_SHADER
-#define GL_VERTEX_SHADER 0x8B31
-#endif
-#ifndef GL_INFO_LOG_LENGTH
-#define GL_INFO_LOG_LENGTH 0x8B84
-#endif
-#ifndef GL_BLEND
-#define GL_BLEND 0x0BE2
-#endif
-#ifndef GL_ONE
-#define GL_ONE 1
-#endif
-#ifndef GL_ONE_MINUS_SRC_ALPHA
-#define GL_ONE_MINUS_SRC_ALPHA 0x0303
-#endif
-#ifndef GL_SCISSOR_TEST
-#define GL_SCISSOR_TEST 0x0C11
-#endif
-#ifndef GL_CULL_FACE
-#define GL_CULL_FACE 0x0B44
-#endif
-#ifndef GL_FRONT_AND_BACK
-#define GL_FRONT_AND_BACK 0x0408
-#endif
-#ifndef GL_LINE
-#define GL_LINE 0x1B01
-#endif
-#ifndef GL_FILL
-#define GL_FILL 0x1B02
-#endif
-#ifndef GL_FLOAT
-#define GL_FLOAT 0x1406
-#endif
-#ifndef GL_UNSIGNED_INT
-#define GL_UNSIGNED_INT 0x1405
-#endif
-#ifndef GL_TRIANGLES
-#define GL_TRIANGLES 0x0004
-#endif
-#ifndef GL_COLOR_BUFFER_BIT
-#define GL_COLOR_BUFFER_BIT 0x00004000
-#endif
-#ifndef GL_DEPTH_BUFFER_BIT
-#define GL_DEPTH_BUFFER_BIT 0x00000100
-#endif
-#ifndef GL_LESS
-#define GL_LESS 0x0201
-#endif
-#ifndef GL_FALSE
-#define GL_FALSE 0
-#endif
-#ifndef GL_TRUE
-#define GL_TRUE 1
-#endif
-#ifndef GL_SHADER_BINARY_FORMAT_SPIR_V
-#define GL_SHADER_BINARY_FORMAT_SPIR_V 0x9551
-#endif
-#ifndef GL_SPIR_V_BINARY
-#define GL_SPIR_V_BINARY 0x9552
-#endif
-// 纹理采样相关常量（GL 1.3+，Windows 自带 gl.h 可能缺失）。
-#ifndef GL_TEXTURE_2D
-#define GL_TEXTURE_2D 0x0DE1
-#endif
-#ifndef GL_TEXTURE0
-#define GL_TEXTURE0 0x84C0
-#endif
-#ifndef GL_RGBA
-#define GL_RGBA 0x1908
-#endif
-#ifndef GL_UNSIGNED_BYTE
-#define GL_UNSIGNED_BYTE 0x1401
-#endif
-#ifndef GL_RGBA8
-#define GL_RGBA8 0x8058
-#endif
-#ifndef GL_SRGB8_ALPHA8
-#define GL_SRGB8_ALPHA8 0x8C43
-#endif
-#ifndef GL_FRAMEBUFFER_SRGB
-#define GL_FRAMEBUFFER_SRGB 0x8DB9
-#endif
-#ifndef GL_TEXTURE_MIN_FILTER
-#define GL_TEXTURE_MIN_FILTER 0x2801
-#endif
-#ifndef GL_TEXTURE_MAG_FILTER
-#define GL_TEXTURE_MAG_FILTER 0x2800
-#endif
-#ifndef GL_TEXTURE_WRAP_S
-#define GL_TEXTURE_WRAP_S 0x2802
-#endif
-#ifndef GL_TEXTURE_WRAP_T
-#define GL_TEXTURE_WRAP_T 0x2803
-#endif
-#ifndef GL_LINEAR
-#define GL_LINEAR 0x2601
-#endif
-#ifndef GL_TEXTURE_MAX_ANISOTROPY_EXT
-#define GL_TEXTURE_MAX_ANISOTROPY_EXT 0x84FE
-#endif
-#ifndef GL_REPEAT
-#define GL_REPEAT 0x2901
-#endif
-#ifndef GL_CLAMP_TO_EDGE
-#define GL_CLAMP_TO_EDGE 0x812F
-#endif
-#ifndef GL_TEXTURE_WRAP_R
-#define GL_TEXTURE_WRAP_R 0x8072
-#endif
-#ifndef GL_TEXTURE_CUBE_MAP
-#define GL_TEXTURE_CUBE_MAP 0x8513
-#endif
-#ifndef GL_TEXTURE_CUBE_MAP_POSITIVE_X
-#define GL_TEXTURE_CUBE_MAP_POSITIVE_X 0x8515
-#endif
-#ifndef GL_LINEAR_MIPMAP_LINEAR
-#define GL_LINEAR_MIPMAP_LINEAR 0x2703
-#endif
-#ifndef GL_TEXTURE_MAX_LEVEL
-#define GL_TEXTURE_MAX_LEVEL 0x813D
-#endif
-#ifndef GL_RGBA16F
-#define GL_RGBA16F 0x881A
-#endif
-#ifndef GL_RG16F
-#define GL_RG16F 0x822F
-#endif
-#ifndef GL_HALF_FLOAT
-#define GL_HALF_FLOAT 0x140B
-#endif
-#ifndef GL_RG
-#define GL_RG 0x8227
-#endif
-#ifndef GL_RGB
-#define GL_RGB 0x1907
-#endif
-
-using GLchar = char;
-using GLsizeiptr = std::ptrdiff_t;
-using GLintptr = std::ptrdiff_t;
 
 namespace tamias::gl {
 
+// 必须在「有一个 current 上下文」的时候调（Windows 上是 legacy bootstrap 上下文）。
+// 返回 false 只表示两件事之一：连 GL 1.1 那批入口都取不到，或者上下文自己报的版本低于
+// 4.5 —— 后端建的就是 4.5 Core，低于这个版本说明入口表不完整。
 bool load_procs();
-void* get_proc(const char* name);
-
-extern void (*GenBuffers)(GLsizei n, GLuint* buffers);
-extern void (*DeleteBuffers)(GLsizei n, const GLuint* buffers);
-extern void (*BindBuffer)(GLenum target, GLuint buffer);
-extern void (*BufferData)(GLenum target, GLsizeiptr size, const void* data, GLenum usage);
-extern void (*BufferSubData)(GLenum target, GLintptr offset, GLsizeiptr size, const void* data);
-extern void (*BindBufferBase)(GLenum target, GLuint index, GLuint buffer);
-
-extern void (*GenTextures)(GLsizei n, GLuint* textures);
-extern void (*DeleteTextures)(GLsizei n, const GLuint* textures);
-extern void (*BindTexture)(GLenum target, GLuint texture);
-extern void (*ActiveTexture)(GLenum texture);
-extern void (*TexImage2D)(GLenum target, GLint level, GLint internalformat, GLsizei width,
-                          GLsizei height, GLint border, GLenum format, GLenum type,
-                          const void* pixels);
-extern void (*TexParameteri)(GLenum target, GLenum pname, GLint param);
-
-extern void (*GenVertexArrays)(GLsizei n, GLuint* arrays);
-extern void (*DeleteVertexArrays)(GLsizei n, const GLuint* arrays);
-extern void (*BindVertexArray)(GLuint array);
-extern void (*EnableVertexAttribArray)(GLuint index);
-extern void (*DisableVertexAttribArray)(GLuint index);
-extern void (*VertexAttribPointer)(GLuint index, GLint size, GLenum type, GLboolean normalized,
-                                   GLsizei stride, const void* pointer);
-extern void (*VertexAttribDivisor)(GLuint index, GLuint divisor);
-
-extern GLuint (*CreateShader)(GLenum type);
-extern void (*DeleteShader)(GLuint shader);
-extern void (*ShaderSource)(GLuint shader, GLsizei count, const GLchar* const* string,
-                            const GLint* length);
-extern void (*CompileShader)(GLuint shader);
-extern void (*ShaderBinary)(GLsizei count, const GLuint* shaders, GLenum binaryFormat,
-                            const void* binary, GLsizei length);
-extern void (*SpecializeShader)(GLuint shader, const GLchar* pEntryPoint,
-                                GLuint numSpecializationConstants, const GLuint* pConstantIndex,
-                                const GLuint* pConstantValue);
-extern void (*GetShaderiv)(GLuint shader, GLenum pname, GLint* params);
-extern void (*GetShaderInfoLog)(GLuint shader, GLsizei bufSize, GLsizei* length, GLchar* infoLog);
-
-extern GLuint (*CreateProgram)();
-extern void (*DeleteProgram)(GLuint program);
-extern void (*AttachShader)(GLuint program, GLuint shader);
-extern void (*LinkProgram)(GLuint program);
-extern void (*UseProgram)(GLuint program);
-extern void (*GetProgramiv)(GLuint program, GLenum pname, GLint* params);
-extern void (*GetProgramInfoLog)(GLuint program, GLsizei bufSize, GLsizei* length, GLchar* infoLog);
-
-extern void (*Enable)(GLenum cap);
-extern void (*Disable)(GLenum cap);
-extern void (*BlendFunc)(GLenum sfactor, GLenum dfactor);
-extern void (*DepthFunc)(GLenum func);
-extern void (*DepthMask)(GLboolean flag);
-extern void (*Clear)(GLbitfield mask);
-extern void (*ClearColor)(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha);
-extern void (*ClearDepth)(GLdouble depth);
-extern void (*Viewport)(GLint x, GLint y, GLsizei width, GLsizei height);
-extern void (*Scissor)(GLint x, GLint y, GLsizei width, GLsizei height);
-extern void (*PolygonMode)(GLenum face, GLenum mode);
-extern void (*DrawElements)(GLenum mode, GLsizei count, GLenum type, const void* indices);
-extern void (*DrawElementsInstanced)(GLenum mode, GLsizei count, GLenum type, const void* indices,
-                                     GLsizei instancecount);
-extern void (*Finish)();
-extern GLenum (*GetError)();
-extern const GLubyte* (*GetString)(GLenum name);
-
-// 离屏渲染目标（FBO）：把一帧画进自己的颜色 / 深度附件，再 glReadPixels 读回。
-extern void (*GenFramebuffers)(GLsizei n, GLuint* framebuffers);
-extern void (*DeleteFramebuffers)(GLsizei n, const GLuint* framebuffers);
-extern void (*BindFramebuffer)(GLenum target, GLuint framebuffer);
-extern void (*FramebufferTexture2D)(GLenum target, GLenum attachment, GLenum textarget,
-                                    GLuint texture, GLint level);
-extern void (*FramebufferRenderbuffer)(GLenum target, GLenum attachment,
-                                       GLenum renderbuffertarget, GLuint renderbuffer);
-extern GLenum (*CheckFramebufferStatus)(GLenum target);
-extern void (*GenRenderbuffers)(GLsizei n, GLuint* renderbuffers);
-extern void (*DeleteRenderbuffers)(GLsizei n, const GLuint* renderbuffers);
-extern void (*BindRenderbuffer)(GLenum target, GLuint renderbuffer);
-extern void (*RenderbufferStorage)(GLenum target, GLenum internalformat, GLsizei width,
-                                   GLsizei height);
-extern void (*ReadPixels)(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format,
-                          GLenum type, void* pixels);
+GLADapiproc get_proc(const char* name);
 
 #if defined(_WIN32)
 using PFN_wglCreateContextAttribsARB = HGLRC(WINAPI*)(HDC, HGLRC, const int*);

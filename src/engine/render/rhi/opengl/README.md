@@ -64,12 +64,12 @@ opengl_device.cpp →  glGenBuffers / glBindBuffer / glDrawElements / SwapBuffer
 ```cpp
 #include "opengl_backend.h"          // 对外暴露的注册/建表面函数
 #include "engine/base/log.h"
-#include "gl_loader.h"               // 自带的 GL 4.5 函数指针表
+#include "gl_loader.h"               // 加载入口 + WGL 入口点（GL 名字由 glad 直接给）
 #include "engine/graphics/mesh.h"    // Vertex 布局，draw 时要按它设属性
 #include "engine/render/runtime/gpu_instance.h"  // GpuInstance 布局
 ```
 
-平台分支只为了拿 `HWND/HDC/HGLRC` 或 `Display*/Window/GLXContext`。所有 GL 函数本身都不直接调用系统符号，而是走 `tamias::gl::` 命名空间里的**函数指针**——因为 Windows 自带的 `opengl32.lib` 只到 GL 1.1，4.5 的入口必须运行时 `wglGetProcAddress` 取。这套加载器在 [gl_loader.h](C:\dev\tamias\src\engine\render\rhi\opengl\gl_loader.h) / [gl_loader.cpp](C:\dev\tamias\src\engine\render\rhi\opengl\gl_loader.cpp)。
+平台分支只为了拿 `HWND/HDC/HGLRC` 或 `Display*/Window/GLXContext`。GL 调用本身**不链系统符号**，走的是运行时取到的函数指针——Windows 自带的 `opengl32.lib` 只到 GL 1.1，4.5 的入口必须 `wglGetProcAddress`。这张函数表（含 `GL_ARB_gl_spirv` 的入口与 token）由 vendored 的 [glad](C:\dev\tamias\3rdparty\glad) 生成：它的 `gl.h` 把 `glBufferData` 这类名字 `#define` 到自己的指针上，所以这里写的就是 `glBufferData(...)`，没有中转层。[gl_loader.h](C:\dev\tamias\src\engine\render\rhi\opengl\gl_loader.h) / [.cpp](C:\dev\tamias\src\engine\render\rhi\opengl\gl_loader.cpp) 只剩三样东西：加载入口 `get_proc`（`wglGetProcAddress` 的哨兵值 + `opengl32.dll` 兜底）与 `load_procs`、WGL 那两个扩展入口、以及 GLX 那边的说法。
 
 ## 3.2 `kPushConstantBinding = 0`（24）
 
@@ -198,7 +198,7 @@ Result<void> OpenGLDevice::create_dummy_context() {
   wglMakeCurrent(dummy_hdc_, bootstrap);
 
   // 3) 趁现在有 current context，才能取到 wgl*ARB 扩展入口
-  gl::load_procs();          // ← 这里才把 gl_loader 的函数指针填满
+  gl::load_procs();          // ← gladLoadGL 把 GL 入口点填满，顺带取 WGL 那两个扩展入口
 
   // 4) 有了 CreateContextAttribsARB，才能建真正的 4.5 Core context
   context_ = gl::CreateContextAttribsARB(dummy_hdc_, nullptr, attribs /* 4.5 core */);

@@ -38,7 +38,7 @@ Dependencies resolved via:
 - System Qt / Vulkan SDK
 - vcpkg `opencascade` 7.9.3 (manifest)
 - vcpkg `tacui` 0.1.0 (manifest, Windows x64) — from TacUI's own git registry, see `vcpkg-configuration.json`
-- Vendored headers in `3rdparty/` (VMA, rapidobj, stb_truetype, volk)
+- Vendored headers in `3rdparty/` (VMA, rapidobj, stb_truetype, volk, glad)
 - FetchContent zip for GoogleTest (tests only)
 
 ## Linux
