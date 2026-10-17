@@ -140,6 +140,94 @@
       var reduceMotion = window.matchMedia &&
         window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+      /* 0. 阅读进度、回到顶部、顶栏当前小节高亮。 */
+      var progressBar = document.querySelector('.tm-progress i');
+      var topButton = document.querySelector('.tm-top');
+      var navSectionLinks = [];
+      var navLinks = document.querySelectorAll('.tm-nav .tm-nav-link');
+      for (var ni = 0; ni < navLinks.length; ni++) {
+        var hash = navLinks[ni].hash;
+        if (!hash || hash === '#') continue;
+        var section = document.querySelector(hash);
+        if (section) navSectionLinks.push({ link: navLinks[ni], section: section });
+      }
+
+      var syncScrollUi = function () {
+        var y = window.scrollY || window.pageYOffset || 0;
+        var max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+        if (progressBar) {
+          progressBar.style.transform =
+            'scaleX(' + Math.min(1, Math.max(0, y / max)).toFixed(4) + ')';
+        }
+        // 产品截图区域是点击看大图的热区，回到顶部先让开，等它滚出视口再出现。
+        var product = document.getElementById('app');
+        var productGone = product ? product.getBoundingClientRect().bottom < 0 : true;
+        if (topButton) {
+          topButton.classList.toggle('is-visible', productGone && y > 720);
+        }
+
+        var active = -1;
+        for (var i = 0; i < navSectionLinks.length; i++) {
+          var rect = navSectionLinks[i].section.getBoundingClientRect();
+          if (rect.top <= 170 && rect.bottom > 170) active = i;
+        }
+        for (var j = 0; j < navSectionLinks.length; j++) {
+          var on = j === active;
+          navSectionLinks[j].link.classList.toggle('is-active', on);
+          if (on) navSectionLinks[j].link.setAttribute('aria-current', 'location');
+          else navSectionLinks[j].link.removeAttribute('aria-current');
+        }
+      };
+
+      syncScrollUi();
+      window.addEventListener('scroll', syncScrollUi, { passive: true });
+      window.addEventListener('resize', syncScrollUi);
+
+      if (topButton) {
+        topButton.addEventListener('click', function () {
+          window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+        });
+      }
+
+      /* 0.5 无限跑马灯：一组先填到至少一屏宽，再原样复制第二组。
+         动画只走 -50%，接缝正好落在同一组内容上，右侧不会断开。 */
+      var marquee = document.querySelector('.tm-marquee');
+      var marqueeTrack = marquee && marquee.querySelector('.tm-marquee-track');
+      var marqueeGroup = marqueeTrack && marqueeTrack.querySelector('.tm-marquee-group');
+      if (marquee && marqueeTrack && marqueeGroup) {
+        var marqueeBase = marqueeGroup.cloneNode(true);
+        var buildMarquee = function () {
+          marquee.classList.remove('is-ready');
+          marqueeTrack.innerHTML = '';
+          var group = marqueeBase.cloneNode(true);
+          marqueeTrack.appendChild(group);
+          var items = Array.prototype.slice.call(group.children);
+          var minWidth = Math.max(marquee.clientWidth + 80, 900);
+          var guard = 0;
+          while (group.getBoundingClientRect().width < minWidth && guard < 12) {
+            for (var i = 0; i < items.length; i++) {
+              group.appendChild(items[i].cloneNode(true));
+            }
+            guard += 1;
+          }
+          var clone = group.cloneNode(true);
+          clone.setAttribute('aria-hidden', 'true');
+          marqueeTrack.appendChild(clone);
+          var groupWidth = group.getBoundingClientRect().width;
+          var duration = Math.max(30, Math.round(groupWidth / 58));
+          marquee.style.setProperty('--marquee-duration', duration + 's');
+          // 强制重排后再启动，保证每次都从 0 开始
+          void marqueeTrack.offsetWidth;
+          marquee.classList.add('is-ready');
+        };
+        buildMarquee();
+        var marqueeResizeTimer = 0;
+        window.addEventListener('resize', function () {
+          window.clearTimeout(marqueeResizeTimer);
+          marqueeResizeTimer = window.setTimeout(buildMarquee, 180);
+        });
+      }
+
       /* 1. 滚动显现：section 标题、流程、卡片依次淡入。 */
       var revealNodes = document.querySelectorAll(
         '[data-reveal], .tm-bento-card, .tm-doc-card, .tm-note, .tm-flow-step, .tm-mini-card'

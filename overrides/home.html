@@ -23,6 +23,8 @@
 
 <div class="tm-home">
 
+  <div class="tm-progress" aria-hidden="true"><i></i></div>
+
   {# cinder 主题的 scrollspy 会找 .bs-sidebar，首页没有目录，放一个占位避免报错 #}
   <div class="bs-sidebar tm-toc-placeholder" aria-hidden="true"></div>
 
@@ -46,8 +48,8 @@
         </h1>
 
         <p class="tm-hero-lead">
-          Tamias 把 <strong>BIM 大模型的查看</strong> 与 <strong>MCAD 的参数化编辑</strong>
-          放进同一条几何链路。特征树是真相，网格只是缓存。
+          Tamias 把 <strong>BIM 大模型的查看</strong><span class="tm-nowrap"> 与 <strong>MCAD 的参数化编辑</strong></span>
+          放进<span class="tm-nowrap">同一条几何链路</span>。特征树是真相，网格只是缓存。
         </p>
 
         <div class="tm-hero-actions">
@@ -71,13 +73,13 @@
         <div class="tm-scene-glow" aria-hidden="true"></div>
 
         <canvas id="tm-hero-canvas" class="tm-scene-canvas" tabindex="0"
-                aria-label="Tamias 三维演示：一栋 12 层钢混塔楼与塔吊。可用拖拽旋转、滚轮缩放，按钮切换体块、线框与剖切三种模式。"></canvas>
+                aria-label="Tamias 三维演示：一个混合开发街区，包含商场裙房、三栋塔楼、广场与街道。可用拖拽旋转、滚轮缩放，按钮切换体块、线框与剖切三种模式。"></canvas>
 
         <img class="tm-scene-poster" data-src="{{ 'img/hero-scene.png'|url }}" alt=""
-             width="900" height="760" aria-hidden="true">
+             width="800" height="880" aria-hidden="true">
         <noscript>
           <img class="tm-scene-poster" src="{{ 'img/hero-scene.png'|url }}" alt=""
-               width="900" height="760">
+               width="800" height="880">
         </noscript>
 
         <div class="tm-scene-fallback" role="status">
@@ -87,20 +89,20 @@
         <div class="tm-scene-hud tm-scene-hud-top">
           <p class="tm-scene-id">
             <span class="tm-scene-live" aria-hidden="true"></span>
-            TOWER_B
-            <span class="tm-scene-id-sub">BIM DEMO · 12F</span>
+            RIVERFRONT
+            <span class="tm-scene-id-sub">MIXED-USE</span>
           </p>
         </div>
 
         <div class="tm-scene-tags" aria-hidden="true">
-          <span class="tm-scene-tag" data-scene-tag data-x="11.6" data-y="54.6" data-z="5.4">
-            <span class="tm-scene-tag-key">RF</span><b>+54.000</b>
+          <span class="tm-scene-tag" data-scene-tag data-x="-22" data-y="122" data-z="1">
+            <span class="tm-scene-tag-key">TA</span><b>+122.000</b>
           </span>
-          <span class="tm-scene-tag" data-scene-tag data-x="12.4" data-y="26.2" data-z="7.6">
-            <span class="tm-scene-tag-key">F6</span><b>+26.000</b>
+          <span class="tm-scene-tag" data-scene-tag data-x="62" data-y="22" data-z="42">
+            <span class="tm-scene-tag-key">M</span><b>+22.000</b>
           </span>
-          <span class="tm-scene-tag" data-scene-tag data-x="11.8" data-y="6.2" data-z="8">
-            <span class="tm-scene-tag-key">F1</span><b>+6.000</b>
+          <span class="tm-scene-tag" data-scene-tag data-x="30" data-y="0.8" data-z="60">
+            <span class="tm-scene-tag-key">P</span><b>±0.000</b>
           </span>
         </div>
 
@@ -158,14 +160,69 @@
 
   <div class="tm-marquee" aria-hidden="true">
     <div class="tm-marquee-track">
-      <span>VULKAN</span><span>OPENGL</span><span>WEBGPU</span><span>OCCT</span><span>IFC</span>
-      <span>STEP</span><span>IGES</span><span>BREP</span><span>GLTF</span><span>QT 6</span>
-      <span>C# PLUGIN</span><span>WASM</span><span>MCP</span><span>CMAKE</span>
-      <span>VULKAN</span><span>OPENGL</span><span>WEBGPU</span><span>OCCT</span><span>IFC</span>
-      <span>STEP</span><span>IGES</span><span>BREP</span><span>GLTF</span><span>QT 6</span>
-      <span>C# PLUGIN</span><span>WASM</span><span>MCP</span><span>CMAKE</span>
+      <div class="tm-marquee-group">
+        <span>VULKAN</span><span>OPENGL</span><span>WEBGPU</span><span>OCCT</span><span>IFC</span>
+        <span>STEP</span><span>IGES</span><span>BREP</span><span>GLTF</span><span>QT 6</span>
+        <span>C# PLUGIN</span><span>WASM</span><span>MCP</span><span>CMAKE</span>
+      </div>
     </div>
   </div>
+
+  <!-- ============================== 真实客户端 ============================== -->
+  <section class="tm-product" id="app">
+    <div class="tm-wrap">
+      <header class="tm-product-head" data-reveal>
+        <p class="tm-eyebrow"><span>APP</span> THE DESKTOP CLIENT</p>
+        <h2 class="tm-section-title">不是渲染图，<br>是能打开的客户端。</h2>
+        <p class="tm-section-sub">
+          三维视口、场景调试器、属性面板、AI 助手与命令控制台在同一个窗口里。
+          这是 RelWithDebInfo 构建的真实截图，不是效果图。
+        </p>
+      </header>
+
+      <div class="tm-product-stage" data-reveal>
+        <div class="tm-product-chrome" aria-hidden="true">
+          <span class="tm-shot-dots"><i></i><i></i><i></i></span>
+          <span>Tamias Desktop</span>
+          <em>Windows 11 · RelWithDebInfo</em>
+        </div>
+
+        <button type="button" class="tm-product-shot"
+                data-tm-lightbox="{{ 'image.png'|url }}"
+                aria-label="全屏查看 Tamias 桌面客户端截图">
+          <img src="{{ 'img/app-overview-1200.webp'|url }}"
+               srcset="{{ 'img/app-overview-1200.webp'|url }} 1200w, {{ 'img/app-overview-2000.webp'|url }} 2000w"
+               sizes="(max-width: 767px) 92vw, 1152px"
+               width="1200" height="617"
+               alt="Tamias 桌面客户端：三维视口、场景调试器、属性面板、AI 助手与命令控制台"
+               loading="lazy" decoding="async">
+          <span class="tm-product-hint"><i class="fas fa-expand" aria-hidden="true"></i> 点击全屏看大图</span>
+        </button>
+
+        <span class="tm-product-callout tm-product-callout-a" style="--callout:#5ff0c8" aria-hidden="true">
+          <b>三维视口</b>RHI · 选择 / 剖切
+        </span>
+        <span class="tm-product-callout tm-product-callout-b" style="--callout:#ffb469" aria-hidden="true">
+          <b>场景调试器</b>draw list · LOD
+        </span>
+        <span class="tm-product-callout tm-product-callout-c" style="--callout:#7aa2ff" aria-hidden="true">
+          <b>AI + 命令控制台</b>dispatch · undo
+        </span>
+      </div>
+
+      <div class="tm-product-foot">
+        <p>真实客户端 · 不是效果图</p>
+        <div>
+          <a class="tm-text-link" href="{{ 'tutorial/03-ui-and-interaction/'|url }}">
+            第 3 章：界面与交互 <i class="fas fa-arrow-right" aria-hidden="true"></i>
+          </a>
+          <a class="tm-text-link" href="{{ 'APP/'|url }}">
+            客户端架构 <i class="fas fa-arrow-right" aria-hidden="true"></i>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <!-- ============================== 功能 ============================== -->
   <section class="tm-section tm-features" id="features">
@@ -563,42 +620,20 @@
           </a>
         </div>
       </div>
-    </div>
-  </section>
 
-  <!-- ============================== 三条设计取舍 ============================== -->
-  <section class="tm-section tm-section-alt tm-notes-section">
-    <div class="tm-wrap">
-      <header class="tm-notes-head">
-        <p class="tm-eyebrow"><span>04</span> DESIGN NOTES</p>
-        <h2 class="tm-section-title">为什么它敢接大模型，<br>也敢让人下手。</h2>
-      </header>
-
-      <div class="tm-notes">
-        <article class="tm-note" data-reveal>
-          <span class="tm-note-index">01</span>
-          <h3>为什么查看看得动</h3>
-          <p>
-            语义树与渲染场景图分离，用稳定 ID 关联：一侧管撤销、序列化、属性面板，
-            另一侧管合批、LOD、裁剪与实例化。两边可以各自演进。
-          </p>
-        </article>
-        <article class="tm-note" data-reveal>
-          <span class="tm-note-index">02</span>
-          <h3>为什么编辑敢下手</h3>
-          <p>
-            几何的真相是特征树（参数 + 依赖）；BRep 与三角网是缓存。
-            任何编辑都封装成一条可撤销命令，失败也不会留下半个模型。
-          </p>
-        </article>
-        <article class="tm-note" data-reveal>
-          <span class="tm-note-index">03</span>
-          <h3>为什么能扩展</h3>
-          <p>
-            C++ 内核保持不动，扩展写托管侧；宿主 API 是一份稳定的面。
-            插件跟着版本升级，不用重写内核。
-          </p>
-        </article>
+      <div class="tm-arch-notes" data-reveal>
+        <div>
+          <span>01</span>
+          <p><b>查看看得动</b>语义树与渲染场景图分离，用稳定 ID 关联；一侧管撤销与序列化，另一侧管合批与 LOD。</p>
+        </div>
+        <div>
+          <span>02</span>
+          <p><b>编辑敢下手</b>特征树是真相，BRep 与三角网是缓存；任何编辑都封装成一条可撤销命令。</p>
+        </div>
+        <div>
+          <span>03</span>
+          <p><b>扩展不重写</b>C++ 内核保持不动，扩展写托管侧；宿主 API 是一份稳定的面。</p>
+        </div>
       </div>
     </div>
   </section>
@@ -608,7 +643,7 @@
     <div class="tm-wrap">
       <header class="tm-section-head">
         <div>
-          <p class="tm-eyebrow"><span>05</span> DOCS</p>
+          <p class="tm-eyebrow"><span>04</span> DOCS</p>
           <h2 class="tm-section-title">从第一行代码，<br>到第一个插件。</h2>
         </div>
         <p class="tm-section-sub">
@@ -651,7 +686,7 @@
     <div class="tm-wrap">
       <header class="tm-section-head">
         <div>
-          <p class="tm-eyebrow"><span>06</span> QUICKSTART</p>
+          <p class="tm-eyebrow"><span>05</span> QUICKSTART</p>
           <h2 class="tm-section-title">三条命令，<br>把源码跑起来。</h2>
         </div>
         <p class="tm-section-sub">
@@ -712,5 +747,9 @@ cmake --build --preset relwithdebinfo --parallel
       </p>
     </div>
   </section>
+
+  <button type="button" class="tm-top" aria-label="回到顶部" title="回到顶部">
+    <i class="fas fa-arrow-up" aria-hidden="true"></i>
+  </button>
 
 </div>

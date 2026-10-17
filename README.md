@@ -33,8 +33,9 @@ cmake --build --preset relwithdebinfo --parallel
 
 | 想改什么 | 改哪 |
 |---|---|
-| 首页落地页（Hero / 功能 / 工作流 / 架构 / 文档入口 / 快速开始） | `overrides/home.html` + `docs/css/home.css` |
-| 首屏 3D 演示（塔楼 + 塔吊 + 体块/线框/剖切） | `docs/js/hero3d.js`；失败退回 `docs/img/hero-scene.png` |
+| 首页落地页（Hero / 客户端实拍 / 功能 / 工作流 / 架构 / 文档入口 / 快速开始） | `overrides/home.html` + `docs/css/home.css` |
+| 首屏 3D 演示（商场裙房 + 三栋塔楼 + 广场/街道） | `docs/js/hero3d.js`；失败退回 `docs/img/hero-scene.png` |
+| 首页客户端截图与灯箱（WebP 响应式 + 原图全屏） | `docs/img/app-overview-1200.webp`、`-2000.webp`；原图 `docs/image.png` |
 | 顶栏、文档三栏布局、页脚、通用组件样式 | `overrides/nav.html`、`overrides/docs-layout.html`、`overrides/footer.html`、`docs/css/brand.css` |
 | 404 页 | `overrides/404.html` |
 | 文档侧栏的目录树 | `overrides/nav-tree.html`（结构来自 `mkdocs.yml` 的 `nav`） |

@@ -1,7 +1,7 @@
 /* ==========================================================================
    Tamias 首页 Hero 三维演示（无依赖，WebGL2）
    --------------------------------------------------------------------------
-   这不是查看器，只是一段"会动的封面"：一栋 12 层钢混塔楼 + 塔吊 + 场地网格，
+   这不是查看器，只是一段"会动的封面"：一个混合开发街区：商场裙房、三栋塔楼、广场与街道，
    用来在首屏把「BIM 大模型」与「几何内核」讲清楚。设计约束：
 
    - **不引入任何第三方库**：官网是 MkDocs 静态站，首屏不该为一段演示多背 600 KB；
@@ -100,7 +100,7 @@
     '  float fres = pow(1.0 - max(dot(N, V), 0.0), 3.0);',
     '  col += vec3(0.30, 0.56, 0.92) * fres * 0.26;',
     '  float dist = length(uEye - vWorld);',
-    '  col = mix(col, vec3(0.018, 0.028, 0.050), smoothstep(70.0, 190.0, dist));',
+    '  col = mix(col, vec3(0.018, 0.028, 0.050), smoothstep(180.0, 460.0, dist));',
     '  outColor = vec4(col, uOpacity);',
     '}'
   ].join('\n');
@@ -135,7 +135,7 @@
     '  col += vec3(0.75, 0.92, 1.0) * spec * 0.55;',
     '  float a = uAlpha + fres * 0.30 + spec * 0.12;',
     '  float dist = length(uEye - vWorld);',
-    '  a *= 1.0 - smoothstep(90.0, 190.0, dist) * 0.65;',
+    '  a *= 1.0 - smoothstep(220.0, 520.0, dist) * 0.65;',
     '  outColor = vec4(col, a);',
     '}'
   ].join('\n');
@@ -160,7 +160,7 @@
     'void main() {',
     '  if (uMode == 2 && vWorld.y > uCut) discard;',
     '  float dist = length(uEye - vWorld);',
-    '  float fog = 1.0 - smoothstep(90.0, 200.0, dist);',
+    '  float fog = 1.0 - smoothstep(200.0, 520.0, dist);',
     '  outColor = vec4(vColor, uAlpha * fog);',
     '}'
   ].join('\n');
@@ -193,8 +193,8 @@
     '}',
     'void main() {',
     '  vec2 p = vWorld.xz;',
-    '  float minor = lineMask(p, 2.0, 0.028) * 0.30;',
-    '  float major = lineMask(p, 10.0, 0.040) * 0.85;',
+    '  float minor = lineMask(p, 5.0, 0.055) * 0.26;',
+    '  float major = lineMask(p, 25.0, 0.11) * 0.55;',
     '  float grid = minor + major;',
     '  vec3 col = uColor;',
     '  float alpha = grid * uAlpha;',
@@ -208,11 +208,11 @@
     '    col = mix(col, vec3(1.0), border * 0.6);',
     '  } else {',
     '    float r = length(p);',
-    '    float ring = mod(uTime * 5.0, 70.0);',
-    '    float scan = 1.0 - smoothstep(0.0, 1.6, abs(r - ring));',
-    '    scan *= 1.0 - smoothstep(30.0, 68.0, r);',
+    '    float ring = mod(uTime * 4.0, 190.0);',
+    '    float scan = 1.0 - smoothstep(0.0, 2.6, abs(r - ring));',
+    '    scan *= 1.0 - smoothstep(50.0, 190.0, r);',
     '    alpha += scan * 0.10;',
-    '    alpha *= 1.0 - smoothstep(18.0, 52.0, length(p));',
+    '    alpha *= 1.0 - smoothstep(90.0, 280.0, length(p));',
     '  }',
     '  outColor = vec4(col, alpha);',
     '}'
@@ -283,15 +283,15 @@
     var glassRanges = [];
 
     var C = {
-      slab: hexColor('#b8c4d6'),
-      slabEdge: hexColor('#dce8fb'),
+      slab: hexColor('#93a1b6'),
+      slabEdge: hexColor('#b6c6db'),
       column: hexColor('#6f7f96'),
       core: hexColor('#1b2536'),
       coreEdge: hexColor('#5d86c9'),
       podium: hexColor('#8b9ab0'),
       roof: hexColor('#4d5d75'),
-      glass: hexColor('#3f6fd0'),
-      mullion: hexColor('#6ea8ff'),
+      glass: hexColor('#3566c4'),
+      mullion: hexColor('#5f86d6'),
       site: hexColor('#3fd7c4'),
       crane: hexColor('#ffb469'),
       warm: hexColor('#ffd9a4'),
@@ -393,84 +393,206 @@
       }
     }
 
-    /* 场地：一块薄基座 + 四角定位桩 */
-    solidBox(-30, -0.7, -25, 30, -0.06, 25, hexColor('#0b111b'));
-    line(-30, -0.05, -25, 30, -0.05, -25, C.site, 0.22);
-    line(30, -0.05, -25, 30, -0.05, 25, C.site, 0.22);
-    line(30, -0.05, 25, -30, -0.05, 25, C.site, 0.22);
-    line(-30, -0.05, 25, -30, -0.05, -25, C.site, 0.22);
+    var P = {
+      mall: hexColor('#77828f'),
+      mallDark: hexColor('#5f6d83'),
+      interior: hexColor('#ffd9a4'),
+      leaf: hexColor('#3f7a63'),
+      leaf2: hexColor('#539a7b'),
+      trunk: hexColor('#5b4a3a'),
+      context: hexColor('#192332'),
+      context2: hexColor('#202d40'),
+      road: hexColor('#0a0f16'),
+      plaza: hexColor('#151d29'),
+      plazaLine: hexColor('#2b3a50'),
+      water: hexColor('#1b4b5b'),
+      carWhite: hexColor('#d6deea'),
+      carBlue: hexColor('#3d6fd0'),
+      carDark: hexColor('#1b2636'),
+      red: hexColor('#ff6b5c'),
+      screen: hexColor('#8ff4ff')
+    };
 
-    var site = [
-      [-27, -21], [27, -21], [27, 21], [-27, 21]
-    ];
-    for (var s = 0; s < 4; s++) {
-      var a = site[s];
-      var b = site[(s + 1) % 4];
-      line(a[0], 0.04, a[1], b[0], 0.04, b[1], C.site, 0.30);
-    }
-    for (var m = 0; m < 4; m++) {
-      var px = site[m][0];
-      var pz = site[m][1];
-      line(px - 1.6, 0.05, pz, px + 1.6, 0.05, pz, C.site, 0.55);
-      line(px, 0.05, pz - 1.6, px, 0.05, pz + 1.6, C.site, 0.55);
-    }
-
-    // 场地基准环：数字孪生常见的"扫描盘"，也是画面里唯一持续转动的元素。
-    function ring(radius, y, color, alpha, segments) {
-      for (var i = 0; i < segments; i++) {
-        var a0 = (i / segments) * Math.PI * 2;
-        var a1 = ((i + 1) / segments) * Math.PI * 2;
-        line(
-          Math.cos(a0) * radius, y, Math.sin(a0) * radius,
-          Math.cos(a1) * radius, y, Math.sin(a1) * radius,
-          color, alpha
-        );
+    function sphere(cx, cy, cz, rx, ry, rz, color, latSeg, lonSeg) {
+      latSeg = latSeg || 3;
+      lonSeg = lonSeg || 6;
+      for (var i = 0; i < latSeg; i++) {
+        var v0 = -Math.PI / 2 + Math.PI * i / latSeg;
+        var v1 = -Math.PI / 2 + Math.PI * (i + 1) / latSeg;
+        for (var j = 0; j < lonSeg; j++) {
+          var u0 = Math.PI * 2 * j / lonSeg;
+          var u1 = Math.PI * 2 * (j + 1) / lonSeg;
+          var p0 = [cx + rx * Math.cos(v0) * Math.cos(u0), cy + ry * Math.sin(v0), cz + rz * Math.cos(v0) * Math.sin(u0)];
+          var p1 = [cx + rx * Math.cos(v0) * Math.cos(u1), cy + ry * Math.sin(v0), cz + rz * Math.cos(v0) * Math.sin(u1)];
+          var p2 = [cx + rx * Math.cos(v1) * Math.cos(u1), cy + ry * Math.sin(v1), cz + rz * Math.cos(v1) * Math.sin(u1)];
+          var p3 = [cx + rx * Math.cos(v1) * Math.cos(u0), cy + ry * Math.sin(v1), cz + rz * Math.cos(v1) * Math.sin(u0)];
+          var ax = p1[0] - p0[0], ay = p1[1] - p0[1], az = p1[2] - p0[2];
+          var bx = p2[0] - p0[0], by = p2[1] - p0[1], bz = p2[2] - p0[2];
+          var nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+          var nl = Math.hypot(nx, ny, nz);
+          if (nl < 0.0001) continue;
+          nx /= nl; ny /= nl; nz /= nl;
+          tri(p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2], nx, ny, nz, color, solid);
+          tri(p0[0], p0[1], p0[2], p2[0], p2[1], p2[2], p3[0], p3[1], p3[2], nx, ny, nz, color, solid);
+        }
       }
     }
-    ring(23.5, 0.035, C.site, 0.08, 96);
-    ring(20.0, 0.035, C.site, 0.12, 96);
-    ring(16.5, 0.035, C.site, 0.18, 96);
-    for (var tick = 0; tick < 12; tick++) {
-      var ta = (tick / 12) * Math.PI * 2;
-      var r0 = tick % 3 === 0 ? 21.0 : 23.0;
-      line(Math.cos(ta) * r0, 0.04, Math.sin(ta) * r0,
-        Math.cos(ta) * 23.8, 0.04, Math.sin(ta) * 23.8, C.site, tick % 3 === 0 ? 0.45 : 0.22);
+
+    /* ---------------------------------------------------------- 场地 */
+    solidBox(-88, -0.8, -72, 88, -0.05, 82, hexColor('#0b111b'));
+
+    var siteCorners = [[-84, -78], [84, -78], [84, 78], [-84, 78]];
+    for (var si = 0; si < 4; si++) {
+      var sa = siteCorners[si];
+      var sb = siteCorners[(si + 1) % 4];
+      line(sa[0], 0.12, sa[1], sb[0], 0.12, sb[1], C.site, 0.26);
+    }
+    for (var si2 = 0; si2 < 4; si2++) {
+      var sp = siteCorners[si2];
+      line(sp[0] - 2.2, 0.13, sp[1], sp[0] + 2.2, 0.13, sp[1], C.site, 0.55);
+      line(sp[0], 0.13, sp[1] - 2.2, sp[0], 0.13, sp[1] + 2.2, C.site, 0.55);
     }
 
-    /* 裙房：6 m 高的玻璃盒 + 屋面 + 入口雨棚 */
-    glassBox(-13, 0.5, -10, 13, 5.7, 10, C.glass);
-    solidBox(-13.4, 5.7, -10.4, 13.4, 6.3, 10.4, C.podium);
-    boxEdges(-13.4, 5.7, -10.4, 13.4, 6.3, 10.4, C.slabEdge, 0.42);
-    solidBox(-6.5, 5.9, 10.4, 6.5, 6.15, 13.6, C.roof);
-    line(-6.5, 6.1, 13.55, 6.5, 6.1, 13.55, C.warm, 0.5);
-
-    // 大堂灯带：暖色竖条，给冷色幕墙一点人气
-    for (var lx = -10; lx <= 10; lx += 5) {
-      glowWindow(lx, 3.05, 10.0, 0.22, 2.25, 0, C.warm);
-    }
-    line(-13, 0.55, 10.02, 13, 0.55, 10.02, C.warm, 0.55);
-    line(-13, 5.65, 10.02, 13, 5.65, 10.02, C.warm, 0.3);
-
-    /* 塔楼：三段收分；每段一套楼板 / 幕墙 / 柱 */
-    var segments = [
-      { y0: 6, y1: 26, w: 18, d: 14, cx: 0 },
-      { y0: 26, y1: 40, w: 15, d: 12, cx: -1.6 },
-      { y0: 40, y1: 54, w: 12, d: 10, cx: -3.2 }
-    ];
-
-    function segmentAtY(y) {
-      for (var i = segments.length - 1; i >= 0; i--) {
-        if (y >= segments[i].y0) return segments[i];
+    function siteRing(radius, y, alpha, seg) {
+      for (var i = 0; i < seg; i++) {
+        var a0 = (i / seg) * Math.PI * 2;
+        var a1 = ((i + 1) / seg) * Math.PI * 2;
+        line(Math.cos(a0) * radius, y, Math.sin(a0) * radius,
+          Math.cos(a1) * radius, y, Math.sin(a1) * radius, C.site, alpha);
       }
-      return segments[0];
+    }
+    siteRing(82, 0.13, 0.07, 128);
+    siteRing(68, 0.13, 0.10, 128);
+    siteRing(50, 0.13, 0.15, 96);
+    for (var tick = 0; tick < 16; tick++) {
+      var ta = (tick / 16) * Math.PI * 2;
+      var r0 = tick % 4 === 0 ? 62 : 80;
+      line(Math.cos(ta) * r0, 0.14, Math.sin(ta) * r0,
+        Math.cos(ta) * 82, 0.14, Math.sin(ta) * 82, C.site, tick % 4 === 0 ? 0.4 : 0.2);
     }
 
-    // 楼层：每 4 m 一道板，顶部加屋面
-    var floors = [];
-    for (var fy = 6; fy <= 54; fy += 4) floors.push(fy);
+    /* 前场铺装 / 道路 */
+    solidBox(-70, 0, 40, 70, 0.07, 64, P.plaza);
+    for (var px = -66; px <= 66; px += 6) {
+      line(px, 0.1, 40, px, 0.1, 64, P.plazaLine, 0.3);
+    }
+    for (var pz = 42; pz <= 62; pz += 5) {
+      line(-70, 0.1, pz, 70, 0.1, pz, P.plazaLine, 0.25);
+    }
+    solidBox(-84, 0, 64, 84, 0.05, 78, P.road);
+    line(-84, 0.1, 64, 84, 0.1, 64, C.site, 0.22);
+    line(-84, 0.1, 78, 84, 0.1, 78, C.site, 0.18);
+    for (var lx = -80; lx < 80; lx += 9) {
+      line(lx, 0.09, 71, lx + 4, 0.09, 71, C.slabEdge, 0.22);
+    }
+    for (var cz = 65.5; cz < 78; cz += 2) {
+      line(-9, 0.09, cz, 9, 0.09, cz, C.slabEdge, 0.18);
+    }
 
-    // 每层四个立面各开几扇亮窗：[+z, -z, +x, -x]，值是窗位种子。
-    // 固定表（不随机）保证每次刷新看到的是同一栋楼，截图和视觉回归也稳定。
+    /* ---------------------------------------------------------- 商场裙房 */
+    function mallBlock(x0, x1, z0, z1, levels, fh, front) {
+      var top = levels * fh;
+      for (var f = 0; f < levels; f++) {
+        var y = f * fh;
+        solidBox(x0 - 0.55, y, z0 - 0.55, x1 + 0.55, y + 0.4, z1 + 0.55, P.mall);
+        boxEdges(x0 - 0.55, y, z0 - 0.55, x1 + 0.55, y + 0.4, z1 + 0.55, C.slabEdge, 0.32, true);
+        glassBox(x0, y + 0.4, z0, x1, y + fh - 0.05, z1, C.glass);
+        boxEdges(x0, y + 0.4, z0, x1, y + fh - 0.05, z1, C.mullion, 0.18);
+
+        line(x0, y + 0.65, z1, x1, y + 0.65, z1, P.interior, 0.55);
+        line(x0, y + fh - 0.3, z1, x1, y + fh - 0.3, z1, P.interior, 0.4);
+        line(x1, y + 0.65, z0, x1, y + 0.65, z1, P.interior, 0.22);
+        line(x0, y + 0.65, z0, x0, y + 0.65, z1, P.interior, 0.22);
+
+        if (front) {
+          for (var wx = x0 + 8; wx < x1 - 6; wx += 14) {
+            glowWindow(wx, y + fh * 0.5, z1, 2.1, fh * 0.24, 0, P.interior);
+          }
+        }
+      }
+
+      for (var mx = x0 + 3; mx < x1 - 1; mx += 6) {
+        line(mx, 0.2, z1 + 0.02, mx, top, z1 + 0.02, C.mullion, 0.12);
+      }
+      for (var mz = z0 + 3; mz < z1 - 1; mz += 6) {
+        line(x1 + 0.02, 0.2, mz, x1 + 0.02, top, mz, C.mullion, 0.1);
+      }
+
+      solidBox(x0 - 0.8, top, z0 - 0.8, x1 + 0.8, top + 0.55, z1 + 0.8, C.roof);
+      boxEdges(x0 - 0.8, top, z0 - 0.8, x1 + 0.8, top + 0.55, z1 + 0.8, C.slabEdge, 0.4);
+      for (var cx2 = x0 + 2; cx2 <= x1 - 2; cx2 += 8) {
+        solidBox(cx2 - 0.3, top, z1 - 0.6, cx2 + 0.3, top + 2.4, z1 + 0.3, C.column);
+      }
+      return top;
+    }
+
+    var mallTop = mallBlock(-60, 60, 0, 40, 5, 4.4, true);
+    var backTop = mallBlock(-60, 60, -26, 0, 6, 4.33, false);
+
+    /* 中庭天窗 */
+    glassBox(-28, mallTop + 0.55, 6, 28, mallTop + 2.8, 30, C.glass);
+    boxEdges(-28, mallTop + 0.55, 6, 28, mallTop + 2.8, 30, C.slabEdge, 0.32);
+    for (var sx = -26; sx <= 26; sx += 8) {
+      line(sx, mallTop + 2.85, 6, sx, mallTop + 2.85, 30, C.slabEdge, 0.2);
+    }
+    line(-28, mallTop + 1.7, 18, 28, mallTop + 1.7, 18, P.interior, 0.35);
+
+    /* 商场入口、雨棚、大屏、台阶 */
+    solidBox(-15, 0, 38.8, -12, 26, 40.8, P.mallDark);
+    solidBox(12, 0, 38.8, 15, 26, 40.8, P.mallDark);
+    solidBox(-15, 24, 38.8, 15, 26, 40.8, P.mallDark);
+    solidBox(-12, 0, 39.6, 12, 23.5, 40.4, C.glass);
+    line(-15, 12, 40.85, -15, 26, 40.85, C.site, 0.3);
+    line(15, 12, 40.85, 15, 26, 40.85, C.site, 0.3);
+    line(-15, 21, 40.85, 15, 21, 40.85, P.interior, 0.4);
+    solidBox(-16, 5.4, 40, 16, 6.1, 49, C.roof);
+    line(-16, 5.5, 48.9, 16, 5.5, 48.9, P.interior, 0.65);
+    for (var lz = 41; lz <= 48; lz += 1.6) {
+      glowWindow(0, 5.1, lz, 14, 0.08, 0, P.interior);
+    }
+    solidBox(-14, 1.2, 40.4, 14, 2.0, 40.9, P.mallDark);
+    solidBox(-9.2, 12.3, 40.5, 9.2, 19.3, 40.72, P.mallDark);
+    glowQuad(
+      [-8.2, 13.2, 40.78], [8.2, 13.2, 40.78],
+      [8.2, 18.4, 40.78], [-8.2, 18.4, 40.78], hexColor('#1f7f92')
+    );
+    for (var sx3 = -4; sx3 <= 4; sx3 += 4) {
+      line(sx3, 13.2, 40.8, sx3, 18.4, 40.8, C.site, 0.22);
+    }
+    line(-8.4, 12.9, 40.8, 8.4, 12.9, 40.8, C.site, 0.45);
+    line(-8.4, 18.8, 40.8, 8.4, 18.8, 40.8, C.site, 0.3);
+
+    for (var st = 0; st < 5; st++) {
+      solidBox(-11 + st * 0.5, 0, 41 + st * 0.7, 11 - st * 0.5, 0.18 + st * 0.34, 42.3 + st * 0.7, P.mall);
+      line(-11 + st * 0.5, 0.2 + st * 0.34, 42.3 + st * 0.7,
+        11 - st * 0.5, 0.2 + st * 0.34, 42.3 + st * 0.7, C.site, 0.3);
+    }
+
+    for (var ax = -52; ax <= 52; ax += 13) {
+      if (Math.abs(ax) < 20) continue;
+      solidBox(ax - 4, 4.6, 40, ax + 4, 5.0, 42, P.mallDark);
+      line(ax - 4, 4.65, 41.9, ax + 4, 4.65, 41.9, P.interior, 0.55);
+      solidBox(ax - 4, 9.0, 40, ax + 4, 9.4, 42, P.mallDark);
+      line(ax - 4, 9.05, 41.9, ax + 4, 9.05, 41.9, P.interior, 0.45);
+      glowWindow(ax, 5.65, 40.1, 2.6, 0.22, 0, (ax % 2 === 0) ? C.cool : P.interior);
+    }
+
+    /* 屋顶花园 + 天窗 + 露台 */
+    for (var rp = 0; rp < 7; rp++) {
+      var rxp = -54 + rp * 16;
+      if (rxp > -16 && rxp < 16) continue;
+      solidBox(rxp - 2, mallTop + 0.55, 30, rxp + 2, mallTop + 1.4, 34, P.leaf);
+      solidBox(rxp - 2.2, mallTop + 0.55, 29.8, rxp + 2.2, mallTop + 0.85, 34.2, P.plazaLine);
+    }
+    solidBox(30, mallTop + 0.55, 8, 46, mallTop + 3.6, 22, C.roof);
+    boxEdges(30, mallTop + 0.55, 8, 46, mallTop + 3.6, 22, C.slabEdge, 0.3);
+    line(31, mallTop + 1.2, 21.9, 45, mallTop + 1.2, 21.9, P.interior, 0.45);
+    for (var pc = 0; pc < 4; pc++) {
+      var pcx = -50 + pc * 33;
+      solidBox(pcx - 0.4, mallTop + 0.55, 2, pcx + 0.4, mallTop + 3.4, 3, C.column);
+    }
+
+    /* ---------------------------------------------------------- 塔楼 */
     var floorLightPattern = [
       [[1], [0], [1], []],
       [[0], [1], [], [1]],
@@ -486,176 +608,219 @@
       [[1], [], [], [0]]
     ];
 
-    for (var f = 0; f < floors.length; f++) {
-      var y = floors[f];
-      var seg = segmentAtY(Math.max(6, y - 0.01));
-      var hw = seg.w / 2;
-      var hd = seg.d / 2;
+    function tower(opts) {
+      var cx = opts.cx, cz = opts.cz, w = opts.w, d = opts.d;
+      var base = opts.base, floors = opts.floors, fh = opts.fh || 4;
+      var setback = opts.setback || floors;
+      var top = base + floors * fh;
+      var style = opts.style || 'office';
 
-      // 楼板（比幕墙外挑 0.65 m，侧面看是一条亮线）
-      var t = f === floors.length - 1 ? 0.52 : 0.32;
-      solidBox(seg.cx - hw - 0.65, y - t, -hd - 0.65, seg.cx + hw + 0.65, y, hd + 0.65, C.slab);
-      boxEdges(seg.cx - hw - 0.65, y - t, -hd - 0.65, seg.cx + hw, y, hd + 0.65, C.slabEdge, 0.34, true);
+      for (var f = 0; f < floors; f++) {
+        var narrow = f >= setback;
+        var ww = narrow ? w * 0.82 : w;
+        var dd = narrow ? d * 0.82 : d;
+        var y = base + f * fh;
 
-      // 幕墙：从楼板上表面到下一层板底
-      if (f < floors.length - 1) {
-        glassBox(seg.cx - hw, y + 0.02, -hd, seg.cx + hw, y + 3.6, hd, C.glass);
-        boxEdges(seg.cx - hw, y + 0.02, -hd, seg.cx + hw, y + 3.6, hd, C.mullion, 0.20);
+        solidBox(cx - ww / 2 - 0.5, y, cz - dd / 2 - 0.5, cx + ww / 2 + 0.5, y + 0.3, cz + dd / 2 + 0.5, C.slab);
+        boxEdges(cx - ww / 2 - 0.5, y, cz - dd / 2 - 0.5, cx + ww / 2 + 0.5, y + 0.3, cz + dd / 2 + 0.5, C.slabEdge, 0.34, true);
 
-        // 每层幕墙顶部一条暖色灯带：远看是水平亮线，近看才分得出是灯。
-        line(seg.cx - hw, y + 3.52, hd, seg.cx + hw, y + 3.52, hd, C.warm, 0.44);
-        line(seg.cx - hw, y + 3.52, -hd, seg.cx + hw, y + 3.52, -hd, C.warm, 0.26);
-        line(seg.cx + hw, y + 3.52, -hd, seg.cx + hw, y + 3.52, hd, C.warm, 0.32);
-        line(seg.cx - hw, y + 3.52, -hd, seg.cx - hw, y + 3.52, hd, C.warm, 0.32);
+        if (f < floors - 1) {
+          glassBox(cx - ww / 2, y + 0.3, cz - dd / 2, cx + ww / 2, y + fh - 0.05, cz + dd / 2, C.glass);
+          boxEdges(cx - ww / 2, y + 0.3, cz - dd / 2, cx + ww / 2, y + fh - 0.05, cz + dd / 2, C.mullion, 0.18);
+          line(cx - ww / 2, y + fh - 0.22, cz + dd / 2, cx + ww / 2, y + fh - 0.22, cz + dd / 2, C.warm, 0.32);
+          line(cx - ww / 2, y + fh - 0.22, cz - dd / 2, cx + ww / 2, y + fh - 0.22, cz - dd / 2, C.warm, 0.18);
 
-        // 零星几扇亮着的窗：全部朝外贴在幕墙前，用确定性伪随机选位置。
-        // 亮窗是整段演示里最"有人味"的细节——没有它，玻璃盒只是个模型。
-        var lit = floorLightPattern[f % floorLightPattern.length];
-        for (var lf = 0; lf < 4; lf++) {
-          var slots = lit[lf];
-          if (!slots) continue;
-          for (var wi = 0; wi < slots.length; wi++) {
-            var slot = slots[wi];
-            var spanX = seg.w - 3;
-            var spanZ = seg.d - 3;
-            var px2 = seg.cx - spanX / 2 + spanX * ((slot * 37 + f * 13) % 100) / 100;
-            var pz2 = -spanZ / 2 + spanZ * ((slot * 53 + f * 7) % 100) / 100;
-            var wc = slot % 3 === 0 ? C.cool : C.warm;
-            if (lf === 0) glowWindow(px2, y + 1.85, hd, 0.5, 0.62, 0, wc);
-            else if (lf === 1) glowWindow(px2, y + 1.85, -hd, 0.5, 0.62, 1, wc);
-            else if (lf === 2) glowWindow(seg.cx + hw, y + 1.85, pz2, 0.5, 0.62, 2, wc);
-            else glowWindow(seg.cx - hw, y + 1.85, pz2, 0.5, 0.62, 3, wc);
+          var lit = floorLightPattern[f % floorLightPattern.length];
+          for (var lf = 0; lf < 4; lf++) {
+            var slots = lit[lf];
+            if (!slots) continue;
+            for (var wi = 0; wi < slots.length; wi++) {
+              var slot = slots[wi];
+              var spanX = ww - 3;
+              var spanZ = dd - 3;
+              var px2 = cx - spanX / 2 + spanX * ((slot * 37 + f * 13) % 100) / 100;
+              var pz2 = cz - spanZ / 2 + spanZ * ((slot * 53 + f * 7) % 100) / 100;
+              var wc = slot % 3 === 0 ? C.cool : C.warm;
+              if (lf === 0) glowWindow(px2, y + fh * 0.5, cz + dd / 2, 0.55, 0.68, 0, wc);
+              else if (lf === 1) glowWindow(px2, y + fh * 0.5, cz - dd / 2, 0.55, 0.68, 1, wc);
+              else if (lf === 2) glowWindow(cx + ww / 2, y + fh * 0.5, pz2, 0.55, 0.68, 2, wc);
+              else glowWindow(cx - ww / 2, y + fh * 0.5, pz2, 0.55, 0.68, 3, wc);
+            }
+          }
+
+          if (style === 'res') {
+            solidBox(cx - ww / 2, y + 0.3, cz + dd / 2, cx + ww / 2, y + 0.8, cz + dd / 2 + 1.5, C.slab);
+            line(cx - ww / 2, y + 0.9, cz + dd / 2 + 1.5, cx + ww / 2, y + 0.9, cz + dd / 2 + 1.5, C.warm, 0.28);
           }
         }
       }
-    }
 
-    // 竖向幕墙分格：每 3 m 一根，只画看得见的外轮廓方向
-    for (var fi = 0; fi < floors.length - 1; fi++) {
-      var yy = floors[fi];
-      var sg = segmentAtY(yy + 0.01);
-      var w2 = sg.w / 2;
-      var d2 = sg.d / 2;
-      var top = yy + 3.6;
-      for (var x = -w2 + 3; x < w2 - 0.5; x += 3) {
-        line(sg.cx + x, yy + 0.05, -d2, sg.cx + x, top, -d2, C.mullion, 0.10);
-        line(sg.cx + x, yy + 0.05, d2, sg.cx + x, top, d2, C.mullion, 0.10);
+      var mainHalf = w / 2;
+      var mainDepth = d / 2;
+      for (var cxi = -1; cxi <= 1; cxi += 2) {
+        for (var czi = -1; czi <= 1; czi += 2) {
+          solidBox(cx + cxi * mainHalf - 0.22, base, cz + czi * mainDepth - 0.22,
+            cx + cxi * mainHalf + 0.22, base + setback * fh, cz + czi * mainDepth + 0.22, C.column);
+          solidBox(cx + cxi * mainHalf * 0.82 - 0.22, base + setback * fh, cz + czi * mainDepth * 0.82 - 0.22,
+            cx + cxi * mainHalf * 0.82 + 0.22, top, cz + czi * mainDepth * 0.82 + 0.22, C.column);
+        }
       }
-      for (var z = -d2 + 3; z < d2 - 0.5; z += 3) {
-        line(sg.cx - w2, yy + 0.05, z, sg.cx - w2, top, z, C.mullion, 0.10);
-        line(sg.cx + w2, yy + 0.05, z, sg.cx + w2, top, z, C.mullion, 0.10);
+
+      solidBox(cx - w * 0.16, base, cz - d * 0.16, cx + w * 0.16, top, cz + d * 0.16, C.core);
+      boxEdges(cx - w * 0.16, base, cz - d * 0.16, cx + w * 0.16, top, cz + d * 0.16, C.coreEdge, 0.2);
+
+      var roofW = w * 0.82;
+      var roofD = d * 0.82;
+      solidBox(cx - roofW / 2 - 0.4, top, cz - roofD / 2 - 0.4, cx + roofW / 2 + 0.4, top + 1.4, cz + roofD / 2 + 0.4, C.roof);
+      boxEdges(cx - roofW / 2 - 0.4, top, cz - roofD / 2 - 0.4, cx + roofW / 2 + 0.4, top + 1.4, cz + roofD / 2 + 0.4, C.slabEdge, 0.4);
+      line(cx - roofW / 2, top + 1.45, cz + roofD / 2, cx + roofW / 2, top + 1.45, cz + roofD / 2, C.warm, 0.4);
+
+      if (opts.spire) {
+        line(cx, top + 1.4, cz, cx, top + 7.5, cz, C.slabEdge, 0.65);
+        line(cx - 1.6, top + 5.2, cz, cx + 1.6, top + 5.2, cz, C.slabEdge, 0.4);
+        glowWindow(cx, top + 7.9, cz, 0.42, 0.42, 0, C.cool);
+        glowWindow(cx, top + 7.9, cz, 0.42, 0.42, 2, C.cool);
+      }
+      return top;
+    }
+
+    var towerATop = tower({ cx: -36, cz: -13, w: 26, d: 26, base: backTop, floors: 24, fh: 4, setback: 18, style: 'office', spire: true });
+    var towerBTop = tower({ cx: 36, cz: -13, w: 22, d: 24, base: backTop, floors: 18, fh: 4, setback: 14, style: 'res' });
+
+    /* 空中连廊 */
+    solidBox(-23, 58, -17, 25, 58.5, -7, C.slab);
+    glassBox(-23, 58.5, -16.8, 25, 61.2, -7.2, C.glass);
+    boxEdges(-23, 58, -17, 25, 61.2, -7, C.slabEdge, 0.4);
+    line(-23, 61.25, -7, 25, 61.25, -7, C.warm, 0.35);
+    for (var bx = -20; bx <= 20; bx += 8) {
+      glowWindow(bx, 59.8, -7.18, 2.4, 0.7, 0, P.interior);
+    }
+
+    /* 酒店 / 公寓 */
+    var hotelTop = tower({ cx: 0, cz: -44, w: 36, d: 24, base: 0, floors: 11, fh: 4, setback: 5, style: 'res' });
+    solidBox(-24, 0, -57, 24, 12, -31, P.mall);
+    boxEdges(-24, 0, -57, 24, 12, -31, C.slabEdge, 0.25);
+    for (var hf = 0; hf < 3; hf++) {
+      line(-24, hf * 4 + 3.8, -30.9, 24, hf * 4 + 3.8, -30.9, P.interior, 0.35);
+    }
+
+    /* ---------------------------------------------------------- 前场景观 */
+    function tree(x, z, s) {
+      solidBox(x - 1.9 * s, 0, z - 1.9 * s, x + 1.9 * s, 0.45, z + 1.9 * s, P.plazaLine);
+      solidBox(x - 0.24 * s, 0.45, z - 0.24 * s, x + 0.24 * s, 2.4 * s, z + 0.24 * s, P.trunk);
+      sphere(x, 3.5 * s, z, 1.9 * s, 2.1 * s, 1.9 * s, P.leaf, 3, 6);
+      sphere(x + 0.9 * s, 3.1 * s, z - 0.4 * s, 1.3 * s, 1.5 * s, 1.3 * s, P.leaf2, 3, 5);
+      sphere(x - 0.9 * s, 3.0 * s, z + 0.5 * s, 1.2 * s, 1.4 * s, 1.2 * s, P.leaf2, 3, 5);
+    }
+
+    var treeSpots = [
+      [-56, 47, 1.1], [-44, 56, 1.0], [-32, 47, 1.15], [-20, 58, 0.9],
+      [20, 58, 0.9], [32, 47, 1.1], [44, 56, 1.0], [56, 47, 1.05],
+      [-58, 60, 0.85], [58, 60, 0.85]
+    ];
+    for (var ti2 = 0; ti2 < treeSpots.length; ti2++) {
+      tree(treeSpots[ti2][0], treeSpots[ti2][1], treeSpots[ti2][2]);
+    }
+
+    /* 水景 */
+    solidBox(-9, 0.15, 48, 9, 0.8, 58, P.water);
+    boxEdges(-9, 0.15, 48, 9, 0.8, 58, C.site, 0.3);
+    line(-9, 0.85, 48, 9, 0.85, 48, C.site, 0.55);
+    line(-9, 0.85, 58, 9, 0.85, 58, C.site, 0.4);
+    for (var wj = -6; wj <= 6; wj += 4) {
+      line(wj, 0.85, 53, wj, 3.0, 53, C.cool, 0.28);
+    }
+
+    /* 路灯 */
+    function lamp(x, z) {
+      solidBox(x - 0.12, 0, z - 0.12, x + 0.12, 5.4, z + 0.12, C.column);
+      glowWindow(x, 5.55, z, 0.38, 0.32, 0, C.warm);
+      glowWindow(x, 5.55, z, 0.38, 0.32, 2, C.warm);
+    }
+    var lampSpots = [[-62, 62], [-40, 62], [-18, 62], [18, 62], [40, 62], [62, 62], [-48, 44], [48, 44]];
+    for (var li2 = 0; li2 < lampSpots.length; li2++) lamp(lampSpots[li2][0], lampSpots[li2][1]);
+
+    /* 车 */
+    function car(x, z, color, flip) {
+      solidBox(x - 2.1, 0.2, z - 0.9, x + 2.1, 1.2, z + 0.9, color);
+      solidBox(x - 1.15, 1.2, z - 0.78, x + 1.15, 1.85, z + 0.78, P.carDark);
+      var wheelY = 0.0;
+      for (var wx2 = -1.5; wx2 <= 1.5; wx2 += 3) {
+        solidBox(x + wx2 - 0.35, wheelY, z - 1.0, x + wx2 + 0.35, 0.55, z - 0.72, P.carDark);
+        solidBox(x + wx2 - 0.35, wheelY, z + 0.72, x + wx2 + 0.35, 0.55, z + 1.0, P.carDark);
+      }
+      if (flip) {
+        glowWindow(x - 2.12, 0.85, z - 0.5, 0.2, 0.16, 3, C.warm);
+        glowWindow(x - 2.12, 0.85, z + 0.5, 0.2, 0.16, 3, C.warm);
+        glowWindow(x + 2.12, 0.8, z - 0.55, 0.18, 0.13, 2, P.red);
+      } else {
+        glowWindow(x + 2.12, 0.85, z - 0.5, 0.2, 0.16, 2, C.cool);
+        glowWindow(x + 2.12, 0.85, z + 0.5, 0.2, 0.16, 2, C.cool);
+        glowWindow(x - 2.12, 0.8, z - 0.55, 0.18, 0.13, 3, P.red);
       }
     }
+    car(-62, 69, P.carWhite, false);
+    car(-48, 72, P.carBlue, true);
+    car(-30, 69, P.carDark, false);
+    car(-12, 73, P.carWhite, false);
+    car(10, 69, P.carBlue, false);
+    car(30, 72, P.carDark, true);
+    car(50, 69, P.carWhite, false);
+    car(66, 73, P.carDark, false);
+    solidBox(-40, 0.2, 75, -30, 3.0, 77, P.carWhite);
+    solidBox(-38, 3.0, 75.2, -32, 3.4, 76.8, P.carDark);
+    for (var busX = -39; busX <= -31; busX += 1.6) {
+      glowWindow(busX, 2.45, 77.02, 0.5, 0.28, 0, C.warm);
+    }
 
-    // 框架柱：每段 8 根
-    for (var si = 0; si < segments.length; si++) {
-      var seg2 = segments[si];
-      var hw2 = seg2.w / 2;
-      var hd2 = seg2.d / 2;
-      var colY0 = seg2.y0;
-      var colY1 = seg2.y1;
-      var spots = [
-        [-hw2, -hd2], [hw2, -hd2], [hw2, hd2], [-hw2, hd2],
-        [0, -hd2], [0, hd2], [-hw2, 0], [hw2, 0]
-      ];
-      for (var ci = 0; ci < spots.length; ci++) {
-        var sx = seg2.cx + spots[ci][0];
-        var sz = spots[ci][1];
-        solidBox(sx - 0.21, colY0, sz - 0.21, sx + 0.21, colY1, sz + 0.21, C.column);
+    /* ---------------------------------------------------------- 周边城市 */
+    function contextBlock(x, z, w, d, h, color, seed) {
+      solidBox(x - w / 2, 0, z - d / 2, x + w / 2, h, z + d / 2, color);
+      boxEdges(x - w / 2, 0, z - d / 2, x + w / 2, h, z + d / 2, C.coreEdge, 0.12);
+      for (var f = 2; f < h - 2; f += 4) {
+        for (var wi = 0; wi < 4; wi++) {
+          if ((f * 7 + wi * 11 + seed) % 5 !== 0) continue;
+          var wx3 = x - w / 2 + 3 + wi * ((w - 6) / 4);
+          glowWindow(wx3, f, z + d / 2, 0.5, 0.45, 0, (seed + wi) % 4 === 0 ? C.cool : C.warm);
+        }
       }
     }
+    contextBlock(-102, -40, 28, 34, 34, P.context, 1);
+    contextBlock(-104, 6, 24, 30, 22, P.context2, 2);
+    contextBlock(-100, 44, 30, 28, 16, P.context, 3);
+    contextBlock(104, -42, 26, 32, 28, P.context2, 4);
+    contextBlock(106, 2, 28, 34, 38, P.context, 5);
+    contextBlock(102, 44, 24, 28, 18, P.context2, 6);
+    contextBlock(-56, -88, 34, 28, 44, P.context2, 7);
+    contextBlock(-16, -92, 28, 26, 30, P.context, 8);
+    contextBlock(22, -90, 32, 30, 48, P.context2, 9);
+    contextBlock(58, -86, 26, 26, 26, P.context, 10);
 
-    // 核心筒：深色实体，给透明幕墙一点"里面真有东西"的纵深
-    for (var cs = 0; cs < segments.length; cs++) {
-      var seg3 = segments[cs];
-      var cw = seg3.w * 0.30;
-      var cd = seg3.d * 0.34;
-      solidBox(seg3.cx - cw, seg3.y0 + 0.4, -cd, seg3.cx + cw, seg3.y1, cd, C.core);
-      boxEdges(seg3.cx - cw, seg3.y0 + 0.4, -cd, seg3.cx + cw, seg3.y1, cd, C.coreEdge, 0.26);
+    /* ---------------------------------------------------------- 剖切轮廓 */
+    var sy = 40.2;
+    function secRect(x0, x1, z0, z1) {
+      section.push(x0, sy, z0, C.site[0], C.site[1], C.site[2]);
+      section.push(x1, sy, z0, C.site[0], C.site[1], C.site[2]);
+      section.push(x1, sy, z0, C.site[0], C.site[1], C.site[2]);
+      section.push(x1, sy, z1, C.site[0], C.site[1], C.site[2]);
+      section.push(x1, sy, z1, C.site[0], C.site[1], C.site[2]);
+      section.push(x0, sy, z1, C.site[0], C.site[1], C.site[2]);
+      section.push(x0, sy, z1, C.site[0], C.site[1], C.site[2]);
+      section.push(x0, sy, z0, C.site[0], C.site[1], C.site[2]);
+      var tickLen = 2.4;
+      var cs = [[x0, z0, -1, -1], [x1, z0, 1, -1], [x1, z1, 1, 1], [x0, z1, -1, 1]];
+      for (var ci = 0; ci < 4; ci++) {
+        var ccx = cs[ci][0], ccz = cs[ci][1];
+        section.push(ccx, sy, ccz, C.site[0], C.site[1], C.site[2]);
+        section.push(ccx + cs[ci][2] * tickLen, sy, ccz, C.site[0], C.site[1], C.site[2]);
+        section.push(ccx, sy, ccz, C.site[0], C.site[1], C.site[2]);
+        section.push(ccx, sy, ccz + cs[ci][3] * tickLen, C.site[0], C.site[1], C.site[2]);
+      }
     }
+    secRect(-49, -23, -26, 0);
+    secRect(25, 47, -25, -1);
+    secRect(-18, 18, -56, -32);
 
-    // 屋面：女儿墙 + 机房 + 天线 + 航空障碍灯
-    var roofSeg = segments[2];
-    solidBox(roofSeg.cx - roofSeg.w / 2 - 0.25, 54, -roofSeg.d / 2 - 0.25,
-      roofSeg.cx - roofSeg.w / 2 + 0.35, 55.15, roofSeg.d / 2 + 0.25, C.roof);
-    solidBox(roofSeg.cx + roofSeg.w / 2 - 0.35, 54, -roofSeg.d / 2 - 0.25,
-      roofSeg.cx + roofSeg.w / 2 + 0.25, 55.15, roofSeg.d / 2 + 0.25, C.roof);
-    solidBox(roofSeg.cx - roofSeg.w / 2, 54, -roofSeg.d / 2 - 0.25,
-      roofSeg.cx + roofSeg.w / 2, 55.15, -roofSeg.d / 2 + 0.35, C.roof);
-    solidBox(roofSeg.cx - roofSeg.w / 2, 54, roofSeg.d / 2 - 0.35,
-      roofSeg.cx + roofSeg.w / 2, 55.15, roofSeg.d / 2 + 0.25, C.roof);
-    line(roofSeg.cx - roofSeg.w / 2, 55.2, roofSeg.d / 2, roofSeg.cx + roofSeg.w / 2, 55.2, roofSeg.d / 2, C.warm, 0.4);
-
-    solidBox(-3.2 - 3.1, 54, -2.6, -3.2 + 3.1, 56.4, 2.6, C.roof);
-    boxEdges(-6.3, 54, -2.6, 0.1, 56.4, 2.6, C.slabEdge, 0.45);
-    line(-3.2, 56.4, 0, -3.2, 62.2, 0, C.slabEdge, 0.55);
-    line(-4.7, 59.4, 0, -1.7, 59.4, 0, C.slabEdge, 0.45);
-    glowWindow(-3.2, 62.5, 0, 0.45, 0.45, 0, C.cool);
-    glowWindow(-3.2, 62.5, 0, 0.45, 0.45, 2, C.cool);
-
-    /* 塔吊：只走线，暖色，和冷色的楼形成一点对比。
-       放在场地左前侧（不是楼后），不然从默认机位看会被塔楼完全挡住。 */
-    var craneX = -23;
-    var craneZ = 17;
-    var mastTop = 35;
-    var jibY = 35;
-    var jibTip = craneX + 21;
-    var jibBack = craneX - 7;
-    var apexY = 44;
-
-    for (var cy = 0; cy <= mastTop; cy += 2.6) {
-      line(craneX - 0.7, cy, craneZ - 0.7, craneX + 0.7, cy, craneZ + 0.7, C.crane, 1.0);
-      line(craneX - 0.7, cy, craneZ + 0.7, craneX + 0.7, cy, craneZ - 0.7, C.crane, 1.0);
-    }
-    line(craneX - 0.7, 0, craneZ - 0.7, craneX - 0.7, mastTop, craneZ - 0.7, C.crane, 0.85);
-    line(craneX + 0.7, 0, craneZ - 0.7, craneX + 0.7, mastTop, craneZ - 0.7, C.crane, 0.85);
-    line(craneX + 0.7, 0, craneZ + 0.7, craneX + 0.7, mastTop, craneZ + 0.7, C.crane, 0.85);
-    line(craneX - 0.7, 0, craneZ + 0.7, craneX - 0.7, mastTop, craneZ + 0.7, C.crane, 0.85);
-
-    line(craneX, mastTop, craneZ, craneX, apexY, craneZ, C.crane, 1.0);
-    line(craneX, jibY, craneZ, jibTip, jibY, craneZ, C.crane, 0.95);
-    line(craneX, jibY, craneZ, jibBack, jibY, craneZ, C.crane, 0.95);
-    line(jibTip, jibY, craneZ, craneX, apexY, craneZ, C.crane, 0.72);
-    line(jibBack, jibY, craneZ, craneX, apexY, craneZ, C.crane, 0.72);
-
-    // 吊钩：小车在跨中偏外，钢索垂下来，下面吊一根钢梁
-    var trolleyX = craneX + 13;
-    line(craneX, jibY, craneZ, trolleyX, jibY, craneZ, C.crane, 0.2);
-    line(trolleyX, jibY, craneZ, trolleyX, 24, craneZ, C.crane, 0.85);
-    solidBox(trolleyX - 0.55, 22.7, craneZ - 0.55, trolleyX + 0.55, 24, craneZ + 0.55, C.crane);
-    line(trolleyX, 23.4, craneZ, trolleyX - 2.7, 21.0, craneZ, C.crane, 0.62);
-    line(trolleyX, 23.4, craneZ, trolleyX + 2.7, 21.0, craneZ, C.crane, 0.62);
-    solidBox(trolleyX - 3.0, 20.3, craneZ - 0.42, trolleyX + 3.0, 21.0, craneZ + 0.42, C.column);
-    glowWindow(trolleyX, 20.65, craneZ - 0.46, 2.3, 0.12, 1, C.warm);
-
-    // 塔吊配重
-    solidBox(jibBack - 1.4, jibY - 1.8, craneZ - 0.9, jibBack, jibY, craneZ + 0.9, C.crane);
-
-    // 塔吊顶部的航空灯（两块互相垂直的自发光面，从各方向都能看到一点）
-    glowWindow(craneX, apexY + 0.35, craneZ, 0.4, 0.4, 0, C.crane);
-    glowWindow(craneX, apexY + 0.35, craneZ, 0.4, 0.4, 2, C.crane);
-
-    /* 剖切轮廓：剖切模式固定切在 38.2 m（段 B 的顶部），
-       画一圈发光的切口边，比半透明平面干净，也更像 BIM 里的"当前楼层"。 */
-    var sy = 38.2;
-    var sx0 = -9.3, sx1 = 6.1, sz0 = -6.2, sz1 = 6.2;
-    function secLine(x0, y0, z0, x1, y1, z1) {
-      section.push(x0, y0, z0, C.site[0], C.site[1], C.site[2]);
-      section.push(x1, y1, z1, C.site[0], C.site[1], C.site[2]);
-    }
-    secLine(sx0, sy, sz0, sx1, sy, sz0);
-    secLine(sx1, sy, sz0, sx1, sy, sz1);
-    secLine(sx1, sy, sz1, sx0, sy, sz1);
-    secLine(sx0, sy, sz1, sx0, sy, sz0);
-    var corners = [[sx0, sz0], [sx1, sz0], [sx1, sz1], [sx0, sz1]];
-    for (var cc = 0; cc < corners.length; cc++) {
-      var cx0 = corners[cc][0];
-      var cz0 = corners[cc][1];
-      var dirX = cx0 < 0 ? -1 : 1;
-      var dirZ = cz0 < 0 ? -1 : 1;
-      secLine(cx0, sy, cz0, cx0 + dirX * 1.5, sy, cz0);
-      secLine(cx0, sy, cz0, cx0, sy, cz0 + dirZ * 1.5);
-    }
 
     return {
       solid: new Float32Array(solid),
@@ -752,12 +917,12 @@
     gl.bufferData(
       gl.ARRAY_BUFFER,
       new Float32Array([
-        -100, 0, -100,
-        100, 0, -100,
-        -100, 0, 100,
-        -100, 0, 100,
-        100, 0, -100,
-        100, 0, 100
+        -300, 0, -300,
+        300, 0, -300,
+        -300, 0, 300,
+        -300, 0, 300,
+        300, 0, -300,
+        300, 0, 300
       ]),
       gl.STATIC_DRAW
     );
@@ -773,15 +938,15 @@
     /* 相机与交互状态 */
     var view = {
       az: 0.16,
-      el: 0.22,
-      dist: 126,
-      target: [-1.8, 30.0, 0]
+      el: 0.16,
+      dist: 290,
+      target: [0, 47, 8]
     };
     var introStart = performance.now();
     var introDone = reduceMotion;
     var mode = 0;
     var cut = 0;
-    var cutTarget = 38.2;
+    var cutTarget = 40.2;
     var autoSpin = !reduceMotion;
     var spinPausedUntil = 0;
     var dragging = false;
@@ -876,7 +1041,7 @@
         var t = clamp((now - introStart) / 2600, 0, 1);
         var e = easeOutCubic(t);
         view.az = 0.16 + (0.62 - 0.16) * e;
-        view.dist = 126 - 24 * e;
+        view.dist = 290 - 40 * e;
         if (t >= 1) introDone = true;
       }
 
@@ -901,7 +1066,7 @@
       var eye = currentEye();
       cameraPos = eye;
 
-      mat4Perspective(projMat, (38 * Math.PI) / 180, cssW / cssH, 0.5, 260);
+      mat4Perspective(projMat, (38 * Math.PI) / 180, cssW / cssH, 0.5, 800);
       mat4LookAt(viewMat, eye, view.target, [0, 1, 0]);
       mat4Multiply(vpMat, projMat, viewMat);
 
@@ -921,7 +1086,7 @@
       gl.uniform1f(gridU.uAlpha, 1.0);
       gl.uniform1f(gridU.uTime, now / 1000);
       gl.uniform1f(gridU.uSection, 0);
-      gl.uniform2f(gridU.uSize, 100, 100);
+      gl.uniform2f(gridU.uSize, 300, 300);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
       gl.bindVertexArray(gridVao);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
@@ -953,7 +1118,7 @@
         gl.uniform3f(glassU.uEye, eye[0], eye[1], eye[2]);
         gl.uniform1f(glassU.uCut, cut);
         gl.uniform1i(glassU.uMode, mode);
-        gl.uniform1f(glassU.uAlpha, mode === 2 ? 0.09 : 0.16);
+        gl.uniform1f(glassU.uAlpha, mode === 2 ? 0.13 : 0.24);
         gl.bindVertexArray(glassBuf.vao);
 
         var order = scene.glassRanges.slice().sort(function (a, b) {
@@ -985,7 +1150,7 @@
       gl.bindVertexArray(lineBuf.vao);
       gl.drawArrays(gl.LINES, 0, lineBuf.count);
 
-      // 自发光：亮窗、灯带、塔吊顶灯。关闭背面剔除，双面可见。
+      // 自发光：亮窗、灯带和标高点。关闭背面剔除，双面可见。
       gl.disable(gl.CULL_FACE);
       gl.useProgram(lineProg);
       gl.uniform1f(lineU.uAlpha, 0.9);
@@ -1002,7 +1167,7 @@
         gl.uniform3f(lineU.uEye, eye[0], eye[1], eye[2]);
         gl.uniform1f(lineU.uCut, 1000.0);
         gl.uniform1i(lineU.uMode, 0);
-        gl.uniform1f(lineU.uAlpha, clamp((cut - 37.0) / 1.3, 0.0, 1.0) * 0.95);
+        gl.uniform1f(lineU.uAlpha, clamp((cut - 39.0) / 1.3, 0.0, 1.0) * 0.95);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
         gl.bindVertexArray(sectionBuf.vao);
         gl.drawArrays(gl.LINES, 0, sectionBuf.count);
@@ -1062,7 +1227,7 @@
     function resetView() {
       view.az = 0.62;
       view.el = 0.22;
-      view.dist = 102;
+      view.dist = 250;
       velocity.az = 0;
       velocity.el = 0;
       introDone = true;
@@ -1095,7 +1260,7 @@
     var zoomIn = stage.querySelector('[data-scene-zoom="in"]');
     var zoomOut = stage.querySelector('[data-scene-zoom="out"]');
     function zoom(factor) {
-      view.dist = clamp(view.dist * factor, 55, 155);
+      view.dist = clamp(view.dist * factor, 120, 420);
       introDone = true;
       start();
     }
@@ -1159,7 +1324,7 @@
         event.preventDefault();
         introDone = true;
         var delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
-        view.dist = clamp(view.dist * Math.exp(delta * 0.0011), 55, 155);
+        view.dist = clamp(view.dist * Math.exp(delta * 0.0011), 120, 420);
         pauseSpin(2200);
         start();
       },
@@ -1240,8 +1405,3 @@
     init();
   }
 })();
-
-
-
-
-
