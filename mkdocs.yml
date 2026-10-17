@@ -29,6 +29,7 @@ extra_css:
 
 extra_javascript:
   - js/site.js
+  - js/hero3d.js
 
 copyright: © 2026 Terry · MIT License
 

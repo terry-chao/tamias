@@ -5,7 +5,8 @@ Qt 做壳，自研 RHI 跑 Vulkan / OpenGL，OCCT 提供 BRep，IfcOpenShell 提
 中间用**特征树**与**分层场景图**串成一条链路。
 
 > 站点首页由模板渲染，见 [`overrides/home.html`](https://github.com/terry-chao/tamias/blob/main/overrides/home.html)；
-> 样式在 `docs/css/home.css`。这一页保留一份文字版说明，供搜索与 GitHub 浏览用。
+> 样式在 `docs/css/home.css`，首屏的三维演示在 `docs/js/hero3d.js`（WebGL2，只展示、不参与引擎，
+> 没有 WebGL2 时退回 `docs/img/hero-scene.png` 静态海报）。这一页保留一份文字版说明，供搜索与 GitHub 浏览用。
 
 ## 这个软件能做什么
 
