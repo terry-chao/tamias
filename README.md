@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/img/brand/tamias-lockup-dark.png" alt="Tamias" width="560">
+</p>
+
 # Tamias
 
 跨 MCAD / BIM 的几何查看 + 参数化编辑内核。
