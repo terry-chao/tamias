@@ -36,7 +36,7 @@
 | [render_scene.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/scene/render_scene.h) | `version = 3`，只有 mesh / item / camera / texture |
 | [document_io.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document_io.cpp) | chunk：`META/MESH/SCEN/VIEW/FEAT/MATL/TEXT/RELA/STRY/GRID/DRWG`。注意 **`'TEXT'` 已经被贴图库占了**，文字块得另起 fourcc（建议 `ANNO`） |
 | `assets/` | 只有 `branding/`、`icons/`、`samples/`，**没有字体资产** |
-| `shaders/` | `mesh / sky / grid / overlay` 四条；没有 `text.*`。WebGL / WebGPU 内嵌着色器里连 `overlay` 都没有（图纸底图是桌面专属） |
+| `shaders/` | `mesh / sky / overlay / text / line` 五条（+`mesh.hlsli`），**没有** `grid.*`。WebGL 内嵌着色器已补齐 `text` / `overlay` / `line`（2026-10-22）；WebGPU 仍只有 mesh + sky |
 | [picking.h](https://github.com/terry-chao/tamias/blob/main/src/engine/document/picking.h) | 有 `project_world_to_screen()`（锚点投影现成可用）、Bvh 三角形拾取；屏幕空间文字的命中测试得自己写 |
 
 ---
@@ -312,6 +312,12 @@ Ribbon **Annotate → Text**（`Ctrl+Shift+T`）→ 视口里点一下定锚点 
 | **P3 文字注记实体** ✅ | `TextAnnotation`（世界锚点 + 屏幕朝向）+ `Document` 存储 + `create_text` / `update_text` / `delete_text`（都可撤销）+ `.tdoc` 的 `ANNO` 块 + 视口放置 / 屏幕拾取 / 双击改字 / 右键菜单 + Ribbon「Annotate → Text」 | `src/engine/document/text_annotation.h`、`src/command/**/*text*`、`document_io.cpp`、`document_viewport.*`、`main_window.cpp` | 能放 / 能选 / 能改 / 能删 / 能撤销；存盘再打开还在；命令与序列化有单测 |
 | **P3b 模型空间几何文字** | 字形轮廓 → 三角网 → `intern_mesh()` → 普通 `SceneDrawItem`（可被遮挡 / 参与布尔 / 导出 OBJ）。带孔洞的字形（`A`、`o`）要么上内核、要么写健壮的多边形三角化 | `src/engine/render/text/outline_tess.*`、`src/command/create/` | 刻字能参与三维遮挡与布尔 |
 | **P4 统一与 Web** | 图纸文字并进文字通路；WebGL / WebGPU 文字着色器；MSDF；IFC 文字 | `src/engine/render/rhi/web*/`、`src/app/drawing/` | Web 里有字；放大不糊 |
+
+> **P4 进展（2026-10-22）**：WebGL 侧的文字 shader（`webgl_shaders::text_vert/frag`）与管线
+> 已补，GLSL ES 3.00 校验通过。但「Web 里有字」还差两步：①`ViewerHost::render()` 不提交
+> `text_quads` / `text_atlas_texture_id`；②wasm 里没有字体来源（本文件 §3.1 明确**不入库字体
+> 二进制**，浏览器也读不到系统字体目录），得先决定「随包带字体」还是「用浏览器 canvas2D
+> 光栅化字形再上传图集」。
 
 依赖关系：P0 → P1 → P2 是直的；P3 只依赖 P0（几何那条支路），可以和 P1/P2 并行。
 

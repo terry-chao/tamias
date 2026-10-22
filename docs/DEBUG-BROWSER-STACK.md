@@ -239,9 +239,11 @@ OCCT 本身基本是黑盒，别指望单步进内核。有效的办法是在边
    （[GEOMETRY-SERVICE-PLAN.md §6.3](https://github.com/terry-chao/tamias/blob/main/GEOMETRY-SERVICE-PLAN.md)）。同源方案能顺带消掉这个噪声。
 5. **Asyncify 在帧内挂起**：页面卡死、栈停在 `requestAnimationFrame` 里。纪律是死的：
    **网络只从命令路径发起，帧内只 poll**（[GEOMETRY-SERVICE-PLAN.md §7.4](https://github.com/terry-chao/tamias/blob/main/GEOMETRY-SERVICE-PLAN.md)）。
-6. **静默不建管线**：WebGL 下 text / overlay / line 三条管线是**静默不建**的，日志里
-   **不会有任何提示**（[WEBGL-PIPELINE-AUDIT.md](WEBGL-PIPELINE-AUDIT.md) 专门纠正了
-   旧文档让你去日志里找的做法）。只能靠 Spector.js 数 draw call。
+6. **管线建了、但没数据**：WebGL 下 text / overlay / line 三条管线**现在都会建**
+   （2026-10-22 补了 GLSL），建失败会走 `create_optional_pipeline()` 的 `log_error`。
+   但 `ViewerHost` 不提交 `text_quads` / `drawing_overlays` / `preview_*` / `grip_points` /
+   `grid_*`，所以文字与底图**建了也是空转**——别在 shader 里找问题
+   （[WEBGL-PIPELINE-AUDIT.md](WEBGL-PIPELINE-AUDIT.md) §2①「第二层」）。
 7. **`mesh_binary` 格式缺口**：`line_list` / `has_texcoord` / `faces` 缺失。跨边界传网格会
    **静默丢字段**——这也是 digest 要连"字段位掩码"一起覆盖的原因。
 8. **调试器改变时序**：`default_kernel()` 竞态、Asyncify、rAF 三者都吃这个。

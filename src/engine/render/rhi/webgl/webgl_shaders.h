@@ -253,6 +253,198 @@ void main() {
   return src;
 }
 
+// ---------------------------------------------------------------------------
+// 屏幕空间文字（对应 shaders/text.vert.hlsl / text.frag.hlsl）
+//
+// 和 mesh 一样把 kPushBlock 逐字拼上：std140 的偏移必须与 C++ PushConstants 对齐。
+// 单位四边形 (0..1)² 由实例里的**像素矩形**摆到屏幕，UV 从字形图集取。
+// 实例复用 GpuInstance 布局（见 runtime/text_quad.h）：
+//   row0.xy = 矩形左上角（像素，左上原点）   row0.zw = 矩形尺寸（像素）
+//   color   = rgb + a（不预乘，片元里乘上去）
+//   tex_st  = xy: 图集 UV 缩放，zw: 图集 UV 偏移
+// 视口尺寸走 pc.eye_pos_mode.xy——文字不光照、不挑显示模式，那几个字段本来没人用。
+// ---------------------------------------------------------------------------
+inline std::string_view text_vert() {
+  static const std::string src = std::string("#version 300 es\n") + std::string(kPushBlock) + R"GLSL(
+layout(location = 0) in vec3 a_position;
+layout(location = 2) in vec2 a_uv;
+layout(location = 4) in vec4 a_rect;
+layout(location = 7) in vec4 a_color;
+layout(location = 9) in vec4 a_tex_st;
+out vec2 v_uv;
+out vec4 v_color;
+void main() {
+  vec2 viewport = max(pc.eye_pos_mode.xy, vec2(1.0));
+  vec2 pixels = a_rect.xy + a_position.xy * a_rect.zw;
+  float ndc_x = pixels.x / viewport.x * 2.0 - 1.0;
+  // GL 裁剪空间 Y 向上，而像素 y 向下，要翻一下（Vulkan 分支见 text.vert.hlsl）。
+  float ndc_y = 1.0 - pixels.y / viewport.y * 2.0;
+  gl_Position = vec4(ndc_x, ndc_y, 0.0, 1.0);
+  v_uv = a_tex_st.zw + a_uv * a_tex_st.xy;
+  v_color = a_color;
+}
+)GLSL";
+  return src;
+}
+
+inline std::string_view text_frag() {
+  static const std::string src = std::string("#version 300 es\nprecision highp float;\n") +
+                                 std::string(kPushBlock) + R"GLSL(
+uniform sampler2D atlas_tex;
+in vec2 v_uv;
+in vec4 v_color;
+out vec4 frag_color;
+void main() {
+  // 字形图集是「白 + 预乘 alpha」，覆盖度就在 alpha 里。
+  // 输出同样预乘（rgb × alpha），和管线里的 ONE / ONE_MINUS_SRC_ALPHA 对齐。
+  float coverage = texture(atlas_tex, v_uv).a;
+  float alpha = clamp(coverage * v_color.a, 0.0, 1.0);
+  frag_color = vec4(v_color.rgb * alpha, alpha);
+}
+)GLSL";
+  return src;
+}
+
+// ---------------------------------------------------------------------------
+// 图纸底图（对应 shaders/overlay.vert.hlsl / overlay.frag.hlsl）
+// 单位四边形（局部 (u,v) ∈ [0,1]²，y = 0）由 pc.mvp 摆到世界，不参与光照。
+// 管线不绑实例缓冲，所以只声明自己用得到的顶点属性。
+// ---------------------------------------------------------------------------
+inline std::string_view overlay_vert() {
+  static const std::string src = std::string("#version 300 es\n") + std::string(kPushBlock) + R"GLSL(
+layout(location = 0) in vec3 a_position;
+layout(location = 2) in vec2 a_uv;
+layout(location = 3) in vec3 a_color;
+out vec2 v_uv;
+out vec3 v_color;
+out float v_opacity;
+void main() {
+  gl_Position = pc.mvp * vec4(a_position, 1.0);
+  v_uv = a_uv;
+  v_color = a_color;
+  v_opacity = pc.color.a;
+}
+)GLSL";
+  return src;
+}
+
+inline std::string_view overlay_frag() {
+  static const std::string src = std::string("#version 300 es\nprecision highp float;\n") +
+                                 std::string(kPushBlock) + R"GLSL(
+uniform sampler2D albedo_tex;
+in vec2 v_uv;
+in vec3 v_color;
+in float v_opacity;
+out vec4 frag_color;
+void main() {
+  // 参考图纸底图：不做光照，直接把透明底的线稿贴到平面上。
+  // 混合因子是 ONE / ONE_MINUS_SRC_ALPHA（预乘 alpha），所以 rgb 要先乘 alpha。
+  vec4 tex = texture(albedo_tex, v_uv);
+  float alpha = clamp(tex.a * v_opacity, 0.0, 1.0);
+  frag_color = vec4(tex.rgb * v_color * alpha, alpha);
+}
+)GLSL";
+  return src;
+}
+
+// ---------------------------------------------------------------------------
+// 屏幕空间像素线（对应 shaders/line.vert.hlsl / line.frag.hlsl）
+//
+// 一个实例 = 一条**世界坐标线段** + 一个**像素**线宽。顶点把两个端点投影到屏幕，
+// 在屏幕空间按法向把线段撑成四边形；片元再按「到中线的像素距离」算覆盖率。
+// 实例复用 GpuInstance 布局（见 runtime/line_instance.h）：
+//   row0 = xyz: 起点（世界）, w: 线宽（像素）
+//   row1 = xyz: 终点（世界）, w: 未用
+//   color = rgb + a（不预乘，片元里乘上去）
+// 顶点属性里 position.xy 是单位四边形的角 (t, side)：t ∈ {0,1} 沿线参数，
+// side ∈ {0,1} 横向（shader 里映射成 -1 / +1）。
+// ---------------------------------------------------------------------------
+inline std::string_view line_vert() {
+  static const std::string src = std::string("#version 300 es\n") + std::string(kPushBlock) + R"GLSL(
+layout(location = 0) in vec3 a_position;
+layout(location = 4) in vec4 a_inst_row0;
+layout(location = 5) in vec4 a_inst_row1;
+layout(location = 7) in vec4 a_inst_color;
+out vec3 v_edge;
+out vec4 v_color;
+
+// w 小于它就认为端点在相机背后（除下去会把点翻到屏幕另一头）。
+const float kNearEps = 1e-4;
+// 四边形横向额外撑出去这么多像素，留给片元算边缘覆盖率（抗锯齿那 1 px）。
+const float kFeather = 1.0;
+
+// 裁剪空间 → 像素（左上原点）。GL 的裁剪空间 Y 向上，和 text_vert 同一处约定。
+vec2 pixel_from_ndc(vec2 ndc, vec2 viewport) {
+  return vec2((ndc.x * 0.5 + 0.5) * viewport.x, (0.5 - ndc.y * 0.5) * viewport.y);
+}
+
+vec2 ndc_from_pixel(vec2 pixel, vec2 viewport) {
+  return vec2(pixel.x / viewport.x * 2.0 - 1.0, 1.0 - pixel.y / viewport.y * 2.0);
+}
+
+void main() {
+  vec2 viewport = max(pc.eye_pos_mode.xy, vec2(1.0));
+  float t = a_position.x;
+  float side = a_position.y * 2.0 - 1.0;
+  float half_width = max(a_inst_row0.w, 0.5) * 0.5;
+
+  vec4 clip_a = pc.mvp * vec4(a_inst_row0.xyz, 1.0);
+  vec4 clip_b = pc.mvp * vec4(a_inst_row1.xyz, 1.0);
+  // 端点跑到相机背后：整段丢掉，或把背后那一端压到近平面上，让线看起来是被裁掉的。
+  if (clip_a.w < kNearEps && clip_b.w < kNearEps) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);  // 视锥外，光栅化阶段整条丢掉
+    v_edge = vec3(t, 0.0, half_width);
+    v_color = a_inst_color;
+    return;
+  }
+  if (clip_a.w < kNearEps) {
+    clip_a = mix(clip_a, clip_b, (kNearEps - clip_a.w) / (clip_b.w - clip_a.w));
+  } else if (clip_b.w < kNearEps) {
+    clip_b = mix(clip_b, clip_a, (kNearEps - clip_b.w) / (clip_a.w - clip_b.w));
+  }
+
+  vec2 a_px = pixel_from_ndc(clip_a.xy / clip_a.w, viewport);
+  vec2 b_px = pixel_from_ndc(clip_b.xy / clip_b.w, viewport);
+  // 线段在屏幕上退化成一个点时给个默认方向，免得归一化出 NaN。
+  vec2 delta = b_px - a_px;
+  float len = length(delta);
+  vec2 dir = len > 1e-4 ? delta / len : vec2(1.0, 0.0);
+  vec2 normal = vec2(-dir.y, dir.x);
+
+  float offset = side * (half_width + kFeather);
+  vec2 px = mix(a_px, b_px, t) + normal * offset;
+
+  // 深度按沿线参数线性插值；w 人为置 1，所以后面的变化量按屏幕空间线性插值就对了
+  // （这条管线本来不测深度，值是给将来的 depth-tested 变体留的）。
+  float z_over_w = mix(clip_a.z / clip_a.w, clip_b.z / clip_b.w, t);
+  vec2 ndc = ndc_from_pixel(px, viewport);
+  gl_Position = vec4(ndc.x, ndc.y, z_over_w, 1.0);
+  // x = 沿线参数 t，y = 到中线的**像素**距离（带符号），z = 半宽（像素）
+  v_edge = vec3(t, offset, half_width);
+  v_color = a_inst_color;
+}
+)GLSL";
+  return src;
+}
+
+inline std::string_view line_frag() {
+  static const std::string src = R"GLSL(#version 300 es
+precision highp float;
+in vec3 v_edge;
+in vec4 v_color;
+out vec4 frag_color;
+void main() {
+  // 到中线的距离在 [半宽 - 0.5, 半宽 + 0.5] 之间时按 1 px 的坡度淡出，
+  // 比这更近是实心、更远是 0——这就是抗锯齿。
+  float coverage = clamp(v_edge.z + 0.5 - abs(v_edge.y), 0.0, 1.0);
+  float alpha = clamp(v_color.a, 0.0, 1.0) * coverage;
+  // 预乘混合（ONE / ONE_MINUS_SRC_ALPHA，和文字 / 底图同一条通路）：rgb 先乘 alpha。
+  frag_color = vec4(v_color.rgb * alpha, alpha);
+}
+)GLSL";
+  return src;
+}
+
 inline std::string_view sky_vert() {
   static const std::string src = R"GLSL(#version 300 es
 layout(location = 0) in vec3 a_position;

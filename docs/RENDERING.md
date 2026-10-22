@@ -128,8 +128,8 @@ src/engine/render/rhi/
   device.h              抽象
   vulkan/               桌面主后端
   opengl/               桌面副后端（兼容性）
-  webgpu/               浏览器默认后端（见 [WebGPU](WGPU.md)）
-  webgl/                浏览器可选回退
+  webgl/                浏览器默认后端（GLSL ES 3.00）
+  webgpu/               浏览器实验后端（预设 wasm-webgpu，见 [WebGPU](WGPU.md)）
 ```
 
 启动时 `main()` 调用 `register_linked_rhi_backends()`，把编进来的后端登记进工厂。`RHIDevice::create()` 按设置里的 `GraphicsBackend` 选一个。
@@ -260,8 +260,8 @@ CPU 侧先把它们收进一张 `OverlayLine` 表（世界两端点 + 颜色 + �
   视口按 `devicePixelRatio` 乘进来，HiDPI 屏上才不会越看越细（和文字标注 `size * dpr` 同理）。
 
 实例仍然复用 `GpuInstance` 的 96 字节布局（字段含义由 `line.vert.hlsl` 解释，和文字实例一个
-套路），所以四条 RHI 后端都不用按新属性改。WebGL / WebGPU 还没有这对 shader，那两个后端走
-兜底：逐段 `LineList`（`line_pipeline_`），线宽回到 1 px。
+套路），所以四条 RHI 后端都不用按新属性改。桌面和 WebGL 各有一份 shader（SPIR-V / GLSL）；
+WebGPU 还没有 WGSL，那条后端走兜底：逐段 `LineList`（`line_pipeline_`），线宽回到 1 px。
 
 ---
 

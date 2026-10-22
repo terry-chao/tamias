@@ -232,7 +232,7 @@ class RenderThread {
   std::unique_ptr<ShaderModule> sky_vs_;
   std::unique_ptr<ShaderModule> sky_fs_;
   std::unique_ptr<PipelineState> sky_pipeline_;
-  // 图纸底图：无光照贴图管线（桌面后端；WebGL / WebGPU 暂不画底图）。
+  // 图纸底图：无光照贴图管线（桌面 SPIR-V / WebGL GLSL；WebGPU 暂无 WGSL）。
   std::unique_ptr<ShaderModule> overlay_vs_;
   std::unique_ptr<ShaderModule> overlay_fs_;
   std::unique_ptr<PipelineState> overlay_pipeline_;
@@ -243,8 +243,8 @@ class RenderThread {
   std::unique_ptr<PipelineState> text_pipeline_;
   GpuMesh text_unit_quad_mesh_;
   // 屏幕空间像素线（overlay 线条）：单位四边形 + 每段一个实例，实例同样复用
-  // GpuInstance 布局（见 line_instance.h）。桌面后端才有这对 shader：WebGL / WebGPU
-  // 不建这条管线，overlay 线条退回逐段 LineList（见 draw_channel 里的兜底分支）。
+  // GpuInstance 布局（见 line_instance.h）。桌面 / WebGL 各有一份 shader（SPIR-V /
+  // GLSL）；WebGPU 还没有 WGSL，那条后端退回逐段 LineList（见 draw_channel 的兜底分支）。
   std::unique_ptr<ShaderModule> line_vs_;
   std::unique_ptr<ShaderModule> line_fs_;
   std::unique_ptr<PipelineState> line_ss_pipeline_;

@@ -120,8 +120,9 @@ DXF 解析器支持的实体：
   倍率时线会发虚——需要看清细节就用「2D page」（那边是矢量直绘）。要更锐的底图得走"矢量线
   直接进视口"的路线（把 DXF 折线当线段批次提交），那是另一条实现。
 - **底图不参与遮挡之外的高亮/拾取**：它只是"纸"，点不中、选不到、不进实体表。
-- **WebGL / WebGPU 后端暂不画底图**：那两套 GLSL / WGSL 里还没有 `overlay` 这对 shader，
-  管线不建、图纸不显示（面板与二维页照常可用）。
+- **WebGL 有管线、但浏览器里仍不画底图**：`overlay` 的 GLSL 已经补上（2026-10-22，
+  `webgl_shaders.h`），WebGPU 仍缺 WGSL。真正的缺口在宿主：`ViewerHost::render()` 不提交
+  `drawing_overlays`，web 也还没有打开图纸的入口（见 [WebGL 链路审计](WEBGL-PIPELINE-AUDIT.md) §2①）。
 - **PDF 需要 Qt6::Pdf**，而它在 Qt 6 下是 GPLv3 / 商业双许可（LGPL 不覆盖），所以默认不带进构建：
   `src/app/CMakeLists.txt` 里 `find_package(Qt6 QUIET COMPONENTS Pdf)` 找到就启用，找不到就提示改用
   DXF/SVG/图片。要走宽松许可就得换 pdfium（BSD-3），那是另一件事。

@@ -25,6 +25,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <utility>
 
@@ -840,162 +841,142 @@ Result<void> RenderThread::ensure_pipelines() {
   }
   sky_pipeline_ = std::move(*psky);
 
-  // 屏幕空间文字管线：无光照、不测深度（标注永远看得见）、预乘混合。
-  // 和底图一样，WebGL / WebGPU 还没写这两条 shader，那两个后端不建管线、不画文字。
-  if (!webgl && !webgpu) {
-    const char* text_vs_name = opengl ? "text.vert.gl.spv" : "text.vert.spv";
-    const char* text_fs_name = opengl ? "text.frag.gl.spv" : "text.frag.spv";
-    auto text_vs_words = load_spirv_file(resolve_shader_path(text_vs_name).string());
-    auto text_fs_words = load_spirv_file(resolve_shader_path(text_fs_name).string());
-    // 缺 shader 不该把视口拖垮：报一声，这一版就没文字。
-    if (!text_vs_words || !text_fs_words) {
-      log_error("text shaders unavailable: " +
-                (text_vs_words ? text_fs_words.error() : text_vs_words.error()));
+  // 文字 / 图纸底图 / 屏幕空间像素线这三条是**可选**管线：WebGL 走内嵌 GLSL，
+  // 桌面后端走 SPIR-V，WebGPU 的 WGSL 版本还没写（实验后端，优先级低于 WebGL）。
+  // 缺 shader 或建管线失败只让对应那条通路降级，不拖垮视口——和之前三个分支一致。
+#if defined(TAMIAS_HAS_RHI_WEBGL)
+  const std::string_view glsl_text_vert = webgl_shaders::text_vert();
+  const std::string_view glsl_text_frag = webgl_shaders::text_frag();
+  const std::string_view glsl_overlay_vert = webgl_shaders::overlay_vert();
+  const std::string_view glsl_overlay_frag = webgl_shaders::overlay_frag();
+  const std::string_view glsl_line_vert = webgl_shaders::line_vert();
+  const std::string_view glsl_line_frag = webgl_shaders::line_frag();
+#else
+  // 没有编 WebGL 后端时这些值不会被读到（webgl == false），留空只为统一调用点。
+  const std::string_view glsl_text_vert{};
+  const std::string_view glsl_text_frag{};
+  const std::string_view glsl_overlay_vert{};
+  const std::string_view glsl_overlay_frag{};
+  const std::string_view glsl_line_vert{};
+  const std::string_view glsl_line_frag{};
+#endif
+
+  auto create_optional_pipeline = [&](const char* label, std::string_view glsl_vert,
+                                      std::string_view glsl_frag, const char* spirv_vert,
+                                      const char* spirv_frag, const PipelineDesc& pipeline_desc,
+                                      std::unique_ptr<ShaderModule>& shader_vs,
+                                      std::unique_ptr<ShaderModule>& shader_fs,
+                                      std::unique_ptr<PipelineState>& out_pipeline) {
+    std::string vs_src;
+    std::string fs_src;
+    std::vector<std::uint32_t> vs_spirv;
+    std::vector<std::uint32_t> fs_spirv;
+    ShaderModuleDesc vs_desc{};
+    vs_desc.stage = ShaderStage::Vertex;
+    vs_desc.entry = "main";
+    ShaderModuleDesc fs_desc{};
+    fs_desc.stage = ShaderStage::Fragment;
+    fs_desc.entry = "main";
+    if (webgl) {
+#if defined(TAMIAS_HAS_RHI_WEBGL)
+      vs_src.assign(glsl_vert);
+      fs_src.assign(glsl_frag);
+      vs_desc.language = ShaderLanguage::Glsl;
+      vs_desc.glsl = std::span<const char>(vs_src.data(), vs_src.size());
+      fs_desc.language = ShaderLanguage::Glsl;
+      fs_desc.glsl = std::span<const char>(fs_src.data(), fs_src.size());
+#else
+      log_error(std::string(label) +
+                " shaders unavailable: WebGL shaders were not compiled into this binary");
+      return;
+#endif
+    } else if (webgpu) {
+      // WebGPU 的文字 / 底图 / 像素线 WGSL 还没写：这条通路不画，其余照常。
+      return;
     } else {
-      std::vector<std::uint32_t> text_vs_spirv = std::move(*text_vs_words);
-      std::vector<std::uint32_t> text_fs_spirv = std::move(*text_fs_words);
-      ShaderModuleDesc text_vs_desc{};
-      text_vs_desc.stage = ShaderStage::Vertex;
-      text_vs_desc.entry = "main";
-      text_vs_desc.language = ShaderLanguage::Spirv;
-      text_vs_desc.spirv = text_vs_spirv;
-      ShaderModuleDesc text_fs_desc{};
-      text_fs_desc.stage = ShaderStage::Fragment;
-      text_fs_desc.entry = "main";
-      text_fs_desc.language = ShaderLanguage::Spirv;
-      text_fs_desc.spirv = text_fs_spirv;
-      auto text_vs = device_->create_shader_module(text_vs_desc);
-      auto text_fs = device_->create_shader_module(text_fs_desc);
-      if (!text_vs || !text_fs) {
-        log_error("text shader modules rejected: " +
-                  (text_vs ? text_fs.error() : text_vs.error()));
-      } else {
-        text_vs_ = std::move(*text_vs);
-        text_fs_ = std::move(*text_fs);
-        PipelineDesc text{};
-        text.vertex_shader = text_vs_.get();
-        text.fragment_shader = text_fs_.get();
-        text.instanced = true;    // 每字形一个实例，复用 GpuInstance 布局
-        text.depth_test = false;  // 标注压在几何之上，和坐标轴 / 预览线同一档
-        text.depth_write = false;
-        text.blend = true;
-        auto ptext = device_->create_pipeline(text);
-        if (!ptext) {
-          log_error("text pipeline failed: " + ptext.error());
-        } else {
-          text_pipeline_ = std::move(*ptext);
-        }
+      auto vs_words = load_spirv_file(resolve_shader_path(spirv_vert).string());
+      auto fs_words = load_spirv_file(resolve_shader_path(spirv_frag).string());
+      if (!vs_words || !fs_words) {
+        log_error(std::string(label) + " shaders unavailable: " +
+                  (vs_words ? fs_words.error() : vs_words.error()));
+        return;
       }
+      vs_spirv = std::move(*vs_words);
+      fs_spirv = std::move(*fs_words);
+      vs_desc.language = ShaderLanguage::Spirv;
+      vs_desc.spirv = vs_spirv;
+      fs_desc.language = ShaderLanguage::Spirv;
+      fs_desc.spirv = fs_spirv;
     }
+    auto vs = device_->create_shader_module(vs_desc);
+    auto fs = device_->create_shader_module(fs_desc);
+    if (!vs || !fs) {
+      log_error(std::string(label) +
+                " shader modules rejected: " + (vs ? fs.error() : vs.error()));
+      return;
+    }
+    shader_vs = std::move(*vs);
+    shader_fs = std::move(*fs);
+    PipelineDesc desc = pipeline_desc;
+    desc.vertex_shader = shader_vs.get();
+    desc.fragment_shader = shader_fs.get();
+    auto created = device_->create_pipeline(desc);
+    if (!created) {
+      log_error(std::string(label) + " pipeline failed: " + created.error());
+      return;
+    }
+    out_pipeline = std::move(*created);
+  };
+
+  // 屏幕空间文字管线：无光照、不测深度（标注永远看得见）、预乘混合。
+  {
+    PipelineDesc text{};
+    text.instanced = true;    // 每字形一个实例，复用 GpuInstance 布局
+    text.depth_test = false;  // 标注压在几何之上，和坐标轴 / 预览线同一档
+    text.depth_write = false;
+    text.blend = true;
+    create_optional_pipeline("text", glsl_text_vert, glsl_text_frag,
+                             opengl ? "text.vert.gl.spv" : "text.vert.spv",
+                             opengl ? "text.frag.gl.spv" : "text.frag.spv", text, text_vs_,
+                             text_fs_, text_pipeline_);
   }
 
   // 图纸底图管线：无光照 + 透明底贴图（references docs/DRAWING.md）。
-  // 只有桌面后端有这对 shader：WebGL / WebGPU 的 GLSL / WGSL 版本还没写，
-  // 那两个后端不建这条管线，底图不画（图纸管理面板和二维页照常可用）。
-  if (!webgl && !webgpu) {
-    const char* overlay_vs_name = opengl ? "overlay.vert.gl.spv" : "overlay.vert.spv";
-    const char* overlay_fs_name = opengl ? "overlay.frag.gl.spv" : "overlay.frag.spv";
-    auto overlay_vs_words = load_spirv_file(resolve_shader_path(overlay_vs_name).string());
-    auto overlay_fs_words = load_spirv_file(resolve_shader_path(overlay_fs_name).string());
-    // 底图缺 shader 不该把整个视口拖垮：报一声，少画底图，别的照常。
-    if (!overlay_vs_words || !overlay_fs_words) {
-      log_error("drawing overlay shaders unavailable: " +
-                (overlay_vs_words ? overlay_fs_words.error() : overlay_vs_words.error()));
-    } else {
-      std::vector<std::uint32_t> overlay_vs_spirv = std::move(*overlay_vs_words);
-      std::vector<std::uint32_t> overlay_fs_spirv = std::move(*overlay_fs_words);
-      ShaderModuleDesc overlay_vs_desc{};
-      overlay_vs_desc.stage = ShaderStage::Vertex;
-      overlay_vs_desc.entry = "main";
-      overlay_vs_desc.language = ShaderLanguage::Spirv;
-      overlay_vs_desc.spirv = overlay_vs_spirv;
-      ShaderModuleDesc overlay_fs_desc{};
-      overlay_fs_desc.stage = ShaderStage::Fragment;
-      overlay_fs_desc.entry = "main";
-      overlay_fs_desc.language = ShaderLanguage::Spirv;
-      overlay_fs_desc.spirv = overlay_fs_spirv;
-      auto overlay_vs = device_->create_shader_module(overlay_vs_desc);
-      auto overlay_fs = device_->create_shader_module(overlay_fs_desc);
-      if (!overlay_vs || !overlay_fs) {
-        log_error("drawing overlay shader modules rejected: " +
-                  (overlay_vs ? overlay_fs.error() : overlay_vs.error()));
-      } else {
-        overlay_vs_ = std::move(*overlay_vs);
-        overlay_fs_ = std::move(*overlay_fs);
-
-        PipelineDesc overlay{};
-        overlay.vertex_shader = overlay_vs_.get();
-        overlay.fragment_shader = overlay_fs_.get();
-        // 测深度但不写深度：底图被模型挡住，自己不去遮挡任何东西，也不会和
-        // 正好落在同一标高的楼板打架。混合走预乘 alpha（和玻璃同一条通路）。
-        overlay.depth_test = true;
-        overlay.depth_write = false;
-        overlay.blend = true;
-        auto poverlay = device_->create_pipeline(overlay);
-        if (!poverlay) {
-          log_error("drawing overlay pipeline failed: " + poverlay.error());
-        } else {
-          overlay_pipeline_ = std::move(*poverlay);
-        }
-      }
-    }
+  {
+    PipelineDesc overlay{};
+    // 测深度但不写深度：底图被模型挡住，自己不去遮挡任何东西，也不会和
+    // 正好落在同一标高的楼板打架。混合走预乘 alpha（和玻璃同一条通路）。
+    overlay.depth_test = true;
+    overlay.depth_write = false;
+    overlay.blend = true;
+    create_optional_pipeline("drawing overlay", glsl_overlay_vert, glsl_overlay_frag,
+                             opengl ? "overlay.vert.gl.spv" : "overlay.vert.spv",
+                             opengl ? "overlay.frag.gl.spv" : "overlay.frag.spv", overlay,
+                             overlay_vs_, overlay_fs_, overlay_pipeline_);
   }
 
   // 屏幕空间像素线管线（overlay 的预览线 / 轴网 / 夹点 / 捕捉 / 调试段）。
   // 顶点把世界线段投影后在**屏幕空间**撑成四边形，片元按像素距离算覆盖率，所以线宽
   // 是以设备像素为单位的（见 shaders/line.vert.hlsl）。不测深度：和坐标轴 / 预览线
   // 一档，永远看得见；混合走预乘 alpha（抗锯齿那 1 px 靠它）。
-  // 桌面后端才有这对 shader（WebGL / WebGPU 的 GLSL / WGSL 版本还没写），
-  // 那两个后端照旧走逐段 LineList 的兜底分支。
-  if (!webgl && !webgpu) {
-    const char* line_vs_name = opengl ? "line.vert.gl.spv" : "line.vert.spv";
-    const char* line_fs_name = opengl ? "line.frag.gl.spv" : "line.frag.spv";
-    auto line_vs_words = load_spirv_file(resolve_shader_path(line_vs_name).string());
-    auto line_fs_words = load_spirv_file(resolve_shader_path(line_fs_name).string());
-    // 缺 shader 不该把视口拖垮：报一声，overlay 线条退回 1 px 的 LineList。
-    if (!line_vs_words || !line_fs_words) {
-      log_error("screen-space line shaders unavailable: " +
-                (line_vs_words ? line_fs_words.error() : line_vs_words.error()));
-    } else {
-      std::vector<std::uint32_t> line_vs_spirv = std::move(*line_vs_words);
-      std::vector<std::uint32_t> line_fs_spirv = std::move(*line_fs_words);
-      ShaderModuleDesc line_vs_desc{};
-      line_vs_desc.stage = ShaderStage::Vertex;
-      line_vs_desc.entry = "main";
-      line_vs_desc.language = ShaderLanguage::Spirv;
-      line_vs_desc.spirv = line_vs_spirv;
-      ShaderModuleDesc line_fs_desc{};
-      line_fs_desc.stage = ShaderStage::Fragment;
-      line_fs_desc.entry = "main";
-      line_fs_desc.language = ShaderLanguage::Spirv;
-      line_fs_desc.spirv = line_fs_spirv;
-      auto line_vs = device_->create_shader_module(line_vs_desc);
-      auto line_fs = device_->create_shader_module(line_fs_desc);
-      if (!line_vs || !line_fs) {
-        log_error("screen-space line shader modules rejected: " +
-                  (line_vs ? line_fs.error() : line_vs.error()));
+  {
+    PipelineDesc line_ss{};
+    line_ss.instanced = true;    // 每段一条实例，复用 GpuInstance 布局
+    line_ss.depth_test = false;  // 和坐标轴 / 预览线一档，永远看得见
+    line_ss.depth_write = false;
+    line_ss.blend = true;  // 预乘 alpha：边缘覆盖率靠它
+    create_optional_pipeline("screen-space line", glsl_line_vert, glsl_line_frag,
+                             opengl ? "line.vert.gl.spv" : "line.vert.spv",
+                             opengl ? "line.frag.gl.spv" : "line.frag.spv", line_ss, line_vs_,
+                             line_fs_, line_ss_pipeline_);
+    // 单位四边形只在管线建好后才有意义；缺 shader 时保持为空，draw_channel 会走
+    // 逐段 LineList 的兜底分支（WebGPU 目前就是这条）。
+    if (line_ss_pipeline_ && !line_quad_mesh_.index_buffer) {
+      auto line_quad = create_gpu_mesh(*device_, make_line_quad());
+      if (!line_quad) {
+        log_error("screen-space line quad failed: " + line_quad.error());
       } else {
-        auto line_quad = create_gpu_mesh(*device_, make_line_quad());
-        if (!line_quad) {
-          log_error("screen-space line quad failed: " + line_quad.error());
-        } else {
-          line_vs_ = std::move(*line_vs);
-          line_fs_ = std::move(*line_fs);
-          line_quad_mesh_ = std::move(*line_quad);
-          PipelineDesc line_ss{};
-          line_ss.vertex_shader = line_vs_.get();
-          line_ss.fragment_shader = line_fs_.get();
-          line_ss.instanced = true;    // 每段一条实例，复用 GpuInstance 布局
-          line_ss.depth_test = false;  // 和坐标轴 / 预览线一档，永远看得见
-          line_ss.depth_write = false;
-          line_ss.blend = true;        // 预乘 alpha：边缘覆盖率靠它
-          auto pline = device_->create_pipeline(line_ss);
-          if (!pline) {
-            log_error("screen-space line pipeline failed: " + pline.error());
-          } else {
-            line_ss_pipeline_ = std::move(*pline);
-          }
-        }
+        line_quad_mesh_ = std::move(*line_quad);
       }
     }
   }
@@ -1695,8 +1676,8 @@ Result<void> RenderThread::draw_channel(std::uint64_t, ChannelState& channel,
       }
 
       // 提交。有屏幕空间像素线管线就整批实例化（一批画不完就按实例缓冲容量分几批，
-      // 顺序不变，混合结果和一次画完一样）；没有（缺 shader 的构建 / 浏览器后端）
-      // 退回逐段 LineList——线宽回到硬件的 1 px，但线条还在。
+      // 顺序不变，混合结果和一次画完一样）；没有（缺 shader 的构建 / WebGPU 还没写
+      // WGSL）退回逐段 LineList——线宽回到硬件的 1 px，但线条还在。
       const bool pixel_lines = line_ss_pipeline_ && line_quad_mesh_.index_buffer;
       if (pixel_lines) {
         TAMIAS_GPU_ZONE(*channel.command_list, "gpu.overlay_lines");

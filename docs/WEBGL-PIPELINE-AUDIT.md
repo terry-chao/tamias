@@ -4,6 +4,14 @@
 > 关联：[引擎 WASM + Web 查看器](WEB.md)、[WebGL 默认化清单](../WEBGL-EXP-IMPLEMENTATION-PLAN.md)、
 > [几何服务方案](../GEOMETRY-SERVICE-PLAN.md)、[建模内核](MODELING-KERNEL.md)、[NDC](NDC.md)。
 
+> **2026-10-22 进展：§2① 的第一层已落地。** `webgl_shaders.h` 补齐
+> `text` / `overlay` / `line` 三对 GLSL ES 3.00 shader，`render_runtime.cpp` 的三条可选
+> 管线改成按后端分派（WebGL 走内嵌 GLSL、桌面走 SPIR-V、WebGPU 仍缺 WGSL）。
+> **第二层（`ViewerHost` 不产 `text_quads` / `drawing_overlays` / `preview_*` /
+> `grip_points` / `grid_*`）没有动**，所以浏览器里的文字与图纸底图**仍然不会出现** ——
+> 立刻生效的只有坐标轴：它从逐段 1 px LineList 换成屏幕空间像素线（抗锯齿、线宽按设备像素、
+> 单批实例化）。下面的审计正文保留原始日期与结论，作为「当时为什么这么排」的记录。
+
 **一句话结论**：WebGL2 这条线**是通的，而且已经是默认**；浏览器里实际只画
 **天空 + 实体 + 三条坐标轴**。真正的缺口是
 ①**除实体外的所有屏幕空间通道（文字 / 底图 / 预览线 / 夹点 / 捕捉 / 轴网）都没有数据**、
@@ -78,6 +86,9 @@
 
 ### ① 文字标注 + 图纸底图：**两层都断了** —— 唯一「功能存在但看不见」的硬伤
 
+> **2026-10-22：第一层已修，第二层仍在。** 下面「第一层」保留审计当时的描述；
+> 现状见本小节末尾的「当前状态」。
+
 **第一层（计划文档记了）**：`webgl_shaders.h` 只有 `mesh_vert/frag` + `sky_vert/frag`，
 **没有 text / overlay / line**；`render_runtime.cpp` 里这三条管线被 `if (!webgl && !webgpu)` 整段跳过
 （[`:848`](../src/engine/render/runtime/render_runtime.cpp#L848)、[`:898`](../src/engine/render/runtime/render_runtime.cpp#L898)）。
@@ -108,17 +119,26 @@ mode / xray / items / lod_sets / scene_generation / scene_dirty_ids`。
 > 这也是 `docs/WEB.md` 说"只有屏幕空间橡皮筋"的**真正原因** —— 不只是引擎没有 `DragContext`，
 > 而是**连屏幕空间的预览线通道都没在喂数据**。
 
-> **结论：光补 GLSL 没用，要改两个地方。** 就算 shader 补齐、管线建起来，浏览器里依然一个标注
+> **结论（当时）：光补 GLSL 没用，要改两个地方。** 就算 shader 补齐、管线建起来，浏览器里依然一个标注
 > 都不会出现。这也是本次调查最值得记住的一条。
 
 **落地路径**（四步，RHI 层零改动）：
-1. `webgl_shaders.h` 加 4 个函数（直译 `text.vert/frag.hlsl`、`overlay.vert/frag.hlsl`，
-   注意 GL 分支 Y 翻转：`ndc_y = 1.0 - pixels.y/viewport.y*2.0`）；
-2. `render_runtime.cpp:848` / `:898` 的守卫改成按后端分派（照抄 `:688` 的 mesh 写法）；
-3. 管道参数**照抄现有值**：text = `instanced=true, depth_test=false, depth_write=false, blend=true`；
+1. ✅ **已做（2026-10-22）**：`webgl_shaders.h` 加 `text_vert/frag`、`overlay_vert/frag`、
+   `line_vert/frag`（直译对应 HLSL，GL 分支 Y 翻转：`ndc_y = 1.0 - pixels.y/viewport.y*2.0`）；
+2. ✅ **已做（2026-10-22）**：`render_runtime.cpp` 的三处守卫改成按后端分派——
+   WebGL 走内嵌 GLSL、桌面走 SPIR-V、WebGPU 明确跳过（WGSL 还没写）。抽成
+   `create_optional_pipeline()`；建管线失败会 `log_error`，不再静默；
+3. ✅ 管道参数照抄原值：text = `instanced=true, depth_test=false, depth_write=false, blend=true`；
    overlay = `instanced=false, depth_test=true, depth_write=false, blend=true`；
-4. `ViewerHost::render()` 补 `text_quads` / `text_atlas_texture_id` / `drawing_overlays`
-   （需要 web 侧先有文字布局与图集来源；`src/engine/render/text/**` 已存在）。
+   line_ss = `instanced=true, depth_test=false, depth_write=false, blend=true`；
+4. ❌ **第二层仍未做**：`ViewerHost::render()` 补 `text_quads` / `text_atlas_texture_id` /
+   `drawing_overlays`（以及 `preview_*` / `grip_points` / `snap_point` / `grid_*`）。
+   文字这一半还卡在一个前置：`docs/TEXT.md §3.1` 明确「不入库字体二进制」，而浏览器拿不到
+   系统字体目录——wasm 侧要么带一份字体（体积代价）要么改成浏览器 canvas 光栅化字形。
+
+**当前状态（2026-10-22 实测）**：三条管线在 WebGL 下都会建（GLSL 通过 glslangValidator
+GLSL ES 3.00 校验）；`line_ss` 立刻作用于坐标轴；text / overlay 因为第二层没喂数据，
+**建了也是空转**，浏览器里文字与图纸依然不可见。下一步是第二层，不是再改 shader。
 
 ### ② 正交 / X 光：引擎早就有，只缺导出 —— 最小改动
 
@@ -279,6 +299,15 @@ GLES 3.0 没有 polygon mode，`WebGLPipeline` **连 `desc.wireframe` 都不存*
 mesh 那六个采样器（`webgl_device.cpp:571-606`），`atlas_tex` / `albedo_tex` 没绑；
 好在 GL 默认就是 0，而 `render_runtime.cpp:1455` 正是 `kTextureSlotAlbedo`（= 0）——
 **碰巧对**。补 text/overlay 时最好顺手显式 `glUniform1i`，别依赖默认。
+> ✅ **2026-10-22 已修**：`create_pipeline` 现在也显式把 `atlas_tex` 绑到 0 号槽；
+> `albedo_tex` 本来就有绑定。
+
+**h. 视口 HUD 的 `draw` / `tri` 恒为 0（2026-10-22 用 headless 实测发现）。**
+`last_stats_ = stats` 在 `render_runtime.cpp:1408`，而 `RecordCommands` 的批次要到
+**析构**（`:1413`，半透明那个是 `:1403`）才 `flush_all()`，并在 `flush_batch` 里自增
+`draws` / `triangles`（`scene_graph.cpp:476-480`）。发布发生在自增之前，所以这两个读数
+永远是 0；`gpu_mesh_bytes` / `lod_requests` 不受影响。修法与 ⑩a 一起做最自然：给不透明
+visitor 单独一层块作用域（先析构、先 flush），并把 stats 发布挪到两个 visitor 都析构之后。
 
 ---
 
@@ -326,8 +355,9 @@ mesh 那六个采样器（`webgl_device.cpp:571-606`），`atlas_tex` / `albedo_
    已核 `scene_graph.cpp:484-491`）。**但先确认文档与代码哪个是想要的**——现场可能一直是反的。
 2. **⑥c `completed_` 跨文档错绑**、**⑥a `xray_` 泄漏**、**⑥b 回退分支不打上传**：都是小改动的状态缺陷。
 3. **②** 正交 / X 光导出 + 按钮 —— 改动最小、立刻可见。
-4. **①** 文字与底图**两层**（GLSL 分派 + ViewerHost 补 `text_quads`/`overlays`；顺带补
-   `preview_*`/`grip_points`/`snap_point`/`grid_*` —— 现在浏览器里这些通道全是死的）。
+4. **①** 文字与底图**两层**：第一层（GLSL 分派）✅ 2026-10-22；**第二层仍在**
+   （ViewerHost 补 `text_quads`/`overlays`，顺带补 `preview_*`/`grip_points`/`snap_point`/
+   `grid_*` —— 现在浏览器里这些通道全是死的）。文字还卡在字体来源，见 §2① 第 4 步。
 5. **③** 框选（引擎侧 `nodes_in_screen_rect` 已成熟）、**④** 接上两个死导出。
 6. **⑤** 指针单位统一（DPR）+ wheel `deltaMode` + DPR 变化监听。
 7. **⑩b** 实例缓冲扩容被拒的静默丢批次；**⑩c** WebGL 离屏/截图（要做快照导出必须先补）。
@@ -357,7 +387,8 @@ powershell -File scripts/wasm-preview.ps1
 复验时要在浏览器里断进 C++、或者要把这几个读数与服务端 / 桌面端对齐，见
 [浏览器 wasm + 几何服务的分层调试](DEBUG-BROWSER-STACK.md)。
 
-功能面复验：打开示例文档 → 建一段文字标注（注释组）→ **确认视口里没有文字**（这是 ① 的现场）。
-注意 `logText()` 面板里**不会有**任何提示：WebGL 走不到那几行 `log_error`（它们在被跳过的守卫块**内部**），
-三条管线（text / overlay / line）是**静默不建**的。（`WEBGL-EXP-IMPLEMENTATION-PLAN.md:352`
-让你去日志里找这两条，是错的。）overlay 线条照旧画：它走 `line_pipeline_` 的逐段 LineList 兜底。
+功能面复验：打开示例文档 → 建一段文字标注（注释组）→ **确认视口里没有文字**（这是 ① 第二层的现场）。
+注意 `logText()` 面板里**不会有**任何提示：ViewerHost 根本没提交 `text_quads`，不是管线坏了。
+三条管线（text / overlay / line）在 WebGL 下**现在都会建**（2026-10-22），建失败会走
+`create_optional_pipeline()` 的 `log_error`；但 text / overlay 没有数据可画。
+overlay 线条现在走屏幕空间像素线（`line_ss_pipeline_`，抗锯齿、按设备像素线宽、整批实例化）。

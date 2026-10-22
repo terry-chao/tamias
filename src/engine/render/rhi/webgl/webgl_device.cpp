@@ -574,6 +574,13 @@ Result<std::unique_ptr<PipelineState>> WebGLDevice::create_pipeline(const Pipeli
     glUniform1i(albedo, 0);
     glUseProgram(0);
   }
+  // 屏幕空间文字用的采样器（text.frag）：和 albedo 一样固定在第 0 张纹理。
+  const GLint atlas = glGetUniformLocation(program, "atlas_tex");
+  if (atlas >= 0) {
+    glUseProgram(program);
+    glUniform1i(atlas, 0);
+    glUseProgram(0);
+  }
   const GLint normal = glGetUniformLocation(program, "normal_tex");
   if (normal >= 0) {
     glUseProgram(program);

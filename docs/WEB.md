@@ -83,10 +83,11 @@ Qt 官方文档同时写明这些限制（[Qt for WebAssembly](https://doc.qt.io
 | 轴网 / 楼层 | ✅ | 🟡 自动轴网 / 加轴线 / 柱网 / 新建楼层能建；**轴线 id 拿不到**，所以柱网只能按整张轴网布；没有楼层管理面板 |
 | 文档模型 | ✅ 多标签页 | 🟡 **一个网页标签页 = 一份文档**（有意不做页内多标签）。有新建 / 打开 / 关闭（`Ctrl+W`）/ 最近打开 / 文件管理页 |
 | 保存 / 另存为 / 导出快照 | ✅ | ❌ 浏览器不允许网页往磁盘写文件（要真做得上 `showSaveFilePicker`） |
-| X 光 / 正交 / 轴网显示 / 标注显示开关 | ✅ | ❌ 引擎侧还没有对应导出（X 光的**状态**在 `ViewerHost` 里有，缺一个 setter + 导出） |
+| X 光 / 正交 / 轴网显示 / 标注显示开关 | ✅ | ❌ **引擎侧已有实现，缺 embind 导出 + 按钮**：`Camera::set_orthographic()` 与 `ViewerHost::xray_` 都在，只是 JS 拿不到（旧文档写成「引擎侧还没有」是错的） |
 | 属性 / 材质 / 纹理 / 手柄 / 楼层 / 构件显隐面板 | ✅ | ❌ 桌面宿主专属 |
 | 打开图纸（DWF / DXF / PDF）、插件（C#）、命令控制台、AI 面板、图形诊断 | ✅ | ❌ 桌面宿主专属，或 web 侧没有对应入口 |
 | 夹点编辑、框选拖拽、实时实体预览 | ✅ | ❌（放置流程只有屏幕空间橡皮筋，见 §4） |
+| 文字注记 / 轴号 / 标高 | ✅ | ❌ **能建、能存、能撤销，但浏览器里不画**：WebGL 的 text / overlay / line 三条 GLSL 管线已补（2026-10-22），但 `ViewerHost::render()` 还不提交 `text_quads` / `drawing_overlays`，而且 wasm 没有字体/图集来源。见 [WebGL 链路审计](WEBGL-PIPELINE-AUDIT.md) §2① |
 | 跨刷新的「最近打开」 | ✅ | ❌ 存的是 `File` 句柄，不可序列化，只在本次会话内有效 |
 | 按路径导入网格（`import_mesh`） | ✅ | ❌ 沙箱里没有路径，只能靠选择文件或拖放 |
 | `create_beam` 的 T / I 断面 | ✅ | ❌ 那两个几何参数是交互态下算出来的，命令层没有对应入参 |
@@ -420,8 +421,23 @@ wasm 链了 `tamias::host`，而 `tamias_host` PUBLIC 链 `tamias::command`，�
 
 ## 8. 下一步
 
-1. **补齐"空着的能力"**：X 光 / 正交 / 轴网显示的开关（引擎侧要先加导出；X 光的状态
-   `ViewerHost` 里已经有了，缺 setter）。
-2. **放置流程的实时预览**：现在只有屏幕空间橡皮筋，桌面端是 `DragContext` 驱动的实体预览。
-3. **保存**：`showSaveFilePicker`（Chromium 系），否则 web 永远只是只读查看。
-4. **大 IFC 走服务端**，或按需加载独立 wasm 模块。
+按「先修对不对、再补有没有、最后补交互」排：
+
+1. **渲染正确性**：半透明遍与不透明遍的提交顺序（`draw_channel` 里两个 visitor 的析构顺序反了，
+   玻璃会被后画的不透明几何盖掉）；同一个原因还让 HUD 的 `draw` / `tri` 恒为 0（stats 在
+   `flush_all()` 之前就发布了）；实例缓冲扩容被拒时静默丢批次。见
+   [WebGL 链路审计](WEBGL-PIPELINE-AUDIT.md) §2⑩。
+2. **补齐"空着的能力"**：X 光 / 正交 / 轴网显示 / 标注显示的开关。**引擎侧已经有实现**
+   （`Camera::set_orthographic()`、`ViewerHost::xray_`），缺 embind 导出 + 顶栏按钮。
+3. **把屏幕空间通道喂上数据**：`ViewerHost::render()` 现在只提交天空 / 实体 / 坐标轴。
+   `preview_*` / `grip_points` / `snap_point` / `grid_*` / `drawing_overlays` 全是空的；
+   文字还缺字体与图集来源（`docs/TEXT.md §3.1` 不入库字体）。WebGL 的 GLSL 管线已就位。
+4. **框选**：引擎侧 `nodes_in_screen_rect()` 已成熟，只缺 embind 导出 + HTML 框选矩形。
+5. **放置流程的实时预览**：现在只有屏幕空间橡皮筋，桌面端是 `DragContext` 驱动的实体预览。
+6. **保存**：`showSaveFilePicker`（Chromium 系），否则 web 永远只是只读查看。要做快照导出还
+   得先给 WebGL 补离屏目标 / `read_back_rgba`。
+7. **线框**：WebGL / WebGPU 没有 polygon mode，`RenderMode::Wireframe` 现在是"实心三角涂成
+   浅蓝"；真线框要么走重心坐标着色，要么给网格补边索引。
+8. **健壮性与交互细节**：WebGL context lost 恢复、指针 DPR 单位统一、`wheel` 的 `deltaMode`、
+   DPR 变化监听。
+9. **大 IFC 走服务端**，或按需加载独立 wasm 模块。

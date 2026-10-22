@@ -17,7 +17,7 @@
 | §2.1 | `viewer_host.cpp` 后端选择改为 **WebGL 优先**，WebGPU 分支补实验告警 | ✅ |
 | §2.2 | `backend_name()` / `backend_experimental()` + embind 导出 | ✅ |
 | §2.3 | 前端顶栏后端读数 + 橙色「实验」角标 | ✅ **但机制变了**：顶栏后来按桌面端重做过，原来的 `--exp` CSS 变量没了；现在是顶栏角落的 backend chip（`.tb-chip.exp`），数据仍来自 `backendExperimental()` |
-| §3 | text / overlay 两条 GLSL 管线 + `render_runtime.cpp` 接线 | ❌ **未做**。注意：这不是本次切换引入的回退——`webgl_shaders.h` 与 `webgpu_shaders.h` **都**只有 mesh + sky，两个后端今天都缺这两条管线，属于既有缺口 |
+| §3 | text / overlay 两条 GLSL 管线 + `render_runtime.cpp` 接线 | 🟡 **WebGL 着色器与管线已补（2026-10-22）**：`text` / `overlay` / 屏幕空间 `line` 三对 GLSL ES 3.00 已进 `webgl_shaders.h`，`render_runtime.cpp` 改为按后端分派（WebGL GLSL / 桌面 SPIR-V / WebGPU 暂缺 WGSL）。**但浏览器里文字与底图仍不出现**——`ViewerHost::render()` 不提交 `text_quads` / `drawing_overlays`（详见 `docs/WEBGL-PIPELINE-AUDIT.md` §2① 的「第二层」）。立刻生效的只有坐标轴改走屏幕空间像素线 |
 | §4.1 | `frameTimeMs()`（帧耗时 / FPS 读数） | ❌ 未做（embind 里确认没有这个导出） |
 | §4.2 | 日志面板可折叠 / 复制 / 清空 | 🟡 **折叠已做**：文件菜单 / 视图段有「引擎日志」开关（`log-panel`，面板有内容才画）。复制、清空仍未做 |
 | §5 | 交互（X 光开关、正交切换、框选、夹点编辑） | ❌ 未做（四项都还在）。**但正交那项比原来记的更小**：`camera.h:147` 已有 `set_orthographic()` / `orthographic()`，只差 embind 导出 + 按钮，见下面 §5 的表 |
@@ -154,11 +154,20 @@ backendExperimental(): boolean;
 
 ## 3. 补齐两条 GLSL 管线（text / overlay）
 
+> **状态（2026-10-22）**：WebGL 侧**已落地**，并且多补了一条屏幕空间像素线
+> （`line`，原来只有桌面 SPIR-V）。三条管线的建法抽成
+> `render_runtime.cpp` 里的 `create_optional_pipeline()`；WebGPU 仍缺 WGSL（实验预设）。
+> 注意本节只解决「管线不存在」，**不解决「没有数据」**：`ViewerHost` 至今不填
+> `text_quads` / `drawing_overlays` / `preview_*` / `grip_points` / `grid_*`，
+> 所以浏览器画面上的文字与底图仍然不可见。第二层见
+> [WebGL 链路审计](docs/WEBGL-PIPELINE-AUDIT.md) §2①。
+
 ### 3.1 关键约束：`kPushBlock` 必须逐字复用
 
-`webgl_shaders.h:8` 的 `kPushBlock` 是 `std140` 的 256 字节 UBO，对应
-`shaders/mesh.hlsli:4` 的 `PushConstants`。text 与 overlay 都**必须拼接同一份
-`kPushBlock`**，否则 UBO 偏移错位。
+`webgl_shaders.h:8` 的 `kPushBlock` 是 `std140` 的 **208 字节** UBO 数据（`PushConstants`
+共 7 槽 × 16 B），放在 256 B 的 GL buffer 里；对应 `shaders/mesh.hlsli:4` 的
+`PushConstants`。text / overlay / line 都**必须拼接同一份 `kPushBlock`**，否则 UBO
+偏移错位。
 
 text 用到的字段：`pc.eye_pos_mode.xy` = **视口像素尺寸**（复用约定，见
 `shaders/text.vert.hlsl:9` 注释）；overlay 用 `pc.mvp` 与 `pc.color.a`。
