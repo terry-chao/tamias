@@ -100,6 +100,12 @@ if(EMSCRIPTEN AND TAMIAS_ENABLE_OCCT AND CMAKE_BUILD_TYPE STREQUAL "Debug")
     "真要连 OCCT 一起调，得先把 OCCT 交叉编译成 Debug 一份，再用 -DTAMIAS_OCCT_PREFIX 指过去。")
 endif()
 option(TAMIAS_ENABLE_TRUCK_KERNEL "Build the Truck (Rust) modeling kernel backend." OFF)
+# SMLib 后端（NVIDIA USD BRep v1.0.0 的 SMLib + SM_API）。Windows + Release/RelWithDebInfo
+# 才有发布包；需要 -DTAMIAS_SMLIB_PREFIX 指向解压出来的 SDK（见 docs/WEB.md 的同类做法）。
+option(TAMIAS_ENABLE_SMLIB_KERNEL "Build the SMLib (USD BRep) modeling kernel backend." OFF)
+# SMLib SDK 前缀：include/SMLib、include/SM_API、lib/SMLib.{dll,lib}、lib/SM_API.{dll,lib}。
+# 只有 Windows 发布包；Debug(/MDd) 不要用（发布包是 /MD，跨 CRT 释放会崩）。
+set(TAMIAS_SMLIB_PREFIX "" CACHE PATH "SMLib / SM_API SDK prefix (include/ + lib/).")
 # OCCT 的导入路径（STEP / IGES / BREP + XCAF 颜色，见 occt_shape_ops.cpp）。
 # 它比内核本身重得多：要 XCAF，而 XCAF 在 OCCT 7.9 上还会把 Visualization
 # （TKService / TKV3d）一起拖进来。wasm 上根本没有这条路（服务端的 load_bytes 也只认
@@ -240,6 +246,7 @@ message(STATUS "Tamias OpenGL backend: ${TAMIAS_ENABLE_OPENGL_BACKEND}")
 message(STATUS "Tamias WebGL backend: ${TAMIAS_ENABLE_WEBGL_BACKEND}")
 message(STATUS "Tamias WebGPU backend: ${TAMIAS_ENABLE_WEBGPU_BACKEND}")
 message(STATUS "Tamias OCCT: ${TAMIAS_OCCT_ROOT}")
+message(STATUS "Tamias SMLib kernel: ${TAMIAS_ENABLE_SMLIB_KERNEL}${TAMIAS_SMLIB_PREFIX}")
 message(STATUS "Tamias IfcOpenShell: IfcParse schemas=${TAMIAS_IFC_SCHEMAS}")
 message(STATUS "Tamias PCH: ${TAMIAS_PCH_ACTIVE} (option ${TAMIAS_ENABLE_PCH})")
 message(STATUS "Tamias unity build: ${TAMIAS_UNITY_BUILD}")

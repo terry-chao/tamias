@@ -44,3 +44,12 @@ if(TARGET tamias::kernel_truck)
   target_link_libraries(tamias_modeling PUBLIC tamias::kernel_truck)
   target_compile_definitions(tamias_modeling PRIVATE TAMIAS_HAS_KERNEL_TRUCK=1)
 endif()
+
+# 后端：SMLib（NVIDIA USD BRep）。默认关；Windows 上需要 TAMIAS_SMLIB_PREFIX。
+if(TAMIAS_ENABLE_SMLIB_KERNEL)
+  add_subdirectory(smlib)
+endif()
+if(TARGET tamias::kernel_smlib)
+  target_link_libraries(tamias_modeling PUBLIC tamias::kernel_smlib)
+  target_compile_definitions(tamias_modeling PRIVATE TAMIAS_HAS_KERNEL_SMLIB=1)
+endif()

@@ -34,6 +34,38 @@ constexpr double kNearly = 1e-6;
 
 double span(double a, double b) { return std::fabs(b - a); }
 
+// 体的可观测快照：包围盒 + 离散出的索引数。
+// 用来锁「造型动词不许改输入」——SMLib 的布尔/倒角都是 in-place 的，
+// 后端如果忘了拷贝，这里会立刻红。
+struct BodySnapshot {
+  Aabb bounds{};
+  std::size_t index_count = 0;
+  bool valid = false;
+};
+
+BodySnapshot snapshot(ModelKernel& kernel, const Body& body) {
+  BodySnapshot out;
+  if (auto bounds = kernel.bounds(body)) {
+    out.bounds = *bounds;
+    out.valid = true;
+  }
+  if (auto mesh = kernel.tessellate(body, 0.05)) {
+    out.index_count = mesh->indices.size();
+  }
+  return out;
+}
+
+void expect_same_snapshot(const BodySnapshot& before, const BodySnapshot& after) {
+  ASSERT_TRUE(before.valid && after.valid);
+  EXPECT_NEAR(after.bounds.min.x, before.bounds.min.x, 1e-5);
+  EXPECT_NEAR(after.bounds.min.y, before.bounds.min.y, 1e-5);
+  EXPECT_NEAR(after.bounds.min.z, before.bounds.min.z, 1e-5);
+  EXPECT_NEAR(after.bounds.max.x, before.bounds.max.x, 1e-5);
+  EXPECT_NEAR(after.bounds.max.y, before.bounds.max.y, 1e-5);
+  EXPECT_NEAR(after.bounds.max.z, before.bounds.max.z, 1e-5);
+  EXPECT_EQ(after.index_count, before.index_count);
+}
+
 }  // namespace
 
 TEST(KernelConformance, RectFaceExtrudesToBox) {
@@ -221,6 +253,8 @@ TEST(KernelConformance, EdgesAndMeasuresAgree) {
       EXPECT_NE(m.key, 0u) << "edge " << i << " has no identity key";
     }
     // 同一条几何边被多个面共享时，重复枚举必须共享同一个 key。
+    // 但「按面重复」不是接口契约：后端只列唯一几何边同样合法（SMLib 的盒子就是 12 条）。
+    // 所以这里只在确实出现重复时要求 key 重合。
     std::size_t with_shared_key = 0;
     for (std::size_t i = 0; i < measures->size(); ++i) {
       for (std::size_t j = i + 1; j < measures->size(); ++j) {
@@ -229,7 +263,10 @@ TEST(KernelConformance, EdgesAndMeasuresAgree) {
         }
       }
     }
-    EXPECT_GT(with_shared_key, 0u) << "盒子的棱应由两个面共享，key 却没重合";
+    if (measures->size() > 12) {
+      EXPECT_GT(with_shared_key, 0u) << "枚举了重复的棱，key 却没重合";
+    }
+    EXPECT_GE(measures->size(), 12u) << "盒子至少应有 12 条几何边";
   });
 }
 
@@ -287,6 +324,59 @@ TEST(KernelConformance, EvaluatorRunsFeatureTreeOnEveryKernel) {
     EXPECT_FALSE(mesh->indices.empty());
     EXPECT_NEAR(span(mesh->bounds.min.x, mesh->bounds.max.x), 3.0, 1e-3);
     EXPECT_NEAR(span(mesh->bounds.min.y, mesh->bounds.max.y), 2.0, 1e-3);
+  });
+}
+
+// 造型动词不许改输入：BodyRef 是 shared_ptr<const Body>，一个体可能被多个下游特征
+// 引用；后端就地改会把兄弟分支一起改坏，而且不报错。（SMLib 的 SM_API 就是这种契约，
+// 所以它的后端必须先深拷贝。这条测试对 OCCT / Truck 同样适用。）
+TEST(KernelConformance, BooleanDoesNotMutateInputs) {
+  for_each_kernel([](ModelKernel& kernel, const KernelCapabilities& caps) {
+    if (!caps.supports(KernelVerb::Boolean) || !caps.supports(KernelVerb::Bounds) ||
+        !caps.supports(KernelVerb::Tessellate)) {
+      GTEST_SKIP() << "backend cannot run the boolean/immutability check";
+    }
+    auto base_face = kernel.make_rect_face(2.0, 2.0);
+    ASSERT_TRUE(base_face) << base_face.error();
+    auto base = kernel.extrude(**base_face, 2.0);
+    ASSERT_TRUE(base) << base.error();
+
+    auto tool_face = kernel.make_rect_face(1.0, 1.0);
+    ASSERT_TRUE(tool_face) << tool_face.error();
+    auto tool = kernel.extrude(**tool_face, 4.0);
+    ASSERT_TRUE(tool) << tool.error();
+    if (caps.supports(KernelVerb::Transform)) {
+      auto moved = kernel.transform(**tool, Vec3{0.f, -1.f, 0.f});
+      ASSERT_TRUE(moved) << moved.error();
+      tool = std::move(*moved);
+    }
+
+    const BodySnapshot before_base = snapshot(kernel, **base);
+    const BodySnapshot before_tool = snapshot(kernel, **tool);
+
+    auto cut = kernel.boolean(**base, **tool, BooleanOp::Cut);
+    ASSERT_TRUE(cut) << cut.error();
+
+    expect_same_snapshot(before_base, snapshot(kernel, **base));
+    expect_same_snapshot(before_tool, snapshot(kernel, **tool));
+  });
+}
+
+TEST(KernelConformance, TransformDoesNotMutateInput) {
+  for_each_kernel([](ModelKernel& kernel, const KernelCapabilities& caps) {
+    if (!caps.supports(KernelVerb::Transform) || !caps.supports(KernelVerb::Bounds) ||
+        !caps.supports(KernelVerb::Tessellate)) {
+      GTEST_SKIP() << "backend cannot run the transform/immutability check";
+    }
+    auto face = kernel.make_rect_face(1.0, 1.0);
+    ASSERT_TRUE(face) << face.error();
+    auto solid = kernel.extrude(**face, 1.0);
+    ASSERT_TRUE(solid) << solid.error();
+
+    const BodySnapshot before = snapshot(kernel, **solid);
+    auto moved = kernel.transform(**solid, Vec3{0.f, 5.f, 0.f});
+    ASSERT_TRUE(moved) << moved.error();
+    expect_same_snapshot(before, snapshot(kernel, **solid));
   });
 }
 

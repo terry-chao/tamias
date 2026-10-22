@@ -143,17 +143,19 @@ Document::createGeom / rebuild
 
 - 接口层、OCCT 后端、求值器与指纹匹配搬进中间层、`register_linked_kernels()`；
 - **第二个后端：Truck（Rust）**，见 §6；设置里可以选内核；
-- 跨后端验收网 `tests/kernel_conformance_tests.cpp`：同一批场景对每个注册的内核跑一遍。
+- **第三个后端：SMLib（NVIDIA USD BRep）**，见 §7；Windows 桌面可选，默认关；
+- 跨后端验收网 `tests/kernel_conformance_tests.cpp`：同一批场景对每个注册的内核跑一遍；
+- 不可变契约测试：`BooleanDoesNotMutateInputs` / `TransformDoesNotMutateInput`（SMLib 的 API 是就地改的，这条网兜住所有后端）。
 
-**两个后端现在各自会什么**（`KernelCapabilities::verbs` 是真相，UI / 测试都按它走）：
+**三个后端现在各自会什么**（`KernelCapabilities::verbs` 是真相，UI / 测试都按它走）：
 
-| 动词 | OCCT | Truck |
-|---|---|---|
-| 矩形 / 圆 / 多边形轮廓、拉伸、平移、边的枚举与测量、三角化、包围盒 | ✅ | ✅ |
-| 布尔（并 / 交 / 差） | ✅ | ✅（经 `truck-shapeops`） |
-| 圆柱 | ✅ | ❌ |
-| 圆角 / 倒角 | ✅ | ❌ |
-| STEP / IGES / BREP 读写 | ✅ | ❌ |
+| 动词 | OCCT | Truck | SMLib |
+|---|---|---|---|
+| 矩形 / 圆 / 多边形轮廓、拉伸、平移、边的枚举与测量、三角化、包围盒 | ✅ | ✅ | ✅ |
+| 布尔（并 / 交 / 差） | ✅ | ✅（经 `truck-shapeops`） | ✅ |
+| 圆柱 | ✅ | ❌ | ✅ |
+| 圆角 / 倒角 | ✅ | ❌ | ✅（可多边；变半径没进 `kernel.h`，不虚报） |
+| STEP / IGES / BREP 读写 | ✅ | ❌ | ❌（只有原生 `.smb`） |
 
 **过渡件（P3 收尾）**：
 
@@ -215,5 +217,58 @@ cmake --build --preset debug --target tamias
 - `EdgeMeasure.key`：OCCT 用 `std::hash<TopoDS_Shape>`，Truck 用 `Edge::id()`（曲线 Arc 指针）。
   没有它，中间层分不清“同一条棱被两个面各枚举一次”和“两条真的不同的棱”；
 - 共面的两个体做布尔是退化情形：Truck 直接返回 none。验收用例里把工具体挪开一点避开它。
+
+---
+
+## 7. 第三个后端：SMLib（NVIDIA USD BRep）
+
+**为什么是它**：Solid Modeling Solutions 的商用 NURBS/BRep 内核，NVIDIA 2022 收购，
+2026-10 以 Apache-2.0 开源（[NVIDIA-Omniverse/usd-brep](https://github.com/NVIDIA-Omniverse/usd-brep)）。
+它是和 OCCT 同量级的 B-Rep 内核（布尔 / 倒角 / 抽壳 / 偏置 / 缝合 / 修复 / 离散），
+许可比 OCCT 的 LGPL 宽松。对 `kernel.h` 来说，这是第一个「和 OCCT 同级、可换」的实现。
+
+**边界**（不满足就别开）：
+
+- **Windows x64 only**：发布包只有 Windows / Linux 二进制，Linux 的 `.so` 还没验证；
+  没有 wasm，浏览器线继续 OCCT/Truck。
+- **Release / RelWithDebInfo only**：SDK 是 `/MD`，Tamias Debug 是 `/MDd`；跨 CRT 释放会崩。
+- **进程级串行**：`SM_API` 用全局 context，官方明确不是线程安全的。后端内部一把全局
+  `std::mutex`，所有调用（含离散）串行；服务端吞吐按串行算。
+- **没有 STEP / IGES**：`SM_API` 只有原生 `.smb`；导入仍走 OCCT。
+- **破坏性 API**：布尔成功会改第一个操作数、删第二个；倒角/倒角/平移都是 in-place。
+  后端在门面里先 `SmApiBrepCopy`，所以 `BodyRef` 的不可变语义成立——代价是每次布尔
+  两个操作数都深拷贝（小体约 0.03 ms，大件要实测）。
+
+**怎么分**（和 Truck 的薄桥同一个思路）：
+
+```
+C++23  smlib_kernel.cpp     ModelKernel 动词；只 include smlib_c.h
+         │  C 门面（POD + 不透明句柄；Tamias Y-up）
+C++17  smlib_api.cpp        唯一 include SMLib 头的地方；UNICODE 必须定义
+         └─ SMLib.dll / SM_API.dll（Z-up、全局 context、破坏性）
+```
+
+**为什么是两层**：SMLib 的头文件只能在 C++17 下编（C++20 起 `SmTreeVertex::operator==`
+的模板实例化会歧义），而 `kernel.h` 是 C++23（`std::span` / `std::expected`）。
+另外发布包是 **Unicode** 构建：不定义 `UNICODE/_UNICODE`，`TCHAR` 就是 `char`，
+`Dump` / `smos_*` 的修饰名对不上，链接直接失败。这两条都写进了
+`smlib/CMakeLists.txt`，别合并成一个 target。
+
+**坐标**：和 OCCT 后端同一套映射——`(x, y, z) → (x, -z, y)`，只在门面进出口做；
+`SmlibBody` 内部存 SMLib 原生 Z-up。
+
+**边**：`SmApiGetEdges` 返回**唯一几何边**（盒子 12 条），`EdgeId` = 下标、`key` = 下标 + 1。
+conformance 里原来那条「盒子必须有重复 key」的断言是 OCCT 的实现细节，已放宽成
+「有重复时必须同 key」。
+
+**已知缺口**：
+
+- 离散是 **flat shading**（每个三角面用面法线），圆柱会有棱面感；下一步按顶点位置合并
+  法线（带夹角阈值）。
+- `measure_edges` 只填 `mid` / `dir` / `length`，没填相邻面法线（和 Truck 一样，
+  指纹少一维消歧）。
+- 布尔固定拷贝两个操作数；P3 可以改成 `use_count()==1` 时就地消费。
+- 变半径倒角内核有（`SmApiVariableRadiusFillet`），但 `kernel.h` 的 `fillet` 只有一个
+  radius 参数，所以 `variable_radius_fillet = false`。
 
 相关：[特征树求值器](FEATURE-TREE-EVALUATOR.md)、[几何边界](ISHAPE-OPS.md)、[渲染 RHI](RENDERING.md)。

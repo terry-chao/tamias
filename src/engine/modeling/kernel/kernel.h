@@ -7,8 +7,10 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace tamias {
@@ -26,9 +28,12 @@ namespace tamias {
 // feature.h 定义这个枚举（内核层不反向 include 中间层的数据头，只做不透明声明）。
 enum class BooleanOp : std::uint8_t;
 
-enum class KernelBackend { Occt, Truck };
+enum class KernelBackend { Occt, Truck, Smlib };
 
 [[nodiscard]] const char* to_string(KernelBackend backend);
+// 设置文件里存的是字符串（"occt" / "truck" / "smlib"）。解析收口在这里，
+// 免得 main.cpp / settings_dialog / 服务端各写一份比较。
+[[nodiscard]] std::optional<KernelBackend> kernel_backend_from_string(std::string_view name);
 
 struct KernelCreateInfo {
   KernelBackend backend = KernelBackend::Occt;

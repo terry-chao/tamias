@@ -13,6 +13,10 @@
 #include "engine/modeling/truck/truck_kernel.h"
 #endif
 
+#if defined(TAMIAS_HAS_KERNEL_SMLIB)
+#include "engine/modeling/smlib/smlib_kernel.h"
+#endif
+
 namespace tamias {
 namespace {
 
@@ -55,6 +59,9 @@ void register_linked_kernels() {
 #endif
 #if defined(TAMIAS_HAS_KERNEL_TRUCK)
   register_truck_kernel_backend();
+#endif
+#if defined(TAMIAS_HAS_KERNEL_SMLIB)
+  register_smlib_kernel_backend();
 #endif
 }
 

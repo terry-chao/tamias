@@ -1,4 +1,7 @@
-add_executable(tamias_tests smoke_tests.cpp location_tests.cpp ifc_spatial_tree_tests.cpp plugin_host_tests.cpp
+# ifc_spatial_tree_tests 依赖 tamias::ifc（下面按 TAMIAS_ENABLE_IFC 才链）；关掉 IFC 时
+# 不能还编这个文件，否则会缺 format_ifc_spatial_tree 的符号。
+add_executable(tamias_tests smoke_tests.cpp location_tests.cpp
+  $<$<BOOL:${TAMIAS_ENABLE_IFC}>:ifc_spatial_tree_tests.cpp> plugin_host_tests.cpp
   scene_graph_tests.cpp ibl_tests.cpp host/session_test.cpp render_scene_tests.cpp
   scene_debug_tests.cpp
   command_dispatch_tests.cpp feature_boolean_tests.cpp camera_controller_tests.cpp import_tests.cpp

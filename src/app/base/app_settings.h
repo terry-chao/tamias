@@ -22,7 +22,7 @@ class AppSettings {
   [[nodiscard]] GraphicsBackend graphics_backend() const { return graphics_backend_; }
   void set_graphics_backend(GraphicsBackend backend);
 
-  // 建模内核后端（"occt" / "truck"）。只影响参数化求值走哪个内核，不影响文件格式。
+  // 建模内核后端（"occt" / "truck" / "smlib"）。只影响参数化求值走哪个内核，不影响文件格式。
   [[nodiscard]] QString kernel_backend() const { return kernel_backend_; }
   void set_kernel_backend(const QString& backend);
 

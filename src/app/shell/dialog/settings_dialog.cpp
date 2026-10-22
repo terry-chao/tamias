@@ -264,13 +264,18 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
   graphics_section->add_row(tr("Render backend"), backend_combo_);
   graphics_section->add_row(backend_hint_);
 
-  // 建模内核后端：OCCT（完整）或 Truck（Rust，实验性）。改完要重启才生效。
+  // 建模内核后端：OCCT（完整）/ Truck（Rust，实验）/ SMLib（NVIDIA，实验）。
+  // 改完要重启才生效。
   kernel_combo_ = new QComboBox(this);
   for (const KernelBackend backend : available_kernels()) {
     const QString key = QString::fromUtf8(to_string(backend));
-    kernel_combo_->addItem(key == QStringLiteral("truck") ? tr("Truck (Rust, experimental)")
-                                                          : tr("OCCT (OpenCASCADE)"),
-                           key);
+    QString label = tr("OCCT (OpenCASCADE)");
+    if (key == QStringLiteral("truck")) {
+      label = tr("Truck (Rust, experimental)");
+    } else if (key == QStringLiteral("smlib")) {
+      label = tr("SMLib (NVIDIA, experimental)");
+    }
+    kernel_combo_->addItem(label, key);
   }
   const int kernel_index =
       kernel_combo_->findData(AppSettings::instance().kernel_backend());
@@ -279,7 +284,8 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
   kernel_hint_->setWordWrap(true);
   kernel_hint_->setObjectName(QStringLiteral("settingsHint"));
   kernel_hint_->setText(tr("Which kernel evaluates the feature tree. OCCT is complete; "
-                           "Truck has no boolean / fillet / chamfer yet. "
+                           "Truck has no boolean / fillet / chamfer yet; SMLib is desktop "
+                           "only and still experimental. "
                            "Kernel changes take effect after restarting Tamias."));
   auto* kernel_section = new SettingsSection(tr("Modeling"), this);
   kernel_section->add_row(tr("Kernel backend"), kernel_combo_);

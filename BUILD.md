@@ -60,6 +60,18 @@ Use the `linux` preset with vcpkg (`linux-desktop` feature) or install Qt6/Vulka
 | `TAMIAS_UNITY_BUILD` | OFF | Batch several `.cpp` into one TU (faster clean build, worse incremental) |
 | `TAMIAS_COMPILER_CACHE` | ON | If `sccache` or `ccache` is on PATH, wrap `cl`/`c++` (helps **clean** rebuilds). Empty incremental builds should be `ninja: no work to do` without a cache. |
 | `TAMIAS_ENABLE_MATH_MODULE` | OFF | C++20 module pilot: builds `tamias::math_module` (`tamias.math`) next to the header-only `tamias::math`. MSVC + GCC verified; Emscripten untested in CI. See [docs/DECISION-MODULES-MATH.md](docs/DECISION-MODULES-MATH.md) |
+| `TAMIAS_ENABLE_SMLIB_KERNEL` | OFF | Third modeling kernel: NVIDIA USD BRep / SMLib. **Windows only, Release/RelWithDebInfo only** (the SDK ships Unicode `/MD` binaries). Needs `TAMIAS_SMLIB_PREFIX`. See [docs/MODELING-KERNEL.md](docs/MODELING-KERNEL.md) |
+
+### SMLib（可选，Windows）
+
+从 [NVIDIA-Omniverse/usd-brep](https://github.com/NVIDIA-Omniverse/usd-brep/releases) 下 `*windows-x86_64.release.7z`，解压到任意前缀（下面假定 `C:\dev\usd-brep`），确认 `lib\SMLib.dll`、`lib\SM_API.dll` 在。然后：
+
+```powershell
+cmake --preset msvc -DTAMIAS_ENABLE_SMLIB_KERNEL=ON -DTAMIAS_SMLIB_PREFIX=C:/dev/usd-brep
+cmake --build --preset relwithdebinfo --parallel
+```
+
+设置 → Modeling → Kernel backend 里会出现 `SMLib (NVIDIA, experimental)`，重启生效。**Debug 不要开**：SDK 是 `/MD`，Tamias Debug 是 `/MDd`，跨 CRT 释放会崩。SMLib 后端下面所有这些调用都是进程级串行的（`SM_API` 不是线程安全的），而且它没有 STEP/IGES 导入。
 
 ### OCCT (required, via vcpkg)
 

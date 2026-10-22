@@ -13,8 +13,23 @@ const char* to_string(KernelBackend backend) {
       return "occt";
     case KernelBackend::Truck:
       return "truck";
+    case KernelBackend::Smlib:
+      return "smlib";
   }
   return "unknown";
+}
+
+std::optional<KernelBackend> kernel_backend_from_string(std::string_view name) {
+  if (name == "occt") {
+    return KernelBackend::Occt;
+  }
+  if (name == "truck") {
+    return KernelBackend::Truck;
+  }
+  if (name == "smlib") {
+    return KernelBackend::Smlib;
+  }
+  return std::nullopt;
 }
 
 namespace {
