@@ -156,8 +156,8 @@ Qt 的助记符一样生效。
   标题栏可以继续拖着走，`×` 收回去。抓手只是视觉提示——按分组身上任何非按钮处都能拖。
 - 拖到工具带上会显示一条插入线，松手就按落点停靠回去（一段之内左右换位置，也可以换排）；
   只在它原来那一段停靠，跨段搬组会把「组属于哪一页」的登记弄乱。
-- **拖过就记下来**：分组的排 / 排内先后（`ui/ribbon_layout`，每条 `page|group|row|index`）、
-  哪几组浮着 + 浮窗位置（`ui/ribbon_floating_groups`）、卷起状态（`ui/ribbon_collapsed`）
+- **拖过就记下来**：分组的排 / 排内先后（`layout/ribbon_layout`，每条 `page|group|row|index`）、
+  哪几组浮着 + 浮窗位置（`layout/floating_groups`）、卷起状态（`ui/ribbon_collapsed`）
   都进设置，下次开还是你摆的样子（形态 `ui/ribbon_style` 同理）。浮窗被拖着挪位置时按
   400ms 节流存一次，不会每挪一像素就写盘。
   旧记录对不上的条目直接忽略；记录里没有的分组（新版本新增、插件后加的）补在末尾，
@@ -205,16 +205,31 @@ Ribbon「开始 → 插件」由 `PluginHost` 在启动时加载 C# 插件。插
 
 ## 设置落盘在哪儿
 
-设置是 exe 旁边的一份 ini：**`<exe 目录>/config/tamias.ini`**。
+设置是 exe 旁边 `config/` 里的**两份** ini——一份给人，一份给程序：
 
-- **开发构建**：`build/bin/<配置>/config/tamias.ini`。每个构建目录各一份，所以 Debug /
+| 文件 | 谁写 | 装什么 |
+|---|---|---|
+| `tamias.ini` | 设置对话框，也可以直接拿编辑器改 | 语言、界面库后端、主题、渲染后端、建模内核、Ribbon 形态与卷起、AI / Meshy 的地址和模型、插件启用表 |
+| `tamias-layout.ini` | 只有程序写，**别手改** | 面板停靠布局（`layout/window_state`，base64）、Ribbon 分组排布（`layout/ribbon_layout`）、浮窗位置（`layout/floating_groups`）、布局版本号（`layout/version`） |
+
+- **为什么分两份**：偏好是短的、稳定的、值得人看和改；布局是**不透明字节**，而且改得
+  很勤（拖一下面板 400ms 就存一次，`QSettings` 每次 sync 都整份重写）。混在一份里，
+  手抖敲坏一个字符丢的是整个停靠布局，拖面板时又把语言 / 后端那几行跟着重写一遍。
+  分开之后布局坏了顶多回到默认排布，偏好不受牵连。
+- **开发构建**：`build/bin/<配置>/config/`。每个构建目录各一份，所以 Debug /
   Release / RelWithDebInfo 和安装版**互不覆盖**——在开发构建里拖一下面板，安装版照旧。
 - **安装版**：`C:\Program Files\Tamias\config\` 对普通用户不可写，退到
-  `%APPDATA%\tamias\tamias\tamias.ini`（每用户一份）。启动日志里的 `Settings file:` 一行
-  会写明这次实际用的是哪个文件。
+  `%APPDATA%\tamias\tamias\`（每用户一份）。启动日志里的 `Settings file:` / `Layout file:`
+  两行会写明这次实际用的是哪两个文件。
 - 以前走 `QSettings` 的默认格式，也就是注册表 `HKCU\Software\tamias\tamias`——一份设置被
-  全机器所有版本共用。现在**第一次**用 ini 启动时会把旧值搬过来一次（18 个键上下），
-  旧位置保留不删。
+  全机器所有版本共用。现在**第一次**用 ini 启动时会把旧值搬过来一次，旧位置保留不删；
+  同一版还会把 `ui/window_state`、`ui/ribbon_layout`、`ui/ribbon_floating_groups`、
+  `ui/dock_layout_version` 从 `tamias.ini` 挪进 `tamias-layout.ini`（搬完删掉老键）。
+
+**最近文件不在这里**：它在 `%APPDATA%\tamias\tamias\recent.json`，和缩略图做邻居。
+以前也是 ini 里的一个 `@Variant` 块——5 条记录 8 KB，占整份 ini 的八成，还只有 QSettings
+读得懂；现在是一份可读、可删、可测的 JSON（`items` 数组，一条一个 `path` / `name` /
+`openedAt` / `createdAt` / `thumbnailPath`）。
 
 API key 不在 ini 里，走 Windows 凭据管理器；缩略图、脚本、用户装的扩展仍在
 `%APPDATA%\tamias\tamias\` 下。

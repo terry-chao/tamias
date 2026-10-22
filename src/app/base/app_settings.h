@@ -17,7 +17,11 @@ class AppSettings {
   static AppSettings& instance();
 
   void load();
+  // 偏好落盘（tamias.ini）。布局也顺手写一遍，保证「set 完调 save」不会漏。
   void save() const;
+  // 只写布局文件（tamias-layout.ini）。拖面板 / 拖分组这种高频路径走这个：
+  // 拖的时候抖的是布局，不该把语言、后端、AI 地址那几行也跟着重写一遍。
+  void save_layout() const;
 
   [[nodiscard]] GraphicsBackend graphics_backend() const { return graphics_backend_; }
   void set_graphics_backend(GraphicsBackend backend);
@@ -44,6 +48,7 @@ class AppSettings {
   [[nodiscard]] QString ribbon_style() const { return ribbon_style_; }
   void set_ribbon_style(const QString& style);
   // 被拖出 Ribbon、漂在外面的分组："page_id|group_id|x|y"。
+  // 和下面几项一样住在 tamias-layout.ini（机器生成的那份），不在 tamias.ini 里。
   [[nodiscard]] QStringList ribbon_floating_groups() const {
     return ribbon_floating_groups_;
   }
@@ -56,6 +61,10 @@ class AppSettings {
   void set_ribbon_collapsed(bool collapsed);
   // 主窗口的面板停靠布局（QMainWindow::saveState：每个面板停在哪一区、多大、
   // 是否浮动、显不显示）。拖动面板之后记下来，下次开还是这样。
+  //
+  // 这是**不透明字节**，落盘时 base64 写在 tamias-layout.ini 的
+  // layout/window_state 里——不再以 QSettings 的 @ByteArray 转义块出现在
+  // 手改的 tamias.ini 中（那东西只有 QSettings 认，敲错一个字符整个键就废）。
   [[nodiscard]] QByteArray window_state() const { return window_state_; }
   void set_window_state(const QByteArray& state);
   // 停靠布局的版本号。布局设计改动（面板换位置、换大小档）时把它 +1，
@@ -141,23 +150,36 @@ class AppSettings {
 
 // 设置落盘在哪儿。
 //
+// 两份文件，同一个目录：
+//   tamias.ini          —— 用户偏好，短、稳定、可以手改（语言、后端、主题、AI 地址…）。
+//   tamias-layout.ini   —— 机器生成的界面状态：面板停靠（window_state，base64）、
+//                          Ribbon 分组排布、浮窗位置、布局版本号。没人会手改它，
+//                          代码改版也随时会让它作废，所以不跟偏好混在一份里。
+//
 // 优先级：
-//   1. <exe 目录>/config/tamias.ini —— 便携；源码树里每个构建目录各一份，
+//   1. <exe 目录>/config/ —— 便携；源码树里每个构建目录各一份，
 //      所以 Debug / Release / RelWithDebInfo 和安装版互不干扰。
 //   2. 那个目录建不出来或不可写（典型是装在 Program Files 的 MSI），
-//      退到 <AppConfigLocation>/tamias.ini —— 每用户一份。
+//      退到 <AppConfigLocation>/ —— 每用户一份。
 //
 // 刻意不用 QSettings 的默认（原生）格式：Windows 上那是注册表
 // HKCU\Software\tamias\tamias，全机器所有版本共用一份设置，在开发构建里
 // 拖一下面板、安装版也跟着变。
+//
+// 为什么布局要单独一份：它写得太勤（拖面板 400ms 一次，而 QSettings 每次 sync
+// 都会整份重写），格式又是不透明字节。混在偏好里，手改 ini 的一个空格就能让
+// 整个 window_state 变成空值，连带把那几行偏好一起暴露在写坏的风险里。
 
 // 选定设置文件、建好目录，必要时把旧位置（原生格式：Windows 是注册表，
-// 其它平台是旧的 .conf）里的设置搬过来。必须在**任何** QSettings 之前调用。
-// 返回最终使用的 ini 路径。
+// 其它平台是旧的 .conf）里的设置搬过来，并把以前塞在 tamias.ini 里的布局
+// （ui/window_state、ui/ribbon_layout、ui/ribbon_floating_groups、
+// ui/dock_layout_version）挪进 tamias-layout.ini。
+// 必须在**任何** QSettings 之前调用。返回最终使用的 ini 路径。
 QString init_settings_storage();
 
 // init_settings_storage() 定下来的路径。
 [[nodiscard]] const QString& app_settings_file_path();
+[[nodiscard]] const QString& app_layout_file_path();
 
 // 所有设置读写都从这里拿，保证「读哪份」和「写哪份」是同一个文件。
 //
@@ -165,6 +187,10 @@ QString init_settings_storage();
 // 不调用拷贝构造，所以这个按值返回是合法的：
 //     QSettings settings = tamias::open_settings();
 [[nodiscard]] QSettings open_settings();
+
+// 布局文件（tamias-layout.ini）的句柄。只有 AppSettings::load / save_layout
+// 该碰它——别的地方要存布局，调 set_* 再 save_layout。
+[[nodiscard]] QSettings open_layout_settings();
 
 void apply_ui_color_scheme(UiColorScheme scheme);
 

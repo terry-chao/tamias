@@ -1064,7 +1064,7 @@ MainWindow::MainWindow(QWidget* parent)
     }
     auto& settings = AppSettings::instance();
     settings.set_ribbon_floating_groups(ribbon_->floating_group_keys());
-    settings.save();
+    settings.save_layout();
   });
   // 拖动分组（换排 / 换位置）之后立刻记下来：「这次拖完是什么样，下次开还是什么样」。
   connect(ribbon, &RibbonBar::layout_changed, this, [this] {
@@ -1073,7 +1073,7 @@ MainWindow::MainWindow(QWidget* parent)
     }
     auto& settings = AppSettings::instance();
     settings.set_ribbon_layout(ribbon_->layout_keys());
-    settings.save();
+    settings.save_layout();
   });
   // 卷起 / 展开也属于布局，一起记。
   connect(ribbon, &RibbonBar::collapsed_changed, this, [](bool collapsed) {
@@ -1355,7 +1355,7 @@ MainWindow::MainWindow(QWidget* parent)
       restoreState(dock_state);
     }
     settings.set_dock_layout_version(kDockLayoutVersion);
-    settings.save();
+    settings.save_layout();
   }
   // 从那以后：布局一动就（节流）记下来，不用等到关窗口。
   window_state_timer_ = new QTimer(this);
@@ -3153,7 +3153,8 @@ void MainWindow::persist_window_state() {
   }
   auto& settings = AppSettings::instance();
   settings.set_window_state(saveState());
-  settings.save();
+  // 只写布局那份：拖一下面板不该把 tamias.ini（语言 / 后端 / AI 地址）也整份重写。
+  settings.save_layout();
 }
 
 void MainWindow::close_tab(int index) {

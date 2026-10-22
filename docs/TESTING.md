@@ -281,7 +281,7 @@ EXPECT_FALSE(mesh->indices.empty());
 | 能测 | 怎么测 |
 |---|---|
 | 已抽出的逻辑 | `ViewportFloor` 已在 gtest；同类（纯函数 / 无窗）继续 gtest |
-| `RecentFilesStore` | 需要 `QCoreApplication`，用 Qt Test 或在 gtest 里 `QCoreApplication app(argc, argv)` + 临时 `QSettings` 路径；断言 add 后上限 8、去重、remove |
+| `RecentFilesStore` | 需要 `QCoreApplication`，用 Qt Test 或在 gtest 里 `QCoreApplication app(argc, argv)` + `QStandardPaths::setTestModeEnabled(true)`（`recent.json` 落进测试目录）；断言 add 后上限 8、去重、remove、坏 JSON 只是空列表不崩 |
 | i18n | 加载 `.qm`，抽几条 `QCoreApplication::translate`，不要测整窗布局 |
 | Ribbon 启用态 | 若逻辑是「`can_undo` → 按钮 enabled」，测 `Session::can_undo()` 即可，不必找 QAction |
 
