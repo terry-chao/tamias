@@ -77,7 +77,7 @@ BIM 的「三角多」常常是「同一段墙截面复制八千次」，所以�
 | 来源 | 现状 | 对策 |
 |---|---|---|
 | OCCT 离散占主线程 | OCCT 不在 UI / 渲染线程跑，走 `TessWorker` 后台队列（[tess_worker.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/evaluate/tess_worker.h)） | 已落地。Emscripten 没 pthread 时靠 `pump(max_jobs)` 把一帧的工作摊到多帧 |
-| 打开大 STEP 首帧出不来 | 导入时只算 `Shape::bounds()`，按 `LodRequest` 懒离散（[occt_shape_ops.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt/occt_shape_ops.cpp)） | 已落地：先出 L0 盒 / 粗档，细档异步补 |
+| 打开大 STEP 首帧出不来 | 导入时只算 `Shape::bounds()`，按 `LodRequest` 懒离散（[occt_shape_ops.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/mki/occt/occt_shape_ops.cpp)） | 已落地：先出 L0 盒 / 粗档，细档异步补 |
 | upload 阻塞 UI | `upload_mesh` / `upload_texture` 会阻塞 UI 直到 GPU 侧写完（[RENDERING.md](RENDERING.md) §4） | 部分落地：`request_upload_mesh` 提交即返回；大贴图的 mip 链仍在渲染线程算（见 §4） |
 
 还有一类不是崩溃而是**手感**问题：LOD 档次抖动。修法是滞回，不是加预算 —— `select_mesh_lod` 升档要 1.25×、降档要 0.8×（[mesh_lod.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/resource/mesh_lod.h)）。
@@ -137,17 +137,17 @@ TopoDS_Shape = TShape（共享的拓扑数据）+ TopLoc_Location（放在哪）
 
 - **几何是共享的。** 圆柱侧面是一个 `Geom_CylindricalSurface` 对象，不是「一堆三角」。一个面只是「这个曲面 + 一圈边界线」。
 - **pcurve 是 BRep 的关键。** 一条 3D 边在参数域里长什么样，决定了「这个面到底被裁到哪里」，也是判定点是否在面内的依据。没有 pcurve，拓扑信息就丢了。
-- **朝向 `TopAbs_REVERSED` 表示法线朝内。** 离散时要把三角形绕序反过来（[occt_mesh.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt/occt_mesh.cpp) 里就是这么处理的）。
+- **朝向 `TopAbs_REVERSED` 表示法线朝内。** 离散时要把三角形绕序反过来（[occt_mesh.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/mki/occt/occt_mesh.cpp) 里就是这么处理的）。
 - **容差是拓扑的一部分。** 布尔 / 倒角的容差会写回边和顶点，直接决定后续能不能缝合。
 - **三角化是缓存在 Face 上的**（`BRep_TFace` 里的 `Poly_Triangulation`），不改变 BRep 本身。Tamias 的 `tessellate` 就是跑 `BRepMesh_IncrementalMesh`，再把这份三角抠出来。
 
 ### Tamias 这一侧的边界
 
-内核接口刻意停在「BRep 操作」层（[kernel.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/kernel/kernel.h)）：
+内核接口刻意停在「BRep 操作」层（[kernel.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/mki/kernel.h)）：
 
 - `Body` 是 `shared_ptr<const Body>` 不透明句柄，**外面永远看不到 `TopoDS_Shape`**；
 - `EdgeId` 只在**一个 Body 的生命周期内**有效；跨求值、跨会话的持久标识由中间层的**几何指纹**负责（[edge_fingerprint.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/evaluate/edge_fingerprint.cpp)），不是内核的事；
-- 唯一允许 `#include <BRep*.hxx>` 的地方是 `src/engine/modeling/occt/`。
+- 唯一允许 `#include <BRep*.hxx>` 的地方是 `src/engine/modeling/mki/occt/`。
 
 离散时按 Face 走，并把每个面在索引里的范围记进 `MeshCpu.faces`（`MeshFaceRange` + 面 AABB，见 [mesh_face_range.h](https://github.com/terry-chao/tamias/blob/main/src/engine/graphics/mesh_face_range.h)）。这样以后「按面剔除 / 按面剖切 / 按面流式」不需要改顶点格式，也不动 `.tdoc` 序列化。
 
@@ -157,7 +157,7 @@ TopoDS_Shape = TShape（共享的拓扑数据）+ TopLoc_Location（放在哪）
 
 ## 3. 圆柱 ∩ 棱锥，BRep 里存什么
 
-假设圆柱（侧面是 `Geom_CylindricalSurface`，上下底是 `Geom_Plane`）和棱锥（`n` 个侧面平面 + 一个底面平面）做布尔。OCCT 走 `BRepAlgoAPI_Cut / Common / Fuse`（Tamias 的 `OcctKernel::boolean`，[occt_kernel.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt/occt_kernel.cpp)）。结果**不是**「记录了一次运算」，而是**一整套新的精确 BRep**。
+假设圆柱（侧面是 `Geom_CylindricalSurface`，上下底是 `Geom_Plane`）和棱锥（`n` 个侧面平面 + 一个底面平面）做布尔。OCCT 走 `BRepAlgoAPI_Cut / Common / Fuse`（Tamias 的 `OcctKernel::boolean`，[occt_kernel.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/mki/occt/occt_kernel.cpp)）。结果**不是**「记录了一次运算」，而是**一整套新的精确 BRep**。
 
 ### 结果里逐个数
 
@@ -606,11 +606,11 @@ CommandList::begin / end / begin_render_pass / end_render_pass
 
 | RHI | 建模内核 |
 |---|---|
-| `rhi/device.h` 定义动词 | `kernel/kernel.h` 定义动词 |
+| `rhi/device.h` 定义动词 | `mki/kernel.h` 定义动词 |
 | `BackendModule` + `register_backend()` | `KernelModule` + `register_kernel_backend()` |
 | `RHIDevice::create({backend})` | `ModelKernel::create({backend})` |
 | `Buffer` / `Texture` 不透明句柄 | `Body` 不透明句柄 + `EdgeId` |
-| `rhi/vulkan/`、`rhi/opengl/`、`rhi/webgpu/` | `modeling/occt/`、`modeling/truck/` |
+| `rhi/vulkan/`、`rhi/opengl/`、`rhi/webgpu/` | `modeling/mki/occt/`、`modeling/mki/truck/` |
 | 后端能力不同就降级（WebGL 没线框） | `KernelCapabilities`，UI 按能力灰按钮 |
 
 **一句话：形状学 Vulkan，词汇表按「四个后端都能实现的最小集合」裁剪，差异全部落在后端。**
@@ -1317,7 +1317,7 @@ ConsolePanel（Ctrl+Enter）
 | 渲染线程 / 驻留 / 纹理 | [render_runtime.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.h)、[render_runtime.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/render_runtime.cpp)、[resident_cache.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/runtime/resident_cache.h)、[texture_mips.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/resource/texture_mips.cpp) |
 | LOD 策略 | [mesh_lod.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/resource/mesh_lod.h)、[lod_mesh_set.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/resource/lod_mesh_set.h)、[lod_request.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/resource/lod_request.h) |
 | RHI | [device.h](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/device.h)、[opengl_device.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/opengl/opengl_device.cpp)、[vulkan_device.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/render/rhi/vulkan/vulkan_device.cpp) |
-| 造型 / 内核 | [kernel.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/kernel/kernel.h)、[occt_kernel.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt/occt_kernel.cpp)、[occt_shape_ops.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt/occt_shape_ops.cpp)、[feature.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/feature/feature.h)、[tess_worker.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/evaluate/tess_worker.h) |
+| 造型 / 内核 | [kernel.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/mki/kernel.h)、[occt_kernel.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/mki/occt/occt_kernel.cpp)、[occt_shape_ops.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/mki/occt/occt_shape_ops.cpp)、[feature.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/feature/feature.h)、[tess_worker.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/evaluate/tess_worker.h) |
 | 命令 / 会话 | [command_system.h](https://github.com/terry-chao/tamias/blob/main/src/command/core/command_system.h)、[session.h](https://github.com/terry-chao/tamias/blob/main/src/host/session.h)、[camera_controller.cpp](https://github.com/terry-chao/tamias/blob/main/src/host/camera_controller.cpp) |
 | 视口 | [document_viewport.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/canvas/document_viewport.cpp)、[drawing_view.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/drawing/drawing_view.cpp)、[view_cube_widget.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/viewport/overlay/view_cube_widget.cpp) |
 | 图纸 / 文字 | [drawing.h](https://github.com/terry-chao/tamias/blob/main/src/engine/drawing/drawing.h)、[drawing_text.h](https://github.com/terry-chao/tamias/blob/main/src/engine/drawing/drawing_text.h)、[drawing_document.cpp](https://github.com/terry-chao/tamias/blob/main/src/app/drawing/drawing_document.cpp) |

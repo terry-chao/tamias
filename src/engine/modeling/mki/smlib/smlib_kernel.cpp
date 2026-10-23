@@ -1,7 +1,7 @@
-#include "engine/modeling/smlib/smlib_kernel.h"
+#include "engine/modeling/mki/smlib/smlib_kernel.h"
 
-#include "engine/modeling/kernel/kernel.h"
-#include "engine/modeling/smlib/smlib_c.h"
+#include "engine/modeling/mki/kernel.h"
+#include "engine/modeling/mki/smlib/smlib_c.h"
 
 #include "engine/base/log.h"
 #include "engine/graphics/mesh.h"

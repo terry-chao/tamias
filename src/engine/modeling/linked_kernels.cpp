@@ -5,16 +5,16 @@
 #include <mutex>
 #include <string>
 
-#if defined(TAMIAS_HAS_KERNEL_OCCT)
-#include "engine/modeling/occt/occt_kernel.h"
+#if defined(TAMIAS_HAS_MKI_OCCT)
+#include "engine/modeling/mki/occt/occt_kernel.h"
 #endif
 
-#if defined(TAMIAS_HAS_KERNEL_TRUCK)
-#include "engine/modeling/truck/truck_kernel.h"
+#if defined(TAMIAS_HAS_MKI_TRUCK)
+#include "engine/modeling/mki/truck/truck_kernel.h"
 #endif
 
-#if defined(TAMIAS_HAS_KERNEL_SMLIB)
-#include "engine/modeling/smlib/smlib_kernel.h"
+#if defined(TAMIAS_HAS_MKI_SMLIB)
+#include "engine/modeling/mki/smlib/smlib_kernel.h"
 #endif
 
 namespace tamias {
@@ -54,13 +54,13 @@ Result<std::unique_ptr<ModelKernel>> create_with_fallback(KernelBackend wanted,
 }  // namespace
 
 void register_linked_kernels() {
-#if defined(TAMIAS_HAS_KERNEL_OCCT)
+#if defined(TAMIAS_HAS_MKI_OCCT)
   register_occt_kernel_backend();
 #endif
-#if defined(TAMIAS_HAS_KERNEL_TRUCK)
+#if defined(TAMIAS_HAS_MKI_TRUCK)
   register_truck_kernel_backend();
 #endif
-#if defined(TAMIAS_HAS_KERNEL_SMLIB)
+#if defined(TAMIAS_HAS_MKI_SMLIB)
   register_smlib_kernel_backend();
 #endif
 }

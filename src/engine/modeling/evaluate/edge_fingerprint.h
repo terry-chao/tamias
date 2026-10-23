@@ -3,7 +3,7 @@
 #include "engine/base/result.h"
 #include "engine/math/math.h"
 #include "engine/modeling/feature/feature.h"
-#include "engine/modeling/kernel/kernel.h"
+#include "engine/modeling/mki/kernel.h"
 
 #include <cstdint>
 #include <string>

@@ -121,8 +121,8 @@ recompute_scene()
 |---|---|---|---|
 | **配方（数据）** | [feature.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/feature/feature.h) `FeatureModel` | 存特征树，纯数据，能序列化进 `.tdoc` | **零依赖 OCCT** |
 | **中间层（求值器）** | [evaluator.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/evaluate/evaluator.cpp) | 遍历特征、解析参数、调内核动词、出三角网 | 零依赖 OCCT（只 include 内核接口） |
-| **内核接口** | [kernel/kernel.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/kernel/kernel.h) `ModelKernel` | 轮廓 / 拉伸 / 布尔 / 圆角 / 倒角 / 测量 / 离散这些动词 | 只声明，不实现 |
-| **后端（实现）** | [occt/](https://github.com/terry-chao/tamias/tree/main/src/engine/modeling/occt) | 真正调 OCCT 求值 | **全项目唯一碰 OCCT 几何的地方** |
+| **内核接口** | [mki/kernel.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/mki/kernel.h) `ModelKernel` | 轮廓 / 拉伸 / 布尔 / 圆角 / 倒角 / 测量 / 离散这些动词 | 只声明，不实现 |
+| **后端（实现）** | [occt/](https://github.com/terry-chao/tamias/tree/main/src/engine/modeling/mki/occt) | 真正调 OCCT 求值 | **全项目唯一碰 OCCT 几何的地方** |
 
 最关键的一点：`FeatureModel` 里**没有任何 OCCT 类型**（没有 `TopoDS_Shape`），只有 `uint64_t id`、`FeatureKind`、`unordered_map<string,double> params`。所以它能存盘。OCCT 的 `TopoDS_Shape` 只在求值器内部活一瞬间，算完就转成 `MeshCpu` 交出去，不往外泄漏。
 
@@ -193,7 +193,7 @@ struct Feature {
 
 ## 5. 从 BRep 到三角网（tessellate）
 
-OCCT 算出来的 `TopoDS_Shape` 是**精确的 BRep**（参数化曲面 + 拓扑边/面），但渲染器要的是**三角网**。转换在 [`occt/occt_mesh.cpp`](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/occt/occt_mesh.cpp) 的 `tessellate_brep`（求值路径和导入路径共用这一份）：
+OCCT 算出来的 `TopoDS_Shape` 是**精确的 BRep**（参数化曲面 + 拓扑边/面），但渲染器要的是**三角网**。转换在 [`occt/occt_mesh.cpp`](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/mki/occt/occt_mesh.cpp) 的 `tessellate_brep`（求值路径和导入路径共用这一份）：
 
 1. `BRepMesh_IncrementalMesh` 把整个 shape 离散成三角网格。
 2. 用 `TopExp_Explorer` 遍历每个面，`BRep_Tool::Triangulation` 取该面的三角数据。

@@ -1,4 +1,4 @@
-#include "engine/modeling/kernel/shape_ops.h"
+#include "engine/modeling/mki/shape_ops.h"
 
 namespace tamias {
 

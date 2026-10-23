@@ -1,4 +1,4 @@
-#include "engine/modeling/occt/occt_mesh.h"
+#include "engine/modeling/mki/occt/occt_mesh.h"
 
 #include "engine/profile/timing_scope.h"
 

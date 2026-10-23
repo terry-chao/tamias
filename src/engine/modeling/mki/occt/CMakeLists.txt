@@ -11,35 +11,35 @@
 # 掏空，而是这个文件从头到尾都泡在 XCAF 里（XCAF 文档、颜色工具、STEP/IGES reader
 # 都是它的成员）。它的调用点全在桌面壳（src/app/main.cpp 的 register_occt_shape_ops），
 # wasm 和服务端都不注册它：服务端 load_bytes 只认 .tdoc / .trscn / .obj。
-set(_tamias_kernel_occt_sources
+set(_tamias_mki_occt_sources
   occt_kernel.cpp
   occt_mesh.cpp
 )
 if(TAMIAS_OCCT_DATA_EXCHANGE)
-  list(APPEND _tamias_kernel_occt_sources occt_shape_ops.cpp)
+  list(APPEND _tamias_mki_occt_sources occt_shape_ops.cpp)
 endif()
 
-add_library(tamias_kernel_occt STATIC ${_tamias_kernel_occt_sources})
-add_library(tamias::kernel_occt ALIAS tamias_kernel_occt)
-target_include_directories(tamias_kernel_occt PUBLIC ${CMAKE_SOURCE_DIR}/src)
+add_library(tamias_mki_occt STATIC ${_tamias_mki_occt_sources})
+add_library(tamias::mki_occt ALIAS tamias_mki_occt)
+target_include_directories(tamias_mki_occt PUBLIC ${CMAKE_SOURCE_DIR}/src)
 if(TAMIAS_OCCT_INCLUDE_DIR)
-  target_include_directories(tamias_kernel_occt PUBLIC "${TAMIAS_OCCT_INCLUDE_DIR}")
+  target_include_directories(tamias_mki_occt PUBLIC "${TAMIAS_OCCT_INCLUDE_DIR}")
 endif()
 
 # 谁要用 shape ops 的注册口，先看这个宏。定义成 0 / 1 而不是「有 / 没有」，
 # 这样 #if 不会碰上未定义宏（-Wundef）。
 if(TAMIAS_OCCT_DATA_EXCHANGE)
-  target_compile_definitions(tamias_kernel_occt PUBLIC TAMIAS_HAS_OCCT_DATA_EXCHANGE=1)
+  target_compile_definitions(tamias_mki_occt PUBLIC TAMIAS_HAS_OCCT_DATA_EXCHANGE=1)
 else()
-  target_compile_definitions(tamias_kernel_occt PUBLIC TAMIAS_HAS_OCCT_DATA_EXCHANGE=0)
+  target_compile_definitions(tamias_mki_occt PUBLIC TAMIAS_HAS_OCCT_DATA_EXCHANGE=0)
 endif()
 
-target_link_libraries(tamias_kernel_occt
+target_link_libraries(tamias_mki_occt
   PUBLIC
-    tamias::kernel
+    tamias::mki
     tamias::base
     tamias::graphics
 )
 if(TAMIAS_OCCT_LIBRARIES)
-  target_link_libraries(tamias_kernel_occt PUBLIC ${TAMIAS_OCCT_LIBRARIES})
+  target_link_libraries(tamias_mki_occt PUBLIC ${TAMIAS_OCCT_LIBRARIES})
 endif()

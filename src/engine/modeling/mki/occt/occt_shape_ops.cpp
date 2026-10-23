@@ -1,9 +1,9 @@
-#include "engine/modeling/occt/occt_shape_ops.h"
+#include "engine/modeling/mki/occt/occt_shape_ops.h"
 
 #include "engine/base/fs_utf8.h"
 #include "engine/base/log.h"
-#include "engine/modeling/occt/occt_error.h"
-#include "engine/modeling/occt/occt_mesh.h"
+#include "engine/modeling/mki/occt/occt_error.h"
+#include "engine/modeling/mki/occt/occt_mesh.h"
 #include "engine/profile/timing_scope.h"
 
 #include <Bnd_Box.hxx>
@@ -177,7 +177,7 @@ Handle(TDocStd_Document) new_xcaf_document() {
 }
 
 // 装配体在这里被拍平成一个 compound：几何、位置、逐面颜色都保留，装配层级和实例
-// 名字不保留 —— Shape 接口（kernel/shape_ops.h）只表达「一个 shape」，没有装配概念。
+// 名字不保留 —— Shape 接口（mki/shape_ops.h）只表达「一个 shape」，没有装配概念。
 // 层级本身没丢：XCAF 文档跟着 OcctShape 一起活着，将来要给 BIM/装配树用，从这里
 // 加一个新的访问入口即可，不用改这条链路。
 TopoDS_Shape compound_free_shapes(const Handle(XCAFDoc_ShapeTool)& shapes) {

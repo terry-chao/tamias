@@ -41,7 +41,7 @@ src/
 │   ├── document/ Document（一个打开的文件）、Scene（语义树）、拾取
 │   ├── graphics/ Mesh、GraphicsBackend 枚举
 │   ├── io/      文件读写：binary_archive、mesh_io
-│   ├── modeling/ 造型：feature/（配方）、evaluate/（求值）、kernel/（内核接口）、occt/ 等后端
+│   ├── modeling/ 造型：feature/（配方）、evaluate/（求值）、mki/（Modeling Kernel Interface + occt/、truck/、smlib/ 后端）
 │   └── render/   渲染：runtime/（线程与帧）、scene/（场景图与快照）、resource/（材质贴图）、debug/（回放）、rhi/（后端）
 ├── web/         Web 查看器宿主（ViewerHost）
 └── …（tests/ 在仓库根；plugin-sdk/csharp/ 是 C# 插件 SDK，plugins/ 是插件示例）

@@ -1,8 +1,8 @@
-#include "engine/modeling/occt/occt_kernel.h"
+#include "engine/modeling/mki/occt/occt_kernel.h"
 
 #include "engine/modeling/feature/feature.h"
-#include "engine/modeling/occt/occt_error.h"
-#include "engine/modeling/occt/occt_mesh.h"
+#include "engine/modeling/mki/occt/occt_error.h"
+#include "engine/modeling/mki/occt/occt_mesh.h"
 #include "engine/profile/timing_scope.h"
 
 #include <Bnd_Box.hxx>

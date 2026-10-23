@@ -1,7 +1,8 @@
 find_package(Threads REQUIRED)
 
-# 内核接口层（对应 render/rhi：动词 + 注册表）
-add_subdirectory(kernel)
+# MKI（Modeling Kernel Interface）+ 各造型后端（mki/occt、mki/truck、mki/smlib）。
+# 目录形状对应 render/rhi：抽象在 mki/，后端在 mki/<backend>/。
+add_subdirectory(mki)
 
 # 中间层：特征树、求值器、草图数学、拓扑命名。不含任何内核实现。
 add_library(tamias_modeling STATIC
@@ -21,35 +22,25 @@ target_include_directories(tamias_modeling PUBLIC
   ${CMAKE_SOURCE_DIR}/src
 )
 target_link_libraries(tamias_modeling PUBLIC
-  tamias::kernel
+  tamias::mki
   tamias::base
   tamias::graphics
   Threads::Threads
 )
 
-# 后端：OCCT。中间层不 include 它，只是把注册进来的内核当默认实现用（过渡期）。
-if(TAMIAS_ENABLE_OCCT)
-  add_subdirectory(occt)
-endif()
-if(TARGET tamias::kernel_occt)
-  target_link_libraries(tamias_modeling PUBLIC tamias::kernel_occt)
-  target_compile_definitions(tamias_modeling PRIVATE TAMIAS_HAS_KERNEL_OCCT=1)
+# 后端目标由 mki/ 下的 CMakeLists 创建；中间层不 include 它们，
+# 只是把注册进来的内核当默认实现用（过渡期）。
+if(TARGET tamias::mki_occt)
+  target_link_libraries(tamias_modeling PUBLIC tamias::mki_occt)
+  target_compile_definitions(tamias_modeling PRIVATE TAMIAS_HAS_MKI_OCCT=1)
 endif()
 
-# 后端：Truck（Rust）。默认关；打开后 conformance 用例会一并跑它。
-if(TAMIAS_ENABLE_TRUCK_KERNEL)
-  add_subdirectory(truck)
-endif()
-if(TARGET tamias::kernel_truck)
-  target_link_libraries(tamias_modeling PUBLIC tamias::kernel_truck)
-  target_compile_definitions(tamias_modeling PRIVATE TAMIAS_HAS_KERNEL_TRUCK=1)
+if(TARGET tamias::mki_truck)
+  target_link_libraries(tamias_modeling PUBLIC tamias::mki_truck)
+  target_compile_definitions(tamias_modeling PRIVATE TAMIAS_HAS_MKI_TRUCK=1)
 endif()
 
-# 后端：SMLib（NVIDIA USD BRep）。默认关；Windows 上需要 TAMIAS_SMLIB_PREFIX。
-if(TAMIAS_ENABLE_SMLIB_KERNEL)
-  add_subdirectory(smlib)
-endif()
-if(TARGET tamias::kernel_smlib)
-  target_link_libraries(tamias_modeling PUBLIC tamias::kernel_smlib)
-  target_compile_definitions(tamias_modeling PRIVATE TAMIAS_HAS_KERNEL_SMLIB=1)
+if(TARGET tamias::mki_smlib)
+  target_link_libraries(tamias_modeling PUBLIC tamias::mki_smlib)
+  target_compile_definitions(tamias_modeling PRIVATE TAMIAS_HAS_MKI_SMLIB=1)
 endif()

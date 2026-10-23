@@ -2,9 +2,9 @@
 #include "engine/document/document.h"
 #include "engine/io/mesh_io.h"
 #include "engine/math/math.h"
-#include "engine/modeling/occt/occt_shape_ops.h"
-#include "engine/modeling/kernel/shape_ops.h"
-#include "engine/modeling/kernel/kernel.h"
+#include "engine/modeling/mki/occt/occt_shape_ops.h"
+#include "engine/modeling/mki/shape_ops.h"
+#include "engine/modeling/mki/kernel.h"
 #include "engine/modeling/linked_kernels.h"
 
 #include <BRepPrimAPI_MakeBox.hxx>

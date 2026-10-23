@@ -333,9 +333,9 @@ visitor 单独一层块作用域（先析构、先 flush），并把 stats 发�
 
 ### 3.1 一个命名陷阱
 
-`src/engine/modeling/kernel/shape_ops.h`（`Shape` / `IShapeOps`）是**导入路径的内核边界**，
+`src/engine/modeling/mki/shape_ops.h`（`Shape` / `IShapeOps`）是**导入路径的内核边界**，
 和「服务端几何服务」毫无关系，但它**确实编进了 wasm**
-（`build/wasm/src/engine/modeling/kernel/CMakeFiles/tamias_kernel.dir/shape_ops.cpp.o` 存在）。
+（`build/wasm/src/engine/modeling/mki/CMakeFiles/tamias_mki.dir/shape_ops.cpp.o` 存在）。
 别把两者当成一回事。
 
 ### 3.2 一个 LOD 时序细节

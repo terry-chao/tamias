@@ -6,7 +6,7 @@ if(NOT TAMIAS_CARGO_EXECUTABLE)
   return()
 endif()
 
-set(_truck_bridge_dir "${CMAKE_CURRENT_SOURCE_DIR}/../truck-bridge")
+set(_truck_bridge_dir "${CMAKE_CURRENT_SOURCE_DIR}/../../truck-bridge")
 
 # 桌面：宿主目标 + release（panic=unwind，桥靠 catch_unwind 把 panic 转成错误码）。
 # WASM：wasm32-unknown-emscripten + wasm-release（panic=abort）。Rust 的 wasm std
@@ -46,13 +46,13 @@ add_custom_command(
 )
 add_custom_target(tamias_truck_bridge_build DEPENDS "${_truck_bridge_lib}")
 
-add_library(tamias_kernel_truck STATIC truck_kernel.cpp)
-add_library(tamias::kernel_truck ALIAS tamias_kernel_truck)
-add_dependencies(tamias_kernel_truck tamias_truck_bridge_build)
-target_include_directories(tamias_kernel_truck PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(tamias_kernel_truck
+add_library(tamias_mki_truck STATIC truck_kernel.cpp)
+add_library(tamias::mki_truck ALIAS tamias_mki_truck)
+add_dependencies(tamias_mki_truck tamias_truck_bridge_build)
+target_include_directories(tamias_mki_truck PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tamias_mki_truck
   PUBLIC
-    tamias::kernel
+    tamias::mki
     tamias::base
     tamias::graphics
     "${_truck_bridge_lib}"
@@ -60,6 +60,6 @@ target_link_libraries(tamias_kernel_truck
 # Rust std 在 MSVC 上要这些系统库；缺哪个链接器会报出来（synchronize 在 Windows SDK
 # 里没有对应 .lib，别加）。
 if(WIN32)
-  target_link_libraries(tamias_kernel_truck PUBLIC
+  target_link_libraries(tamias_mki_truck PUBLIC
     ws2_32 userenv bcrypt ntdll advapi32 ole32 shell32 kernel32)
 endif()

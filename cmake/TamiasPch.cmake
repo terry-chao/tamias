@@ -59,11 +59,11 @@ function(tamias_apply_build_acceleration)
   tamias_accelerate_target(tamias_tests EXTRA "<gtest/gtest.h>")
   tamias_accelerate_target(tamias_viewer)
 
-  if(TAMIAS_UNITY_BUILD AND TARGET tamias_kernel_occt)
+  if(TAMIAS_UNITY_BUILD AND TARGET tamias_mki_occt)
     set_source_files_properties(
-      "${PROJECT_SOURCE_DIR}/src/engine/modeling/occt/occt_kernel.cpp"
-      "${PROJECT_SOURCE_DIR}/src/engine/modeling/occt/occt_shape_ops.cpp"
-      "${PROJECT_SOURCE_DIR}/src/engine/modeling/occt/occt_mesh.cpp"
+      "${PROJECT_SOURCE_DIR}/src/engine/modeling/mki/occt/occt_kernel.cpp"
+      "${PROJECT_SOURCE_DIR}/src/engine/modeling/mki/occt/occt_shape_ops.cpp"
+      "${PROJECT_SOURCE_DIR}/src/engine/modeling/mki/occt/occt_mesh.cpp"
       PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
     )
   endif()

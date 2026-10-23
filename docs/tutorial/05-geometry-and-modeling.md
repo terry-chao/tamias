@@ -79,7 +79,7 @@ OCCT 是 **Z-up**（Z 朝上），Tamias 视口是 **Y-up**（glTF/Blender 惯�
 | 点盒子 / 拖墙 / 改参数 | 配方 → OCCT 求值 | 有，能再改 |
 | 打开 STEP / OBJ | 直接读成三角网 | 没有，改不了「原来的拉伸深度」 |
 
-`IShapeOps`（[kernel/shape_ops.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/kernel/shape_ops.h)）就是第二条口的抽象：读 STEP/IGES/BREP → tessellate → 三角网。它和参数化求值的动词（[kernel/kernel.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/kernel/kernel.h)）共用同一个后端，见 [几何边界](../ISHAPE-OPS.md)。
+`IShapeOps`（[mki/shape_ops.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/mki/shape_ops.h)）就是第二条口的抽象：读 STEP/IGES/BREP → tessellate → 三角网。它和参数化求值的动词（[mki/kernel.h](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/mki/kernel.h)）共用同一个后端，见 [几何边界](../ISHAPE-OPS.md)。
 
 ## 5.6 现在刻意没做的
 

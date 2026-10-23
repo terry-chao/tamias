@@ -1,4 +1,4 @@
-#include "engine/modeling/kernel/kernel.h"
+#include "engine/modeling/mki/kernel.h"
 
 #include "engine/base/log.h"
 

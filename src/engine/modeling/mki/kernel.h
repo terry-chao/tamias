@@ -15,7 +15,7 @@
 
 namespace tamias {
 
-// 建模内核的边界（对应渲染侧的 rhi/device.h）。
+// MKI（Modeling Kernel Interface）的边界（对应渲染侧的 rhi/device.h）。
 //
 // 分层：
 //   中间层（modeling：特征树遍历、草图数学、拓扑命名）只 include 这个头；

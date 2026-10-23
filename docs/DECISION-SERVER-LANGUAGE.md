@@ -42,7 +42,7 @@ Tamias 已经为「一份内核、多个宿主」付过一遍成本了，加服�
 |---|---|---|
 | 无头会话层 `Session`（**不 include Qt**） | [`src/host/session.h`](https://github.com/terry-chao/tamias/blob/main/src/host/session.h) | 服务端就是它的第四个宿主，不用重新设计会话 |
 | 三个宿主已经共用它 | `src/app`(Qt) / `src/wasm`(embind) / `src/app/mcp`(HTTP) | 加第四个是既有模式的延续，不是特例 |
-| 扁平 C ABI 的先例 | [`truck_bridge.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/truck/truck_bridge.h) | 错误码 + `last_error()` 的约定直接照搬 |
+| 扁平 C ABI 的先例 | [`truck_bridge.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/modeling/mki/truck/truck_bridge.h) | 错误码 + `last_error()` 的约定直接照搬 |
 | 版本化、只追加的 ABI 纪律 | [`src/plugin/host_api.h`](https://github.com/terry-chao/tamias/blob/main/src/plugin/host_api.h)（v8） | 服务端 ABI 用同一套规矩（`TAMIAS_SERVER_ABI_VERSION`） |
 | 命令参数文本解析器 | [`src/host/command_arg_text.h`](https://github.com/terry-chao/tamias/blob/main/src/host/command_arg_text.h) | 服务端收的参数格式和桌面控制台**逐字相同** |
 | 内存文档 IO（`.tdoc` / `.trscn` / `.obj`） | [`src/engine/document/document_io.h`](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document_io.h) | 客户端上传字节即可，不需要服务端碰文件系统 |

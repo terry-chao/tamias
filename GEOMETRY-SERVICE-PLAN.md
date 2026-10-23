@@ -188,7 +188,7 @@ per result：
                             n1 3×f32, n2 3×f32, has_n1 u8, has_n2 u8)
 ```
 
-`EdgeMeasure` 的字段（[kernel.h:97-113](src/engine/modeling/kernel/kernel.h#L97-L113)）全是 POD，
+`EdgeMeasure` 的字段（[kernel.h:97-113](src/engine/modeling/mki/kernel.h#L97-L113)）全是 POD，
 可以照 `mesh_binary` 的写法加一个 `write_edge_measures`，与 `MeshCpu` 同一个文件风格。
 
 ### 5.4 错误
@@ -360,7 +360,7 @@ class IAsyncGeometryBuilder {               // wasm：新增
 | [App.tsx](web/src/App.tsx) | 顶栏加服务状态角标（复用 `backendName()` / `backendExperimental()` 那段 `brand` 的写法与 `.wip` 样式）；状态栏显示 pending 数；离线时把建模命令按钮灰掉 |
 | [App.tsx](web/src/App.tsx) | 文件选择器 `accept`（[:431](web/src/App.tsx#L431)）暂不动——STEP/IGES 入口属于后续一轮，不混进来 |
 
-「离线灰按钮」的判据用现成的能力位：`KernelCapabilities`（[kernel.h:65-79](src/engine/modeling/kernel/kernel.h#L65-L79)）。
+「离线灰按钮」的判据用现成的能力位：`KernelCapabilities`（[kernel.h:65-79](src/engine/modeling/mki/kernel.h#L65-L79)）。
 [MODELING-KERNEL.md:168](docs/MODELING-KERNEL.md#L168) 已把「能力位接 UI 灰按钮」列为待办，本方案正好是它的第一个真实用例。
 
 ---

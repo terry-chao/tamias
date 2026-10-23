@@ -25,7 +25,7 @@
       "type": "cppvsdbg",
       "request": "attach",
       "processId": "${command:pickProcess}",
-      "detail": "Attach the C++ debugger to a running Tamias.Server so the native side can take breakpoints: src/server/server_api.cpp, src/server/session_service.cpp, src/command/core/command_system.cpp, src/engine/modeling/evaluate/evaluator.cpp, src/engine/modeling/kernel/occt_kernel.cpp. Its PDB sits next to the DLL in build\\bin\\<Config>\\ - the same directory the shell runs from, so no symbol path is needed. This session does NOT drive the managed side: C# breakpoints stay unbound. Attaching changes thread timing, so default_kernel()'s call_once races can hide. If a breakpoint stays hollow, set logging.moduleLoad to true and check whether tamias_server.dll loaded with symbols."
+      "detail": "Attach the C++ debugger to a running Tamias.Server so the native side can take breakpoints: src/server/server_api.cpp, src/server/session_service.cpp, src/command/core/command_system.cpp, src/engine/modeling/evaluate/evaluator.cpp, src/engine/modeling/mki/occt/occt_kernel.cpp. Its PDB sits next to the DLL in build\\bin\\<Config>\\ - the same directory the shell runs from, so no symbol path is needed. This session does NOT drive the managed side: C# breakpoints stay unbound. Attaching changes thread timing, so default_kernel()'s call_once races can hide. If a breakpoint stays hollow, set logging.moduleLoad to true and check whether tamias_server.dll loaded with symbols."
     },
     {
       "name": "WebGL 查看器 (wasm-debug, C++ 断点)",

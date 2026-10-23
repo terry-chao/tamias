@@ -1,6 +1,6 @@
-#include "engine/modeling/truck/truck_kernel.h"
+#include "engine/modeling/mki/truck/truck_kernel.h"
 
-#include "engine/modeling/truck/truck_bridge.h"
+#include "engine/modeling/mki/truck/truck_bridge.h"
 
 #include <string>
 #include <vector>

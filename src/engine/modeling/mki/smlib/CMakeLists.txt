@@ -2,7 +2,7 @@
 #
 # 两个 target，因为语言版本要求不同：
 #   tamias_smlib_c    —— C++17，唯一 include SMLib 头的地方（smlib_api.cpp）；
-#   tamias_kernel_smlib —— C++23（项目默认），实现 ModelKernel，只 include smlib_c.h。
+#   tamias_mki_smlib —— C++23（项目默认），实现 ModelKernel，只 include smlib_c.h。
 #
 # 发布包是 Unicode + /MD + v142 构建的，所以：
 #   - 必须定义 UNICODE/_UNICODE，否则 TCHAR 是 char，Dump/smos_* 的符号对不上；
@@ -54,12 +54,12 @@ if(MSVC)
 endif()
 target_link_libraries(tamias_smlib_c PRIVATE smlib_native sm_api_native)
 
-add_library(tamias_kernel_smlib STATIC smlib_kernel.cpp)
-add_library(tamias::kernel_smlib ALIAS tamias_kernel_smlib)
-target_include_directories(tamias_kernel_smlib PUBLIC "${CMAKE_SOURCE_DIR}/src")
-target_link_libraries(tamias_kernel_smlib
+add_library(tamias_mki_smlib STATIC smlib_kernel.cpp)
+add_library(tamias::mki_smlib ALIAS tamias_mki_smlib)
+target_include_directories(tamias_mki_smlib PUBLIC "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(tamias_mki_smlib
   PUBLIC
-    tamias::kernel
+    tamias::mki
     tamias::base
     tamias::graphics
   PRIVATE

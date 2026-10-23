@@ -1,6 +1,6 @@
 # SMLib 引入方案
 
-> **结论：不换内核，加第三个后端。** SMLib 落在 [`kernel.h`](src/engine/modeling/kernel/kernel.h) 后面，
+> **结论：不换内核，加第三个后端。** SMLib 落在 [`kernel.h`](src/engine/modeling/mki/kernel.h) 后面，
 > 默认关闭，桌面 / 服务端可用，WASM 不支持。先用 3 天验证 6 个硬假设（§7 P0），再决定要不要投 4 周。
 >
 > 本文的「SMLib」指 NVIDIA 2026-10 开源的 **USD BRep v1.0.0** 里的 `SMLib` + `SM_API` 两层，
@@ -90,16 +90,16 @@
 | # | 改动 | 文件 | 说明 |
 |---|---|---|---|
 | 1 | 枚举 + 字符串 | `kernel.h:29`、`kernel_registry.cpp:10` | 加 `Smlib` / `"smlib"`；顺手加 `from_string`，别让字符串比较散在 `main.cpp` 和设置对话框里（现在就是这样）。 |
-| 2 | 注册 | `linked_kernels.cpp` 的 `register_linked_kernels()` | `#if TAMIAS_HAS_KERNEL_SMLIB` → `register_smlib_kernel_backend()`。 |
-| 3 | 新后端目录 | `src/engine/modeling/smlib/` | 见 §5 的文件清单与 CMake。 |
-| 4 | 构建开关 | `CMakeLists.txt:102` 附近、`modeling/CMakeLists.txt:40` 附近 | `TAMIAS_ENABLE_SMLIB_KERNEL`，照 Truck 那两段抄。 |
+| 2 | 注册 | `linked_kernels.cpp` 的 `register_linked_kernels()` | `#if TAMIAS_HAS_MKI_SMLIB` → `register_smlib_kernel_backend()`。 |
+| 3 | 新后端目录 | `src/engine/modeling/mki/smlib/` | 见 §5 的文件清单与 CMake。 |
+| 4 | 构建开关 | `CMakeLists.txt:102` 附近、`modeling/mki/CMakeLists.txt` | `TAMIAS_ENABLE_SMLIB_KERNEL`，照 Truck 那两段抄。 |
 | 5 | 设置 | `app/main.cpp:73`、`settings_dialog.cpp:267` | 现在是一个 `truck ? Truck : Occt` 的三元表达式 + 一个 `truck ? ... : ...` 的标签分支。第三个后端进来必须换成查表，否则一定写错。 |
 | 6 | 打包 | `cmake/TamiasPackage.cmake` | 它已经 glob 运行目录下的 `*.dll`，WiX 又是 `!(bindpath.Payload)\**` 全量收——所以**不用改 `.wxs`**，只要把两个 DLL 拷进 payload（`POST_BUILD` copy），再把 Apache-2.0 许可文本放进去。 |
 
 后端目录建议：
 
 ```
-src/engine/modeling/smlib/
+src/engine/modeling/mki/smlib/
   smlib_kernel.h/.cpp     ModelKernel 动词
   smlib_body.h/.cpp       RAII：SmBrep / 轮廓曲线 + 所有权
   smlib_mesh.h/.cpp       SmPolyBrep → MeshCpu（含 Z-up→Y-up、法线）
@@ -270,13 +270,13 @@ endif()
 后端 target：
 
 ```cmake
-add_library(tamias_kernel_smlib STATIC smlib_kernel.cpp smlib_mesh.cpp smlib_body.cpp)
-add_library(tamias::kernel_smlib ALIAS tamias_kernel_smlib)
-target_include_directories(tamias_kernel_smlib SYSTEM PUBLIC
+add_library(tamias_mki_smlib STATIC smlib_kernel.cpp smlib_mesh.cpp smlib_body.cpp)
+add_library(tamias::mki_smlib ALIAS tamias_mki_smlib)
+target_include_directories(tamias_mki_smlib SYSTEM PUBLIC
   "${TAMIAS_SMLIB_PREFIX}/include/SMLib"
   "${TAMIAS_SMLIB_PREFIX}/include/SM_API")
-target_link_libraries(tamias_kernel_smlib PUBLIC tamias::kernel tamias::base tamias::graphics)
-target_link_libraries(tamias_kernel_smlib PRIVATE
+target_link_libraries(tamias_mki_smlib PUBLIC tamias::mki tamias::base tamias::graphics)
+target_link_libraries(tamias_mki_smlib PRIVATE
   "${TAMIAS_SMLIB_PREFIX}/lib/SMLib.lib"    # Linux: libSMLib.so（全路径）
   "${TAMIAS_SMLIB_PREFIX}/lib/SM_API.lib")
 ```
@@ -284,7 +284,7 @@ target_link_libraries(tamias_kernel_smlib PRIVATE
 几个必须做的细节：
 
 - **`SYSTEM` include**：238 个老头文件，`/W4 /permissive-` 下一定刷警告。不要为了它们把整个项目的警告级别降下来。
-- **拆两层 target（实测必须）**：SMLib 头只能在 **C++17** 下编（C++20 起 `SmTreeVertex::operator==` 的模板实例化歧义），而 `kernel.h` 是 C++23。落地形状是 `tamias_smlib_c`（C++17，只 include SMLib，C 门面）+ `tamias_kernel_smlib`（C++23）。
+- **拆两层 target（实测必须）**：SMLib 头只能在 **C++17** 下编（C++20 起 `SmTreeVertex::operator==` 的模板实例化歧义），而 `kernel.h` 是 C++23。落地形状是 `tamias_smlib_c`（C++17，只 include SMLib，C 门面）+ `tamias_mki_smlib`（C++23）。
 - **必须定义 `UNICODE` / `_UNICODE`**：发布包是 Unicode 构建（`TCHAR = wchar_t`）；不定义的话 `SmObject::Dump` / `smos_*` 的修饰名对不上，链接会报 11 个未解析符号。
 - **运行期只需要两个 DLL**（`dumpbin` 证实只依赖 VC runtime）。安装包里**不要**带 `extraLibs/`、`usdpy/`、`plugin/`，那是 USD 那一套。
 - **Debug 配置禁用**：Tamias Debug 用 `/MDd`，SMLib 发布包是 `/MD`。跨 CRT 传裸指针再 `delete` 是未定义行为。两种解法：① 只在 `Release` / `RelWithDebInfo` 打开（推荐，P1 这么做）；② 用 `repo.bat` 编一份 Debug 的 SMLib（P3 再考虑）。

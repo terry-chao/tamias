@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/modeling/kernel/kernel.h"
+#include "engine/modeling/mki/kernel.h"
 
 #include <TopoDS_Shape.hxx>
 

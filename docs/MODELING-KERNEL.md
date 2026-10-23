@@ -1,9 +1,14 @@
 # 建模内核（Kernel）
 
 > 造型层的中间层与后端怎么分：中间层（特征树、求值器、草图数学、拓扑命名）**不含任何内核类型**；
-> 后端（OCCT，将来的 ACIS / Truck）只实现一组「BRep 动词」。结构照抄渲染侧的 RHI。
+> 后端（OCCT，将来的 ACIS / Truck）只实现一组「BRep 动词」。结构照抄渲染侧的 RHI：
+> 接口层是 **MKI（Modeling Kernel Interface，`mki/`）**，对应 `render/rhi/`。
 
 代码在 [`src/engine/modeling/`](https://github.com/terry-chao/tamias/tree/main/src/engine/modeling)。
+
+> 命名：实现侧（OCCT / Parasolid / ACIS / Truck / SMLib）业界统一叫 **geometric modeling kernel**；
+> 这里的抽象层按 RHI 的同构叫法取 **MKI = Modeling Kernel Interface**（目录 `mki/`），
+> 而不是 `kernel/`——`kernel` 留给被抽象的后端，免得层名和实现名混在一起。
 
 ---
 
@@ -19,10 +24,10 @@
 Qt / WASM 壳
       │
 中间层（内核无关）  feature.h · evaluator · curve_geom · edge_fingerprint · tess_worker
-      │  只 include kernel/kernel.h
-内核接口            ModelingKernel 接口（动词 + 能力 + 注册表）
+      │  只 include mki/kernel.h
+MKI 接口层          ModelKernel 接口（动词 + 能力 + 注册表）  mki/kernel.h
       │
-后端                occt/   （将来 acis/）
+后端                mki/occt/   （将来 mki/acis/）
                    唯一允许 include BRep* / ENTITY* 的地方
 ```
 
@@ -30,11 +35,11 @@ Qt / WASM 壳
 
 | RHI | 建模内核 |
 |---|---|
-| `rhi/device.h` 定义动词 | `kernel/kernel.h` 定义动词 |
+| `rhi/device.h` 定义动词 | `mki/kernel.h` 定义动词 |
 | `BackendModule` + `register_backend()` | `KernelModule` + `register_kernel_backend()` |
 | `RHIDevice::create({backend})` | `ModelKernel::create({backend})` |
 | `Buffer` / `Texture` 不透明句柄 | `Body` 不透明句柄 + `EdgeId` |
-| `rhi/vulkan/`、`rhi/opengl/` | `modeling/occt/`、将来的 `modeling/acis/` |
+| `rhi/vulkan/`、`rhi/opengl/` | `modeling/mki/occt/`、将来的 `modeling/mki/acis/` |
 | `register_linked_rhi_backends()` | `register_linked_kernels()` |
 | 后端能力不同就降级（WebGL 没线框） | `KernelCapabilities`，UI 按能力灰按钮 |
 
@@ -94,25 +99,33 @@ src/engine/modeling/
     feature.h          特征树（FeatureKind / Feature / FeatureModel）
     curve_geom.*       曲线点集 ↔ 特征参数、采样
     curve_kind.h  curve_definition.h  曲线种类与定义
-  kernel/                                     接口层（≈ render/rhi）
+  mki/                                        MKI：接口层 + 各后端（≈ render/rhi）
     kernel.h            ModelKernel / Body / EdgeId / EdgeMeasure / 能力 / 注册表
     kernel_registry.cpp register_kernel_backend / ModelKernel::create
     shape_ops.h/.cpp    导入路径的边界（Shape / IShapeOps）
+    occt/                                       后端 1：唯一 include BRep* 的地方
+      occt_kernel.h/.cpp   动词实现 + 边的测量
+      occt_shape_ops.h/.cpp 导入路径（STEP / IGES / BREP + XCAF 颜色）
+      occt_mesh.h/.cpp     BRep → 三角网（两条路径共用）
+      occt_error.h         OCCT 异常 → Result 的边界
+    truck/                                      后端 2：Rust 薄桥
+      truck_kernel.h/.cpp   ModelKernel 动词；Body 包一个 u64 句柄
+      truck_bridge.h        C ABI 声明
+    smlib/                                      后端 3：SMLib（Windows 可选）
+      smlib_kernel.h/.cpp   ModelKernel 动词；只 include smlib_c.h
+      smlib_c.h / smlib_api.cpp  C 门面与唯一 include SMLib 头的地方
   evaluate/                                   求值链路：特征树 → 体 → 三角网
     evaluator.h/.cpp                    遍历特征、调内核动词
     edge_fingerprint.h/.cpp             指纹存储 + 匹配（索引 + 几何指纹）
     geom_builder.h/.cpp                 过渡 shim（老调用方要的 IGeometryBuilder）
     tess_worker.*                       后台离散队列
   linked_kernels.cpp                          把编译进来的后端注册进注册表
-  occt/                                       后端 1：唯一 include BRep* 的地方
-    occt_kernel.h/.cpp   动词实现 + 边的测量
-    occt_shape_ops.h/.cpp 导入路径（STEP / IGES / BREP + XCAF 颜色）
-    occt_mesh.h/.cpp     BRep → 三角网（两条路径共用）
-    occt_error.h         OCCT 异常 → Result 的边界
+  truck-bridge/                               Rust 侧：Truck 拓扑与动词（被 mki/truck 调用）
 ```
 
-CMake 也是同一形状：`tamias::kernel`（接口）← `tamias::modeling`（中间层）← `tamias::kernel_occt`（后端），
-中间层通过 `TAMIAS_HAS_KERNEL_OCCT` 知道有没有后端可注册。
+CMake 也是同一形状：`tamias::mki`（接口层，`mki/CMakeLists.txt` 里再挂 `occt/`、`truck/`、`smlib/`）
+← `tamias::modeling`（中间层）← `tamias::mki_occt`（后端），
+中间层通过 `TAMIAS_HAS_MKI_OCCT` 知道有没有后端可注册。
 
 ---
 
@@ -186,7 +199,7 @@ FoundationClasses + ModelingData + ModelingAlgorithms），但那份产物是 26
 **桥怎么分**（Rust 与 C++ 之间只有一层薄桥）：
 
 ```
-C++  truck/truck_kernel.cpp     实现 ModelKernel 动词，Body 包一个 u64 句柄
+C++  mki/truck/truck_kernel.cpp  实现 ModelKernel 动词，Body 包一个 u64 句柄
         │  extern "C"（POD + 裸指针）
 Rust    truck-bridge/src/lib.rs  持有 Truck 拓扑（handle table）、跑动词、序列化网格
         └─ truck-modeling / topology / meshalgo / shapeops
@@ -252,7 +265,7 @@ C++17  smlib_api.cpp        唯一 include SMLib 头的地方；UNICODE 必须�
 的模板实例化会歧义），而 `kernel.h` 是 C++23（`std::span` / `std::expected`）。
 另外发布包是 **Unicode** 构建：不定义 `UNICODE/_UNICODE`，`TCHAR` 就是 `char`，
 `Dump` / `smos_*` 的修饰名对不上，链接直接失败。这两条都写进了
-`smlib/CMakeLists.txt`，别合并成一个 target。
+`mki/smlib/CMakeLists.txt`，别合并成一个 target。
 
 **坐标**：和 OCCT 后端同一套映射——`(x, y, z) → (x, -z, y)`，只在门面进出口做；
 `SmlibBody` 内部存 SMLib 原生 Z-up。
