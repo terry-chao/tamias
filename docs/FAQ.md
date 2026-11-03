@@ -814,7 +814,9 @@ while (!stack.empty()) {
 
 返回 `PickHit{node_id, triangle_index, t}` —— 它带 `triangle_index`，所以调用方还能继续做「面级 / 边级」的后续判定。
 
-### 还有两个必答的细节
+完整规则（遍历顺序、剪枝为什么正确、并列行为、`accept` 求值位置、返回 id 的语义）见 [空间索引：点选与框选](SPATIAL-INDEX.md) §2.1。
+
+### 还有几个必答的细节
 
 **隐藏的东西不参与拾取。** 视口传了 `accept` 谓词：
 
@@ -822,7 +824,9 @@ while (!stack.empty()) {
 bvh_.closest_hit(ray, *document_, [this](std::uint64_t id) { return node_visible_in_view(id); })
 ```
 
-隐藏楼层 / 被 isolate 掉的构件在叶子里就被否掉，不会「点到一个看不见的东西」。
+隐藏楼层 / 被 isolate 掉的构件在叶子里就被否掉，不会「点到一个看不见的东西」。注意谓词只在叶子求值，隐藏的节点盒子照样要走完，所以隐藏一整层不省查询时间。
+
+**共面重合时谁赢？** 比较是严格 `<`，`t` 相等时**先遍历到的赢**，而遍历顺序取决于 `nth_element` 的不稳定划分。两块板贴在一起、线正好压在面边上时，BVH 重建后可能换一个被选中 —— 要确定性得加 tie-break（`t` 相等比 id），当前没有（[空间索引 §7](SPATIAL-INDEX.md)）。
 
 **拾取用的是哪一档网格？** `doc.resolved_mesh(sn->mesh_asset_id)`。它按 `close → work → coarse → 原网` 找第一个顶点非空的资产（[document.cpp](https://github.com/terry-chao/tamias/blob/main/src/engine/document/document.cpp)），也就是**绝不用 L0 盒当拾取体**。否则远处点一个盒子会命中「整个包围盒」，而用户看到的是个粗模型。
 
