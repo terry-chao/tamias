@@ -108,7 +108,7 @@ CAD 内核里的精确实体是 [BRep](FEATURE-TREE-EVALUATOR.md)（曲面方程
 - Vulkan：相同后端 + 相同校验设置的视口可以共用一条 `RenderThread`（一个 Device 多个 channel）。
 - OpenGL：**从不共用**。每个 GL 视口自己的上下文，和别的窗口共享会踩上下文绑定。Windows 上还要在 UI 线程先建一个子 HWND，再交给 GL 当交换链表面（在渲染线程建 HWND 会和 Qt 死锁）。
 
-`RenderThreadPool` 按这个规则 `acquire`。
+`RenderThreadPool` 按这个规则 `acquire`。调度契约、channel 生命周期、以及 GL 为什么整体退出共用，见 [渲染线程与 RenderChannel 调度](RENDER-CHANNEL.md)。
 
 ---
 

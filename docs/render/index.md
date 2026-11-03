@@ -3,6 +3,7 @@
 一帧怎么画、RHI 后端、屏外不发 draw。
 
 - [管线与 RHI](../RENDERING.md) —— 从三角网到像素；RHI 抽象
+- [渲染线程与通道调度](../RENDER-CHANNEL.md) —— 一 Device 多表面；OpenGL 为何整条线程退出共用
 - [UE5 对照](../UE5-VS-TAMIAS.md) —— UE5 管线与 Tamias 的逐维度异同
 - [Qt3D 对照](../QT3D-VS-TAMIAS.md) —— 框架式场景图（Aspect / FrameGraph）与投影式渲染的异同
 - [RHI 启动](../RHI-STARTUP.md) —— 探测 / 降级 / 块名单 / 安全模式（`--probe-rhi`）
