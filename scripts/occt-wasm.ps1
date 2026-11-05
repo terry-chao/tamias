@@ -18,8 +18,8 @@
 #
 # NOTE: keep this file ASCII-only (same convention as scripts/build-server.ps1).
 param(
-  [string]$Root = "C:\dev\occt-wasm",
-  [string]$Emsdk = "C:\dev\emsdk",
+  [string]$Root = "D:\dev\occt-wasm",
+  [string]$Emsdk = "D:\dev\emsdk",
   [switch]$Reuse,
   [switch]$ConfigureOnly
 )

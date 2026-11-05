@@ -20,22 +20,24 @@
         "strategy": "external"
       },
       "binaryDir": "${sourceDir}/build",
-      "toolchainFile": "C:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake",
+      "toolchainFile": "D:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake",
       "environment": {
         "VSLANG": "1033",
         "PreferredUILang": "en-US",
-        "VCPKG_ROOT": "C:/dev/vcpkg",
-        "VCPKG_INSTALLATION_ROOT": "C:/dev/vcpkg"
+        "VCPKG_ROOT": "D:/dev/vcpkg",
+        "VCPKG_INSTALLATION_ROOT": "D:/dev/vcpkg"
       },
       "cacheVariables": {
         "TAMIAS_QT_PREFIX": "C:/Qt/6.12.0/msvc2022_64",
-        "TAMIAS_TACUI_SOURCE_DIR": "C:/dev/TacUI",
+        "TAMIAS_TACUI_SOURCE_DIR": "D:/dev/TacUI",
         "CMAKE_C_COMPILER": "cl.exe",
         "CMAKE_CXX_COMPILER": "cl.exe",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_MAKE_PROGRAM": "C:/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe",
         "TAMIAS_ENABLE_OPENGL_BACKEND": "ON",
         "TAMIAS_USE_FETCHCONTENT": "ON",
+        "FETCHCONTENT_SOURCE_DIR_BOOST": "${sourceDir}/.cache/boost/src/boost-1.87.0",
+        "FETCHCONTENT_SOURCE_DIR_IFCOPENSHELL": "${sourceDir}/.cache/ifc/src/IfcOpenShell-0.8.0",
         "VCPKG_TARGET_TRIPLET": "x64-windows",
         "VCPKG_MANIFEST_MODE": "ON"
       }
@@ -55,19 +57,19 @@
       "displayName": "Emscripten WebGL viewer",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/wasm",
-      "toolchainFile": "C:/dev/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+      "toolchainFile": "D:/dev/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
       "environment": {
-        "EMSDK": "C:/dev/emsdk",
-        "EMSDK_NODE": "C:/dev/emsdk/node/24.19.0_64bit/node.exe",
-        "EMSDK_PYTHON": "C:/dev/emsdk/python/3.13.3_64bit/python.exe",
-        "CMAKE_TOOLCHAIN_FILE": "C:/dev/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+        "EMSDK": "D:/dev/emsdk",
+        "EMSDK_NODE": "D:/dev/emsdk/node/24.19.0_64bit/node.exe",
+        "EMSDK_PYTHON": "D:/dev/emsdk/python/3.13.3_64bit/python.exe",
+        "CMAKE_TOOLCHAIN_FILE": "D:/dev/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
         "VCPKG_ROOT": "",
         "VCPKG_INSTALLATION_ROOT": "",
-        "PATH": "C:/dev/emsdk;C:/dev/emsdk/upstream/emscripten;C:/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja;$penv{PATH}"
+        "PATH": "D:/dev/emsdk;D:/dev/emsdk/upstream/emscripten;C:/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja;$penv{PATH}"
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_CROSSCOMPILING_EMULATOR": "C:/dev/emsdk/node/24.19.0_64bit/node.exe",
+        "CMAKE_CROSSCOMPILING_EMULATOR": "D:/dev/emsdk/node/24.19.0_64bit/node.exe",
         "CMAKE_MAKE_PROGRAM": "C:/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe",
         "VCPKG_MANIFEST_MODE": "OFF",
         "TAMIAS_ENABLE_VULKAN_BACKEND": "OFF",
@@ -75,7 +77,7 @@
         "TAMIAS_ENABLE_WEBGL_BACKEND": "ON",
         "TAMIAS_ENABLE_WEBGPU_BACKEND": "OFF",
         "TAMIAS_ENABLE_OCCT": "ON",
-        "TAMIAS_OCCT_PREFIX": "C:/dev/occt-wasm/prefix",
+        "TAMIAS_OCCT_PREFIX": "D:/dev/occt-wasm/prefix",
         "TAMIAS_OCCT_DATA_EXCHANGE": "OFF",
         "TAMIAS_ENABLE_TRUCK_KERNEL": "ON",
         "TAMIAS_BUILD_TESTS": "OFF",

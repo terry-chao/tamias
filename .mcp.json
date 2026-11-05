@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "tamias": {
-      "command": "C:/dev/tamias/build/bin/Debug/tamias-mcp.exe",
+      "command": "D:/dev/tamias/build/bin/Debug/tamias-mcp.exe",
       "args": []
     }
   }

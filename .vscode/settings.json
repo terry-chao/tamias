@@ -18,15 +18,17 @@
   "cmake.environment": {
     "VSLANG": "1033",
     "PreferredUILang": "en-US",
-    "VCPKG_ROOT": "C:\\dev\\vcpkg",
-    "VCPKG_INSTALLATION_ROOT": "C:\\dev\\vcpkg"
+    "VCPKG_ROOT": "D:\\dev\\vcpkg",
+    "VCPKG_INSTALLATION_ROOT": "D:\\dev\\vcpkg",
+    "HTTP_PROXY": "http://127.0.0.1:7897",
+    "HTTPS_PROXY": "http://127.0.0.1:7897"
   },
   "cmake.buildEnvironment": {
     "VSLANG": "1033",
     "PreferredUILang": "en-US"
   },
   "terminal.integrated.env.windows": {
-    "PATH": "C:\\dev\\emsdk;C:\\dev\\emsdk\\upstream\\emscripten;${env:PATH}"
+    "PATH": "D:\\dev\\emsdk;D:\\dev\\emsdk\\upstream\\emscripten;${env:PATH}"
   },
 
   "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",

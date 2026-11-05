@@ -180,12 +180,12 @@ if(NOT EMSCRIPTEN AND NOT DEFINED Z_VCPKG_ROOT_DIR AND NOT DEFINED VCPKG_INSTALL
   message(FATAL_ERROR
     "vcpkg toolchain did not load. Delete the build directory and configure "
     "again with `cmake --preset msvc` or `cmake --preset linux` "
-    "(Windows: use C:/dev/vcpkg, not the Visual Studio bundled vcpkg). "
+    "(Windows: use D:/dev/vcpkg, not the Visual Studio bundled vcpkg). "
     "Adding CMAKE_TOOLCHAIN_FILE to an existing cache is not enough.")
 endif()
 if(WIN32 AND DEFINED Z_VCPKG_ROOT_DIR AND Z_VCPKG_ROOT_DIR MATCHES "Microsoft Visual Studio")
   message(FATAL_ERROR
-    "Do not use the Visual Studio bundled vcpkg. Point VCPKG_ROOT at C:/dev/vcpkg "
+    "Do not use the Visual Studio bundled vcpkg. Point VCPKG_ROOT at D:/dev/vcpkg "
     "(got ${Z_VCPKG_ROOT_DIR}).")
 endif()
 
