@@ -117,6 +117,7 @@ nav:
       - 造型总览: modeling/index.md
       - 建模内核（Kernel）: MODELING-KERNEL.md
       - 特征树求值器: FEATURE-TREE-EVALUATOR.md
+      - 节点建模: NODE-MODELING.md
       - MCAD 管线: MCAD-PIPELINE.md
       - 几何边界: ISHAPE-OPS.md
       - 几何边界入口: kernel/index.md

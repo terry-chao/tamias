@@ -1706,6 +1706,14 @@ Meshes / textures: %2
         <source>The file was written by a Tamias version this build cannot read.</source>
         <translation>这个文件是其它版本的 Tamias 写的，当前版本读不了。</translation>
     </message>
+    <message>
+        <source>Node Editor</source>
+        <translation>节点编辑器</translation>
+    </message>
+    <message>
+        <source>Procedural modeling: build a node graph, preview it in the viewport, bake to real geometry</source>
+        <translation>程序化建模：搭建节点图，在视口中预览，烘焙成真实几何</translation>
+    </message>
 </context>
 <context>
     <name>tamias::DrawingSettingsDialog</name>
@@ -5401,6 +5409,318 @@ tests failed (exit %1)
     <message>
         <source>The model returned no content.</source>
         <translation>模型没有返回内容。</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::NodeEditorPanel</name>
+    <message>
+        <source>Add node</source>
+        <translation>添加节点</translation>
+    </message>
+    <message>
+        <source>Frame</source>
+        <translation>适配视图</translation>
+    </message>
+    <message>
+        <source>Bake</source>
+        <translation>烘焙</translation>
+    </message>
+    <message>
+        <source>Solve</source>
+        <translation>求解</translation>
+    </message>
+    <message>
+        <source>Run evaluation now, ignoring the time budget</source>
+        <translation>立即求值（忽略预算）</translation>
+    </message>
+    <message>
+        <source>Search and place a node</source>
+        <translation>搜索并放置节点</translation>
+    </message>
+    <message>
+        <source>Fit the whole graph in view (F)</source>
+        <translation>适配全图（F）</translation>
+    </message>
+    <message>
+        <source>Bake previewed + output nodes into normal geometry</source>
+        <translation>把预览 / 输出节点烘焙成普通几何</translation>
+    </message>
+    <message>
+        <source>Pending: %1 node(s), click Solve</source>
+        <translation>待计算：%1 个节点，点击「求解」</translation>
+    </message>
+    <message>
+        <source>No document</source>
+        <translation>无文档</translation>
+    </message>
+    <message>
+        <source>Empty graph</source>
+        <translation>空图</translation>
+    </message>
+    <message>
+        <source>%1 nodes · %2 ms</source>
+        <translation>%1 个节点 · %2 ms</translation>
+    </message>
+    <message>
+        <source> · pending %1</source>
+        <translation> · 待算 %1</translation>
+    </message>
+    <message>
+        <source> · %1 error(s)</source>
+        <translation> · %1 个错误</translation>
+    </message>
+    <message>
+        <source>No modeling kernel: %1</source>
+        <translation>没有可用的建模内核：%1</translation>
+    </message>
+    <message>
+        <source>Nothing to bake — enable a node's preview first</source>
+        <translation>没有可烘焙的结果：先给节点开预览</translation>
+    </message>
+    <message>
+        <source>Baked %1 object(s) — selected in the viewport</source>
+        <translation>已烘焙 %1 个实体 —— 已在视口里选中</translation>
+    </message>
+    <message>
+        <source>Bake failed — see the console for details</source>
+        <translation>烘焙失败 —— 详情见控制台</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::NodeCanvas</name>
+    <message>
+        <source>No document</source>
+        <translation>无文档</translation>
+    </message>
+    <message>
+        <source>Open or create one to edit nodes</source>
+        <translation>打开或新建文档后即可编辑节点</translation>
+    </message>
+    <message>
+        <source>No nodes yet</source>
+        <translation>还没有节点</translation>
+    </message>
+    <message>
+        <source>Add one from the toolbar, or right-click the canvas</source>
+        <translation>从工具栏添加，或在画布上右键</translation>
+    </message>
+    <message>
+        <source>unknown type</source>
+        <translation>未知类型</translation>
+    </message>
+    <message>
+        <source>Incompatible ports</source>
+        <translation>端口类型不兼容</translation>
+    </message>
+    <message>
+        <source>Add node…</source>
+        <translation>添加节点…</translation>
+    </message>
+    <message>
+        <source>Frame all</source>
+        <translation>适配全图</translation>
+    </message>
+    <message>
+        <source>Invalid value</source>
+        <translation>无效的值</translation>
+    </message>
+</context>
+<context>
+    <name>tamias::NodePalettePopup</name>
+    <message>
+        <source>Search nodes…</source>
+        <translation>搜索节点…</translation>
+    </message>
+</context>
+<context>
+    <name>NodeUiText</name>
+    <message>
+        <source>number</source>
+        <translation>数值</translation>
+    </message>
+    <message>
+        <source>integer</source>
+        <translation>整数</translation>
+    </message>
+    <message>
+        <source>bool</source>
+        <translation>布尔</translation>
+    </message>
+    <message>
+        <source>text</source>
+        <translation>文本</translation>
+    </message>
+    <message>
+        <source>vector</source>
+        <translation>向量</translation>
+    </message>
+    <message>
+        <source>body</source>
+        <translation>实体</translation>
+    </message>
+    <message>
+        <source>empty</source>
+        <translation>空</translation>
+    </message>
+    <message>
+        <source>rect face</source>
+        <translation>生成矩形面</translation>
+    </message>
+    <message>
+        <source>polygon face</source>
+        <translation>生成多边形面</translation>
+    </message>
+    <message>
+        <source>extrude</source>
+        <translation>拉伸</translation>
+    </message>
+    <message>
+        <source>boolean</source>
+        <translation>布尔运算</translation>
+    </message>
+    <message>
+        <source>fillet</source>
+        <translation>圆角</translation>
+    </message>
+    <message>
+        <source>chamfer</source>
+        <translation>斜角</translation>
+    </message>
+    <message>
+        <source>edges</source>
+        <translation>取边</translation>
+    </message>
+    <message>
+        <source>cylinder</source>
+        <translation>圆柱</translation>
+    </message>
+    <message>
+        <source>transform</source>
+        <translation>变换</translation>
+    </message>
+    <message>
+        <source>%1 failed: %2</source>
+        <translation>%1失败：%2</translation>
+    </message>
+    <message>
+        <source>Cannot connect %1 to %2</source>
+        <translation>无法连接：%1 → %2</translation>
+    </message>
+    <message>
+        <source>That input already has a connection</source>
+        <translation>该输入端口已经有连线了</translation>
+    </message>
+    <message>
+        <source>That would create a cycle</source>
+        <translation>这样连会形成环</translation>
+    </message>
+    <message>
+        <source>That link already exists</source>
+        <translation>这根线已经连过了</translation>
+    </message>
+    <message>
+        <source>Port index out of range</source>
+        <translation>端口序号超出范围</translation>
+    </message>
+    <message>
+        <source>The node no longer exists</source>
+        <translation>节点不存在（可能已被删除）</translation>
+    </message>
+    <message>
+        <source>Nothing to delete</source>
+        <translation>没有可删除的节点</translation>
+    </message>
+    <message>
+        <source>That input is not connected</source>
+        <translation>该输入端口没有连线</translation>
+    </message>
+    <message>
+        <source>This document has no node graph</source>
+        <translation>这个文档还没有节点图</translation>
+    </message>
+    <message>
+        <source>Nothing to bake — enable a node's preview first</source>
+        <translation>没有可烘焙的结果：先给节点开预览</translation>
+    </message>
+    <message>
+        <source>Tessellation failed: %1</source>
+        <translation>网格细分失败：%1</translation>
+    </message>
+    <message>
+        <source>Evaluation cancelled</source>
+        <translation>求值已取消</translation>
+    </message>
+    <message>
+        <source>No document</source>
+        <translation>无文档</translation>
+    </message>
+    <message>
+        <source>Missing input: %1</source>
+        <translation>缺少输入：%1</translation>
+    </message>
+    <message>
+        <source>Missing body input: %1</source>
+        <translation>缺少实体输入：%1</translation>
+    </message>
+    <message>
+        <source>Unknown node type: %1</source>
+        <translation>未知节点类型：%1</translation>
+    </message>
+    <message>
+        <source>No modeling kernel</source>
+        <translation>没有可用的建模内核</translation>
+    </message>
+    <message>
+        <source>Box dimensions must be positive</source>
+        <translation>盒体尺寸必须大于 0</translation>
+    </message>
+    <message>
+        <source>Cylinder dimensions must be positive</source>
+        <translation>圆柱尺寸必须大于 0</translation>
+    </message>
+    <message>
+        <source>Depth must be positive</source>
+        <translation>深度必须大于 0</translation>
+    </message>
+    <message>
+        <source>Radius must be positive</source>
+        <translation>半径必须大于 0</translation>
+    </message>
+    <message>
+        <source>Distance must be positive</source>
+        <translation>距离必须大于 0</translation>
+    </message>
+    <message>
+        <source>No edges selected</source>
+        <translation>没有选中任何边</translation>
+    </message>
+    <message>
+        <source>Bad edge index: %1</source>
+        <translation>边序号无效：%1</translation>
+    </message>
+    <message>
+        <source>Edge index out of range: %1</source>
+        <translation>边序号超出范围：%1</translation>
+    </message>
+    <message>
+        <source>Bad point: %1</source>
+        <translation>点格式无效：%1</translation>
+    </message>
+    <message>
+        <source>Point needs x,z: %1</source>
+        <translation>点需要 x,z 两个数：%1</translation>
+    </message>
+    <message>
+        <source>Polygon needs at least 3 points</source>
+        <translation>多边形至少需要 3 个点</translation>
+    </message>
+    <message>
+        <source>Node evaluation exception: %1</source>
+        <translation>求值异常：%1</translation>
+    </message>
+    <message>
+        <source>Unknown exception in node solve</source>
+        <translation>节点求值时发生未知异常</translation>
     </message>
 </context>
 </TS>

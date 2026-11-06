@@ -21,9 +21,14 @@ class TurntableCamera {
     znear_ = std::max(distance_ * 0.001f, 0.01f);
     zfar_ = std::max(distance_ * 50.f, 500.f);
   }
+  // yaw 保持在 (-π, π]、pitch 保持在 [-π/2, π/2]，且两者都必须是有限值。
+  // orbit() 会无限累加增量，存档 / 外部输入（wasm、.tdoc 的 f32 视图块）也可能直接
+  // 塞进任意值；不在这里收敛的话，yaw 会一路涨到 2π 步长在 float 下不再改变数值的
+  // 量级（|yaw| ≳ 1.3e8），任何 "while (delta > π) delta -= 2π" 的归约都会变成死循环。
   void set_yaw_pitch(float yaw, float pitch) {
-    yaw_ = yaw;
-    pitch_ = std::clamp(pitch, -kHalfPi, kHalfPi);
+    constexpr float kTwoPi = 6.28318530718f;
+    yaw_ = std::isfinite(yaw) ? std::remainder(yaw, kTwoPi) : 0.f;
+    pitch_ = std::isfinite(pitch) ? std::clamp(pitch, -kHalfPi, kHalfPi) : 0.f;
   }
   void orbit(float dyaw, float dpitch) { set_yaw_pitch(yaw_ + dyaw, pitch_ + dpitch); }
 

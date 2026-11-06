@@ -11,6 +11,7 @@
 #include "engine/graphics/mesh.h"
 #include "engine/io/binary_archive.h"
 #include "engine/io/mesh_binary.h"
+#include "engine/modeling/nodes/node_io.h"
 #include "engine/render/resource/builtin_textures.h"
 #include "entity/family/attached/opening/door/door_entity.h"
 #include "entity/core/entity_grip.h"
@@ -64,6 +65,8 @@ constexpr std::uint32_t kChunkGrid = fourcc('G', 'R', 'I', 'D');
 constexpr std::uint32_t kChunkDrwg = fourcc('D', 'R', 'W', 'G');
 // 文字注记（世界锚点 + 屏幕朝向）。注意别和贴图块的 'TEXT' 混了。
 constexpr std::uint32_t kChunkAnno = fourcc('A', 'N', 'N', 'O');
+// 节点建模图（每个文档至多一张；只在文档真的有图时写这个块，旧档没有即无此块）。
+constexpr std::uint32_t kChunkNode = fourcc('N', 'O', 'D', 'E');
 
 void report_load_progress(const LoadProgressCallback& progress, float value) {
   if (progress) {
@@ -1793,6 +1796,16 @@ Result<void> save_document(const std::filesystem::path& path, const Document& do
   if (auto r = append_chunk(file, kChunkAnno, anno_w.data()); !r) {
     return r;
   }
+  // 节点建模图：只存结构与标量（几何是求值结果，加载后全量重算，见 node_io.h）。
+  if (const Graph* graph = document.find_node_graph()) {
+    auto node_bytes = write_node_graph(*graph);
+    if (!node_bytes) {
+      return Err(node_bytes.error());
+    }
+    if (auto r = append_chunk(file, kChunkNode, *node_bytes); !r) {
+      return r;
+    }
+  }
   if (auto r = append_chunk(file, kChunkView, view_w.data()); !r) {
     return r;
   }
@@ -1852,6 +1865,7 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes,
   std::uint64_t next_grid_id = 1;
   std::uint64_t next_relation_id = 1;
   std::uint64_t active_storey_id = 0;
+  std::unique_ptr<Graph> node_graph;
   ViewportState viewport{};
   bool has_meta = false;
   bool has_mesh = false;
@@ -2087,6 +2101,12 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes,
         }
         text_annotations.push_back(std::move(annotation));
       }
+    } else if (*id == kChunkNode) {
+      auto graph = std::make_unique<Graph>();
+      if (auto res = read_node_graph(*graph, chunk); !res) {
+        return Err(res.error());
+      }
+      node_graph = std::move(graph);
     } else {
       // Unknown chunk: already consumed via read_bytes into chunk; skip.
     }
@@ -2127,6 +2147,10 @@ Result<LoadedDocument> load_document_bytes(std::span<const std::uint8_t> bytes,
   loaded.document.bim().grid().replace(grid_axes);
   loaded.document.bim().grid().set_next_id(next_grid_id);
   loaded.document.drawings() = std::move(drawings);
+  if (node_graph != nullptr) {
+    // 加载的图是全脏的（read_node_graph 里 mark_all_dirty），开图后等第一次求值。
+    loaded.document.node_graph() = std::move(*node_graph);
+  }
   for (auto& annotation : text_annotations) {
     loaded.document.insert_text_annotation(std::move(annotation));
   }

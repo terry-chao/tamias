@@ -39,6 +39,11 @@ add_executable(tamias
   shell/panel/ai_panel.cpp
   shell/panel/meshy_panel.cpp
   shell/panel/extension_watcher.cpp
+  # 节点建模编辑器：搜索面板 / 自绘画布 / dock 面板（见 docs/NODE-MODELING.md）
+  shell/panel/node_palette_popup.cpp
+  shell/panel/node_canvas.cpp
+  shell/panel/node_editor_panel.cpp
+  shell/panel/node_ui_text.cpp
   # 内置 AI 助手：OpenAI 兼容客户端（对话面板在 shell/panel/ai_panel.cpp）
   ai/ai_client.cpp
   # AI 生成 3D：Meshy 客户端（建任务 → 轮询 → 下载；协议在 src/ai/meshy_protocol）

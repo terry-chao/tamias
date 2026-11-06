@@ -12,6 +12,7 @@
 #include "engine/document/tess_cache.h"
 #include "engine/modeling/mki/shape_ops.h"
 #include "engine/modeling/evaluate/tess_worker.h"
+#include "engine/modeling/nodes/node_graph.h"
 #include "engine/render/resource/lod_request.h"
 
 #include <algorithm>
@@ -33,6 +34,15 @@ struct DrawingRef {
   bool visible = true;  // 视口里画不画这张底图（面板上的勾）
   int page = 0;         // 多页图纸（DWFx / PDF）画哪一页
   DrawingPlacement placement{};
+};
+
+// 节点建模预览的一个条目：语义上不是实体、不进 Scene、不参与拾取 / 保存，
+// 只是往渲染帧里追加的 draw item（求值器把 Body 细分成 MeshCpu 后挂进来）。
+struct NodePreviewEntry {
+  std::uint64_t mesh_asset_id = 0;
+  Mat4 transform = Mat4::identity();
+  Vec3 color{1.0f, 0.6f, 0.2f};  // 橙色：一眼看出是节点预览，不是真实构件
+  bool lines = false;            // 曲线类用 LineList 画
 };
 
 class Document {
@@ -237,6 +247,8 @@ class Document {
     bim_.clear();
     text_annotations_.clear();
     render_snapshot_.reset();
+    node_graph_.reset();
+    node_preview_.clear();
     next_mesh_id_ = 1;
     next_text_annotation_id_ = 1;
   }
@@ -370,7 +382,24 @@ class Document {
     return render_snapshot_ ? &*render_snapshot_ : nullptr;
   }
 
+  // ===== 节点建模（每个文档一张图；见 docs/NODE-MODELING.md）=====
+  // 懒创建：第一次有人在上面放节点才算有图。
+  Graph& node_graph();
+  [[nodiscard]] Graph* find_node_graph() { return node_graph_.get(); }
+  [[nodiscard]] const Graph* find_node_graph() const { return node_graph_.get(); }
+
+  // 预览叠加：编辑器求值后整体替换（内容寻址 intern，重复内容零拷贝）。
+  // 旧预览中不再被引用的网格自动释放。不标 scene dirty——预览不进 Scene，
+  // 渲染帧每帧都从 render_items() 取。
+  void set_node_preview(std::vector<NodePreviewEntry> entries);
+  void clear_node_preview();
+  [[nodiscard]] const std::vector<NodePreviewEntry>& node_preview() const {
+    return node_preview_;
+  }
+
   // ===== 导入网格（无实体，如 STEP/OBJ/glTF）=====
+  // 返回**网格资产 id**（内容寻址，相同三角网复用同一份资产），不是场景节点 id。
+  // 场景里新增的节点是 scene().nodes().back()；要节点 id 请在调用前记 scene().next_id()。
   std::uint64_t add_import_mesh(std::string name, MeshCpu mesh, Mat4 transform, Vec3 color,
                                 std::uint64_t material_id = 0);
   // CAD 导入：保留 Shape，首帧只放包围盒，按需 tessellate。
@@ -434,6 +463,8 @@ class Document {
   std::vector<TextAnnotation> text_annotations_;
   TessCache tess_cache_;
   std::optional<RenderScene> render_snapshot_;
+  std::unique_ptr<Graph> node_graph_;
+  std::vector<NodePreviewEntry> node_preview_;
   std::uint64_t next_mesh_id_ = 1;
   std::uint64_t next_text_annotation_id_ = 1;
   std::uint64_t next_material_id_ = 1;

@@ -37,12 +37,16 @@ add_library(tamias_command STATIC
   edit/annotation/update_text_command.cpp
   # 删除
   delete/delete_entity_command.cpp
+  delete/delete_scene_node_command.cpp
   delete/delete_grid_axis_command.cpp
   delete/delete_text_command.cpp
   # 导入
   import/import_drawing_command.cpp
   import/import_mesh_command.cpp
   import/import_texture_command.cpp
+  # 节点建模：图编辑（可撤销）+ 烘焙
+  nodes/graph_edit_commands.cpp
+  nodes/bake_graph_command.cpp
 )
 add_library(tamias::command ALIAS tamias_command)
 target_include_directories(tamias_command PUBLIC ${CMAKE_SOURCE_DIR}/src)

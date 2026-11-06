@@ -42,6 +42,7 @@ class TimingPanel;
 class AiPanel;
 class MeshyPanel;
 class ConsolePanel;
+class NodeEditorPanel;
 class PluginManager;
 class RibbonBar;
 class RibbonGroup;
@@ -89,6 +90,8 @@ class MainWindow final : public QMainWindow {
   void refresh_handle_inspector();
   void refresh_texture_library_panel();
   void sync_draw_panel();
+  // 当前文档视口 → 节点编辑器面板（切页签 / 回首页 / 开新文档都要调用）。
+  void sync_node_editor_panel();
   // 当前楼层（或它的层高）变了以后，把绘制面板上"跟着楼层走"的默认值刷新掉。
   void refresh_draw_panel_storey_defaults();
 
@@ -212,6 +215,7 @@ class MainWindow final : public QMainWindow {
   QAction* handle_toggle_ = nullptr;
   QAction* timing_toggle_ = nullptr;
   QAction* console_toggle_ = nullptr;
+  QAction* node_editor_toggle_ = nullptr;
   RecentFilesStore recent_;
   QAction* wireframe_action_ = nullptr;
   QAction* shaded_action_ = nullptr;
@@ -262,6 +266,9 @@ class MainWindow final : public QMainWindow {
   // 命令控制台：每次执行的内核命令的一行等价 C# 调用（默认收起）。
   ConsolePanel* console_panel_ = nullptr;
   QDockWidget* console_dock_ = nullptr;
+  // 节点建模编辑器（默认收起；见 docs/NODE-MODELING.md）。
+  NodeEditorPanel* node_editor_panel_ = nullptr;
+  QDockWidget* node_editor_dock_ = nullptr;
   // AI 对话面板：进程内助手，工具直接调 SessionMcpBackend，不经 MCP 传输。
   AiPanel* ai_panel_ = nullptr;
   MeshyPanel* meshy_panel_ = nullptr;

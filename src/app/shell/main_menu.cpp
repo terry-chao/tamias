@@ -128,8 +128,8 @@ void MainWindow::build_menu_bar() {
   annotations_menu->addAction(label_level_action_);
   annotations_menu->addAction(label_dimension_action_);
   view_menu->addSeparator();
-  // 面板：停靠面板（属性 / 绘制设置 / 贴图 / 句柄 / 计时 / 控制台 / 调试器）
-  // 和视口右侧工具列（构件 / 楼层 / 图纸）都在这里开关。
+  // 面板：停靠面板（属性 / 绘制设置 / 贴图 / 句柄 / 计时 / 控制台 / 节点编辑器 /
+  // 调试器）和视口右侧工具列（构件 / 楼层 / 图纸）都在这里开关。
   QMenu* panels_menu = view_menu->addMenu(tr("Panels"));
   panels_menu->addAction(property_toggle_);
   panels_menu->addAction(draw_toggle_);
@@ -137,6 +137,7 @@ void MainWindow::build_menu_bar() {
   panels_menu->addAction(handle_toggle_);
   panels_menu->addAction(timing_toggle_);
   panels_menu->addAction(console_toggle_);
+  panels_menu->addAction(node_editor_toggle_);
   panels_menu->addAction(debug_scene_action_);
   panels_menu->addAction(diagnostics_action_);
   panels_menu->addSeparator();

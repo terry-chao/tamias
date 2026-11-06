@@ -16,6 +16,7 @@
 #include "command/create/component/create_structural_wall_command.h"
 #include "command/create/component/create_wall_command.h"
 #include "command/delete/delete_entity_command.h"
+#include "command/delete/delete_scene_node_command.h"
 #include "command/delete/delete_grid_axis_command.h"
 #include "command/delete/delete_text_command.h"
 #include "command/edit/transform/copy_entities_command.h"
@@ -30,6 +31,8 @@
 #include "command/edit/reference/update_grid_command.h"
 #include "command/edit/annotation/update_text_command.h"
 #include "command/import/import_mesh_command.h"
+#include "command/nodes/bake_graph_command.h"
+#include "command/nodes/graph_edit_commands.h"
 #include "bim/wall_size.h"
 #include "entity/family/host/structural/column/column_entity.h"
 
@@ -435,6 +438,12 @@ void register_commands(CommandRegistry& registry) {
         doc, static_cast<std::uint64_t>(arg_int(args, "entity_id", 0)));
   });
 
+  // 烘焙 / 导入的哑网格节点没有 Entity，删除走这条。
+  registry.register_command("delete_scene_node", [](Document& doc, const CommandArgs& args) {
+    return std::make_unique<DeleteSceneNodeCommand>(
+        doc, static_cast<std::uint64_t>(arg_int(args, "node_id", 0)));
+  });
+
   // ---- 通用编辑：移动 / 复制 / 旋转 / 镜像 / 阵列 ----
   // 全部按「选择集 → 一组摆放 → 一条可撤销命令」走；给了点或 delta 就直接做，
   // 没给就武装成交互式工具（视口里点基点 / 目标点，见 transform_tool_command.h）。
@@ -633,6 +642,72 @@ void register_commands(CommandRegistry& registry) {
     }
     return std::make_unique<ImportMeshCommand>(doc, arg_string(args, "path", ""),
                                               arg_string(args, "name", ""), transform);
+  });
+
+  // ---- 节点建模（图编辑 + 烘焙；节点图由 Document 持有，见 docs/NODE-MODELING.md）----
+  // 值参数按「value 键的类型」决定 NodeValue 类型：d:value → 数值、
+  // i:value → 整数、v:value → 向量、s:value → 文本。
+  const auto node_value_arg = [](const CommandArgs& args) {
+    const auto it = args.find("value");
+    if (it != args.end()) {
+      const CommandArg& value = it->second;
+      if (const double* number = std::get_if<double>(&value)) {
+        return NodeValue::number(*number);
+      }
+      if (const std::int64_t* integer = std::get_if<std::int64_t>(&value)) {
+        return NodeValue::integer(*integer);
+      }
+      if (const Vec3* vec = std::get_if<Vec3>(&value)) {
+        return NodeValue::vector(*vec);
+      }
+      if (const std::string* text = std::get_if<std::string>(&value)) {
+        return NodeValue::text(*text);
+      }
+    }
+    return NodeValue::empty();
+  };
+  registry.register_command("node_add", [](Document& doc, const CommandArgs& args) {
+    return std::make_unique<NodeAddCommand>(doc, arg_string(args, "type", ""),
+                                            arg_double(args, "x", 0.0),
+                                            arg_double(args, "y", 0.0));
+  });
+  registry.register_command("node_delete", [](Document& doc, const CommandArgs& args) {
+    std::vector<std::uint64_t> ids;
+    for (const double id : arg_doubles(args, "ids")) {
+      ids.push_back(static_cast<std::uint64_t>(id));
+    }
+    return std::make_unique<NodeDeleteCommand>(doc, std::move(ids));
+  });
+  registry.register_command("node_connect", [](Document& doc, const CommandArgs& args) {
+    return std::make_unique<NodeConnectCommand>(
+        doc, static_cast<std::uint64_t>(arg_int(args, "from", 0)),
+        static_cast<std::uint16_t>(arg_int(args, "from_port", 0)),
+        static_cast<std::uint64_t>(arg_int(args, "to", 0)),
+        static_cast<std::uint16_t>(arg_int(args, "to_port", 0)));
+  });
+  registry.register_command("node_disconnect", [](Document& doc, const CommandArgs& args) {
+    return std::make_unique<NodeDisconnectInputCommand>(
+        doc, static_cast<std::uint64_t>(arg_int(args, "node", 0)),
+        static_cast<std::uint16_t>(arg_int(args, "port", 0)));
+  });
+  registry.register_command("node_set_input", [&node_value_arg](Document& doc,
+                                                                const CommandArgs& args) {
+    return std::make_unique<NodeSetInputCommand>(
+        doc, static_cast<std::uint64_t>(arg_int(args, "node", 0)),
+        static_cast<std::uint16_t>(arg_int(args, "port", 0)), node_value_arg(args));
+  });
+  registry.register_command("node_set_param", [&node_value_arg](Document& doc,
+                                                                const CommandArgs& args) {
+    return std::make_unique<NodeSetParamCommand>(
+        doc, static_cast<std::uint64_t>(arg_int(args, "node", 0)),
+        static_cast<std::uint16_t>(arg_int(args, "param", 0)), node_value_arg(args));
+  });
+  registry.register_command("node_bake", [](Document& doc, const CommandArgs& args) {
+    std::vector<std::uint64_t> ids;
+    for (const double id : arg_doubles(args, "ids")) {
+      ids.push_back(static_cast<std::uint64_t>(id));
+    }
+    return std::make_unique<BakeGraphCommand>(doc, std::move(ids));
   });
 }
 

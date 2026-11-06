@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <limits>
 
 namespace tamias {
 namespace {
@@ -88,6 +89,32 @@ TEST(CameraRay, UsesRenderedAreaSoMousePointRoundTrips) {
   const float t_wide = -wide.origin.y / wide.direction.y;
   const Vec3 wide_hit = wide.origin + wide.direction * t_wide;
   EXPECT_GT(dist(hit, wide_hit), 0.1f);
+}
+
+// 回归：yaw 必须被收敛到 (-π, π] 且拒绝非有限值。视口点击视图方块时的最短弧归约
+// 以前是 `while (delta > π) delta -= 2π`：yaw 一旦到 ±inf 或量级大到 2π 在 float
+// 下不再改变数值（|yaw| ≳ 1.3e8），这个循环就永不退出，界面直接卡死。
+TEST(TurntableCamera, YawStaysWrappedAndFinite) {
+  TurntableCamera camera;
+  constexpr float kTwoPi = 6.28318530718f;
+  constexpr float kPi = 3.141592654f;
+
+  // 转了很多整圈后只剩零头。
+  camera.set_yaw_pitch(1000.f * kTwoPi + 0.5f, 0.f);
+  EXPECT_NEAR(camera.yaw(), 0.5f, 1e-2f);
+
+  // 巨大的有限值（比如 .tdoc 视图块里的垃圾 f32）也要收敛到合法区间。
+  camera.set_yaw_pitch(1e30f, 0.f);
+  EXPECT_TRUE(std::isfinite(camera.yaw()));
+  EXPECT_LE(std::abs(camera.yaw()), kPi);
+
+  // ±inf 和 NaN 不能落进 yaw_ / pitch_，否则后面的任何角度运算都会中毒。
+  camera.set_yaw_pitch(std::numeric_limits<float>::infinity(), 0.f);
+  EXPECT_TRUE(std::isfinite(camera.yaw()));
+  camera.set_yaw_pitch(-std::numeric_limits<float>::infinity(), 0.f);
+  EXPECT_TRUE(std::isfinite(camera.yaw()));
+  camera.set_yaw_pitch(0.f, std::numeric_limits<float>::quiet_NaN());
+  EXPECT_TRUE(std::isfinite(camera.pitch()));
 }
 
 }  // namespace

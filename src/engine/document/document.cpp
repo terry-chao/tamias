@@ -18,6 +18,10 @@
 namespace tamias {
 namespace {
 
+// 节点预览 draw item 的 node_id 哨兵段：实体 id 从 1 递增，永远碰不到这里。
+// 预览不进 Scene、不可选，渲染帧里只按 mesh_asset_id 画。
+constexpr std::uint64_t kNodePreviewNodeIdBase = 1ull << 62;
+
 // 楼层归属只认楼层表里真有的那一层：表里没有（含 0 = 未指定）就是"未归属"。
 std::uint64_t resolve_storey_id(const BimModel& bim, std::uint64_t storey_id) {
   return bim.find_storey(storey_id) != nullptr ? storey_id : 0;
@@ -687,6 +691,40 @@ void Document::insert_entity(std::unique_ptr<Entity> entity) {
   }
 }
 
+Graph& Document::node_graph() {
+  if (node_graph_ == nullptr) {
+    node_graph_ = std::make_unique<Graph>();
+  }
+  return *node_graph_;
+}
+
+void Document::set_node_preview(std::vector<NodePreviewEntry> entries) {
+  // 旧预览网格里不再被引用的（scene / tess cache / 新预览都不用）顺手释放。
+  std::vector<std::uint64_t> retired;
+  retired.reserve(node_preview_.size());
+  for (const NodePreviewEntry& entry : node_preview_) {
+    retired.push_back(entry.mesh_asset_id);
+  }
+  node_preview_ = std::move(entries);
+  for (const std::uint64_t id : retired) {
+    if (id == 0) {
+      continue;
+    }
+    const bool reused = std::any_of(node_preview_.begin(), node_preview_.end(),
+                                    [id](const NodePreviewEntry& e) {
+                                      return e.mesh_asset_id == id;
+                                    });
+    if (reused || mesh_referenced(id) || tess_cache_.uses_asset(id)) {
+      continue;
+    }
+    remove_mesh(id);
+  }
+}
+
+void Document::clear_node_preview() {
+  set_node_preview({});
+}
+
 std::vector<SceneDrawItem> Document::render_items(const Frustum* frustum) const {
   if (render_snapshot_) {
     std::vector<SceneDrawItem> items;
@@ -747,6 +785,32 @@ std::vector<SceneDrawItem> Document::render_items(const Frustum* frustum) const 
     if (const MeshAsset* asset = mesh(node.mesh_asset_id); asset != nullptr && asset->cpu.line_list) {
       item.lines = true;
     }
+    items.push_back(item);
+  }
+
+  // 节点建模预览：不在 Scene 里、不可选、不进渲染快照（上面已提前 return），
+  // 只作为普通 draw item 追加到当前帧。
+  for (std::size_t i = 0; i < node_preview_.size(); ++i) {
+    const NodePreviewEntry& preview = node_preview_[i];
+    if (preview.mesh_asset_id == 0) {
+      continue;
+    }
+    const MeshAsset* asset = mesh(preview.mesh_asset_id);
+    if (asset == nullptr) {
+      continue;
+    }
+    SceneDrawItem item{};
+    item.node_id = kNodePreviewNodeIdBase + i;
+    item.mesh_asset_id = preview.mesh_asset_id;
+    item.transform = preview.transform;
+    item.bounds = asset->cpu.bounds;  // P1 预览不做变换，网格局部盒即世界盒
+    if (frustum != nullptr && item.bounds.valid() && !frustum->intersects(item.bounds)) {
+      continue;
+    }
+    item.color = preview.color;
+    item.category_color = preview.color;
+    item.opacity = 0.85f;
+    item.lines = preview.lines || asset->cpu.line_list;
     items.push_back(item);
   }
   return items;

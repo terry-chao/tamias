@@ -794,22 +794,23 @@ void DocumentViewport::stop_view_animation() {
 
 void DocumentViewport::start_view_animation(float target_yaw, float target_pitch,
                                             bool finish_orthographic) {
-  constexpr float kPi = 3.141592654f;
+  // 非有限的目标没法插值，只会把 NaN 传染给之后的每一帧。
+  if (!std::isfinite(target_yaw) || !std::isfinite(target_pitch)) {
+    return;
+  }
   anim_finish_orthographic_ = finish_orthographic;
   anim_from_yaw_ = camera_.yaw();
   anim_from_pitch_ = camera_.pitch();
   anim_to_yaw_ = target_yaw;
   anim_to_pitch_ = std::clamp(target_pitch, -kHalfPi, kHalfPi);
 
-  // Shortest yaw arc so e.g. Front↔Back never spins the long way.
-  float delta = anim_to_yaw_ - anim_from_yaw_;
-  while (delta > kPi) {
-    delta -= 2.f * kPi;
-  }
-  while (delta < -kPi) {
-    delta += 2.f * kPi;
-  }
-  anim_yaw_delta_ = delta;
+  // 最短 yaw 弧，Front↔Back 不走远路。用 remainder() 归约是 O(1)：
+  // 原来 `while (delta > π) delta -= 2π` 在 |delta| 涨到 2π 已经小于 float 的
+  // ULP（约 1.3e8 弧度）之后，减法不再改变 delta，循环永不退出；delta = ±inf 时
+  // 更是从第一轮就原地打转。两者都表现为界面卡死。
+  constexpr float kTwoPi = 6.28318530718f;
+  const float raw_delta = anim_to_yaw_ - anim_from_yaw_;
+  anim_yaw_delta_ = std::isfinite(raw_delta) ? std::remainder(raw_delta, kTwoPi) : 0.f;
 
   if (std::abs(anim_yaw_delta_) < 1e-4f && std::abs(anim_to_pitch_ - anim_from_pitch_) < 1e-4f) {
     camera_.set_yaw_pitch(anim_to_yaw_, anim_to_pitch_);
@@ -2213,10 +2214,13 @@ void DocumentViewport::chamfer_selected(double distance) {
 void DocumentViewport::delete_selected() {
   const std::vector<std::uint64_t> ids = document_->selected_ids();
   for (const std::uint64_t id : ids) {
-    if (document_->entity(id) == nullptr) {
-      continue;
+    if (document_->entity(id) != nullptr) {
+      run_command("delete_entity", {{"entity_id", static_cast<std::int64_t>(id)}});
+    } else if (document_->scene().find(id) != nullptr) {
+      // 烘焙出来 / 导入的哑网格没有 Entity，走场景节点删除——
+      // 以前这里 continue 掉，于是选中了也删不掉。
+      run_command("delete_scene_node", {{"node_id", static_cast<std::int64_t>(id)}});
     }
-    run_command("delete_entity", {{"entity_id", static_cast<std::int64_t>(id)}});
   }
   // 选中的轴线一次删掉：留表 = 原来的表去掉选中项，仍然一步撤销。
   if (document_->bim().grid().has_selection()) {

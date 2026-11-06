@@ -1,9 +1,12 @@
 #include "command/core/command_system.h"
 #include "command/import/import_texture_command.h"
 #include "command/edit/material/update_material_command.h"
+#include "command/nodes/bake_graph_command.h"
 #include "bim/grid.h"
 #include "engine/document/document.h"
 #include "engine/modeling/feature/feature.h"
+#include "engine/modeling/nodes/node_graph.h"
+#include "engine/modeling/nodes/node_type.h"
 #include "engine/render/resource/texture_asset.h"
 #include "entity/core/entity.h"
 #include "entity/core/entity_storey.h"
@@ -350,6 +353,53 @@ TEST(CommandDispatch, BooleanCommonAndCutUndo) {
        {"operation", static_cast<std::int64_t>(BooleanOp::Common)}});
   ASSERT_TRUE(common) << common.error();
   EXPECT_EQ(cmd.doc.entities().size(), 1u);
+}
+
+// 烘焙出来的是「没有实体的场景节点」：删除必须走 delete_scene_node，
+// 以前 delete_selected 见到 entity == nullptr 就直接跳过，选中也删不掉。
+TEST(CommandDispatch, DeleteEntityLessSceneNodeUndoRedo) {
+  Cmd cmd("delete-mesh");
+  MeshCpu mesh;
+  mesh.vertices = {Vertex{Vec3{0.f, 0.f, 0.f}, Vec3{0.f, 1.f, 0.f}, Vec2{0.f, 0.f}, {}},
+                   Vertex{Vec3{1.f, 0.f, 0.f}, Vec3{0.f, 1.f, 0.f}, Vec2{1.f, 0.f}, {}},
+                   Vertex{Vec3{0.f, 0.f, 1.f}, Vec3{0.f, 1.f, 0.f}, Vec2{0.f, 1.f}, {}}};
+  mesh.indices = {0, 1, 2};
+  cmd.doc.add_import_mesh("Node bake 1", std::move(mesh), Mat4::identity(), Vec3{0.7f, 0.7f, 0.7f});
+  ASSERT_EQ(cmd.doc.scene().nodes().size(), 1u);
+  const std::uint64_t node_id = cmd.doc.scene().nodes().front().id;
+
+  auto deleted = cmd.system.dispatch(
+      cmd.doc, "delete_scene_node", {{"node_id", static_cast<std::int64_t>(node_id)}});
+  ASSERT_TRUE(deleted) << deleted.error();
+  EXPECT_TRUE(cmd.doc.scene().nodes().empty());
+
+  cmd.system.undo();
+  ASSERT_EQ(cmd.doc.scene().nodes().size(), 1u);
+  EXPECT_EQ(cmd.doc.scene().nodes().front().id, node_id);  // 原 id 放回
+
+  cmd.system.redo();
+  EXPECT_TRUE(cmd.doc.scene().nodes().empty());
+}
+
+// 烘焙用 add_import_mesh 建节点，返回的是网格资产 id（可能和节点 id 不同）；
+// baked_node_ids() 必须给出真正的场景节点 id，否则删不掉 / 选不中。
+TEST(CommandDispatch, BakeReportsRealSceneNodeId) {
+  Cmd cmd("bake");
+  Graph& graph = cmd.doc.node_graph();
+  const NodeId box = graph.add_node("solid.box", 0, 0);
+  ASSERT_NE(graph.node(box), nullptr);
+  ASSERT_TRUE(graph.node(box)->preview);
+
+  BakeGraphCommand bake(cmd.doc);
+  auto r = bake.execute();
+  ASSERT_TRUE(r) << r.error();
+  ASSERT_EQ(cmd.doc.scene().nodes().size(), 1u);
+  ASSERT_EQ(bake.baked_node_ids().size(), 1u);
+  EXPECT_EQ(cmd.doc.scene().nodes().front().id, bake.baked_node_ids().front());
+  EXPECT_EQ(cmd.doc.scene().nodes().front().name, "Node bake 1");
+
+  bake.undo();
+  EXPECT_TRUE(cmd.doc.scene().nodes().empty());
 }
 
 }  // namespace

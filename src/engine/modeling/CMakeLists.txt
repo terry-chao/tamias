@@ -13,6 +13,15 @@ add_library(tamias_modeling STATIC
   evaluate/evaluator.cpp
   evaluate/geom_builder.cpp
   evaluate/tess_worker.cpp
+  # 节点建模：图数据模型、类型注册表、求值器、序列化、内置节点
+  nodes/node_graph.cpp
+  nodes/node_type.cpp
+  nodes/node_eval.cpp
+  nodes/node_io.cpp
+  nodes/builtin/builtin_register.cpp
+  nodes/builtin/builtin_input_nodes.cpp
+  nodes/builtin/builtin_solid_nodes.cpp
+  nodes/builtin/builtin_transform_nodes.cpp
   # 后端装配：把编进来的内核登记成默认实现
   linked_kernels.cpp
 )
@@ -25,6 +34,7 @@ target_link_libraries(tamias_modeling PUBLIC
   tamias::mki
   tamias::base
   tamias::graphics
+  tamias::io
   Threads::Threads
 )
 

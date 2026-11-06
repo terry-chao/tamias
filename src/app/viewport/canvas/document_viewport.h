@@ -67,6 +67,11 @@ class DocumentViewport final : public QWidget {
   ~DocumentViewport() override;
 
   [[nodiscard]] Document& document() { return *document_; }
+  // 把文档里全部网格重新推给渲染线程（幂等缓存，命中即早退）。节点编辑器的
+  // 预览网格是新 intern 的资产，要靠它上 GPU。
+  void resync_all_meshes();
+  // 跑一条注册表命令（回显 / 观察者照走）。面板（如节点编辑器的烘焙）用。
+  void run_command(const std::string& name, const CommandArgs& args, bool notify = true);
   void set_render_mode(RenderMode mode);
   [[nodiscard]] RenderMode render_mode() const { return mode_; }
   // X 光（X-Ray）：所有有面的构件画成半透明，能一眼看穿整栋楼。
@@ -371,7 +376,6 @@ class DocumentViewport final : public QWidget {
   void update_opening_hover(const QPoint& pos);
   void show_entity_context_menu(const QPoint& global_pos);
   void adjust_selected_param(double delta);
-  void run_command(const std::string& name, const CommandArgs& args, bool notify = true);
   // 会新增实体的编辑（复制 / 阵列）：跑完把选择换成新建的副本（CAD 惯例）。
   void run_creating_command(const std::string& name, const CommandArgs& args);
   // 武装一个交互式变换工具：命令名 + 提示语（见 command/edit/transform/transform_tool_command.h）。
@@ -386,7 +390,6 @@ class DocumentViewport final : public QWidget {
   // 当前楼层（或它的标高 / 层高）变了以后，武装中的构件命令要按新楼层重画一遍：
   // 不然命令还拿着旧楼层的标高执行，归属却写成新楼层（见 armed_placement.h）。
   void sync_armed_placement();
-  void resync_all_meshes();
   void resync_textures();
   void cancel_tool();
   // 丢弃放置会话（不重绘、不提示）；落位 / 取消 / 被别的工具顶掉都走它。

@@ -3,6 +3,7 @@
 #include "app/shell/dialog/about_dialog.h"
 #include "app/mcp/mcp_service.h"
 #include "app/shell/panel/console_panel.h"
+#include "app/shell/panel/node_editor_panel.h"
 #include "app/shell/panel/ai_panel.h"
 #include "app/shell/panel/meshy_panel.h"
 #include "app/shell/panel/extension_watcher.h"
@@ -263,6 +264,7 @@ MainWindow::MainWindow(QWidget* parent)
     refresh_handle_inspector();
     refresh_texture_library_panel();
     sync_draw_panel();
+    sync_node_editor_panel();
     bind_plugin_session();
     sync_document_actions();
   });
@@ -954,6 +956,42 @@ MainWindow::MainWindow(QWidget* parent)
       tr("Show the command echo: every executed kernel command as a paste-ready C# call"));
   addAction(console_toggle_);
 
+  // 节点建模编辑器：底部停靠（与控制台同区，标签页并排），默认收起。
+  // 图由 Document 持有、随 .tdoc 存；预览叠加进视口，烘焙成普通网格。
+  node_editor_panel_ = new NodeEditorPanel(this);
+  node_editor_dock_ = new QDockWidget(tr("Node Editor"), this);
+  node_editor_dock_->setObjectName(QStringLiteral("nodeEditorDock"));
+  node_editor_dock_->setWidget(node_editor_panel_);
+  node_editor_dock_->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::LeftDockWidgetArea |
+                                     Qt::RightDockWidgetArea | Qt::TopDockWidgetArea);
+  addDockWidget(Qt::BottomDockWidgetArea, node_editor_dock_);
+  tabifyDockWidget(console_dock_, node_editor_dock_);
+  node_editor_dock_->hide();
+  node_editor_toggle_ = node_editor_dock_->toggleViewAction();
+  node_editor_toggle_->setText(tr("Node Editor"));
+  node_editor_toggle_->setIcon(ribbon_icon(QStringLiteral(":/icons/node_editor.svg")));
+  node_editor_toggle_->setToolTip(
+      tr("Procedural modeling: build a node graph, preview it in the viewport, bake to real "
+         "geometry"));
+  addAction(node_editor_toggle_);
+
+  // 面板默认收起，第一次显示出来时再对一次当前视口：别让「点开面板 → Add node」
+  // 因为构造期还没文档而永远停在 No document。
+  connect(node_editor_dock_, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+    if (!visible) {
+      return;
+    }
+    sync_node_editor_panel();
+    // 跟控制台并排的底部 dock 常常只有一百多像素高，节点卡片摆不开：
+    // 太矮的话第一次显示时撑到约 40% 窗口高（用户自己拉过就不再强改）。
+    QTimer::singleShot(0, this, [this]() {
+      if (node_editor_dock_->height() < 240) {
+        resizeDocks({node_editor_dock_},
+                    {std::max(320, static_cast<int>(height() * 2 / 5))}, Qt::Vertical);
+      }
+    });
+  });
+
   connect(console_panel_, &ConsolePanel::run_requested, this, [this](const QString& code) {
     // 回显输入：多行只回第一行，免得刷屏。
     QString echo = code.section(QLatin1Char('\n'), 0, 0);
@@ -1227,6 +1265,7 @@ MainWindow::MainWindow(QWidget* parent)
   panels_group->add_action(debug_scene_action_);
   panels_group->add_action(timing_toggle_);
   panels_group->add_action(console_toggle_);
+  panels_group->add_action(node_editor_toggle_);
   panels_group->add_action(ai_toggle_);
   panels_group->add_action(meshy_toggle_);
 
@@ -1573,7 +1612,17 @@ void MainWindow::show_home() {
   refresh_home();
   stack_->setCurrentWidget(home_);
   sync_draw_panel();
+  // 回首页后当前视口没了：节点画布要断开 session，免得指针悬空 / 还在算旧文档。
+  sync_node_editor_panel();
   sync_document_actions();
+}
+
+// 节点编辑器只认「当前文档视口」。所有切页签 / 切首页 / 开新文档的路径都要走这里，
+// 否则面板会拿着 nullptr（画布、Add node、右键菜单全部静默失效）。
+void MainWindow::sync_node_editor_panel() {
+  if (node_editor_panel_ != nullptr) {
+    node_editor_panel_->set_viewport(current_viewport());
+  }
 }
 
 void MainWindow::show_documents() {
@@ -1588,6 +1637,9 @@ void MainWindow::show_documents() {
   refresh_handle_inspector();
   refresh_texture_library_panel();
   sync_draw_panel();
+  // 同一件事：从首页打开文档时 currentChanged 里拿不到视口（那时还在首页），
+  // 节点编辑器面板会一直停在「没有文档」，点 Add node 连搜索面板都不弹。
+  sync_node_editor_panel();
   sync_document_actions();
 }
 
